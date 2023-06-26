@@ -14,6 +14,8 @@ DATA_ELECTRICITY = "electricity"
 DATA_GAS = "gas"
 DATA_MONTH_SUMMARY = "month_summary"
 DATA_INVOICES = "invoices"
+DATA_USER = "user"
 
 SERVICE_NAME_PRICES = "Prices"
 SERVICE_NAME_COSTS = "Costs"
+SERVICE_NAME_USER = "User"
