@@ -7,13 +7,15 @@ from typing import TypedDict
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from python_frank_energie import FrankEnergie
-from python_frank_energie.exceptions import RequestException
-from python_frank_energie.models import PriceData, MonthSummary, Invoices, MarketPrices
+from python_frank_energie.exceptions import RequestException, AuthException
+from python_frank_energie.models import PriceData, MonthSummary, Invoices, MarketPrices, User
 
-from .const import DATA_ELECTRICITY, DATA_GAS, DATA_MONTH_SUMMARY, DATA_INVOICES
+from .api import FrankEnergieAPI
+from .const import DATA_ELECTRICITY, DATA_GAS, DATA_MONTH_SUMMARY, DATA_INVOICES, DATA_USER
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ class FrankEnergieData(TypedDict):
     DATA_GAS: PriceData
     DATA_MONTH_SUMMARY: MonthSummary | None
     DATA_INVOICES: Invoices | None
+    DATA_USER: User | None
 
 
 class FrankEnergieCoordinator(DataUpdateCoordinator):
@@ -62,10 +65,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator):
             prices_tomorrow = await self.__fetch_prices_with_fallback(tomorrow, day_after_tomorrow)
 
             data_month_summary = (
-                await self.api.monthSummary() if self.api.is_authenticated else None
+                await self.api.month_summary() if self.api.is_authenticated else None
             )
             data_invoices = (
                 await self.api.invoices() if self.api.is_authenticated else None
+            )
+            data_user = (
+                await self.api.user() if self.api.is_authenticated else None
             )
         except UpdateFailed as err:
             # Check if we still have data to work with, if so, return this data. Still log the error as warning
@@ -83,18 +89,26 @@ class FrankEnergieCoordinator(DataUpdateCoordinator):
 
             raise UpdateFailed(ex) from ex
 
+        except AuthException as ex:
+            LOGGER.debug("Authentication tokens expired, trying to renew them (%s)", ex)
+            self.__try_renew_token()
+
+            # Tell we have no data, so update coordinator tries again with renewed tokens
+            raise UpdateFailed(ex) from ex
+
         return {
             DATA_ELECTRICITY: prices_today.electricity + prices_tomorrow.electricity,
             DATA_GAS: prices_today.gas + prices_tomorrow.gas,
             DATA_MONTH_SUMMARY: data_month_summary,
             DATA_INVOICES: data_invoices,
+            DATA_USER: data_user,
         }
 
     async def __fetch_prices_with_fallback(self, start_date: date, end_date: date) -> MarketPrices:
         if not self.api.is_authenticated:
             return await self.api.prices(start_date, end_date)
         else:
-            user_prices = await self.api.userPrices(start_date)
+            user_prices = await self.api.user_prices(start_date)
 
             if len(user_prices.gas.all) > 0 and len(user_prices.electricity.all) > 0:
                 # If user_prices are available for both gas and electricity return them
@@ -112,3 +126,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator):
                     user_prices.electricity = public_prices.electricity
 
                 return user_prices
+
+    async def __try_renew_token(self):
+
+        try:
+            updated_tokens = await self.api.renew_token()
+
+            data = {
+                CONF_ACCESS_TOKEN: updated_tokens.authToken,
+                CONF_TOKEN: updated_tokens.refreshToken,
+            }
+            self.hass.config_entries.async_update_entry(self.entry, data=data)
+
+            LOGGER.debug("Successfully renewed token")
+
+        except AuthException as ex:
+            LOGGER.error("Failed to renew token: %s. Starting user reauth flow", ex)
+            raise ConfigEntryAuthFailed from ex
