@@ -16,6 +16,9 @@ DATA_URL = "https://frank-graphql-prod.graphcdn.app/"
 ICON = "mdi:currency-eur"
 COMPONENT_TITLE = "Frank Energie"
 
+# Unique ID for the component
+UNIQUE_ID = f"{DOMAIN}_component"
+
 CONF_COORDINATOR = "coordinator"
 ATTR_TIME = "from_time"
 
