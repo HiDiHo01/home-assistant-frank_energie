@@ -125,7 +125,7 @@
         },
         "sensor": {
             "current_electricity_price": {
-                "name": "Huidige elektriciteitsprijs (All-in)",
+                "name": "Elektriciteitsprijs Huidig All-in",
                 "state_attributes": {
                     "prices": {
                         "name": "Prijzen"
@@ -133,7 +133,7 @@
                 }
             },
             "total_costs": {
-                "name": "Totaal kosten"
+                "name": "Kosten totaal"
             },
             "costs_previous_year": {
                 "name": "Kosten vorig jaar"
@@ -142,124 +142,125 @@
                 "name": "Kosten dit jaar"
             },
             "current_electricity_marketprice": {
-                "name": "Huidige elektriciteit inkoopprijs"
+                "name": "Elektriciteitsprijs Huidig Inkoop"
             },
             "current_electricity_price_incl_tax": {
-                "name": "Huidige elektriciteit inkoopprijs + BTW"
+                "name": "Elektriciteitsprijs Huidig Inkoopprijs + BTW"
             },
             "current_electricity_price_incl_tax_markup": {
-                "name": "Huidige elektriciteit inkoopprijs + BTW + inkoopvergoeding"
+                "name": "Elektriciteitsprijs Huidig Inkoop + BTW + Inkoopvergoeding"
             },
             "current_electricity_tax_price": {
-                "name": "Huidige elektriciteit BTW prijs"
+                "name": "Elektriciteitsprijs Huidig BTW"
             },
             "current_electricity_sourcing_markup": {
-                "name": "Huidige elektriciteit inkoopvergoeding"
+                "name": "Elektriciteitsprijs Huidig Inkoopvergoeding"
             },
             "elec_fixed_kwh": {
-                "name": "Vaste elektriciteitsprijs per kWh"
+                "name": "Elektriciteitsprijs Vast per kWh"
             },
             "elec_var_kwh": {
-                "name": "Variabele elektriciteitsprijs per kWh"
+                "name": "Elektriciteitsprijs Variabel per kWh"
             },
             "elec_tax_only": {
-                "name": "Elektriciteit energiebelasting per kWh"
+                "name": "Elektriciteitsprijs Energiebelasting per kWh"
             },
             "elec_market_percent_tax": {
-                "name": "Elektriciteit procent BTW"
+                "name": "Elektriciteitprijs BTW percentage"
             },
             "elec_previoushour": {
-                "name": "Elektriciteitsprijs vorig uur (All-in)"
+                "name": "Elektriciteitsprijs vorig uur All-in"
             },
             "elec_nexthour": {
-                "name": "Elektriciteitsprijs volgend uur (All-in)"
+                "name": "Elektriciteitsprijs volgend uur All-in"
             },
             "elec_previoushour_market": {
-                "name": "Elektriciteit inkoopprijs vorig uur"
+                "name": "Elektriciteitsprijs Inkoop afgelopen uur"
             },
             "elec_nexthour_market": {
-                "name": "Elektriciteit inkoopprijs volgend uur"
+                "name": "Elektriciteitsprijs Inkoop volgend uur"
             },
             "average_electricity_market_price_today": {
-                "name": "Gemiddelde elektriciteit inkoopprijs vandaag"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs vandaag"
             },
             "average_electricity_price_today_including_tax": {
-                "name": "Gemiddelde elektriciteit inkoopprijs + BTW vandaag"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs + BTW vandaag"
             },
             "average_electricity_price_today_including_tax_and_markup": {
-                "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding vandaag"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs + BTW + Inkoopvergoeding vandaag"
             },
             "average_electricity_price_today_all_in": {
-                "name": "Gemiddelde elektriciteitsprijs vandaag (All-in)"
+                "name": "Elektriciteitsprijs Gemiddelde All-in prijs vandaag"
             },
             "average_electricity_market_price_tomorrow": {
-                "name": "Gemiddelde elektriciteit inkoopprijs morgen"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs morgen"
             },
             "average_electricity_price_tomorrow_including_tax": {
-                "name": "Gemiddelde elektriciteit inkoopprijs + BTW morgen"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs + BTW morgen"
             },
             "average_electricity_price_tomorrow_including_tax_and_markup": {
-                "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding morgen"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs + BTW + Inkoopvergoeding morgen"
             },
             "average_electricity_price_tomorrow_all_in": {
-                "name": "Gemiddelde elektriciteitsprijs morgen (All-in)"
+                "name": "Elektriciteitsprijs Gemiddeld All-in prijs morgen"
             },
             "average_electricity_price_upcoming_market": {
-                "name": "Gemiddelde elektriciteit inkoopprijs komende uren"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs komende uren"
             },
             "average_electricity_price_upcoming_market_tax": {
-                "name": "Gemiddelde elektriciteit inkoopprijs + BTW komende uren"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs + BTW komende uren"
             },
             "average_electricity_price_upcoming_market_tax_markup": {
-                "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding komende uren"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs + BTW + Inkoopvergoeding komende uren"
             },
+            ## This is the same as average_electricity_price_upcoming_market? ###
             "average_electricity_market_price_upcoming": {
-                "name": "Gemiddelde elektriciteitsprijs komende uren (All-in)"
+                "name": "Elektriciteitsprijs Gemiddelde Inkoopprijs prijs komende uren"
             },
             "average_electricity_price_upcoming_all_in": {
-                "name": "Gemiddelde elektriciteitsprijs komende uren (All-in)"
+                "name": "Elektriciteitsprijs Gemiddelde All-in komende uren"
             },
             "elec_min": {
-                "name": "Laagste elektriciteitsprijs vandaag (All-in)"
+                "name": "Elektriciteitsprijs Laagste All-in prijs vandaag"
             },
             "elec_max": {
-                "name": "Hoogste elektriciteitsprijs vandaag (All-in)"
+                "name": "Elektriciteitsprijs Hoogste All-in prijs vandaag"
             },
             "elec_tomorrow_min": {
-                "name": "Laagste elektriciteitsprijs morgen (All-in)"
+                "name": "Elektriciteitsprijs Laagste All-in prijs morgen"
             },
             "elec_tomorrow_max": {
-                "name": "Hoogste elektriciteitsprijs morgen (All-in)"
+                "name": "Elektriciteitsprijs Hoogste All-in prijs morgen"
             },
             "elec_upcoming_min": {
-                "name": "Laagste elektriciteitsprijs komende uren (All-in)"
+                "name": "Elektriciteitsprijs Laagste All-in prijs komende uren"
             },
             "elec_upcoming_max": {
-                "name": "Hoogste elektriciteitsprijs komende urenn (All-in)"
+                "name": "Elektriciteitsprijs Hoogste All-in prijs komende uren"
             },
             "elec_all": {
-                "name": "Gemiddelde elektriciteitsprijs alle uren (All-in)"
+                "name": "Elektriciteitsprijs Gemiddelde All-in prijs alle uren"
             },
             "elec_all_min": {
-                "name": "Laagste elektriciteitsprijs alle uren (All-in)"
+                "name": "Elektriciteitsprijs Laagste All-in prijs alle uren"
             },
             "elec_all_max": {
-                "name": "Hoogste elektriciteitsprijs alle uren (All-in)"
+                "name": "Elektriciteitsprijs Hoogste All-in prijs alle uren"
             },
             "gas_markup": {
-                "name": "Huidige gasprijs (All-in)"
+                "name": "Gasprijs Huidige All-in prijs"
             },
             "gas_tax_markup": {
-                "name": "Huidige gasprijs met BTW en inkoopvergoeding"
+                "name": "Gasprijs Huidig met BTW en inkoopvergoeding"
             },
             "gas_tax": {
-                "name": "Huidige gasprijs met BTW"
+                "name": "Gasprijs Huidig met BTW"
             },
             "gas_market": {
-                "name": "Huidige gas marktprijs"
+                "name": "Gasprijs Huidige inkoopprijs"
             },
             "gas_tax_vat": {
-                "name": "Huidige gas energiebelasting prijs"
+                "name": "Gasprijs Huidige energiebelasting"
             },
             "gas_sourcing": {
                 "name": "Huidige gas inkoopvergoeding prijs"
