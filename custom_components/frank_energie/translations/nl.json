@@ -263,79 +263,79 @@
                 "name": "Gasprijs Huidige energiebelasting"
             },
             "gas_sourcing": {
-                "name": "Huidige gas inkoopvergoeding prijs"
+                "name": "Gasprijs Huidige inkoopvergoeding"
             },
             "gas_tax_only": {
-                "name": "Huidige gas BTW prijs"
+                "name": "Gasprijs Huidige BTW"
             },
             "gas_today_avg_all_in": {
-                "name": "Gemiddelde gasprijs vandaag (All-in)"
+                "name": "Gasprijs Gemiddelde All-in prijs vandaag"
             },
             "gas_tomorrow_avg_all_in": {
-                "name": "Gemiddelde gasprijs morgen (All-in)"
+                "name": "Gasprijs Gemiddelde All-in prijs morgen"
             },
             "gas_previoushour_all_in": {
-                "name": "Gasprijs vorig uur (All-in)"
+                "name": "Gasprijs All-in afgelopen uur"
             },
             "gas_nexthour_all_in": {
-                "name": "Gasprijs volgend uur (All-in)"
+                "name": "Gasprijs All-in volgend uur"
             },
             "gas_previoushour_market": {
-                "name": "Gas inkoopprijs vorig uur"
+                "name": "Gasprijs Inkoop vorig uur"
             },
             "gas_nexthour_market": {
-                "name": "Gas inkoopprijs volgend uur"
+                "name": "Gasprijs Inkoop volgend uur"
             },
             "gas_markup_before6am": {
-                "name": "Gasprijs voor 6:00 uur vandaag (All-in)"
+                "name": "Gasprijs All-in voor 6:00 vandaag"
             },
             "gas_markup_after6am": {
-                "name": "Gasprijs na 6:00 uur vandaag (All-in)"
+                "name": "Gasprijs All-in na 6:00 uur vandaag"
             },
             "gas_price_tomorrow_before6am_allin": {
-                "name": "Gas morgen voor 6:00 uur (All-in)"
+                "name": "Gasprijs All-in morgen voor 6:00 uur"
             },
             "gas_price_tomorrow_after6am_allin": {
-                "name": "Gas morgen na 6:00 uur (All-in)"
+                "name": "Gasprijs All-in morgen na 6:00 uur"
             },
             "gas_market_percent_tax": {
-                "name": "Gas procent BTW"
+                "name": "Gasprijs BTW tarief"
             },
             "gas_min": {
-                "name": "Laagste gasprijs vandaag (All-in)"
+                "name": "Gasprijs Laagste All-in prijs vandaag"
             },
             "gas_max": {
-                "name": "Hoogste gasprijs vandaag (All-in)"
+                "name": "Gasprijs Hoogste All-in prijs vandaag"
             },
             "gas_tomorrow_min": {
-                "name": "Laagste gasprijs morgen (All-in)"
+                "name": "Gasprijs Laagste All-in prijs morgen"
             },
             "gas_tomorrow_max": {
-                "name": "Hoogste gasprijs morgen (All-in)"
+                "name": "Gasprijs Hoogste All-in prijs morgen"
             },
             "gas_tomorrow_avg_market": {
-                "name": "Gemiddelde gas marktprijs morgen"
+                "name": "Gasprijs Gemiddelde Marktprijs morgen"
             },
             "gas_tomorrow_avg_market_tax": {
-                "name": "Gemiddelde gas marktprijs met BTW morgen"
+                "name": "Gasprijs Gemiddelde Marktprijs + BTW morgen"
             },
             "gas_tomorrow_avg_market_tax_markup": {
-                "name": "Gemiddelde gas marktprijs met BTW en inkoopvergoeding morgen"
+                "name": "Gasprijs Gemiddelde Marktprijs + BTW + Inkoopvergoeding morgen"
             },
             "gas_market_upcoming": {
-                "name": "Gemiddelde gas marktprijs komende uren"
+                "name": "Gasprijs Gemiddelde Marktprijs komende uren"
             },
             "gas_upcoming_min": {
-                "name": "Laagste gasprijs komende uren (All-in)"
+                "name": "Gasprijs Laagste All-in prijs komende uren"
             },
             "gas_upcoming_max": {
-                "name": "Hoogste gasprijs komende uren (All-in)"
+                "name": "Gasprijs Hoogste All-in prijs komende uren"
             },
             "elec_hourcount": {
-                "name": "Aantal uren elektriciteitprijzen geladen"
+                "name": "Elektriciteitprijs Aantal uren geladen"
             },
             "gas_hourcount": {
-                "name": "Aantal uren gasprijzen geladen"
+                "name": "Gasprijs Aantal uren geladen"
             },
             "average_costs_per_year": {
                 "name": "Gemiddelde kosten per jaar"
