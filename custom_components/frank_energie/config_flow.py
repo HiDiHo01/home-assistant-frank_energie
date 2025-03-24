@@ -88,12 +88,13 @@ class ConfigFlow(config_entries.ConfigFlow):
                 auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
             )
-            me = await api.me()
-
-            all_delivery_sites = me.deliverySites
+            # me = await api.me()
+            user_sites = await api.UserSites()
+            all_delivery_sites = [
+                site for site in user_sites.deliverySites if hasattr(site, "status")
+            ]
 
             # filter out all sites that are not in delivery
-            # me.deliverySites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
             in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
 
             if not in_delivery_sites:

@@ -57,6 +57,12 @@
                 "Costs": "Kosten"
             }
         },
+        "Frank Energie - Usage": {
+            "name": "Frank Energie - Gebruik",
+            "model": {
+                "Usage": "Gebruik"
+            }
+        },
         "Frank Energie - User": {
             "name": "Frank Energie - Gebruiker",
             "model": {
@@ -406,6 +412,18 @@
             "country_code": {
                 "name": "Landcode"
             },
+            "costs_elelectricity_yesterday": {
+                "name": "Kosten elektriciteit gisteren"
+            },
+            "usage_elelectricity_yesterday": {
+                "name": "Verbruik elektriciteit gisteren"
+            },
+            "costs_gas_yesterday": {
+                "name": "Kosten gas gisteren"
+            },
+            "usage_gas_yesterday": {
+                "name": "Verbruik gas gisteren"
+            },
             "delivery_site": {
                 "name": "Leveringslocatie",
                 "state_attributes": {
@@ -490,6 +508,13 @@
                 }
             },
             "push_notification_price_alerts": {
+                "name": "Stroomprijsadvies",
+                "state": {
+                    "True": "Aan",
+                    "False": "Uit"
+                }
+            },
+            "smart_push_notification_price_alerts": {
                 "name": "Stroomprijsadvies",
                 "state": {
                     "True": "Aan",

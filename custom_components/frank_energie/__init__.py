@@ -48,9 +48,9 @@ async def async_setup_platform(
     config entries and UI-driven setup.
     """
     _LOGGER.debug("Setting up Frank Energie sensor platform")
-    timezone = hass.config.time_zone
-    _LOGGER.info("Configured Time Zone: %s", timezone)
-    # You can pass the timezone to a platform if needed
+    timezone = hass.config.time_zone  # Get the configured time zone
+    _LOGGER.debug("Configured Time Zone: %s", timezone)
+    # Pass the timezone to a platform
     hass.data[DOMAIN] = {
         "timezone": timezone,
     }
@@ -81,7 +81,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         """Set up the Frank Energie component from a config entry."""
         _LOGGER.debug("Setting up Frank Energie component")
 
-        # For backwards compatibility, set unique ID
+        # For backwards compatibility, update the unique ID
         self._update_unique_id()
 
         # Create API and Coordinator
@@ -101,7 +101,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # Forward entry setups to appropriate platforms
         _LOGGER.debug("Forwarding entry setups to platforms")
         await self._async_forward_entry_setups()
-
+        _LOGGER.debug("Finished forwarding entry setups to platforms")
         return True
 
     def _update_unique_id(self) -> None:
@@ -138,19 +138,25 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         _LOGGER.debug("Getting site reference and title for coordinator")
 
         # Haal de 'Me' gegevens op van de coordinator API
-        me_data = await coordinator.api.me()
+        # me_data = await coordinator.api.me()
+        user_sites_data = await coordinator.api.UserSites()
 
         # Haal de bezorgsites op uit de 'Me' gegevens
-        delivery_sites = me_data.deliverySites
+        # delivery_sites = me_data.deliverySites # remove this line
+        user_sites = user_sites_data.deliverySites
 
         # Controleer of er bezorgsites zijn gevonden
-        if not delivery_sites:
+        # if not delivery_sites:
+        #     raise NoSuitableSitesFoundError(
+        #         "No suitable delivery sites found for this account")
+        if not user_sites:
             raise NoSuitableSitesFoundError(
                 "No suitable delivery sites found for this account")
 
         # Selecteer de eerste bezorgsite voor nu, je kunt logica toevoegen
         # om de juiste site te selecteren op basis van voorkeuren
-        selected_site = delivery_sites[0]
+        # selected_site = delivery_sites[0]
+        selected_site = user_sites[0]
 
         # Maak een titel op basis van de adresgegevens van de bezorgsite
         title = f"{selected_site.address.street} {selected_site.address.houseNumber}"
@@ -175,11 +181,23 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         _LOGGER.debug("Creating Frank Energie Coordinator instance")
         return FrankEnergieCoordinator(self.hass, self.entry, api)
 
-    async def _async_forward_entry_setups(self) -> None:
+    async def old_async_forward_entry_setups(self) -> None:
         """Forward entry setups to appropriate platforms."""
         _LOGGER.debug("Forwarding entry setups to platforms")
         await self.hass.config_entries.async_forward_entry_setups(self.entry,
                                                                   PLATFORMS)
+        _LOGGER.debug("Finished forwarding entry setups to platforms 2")
+
+    async def _async_forward_entry_setups(self) -> None:
+        """Forward entry setups to appropriate platforms."""
+        _LOGGER.debug("Starting to forward entry setups to platforms")
+        try:
+            await self.hass.config_entries.async_forward_entry_setups(self.entry, PLATFORMS)
+            _LOGGER.debug("Successfully forwarded entry setups to platforms")
+        except Exception as e:
+            _LOGGER.error("Error forwarding entry setups to platforms: %s", str(e))
+            raise
+        _LOGGER.debug("Finished forwarding entry setups to platforms")
 
     async def _save_coordinator_to_hass_data(self,
                                              coordinator: FrankEnergieCoordinator
