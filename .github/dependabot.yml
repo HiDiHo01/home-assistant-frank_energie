@@ -3,8 +3,6 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
-# Basic set up for three package managers
-
 version: 2
 
 updates:
@@ -13,10 +11,12 @@ updates:
     directory: "/"  # Default location of .github/workflows
     schedule:
       interval: "weekly"
+      time: "05:00"
 
   # Maintain dependencies for pip
   - package-ecosystem: "pip"
     directory: "/"  # Root directory
     schedule:
       interval: "weekly"
+      time: "05:00"
 
