@@ -1,6 +1,4 @@
 # requirements.txt
 
 # Core dependencies
-python-frank-energie>=2025.4.11
-aiohttp>=3.10.11
-PyJWT>=2.8.0,<3.0.0
+python-frank-energie>=2025.6.9
