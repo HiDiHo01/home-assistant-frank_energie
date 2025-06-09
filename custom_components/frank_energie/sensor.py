@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.4.24"
+# VERSION = "2025.6.9"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -57,6 +57,7 @@ from .const import (
     SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_COSTS,
     SERVICE_NAME_ENODE_CHARGERS,
+    SERVICE_NAME_GAS_PRICES,
     SERVICE_NAME_PRICES,
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
@@ -68,7 +69,6 @@ from .coordinator import FrankEnergieBatterySessionCoordinator, FrankEnergieCoor
 
 _LOGGER = logging.getLogger(__name__)
 
-# DATA_DELIVERY_SITE: Final[str] = "delivery_site"
 FORMAT_DATE = "%d-%m-%Y"
 
 
@@ -80,6 +80,10 @@ class FrankEnergieEntityDescription(SensorEntityDescription):
     service_name: Optional[str] = SERVICE_NAME_PRICES
     value_fn: Callable[[dict], StateType] = field(default=lambda _: STATE_UNKNOWN)
     attr_fn: Optional[Callable[[dict], dict[str, Union[StateType, list, None]]]] = None
+    is_gas: bool = False
+    is_electricity: bool = False
+    is_feed_in: bool = False  # used to filter based on estimatedFeedIn
+    is_battery_session: bool = False
 
     def __init__(
         self,
@@ -98,6 +102,10 @@ class FrankEnergieEntityDescription(SensorEntityDescription):
         entity_category: Optional[Union[str, EntityCategory]] = None,
         translation_key: Optional[str] = None,
         icon: Optional[str] = None,
+        is_gas: bool = False,  # used externally for gas filtering
+        is_electricity: bool = False,  # used externally for electricity filtering
+        is_feed_in: bool = False,  # used to filter based on estimatedFeedIn
+        is_battery_session: bool = False,  # used to indicate battery session sensors
     ) -> None:
         super().__init__(
             key=key,
@@ -116,6 +124,10 @@ class FrankEnergieEntityDescription(SensorEntityDescription):
         self.entity_registry_enabled_default = entity_registry_enabled_default
         self.entity_registry_visible_default = entity_registry_visible_default
         self.icon = icon
+        self.is_gas = is_gas
+        self.is_electricity = is_electricity
+        self.is_feed_in = is_feed_in
+        self.is_battery_session = is_battery_session
 
     def get_state(self, data: dict) -> StateType:
         """Get the state value."""
@@ -133,6 +145,7 @@ class FrankEnergieEntityDescription(SensorEntityDescription):
 
 @dataclass
 class ChargerSensorDescription:
+    """Describes a charger sensor entity."""
     key: str
     name: str
     device_class: Optional[str] = None
@@ -141,51 +154,27 @@ class ChargerSensorDescription:
     authenticated: bool = True
     service_name: str = SERVICE_NAME_ENODE_CHARGERS
     icon: Optional[str] = None
-    value_fn: Callable[[dict], StateType] = field(default=lambda _: STATE_UNKNOWN)
+    value_fn: Callable[[dict], StateType] = field(default_factory=lambda: lambda _: STATE_UNKNOWN)
+    attr_fn: Callable[[dict], dict[str, Union[StateType, list, None]]] = field(default_factory=lambda: lambda _: {})
     entity_registry_enabled_default: bool = True
     entity_registry_visible_default: bool = True
     entity_category: Optional[Union[str, EntityCategory]] = None
 
-    def __init__(
-        self,
-        key: str,
-        name: str,
-        # attr_fn: Optional[Callable[[dict], dict[str, Union[StateType, list]]]] = None,
-        device_class=SensorDeviceClass(device_class) if device_class else None,
-        state_class=state_class,
-        native_unit_of_measurement: Optional[str] = None,
-        authenticated: bool = True,
-        service_name: str = SERVICE_NAME_ENODE_CHARGERS,
-        icon: Optional[str] = None,
-        value_fn: Optional[Callable[[dict], StateType]] = None,
-        entity_registry_enabled_default: bool = True,
-        entity_registry_visible_default: bool = True,
-        entity_category: Optional[Union[str, EntityCategory]] = None,
-    ):
-        self.key = key
-        self.name = name
-        self.device_class = device_class
-        self.state_class = state_class
-        self.native_unit_of_measurement = native_unit_of_measurement
-        self.authenticated = authenticated
-        self.service_name = service_name
-        self.icon = icon
-        self.value_fn = value_fn if value_fn is not None else lambda data: STATE_UNKNOWN
-        self.entity_registry_enabled_default = entity_registry_enabled_default
-        self.entity_registry_visible_default = entity_registry_visible_default
-        self.entity_category = entity_category
-
     def get_state(self, data: dict) -> StateType:
         """Get the state value."""
-        return self.value_fn(data) if self.value_fn else STATE_UNAVAILABLE
-
-    # def get_value(self, data: dict) -> StateType:
-    #     """Get the value from the provided data."""
-    #     return self.value_fn(data) if self.value_fn else STATE_UNKNOWN
+        try:
+            return self.value_fn(data)
+        except Exception as e:
+            _LOGGER.error("Failed to evaluate state for '%s': %s", self.key, e)
+            return STATE_UNAVAILABLE
 
     def get_attributes(self, data: dict) -> dict[str, Union[StateType, list]]:
         """Get the additional attributes."""
-        return self.attr_fn(data) if self.attr_fn else {}
+        try:
+            return self.attr_fn(data)
+        except Exception as e:
+            _LOGGER.error("Failed to evaluate attributes for '%s': %s", self.key, e)
+            return {}
 
     @property
     def is_authenticated(self) -> bool:
@@ -193,7 +182,10 @@ class ChargerSensorDescription:
         return self.authenticated
 
 
-class FrankEnergieBatterySessionSensor(CoordinatorEntity, SensorEntity):
+class old_FrankEnergieBatterySessionSensor(
+    CoordinatorEntity[FrankEnergieBatterySessionCoordinator],
+    SensorEntity,
+):
     """Sensor for smart battery session metrics."""
 
     def __init__(
@@ -203,17 +195,15 @@ class FrankEnergieBatterySessionSensor(CoordinatorEntity, SensorEntity):
         description: FrankEnergieEntityDescription,
         battery_id: str,
     ) -> None:
+        """Initialize the battery session sensor."""
         super().__init__(parent_coordinator)
         self.coordinator = coordinator
         self.entity_description = description
-        battery_data = coordinator.data
-        _LOGGER.debug("Battery data test: %s", battery_data)
-        # self._battery_id = battery_id
-        self._battery_id = battery_data.device_id
-        # self._battery_id = battery_data["deviceId"]
+        self._battery_id = coordinator.data.device_id  # Type: str
+        # _LOGGER.debug("Battery data test: %s", battery_data)
         self._attr_name = f"{description.name} ({self._battery_id})"
-        self._attr_unique_id = f"{self._battery_id}_{description.key}"
-        self._battery_name = "Slimme batterij"
+        # self._attr_unique_id = f"{self._battery_id}_{description.key}"
+        self._attr_unique_id = description.key
 
     @property
     def available(self) -> bool:
@@ -226,7 +216,12 @@ class FrankEnergieBatterySessionSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         if not data:
             return STATE_UNAVAILABLE
-        return self.entity_description.get_state(data)
+        try:
+            return self.entity_description.get_state(data)
+        except Exception as err:
+            _LOGGER.error("Failed to get native value for %s: %s", self.entity_description.key, err)
+            # return STATE_UNAVAILABLE
+            return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -237,8 +232,8 @@ class FrankEnergieBatterySessionSensor(CoordinatorEntity, SensorEntity):
         try:
             attributes = self.entity_description.get_attributes(data)
             return attributes if attributes else {}
-        except Exception as e:
-            _LOGGER.error("Failed to get attributes: %s", e)
+        except Exception as err:
+            _LOGGER.error("Failed to get attributes for %s: %s", self.entity_description.key, err)
             return {}
 
     @property
@@ -255,6 +250,69 @@ class FrankEnergieBatterySessionSensor(CoordinatorEntity, SensorEntity):
             configuration_url=API_CONF_URL,
             sw_version=VERSION,
         )
+
+
+class FrankEnergieBatterySessionSensor(
+    CoordinatorEntity,  # type: ignore
+    SensorEntity,
+):
+    """Sensor voor een enkele smart battery sessie."""
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieBatterySessionCoordinator | FrankEnergieCoordinator,
+        description: FrankEnergieEntityDescription,
+        battery_id: str | None = None,
+        is_total: bool = False,
+    ) -> None:
+        """Initialiseer de sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._battery_id = battery_id
+        self._attr_unique_id = description.key if is_total else f"{battery_id}_{description.key}"
+        self._attr_name = description.name
+        self._attr_has_entity_name = True
+        self._is_total = is_total
+
+    @property
+    def native_value(self) -> float | int | str | None:
+        """Return the native value of the sensor."""
+        try:
+            value = self.entity_description.value_fn(self.coordinator.data)
+            return round(value, self.entity_description.suggested_display_precision) if isinstance(value, (int, float)) else value
+        except Exception as err:
+            self._logger().error(
+                "Failed to get native value for %s: %s", self.entity_description.key, err
+            )
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Return optional state attributes."""
+        try:
+            if self.entity_description.attr_fn:
+                return self.entity_description.attr_fn(self.coordinator.data) or {}
+        except Exception as err:
+            self._logger().warning(
+                "Failed to get attributes for %s: %s", self.entity_description.key, err
+            )
+        return None
+
+    @property
+    def device_info(self) -> dict | None:
+        """Return device info."""
+        if not self._battery_id:
+            return None
+        return {
+            "identifiers": {(DOMAIN, self._battery_id)},
+            "name": f"Smart Battery {self._battery_id}",
+            "manufacturer": "Frank Energie",
+            "model": "SmartBattery",
+        }
+
+    def _logger(self):
+        import logging
+        return logging.getLogger(f"{DOMAIN}.sensor")
 
 
 def format_user_name(data: dict) -> Optional[str]:
@@ -334,7 +392,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: data.device_id,
     ),
-
     FrankEnergieEntityDescription(
         key="period_start_date",
         name="Period Start Date",
@@ -345,12 +402,15 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         device_class=SensorDeviceClass.TIMESTAMP,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            datetime.strptime(data.period_start_date, "%Y-%m-%d").replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
+            (
+                datetime.strptime(data.period_start_date, "%Y-%m-%d").replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
+                if isinstance(data.period_start_date, str)
+                else data.period_start_date.replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
+            )
             if data.period_start_date
             else None
         ),
     ),
-
     FrankEnergieEntityDescription(
         key="period_end_date",
         name="Period End Date",
@@ -361,7 +421,11 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         device_class=SensorDeviceClass.TIMESTAMP,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            datetime.strptime(data.period_end_date, "%Y-%m-%d").replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
+            (
+                datetime.strptime(data.period_end_date, "%Y-%m-%d").replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
+                if isinstance(data.period_end_date, str)
+                else data.period_end_date.replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
+            )
             if data.period_end_date
             else None
         ),
@@ -415,6 +479,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
                 }
                 for s in data.sessions
             ],
+            "total_trading_result": data.total_trading_result,
         }
     ),
     FrankEnergieEntityDescription(
@@ -442,14 +507,24 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         # attr_fn=lambda data: {"epex": data.get("periodEpexResult", 0.0)},
     ),
     FrankEnergieEntityDescription(
-        key="frank_slim_bonus",
-        name="Frank Slim Bonus",
+        key="period_frank_slim_bonus",
+        name="Period Frank Slim Bonus",
         icon="mdi:currency-eur",
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: data.period_frank_slim,
+    ),
+    FrankEnergieEntityDescription(
+        key="total_trading_result",
+        name="Total Trading Result",
+        icon="mdi:currency-eur",
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
+        state_class="measurement",
+        service_name=SERVICE_NAME_BATTERY_SESSIONS,
+        value_fn=lambda data: data.total_trading_result,
     ),
 )
 
@@ -576,9 +651,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.total
-        if data[DATA_GAS].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         attr_fn=lambda data: {"prices": data[DATA_GAS].asdict("total")}
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
     ),
     FrankEnergieEntityDescription(
         key="gas_market",
@@ -588,9 +665,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.market_price
-        if data[DATA_GAS].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         attr_fn=lambda data: {"prices": data[DATA_GAS].asdict("market_price")}
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
     ),
     FrankEnergieEntityDescription(
         key="gas_tax",
@@ -600,10 +679,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.market_price_with_tax
-        if data[DATA_GAS].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         attr_fn=lambda data: {
-            "prices": data[DATA_GAS].asdict("market_price_with_tax", timezone="Europe/Amsterdam")},
+            "prices": data[DATA_GAS].asdict("market_price_with_tax", timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -614,8 +695,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.market_price_tax
-        if data[DATA_GAS].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -626,8 +708,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.sourcing_markup_price
-        if data[DATA_GAS].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -638,8 +721,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.energy_tax_price
-        if data[DATA_GAS].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -650,9 +734,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].today_min.total
-        if data[DATA_GAS].today_min else None,
+        if data[DATA_GAS] and data[DATA_GAS].today_min else None,
         attr_fn=lambda data: {ATTR_TIME: data[DATA_GAS].today_min.date_from}
+        if data[DATA_GAS] and data[DATA_GAS].today_min else None
     ),
     FrankEnergieEntityDescription(
         key="gas_max",
@@ -662,9 +748,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=4,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].today_max.total
-        if data[DATA_GAS].today_max else None,
+        if data[DATA_GAS] and data[DATA_GAS].today_max else None,
         attr_fn=lambda data: {ATTR_TIME: data[DATA_GAS].today_max.date_from}
+        if data[DATA_GAS] and data[DATA_GAS].today_max else None
     ),
     FrankEnergieEntityDescription(
         key="elec_min",
@@ -764,12 +852,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         suggested_display_precision=0,
         icon="mdi:percent",
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             100 / (
                 data[DATA_GAS].current_hour.market_price /
                 data[DATA_GAS].current_hour.market_price_tax
             )
             if (
+                data[DATA_GAS] and
                 data[DATA_GAS].current_hour and
                 data[DATA_GAS].current_hour.market_price != 0 and
                 data[DATA_GAS].current_hour.market_price_tax != 0
@@ -1000,9 +1090,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: data[DATA_GAS].tomorrow_average_price,
+        service_name=SERVICE_NAME_GAS_PRICES,
+        value_fn=lambda data: data[DATA_GAS].tomorrow_average_price
+        if data[DATA_GAS] else None,
         # value_fn=lambda data: data[DATA_GAS].tomorrow_avg.total,
-        entity_registry_enabled_default=True
+        # if data[DATA_GAS].tomorrow_avg else None,
+        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
+            'total', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_tax_markup",
@@ -1012,12 +1107,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         native_unit_of_measurement=UNIT_GAS,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.market_price_including_tax_and_markup
-        if data[DATA_ELECTRICITY].current_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         attr_fn=lambda data: {'prices': data[DATA_GAS].asdict(
             'market_price_including_tax_and_markup', timezone="Europe/Amsterdam")}
-        if data[DATA_GAS].current_hour else {},
-        entity_registry_enabled_default=True
+        if data[DATA_GAS] and data[DATA_GAS].current_hour else {},
     ),
     FrankEnergieEntityDescription(
         key="elec_hourcount",
@@ -1037,7 +1132,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:numeric-0-box-multiple",
         suggested_display_precision=0,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data[DATA_GAS].length,
+        service_name=SERVICE_NAME_GAS_PRICES,
+        value_fn=lambda data: data[DATA_GAS].length
+        if data[DATA_GAS] else None,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True
     ),
@@ -1061,6 +1158,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+
         value_fn=lambda data: data[DATA_ELECTRICITY].next_hour.market_price
         if data[DATA_ELECTRICITY].next_hour else None,
         entity_registry_enabled_default=True
@@ -1073,8 +1171,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].previous_hour.total
-        if data[DATA_GAS].previous_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].previous_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -1085,8 +1184,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].next_hour.total
-        if data[DATA_GAS].next_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].next_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -1097,8 +1197,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].previous_hour.market_price
-        if data[DATA_GAS].previous_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].previous_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -1109,8 +1210,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].next_hour.market_price
-        if data[DATA_GAS].next_hour else None,
+        if data[DATA_GAS] and data[DATA_GAS].next_hour else None,
         entity_registry_enabled_default=True
     ),
     FrankEnergieEntityDescription(
@@ -1121,7 +1223,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_market
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market else None,
+        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
+            'market_price', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market_tax",
@@ -1131,7 +1238,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_market_tax
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax else None,
+        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
+            'market_price_tax', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market_tax_markup",
@@ -1141,7 +1253,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_market_tax_markup
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax_markup else None,
+        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
+            'market_price_including_tax_and_markup', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax_markup else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_today_avg_all_in",
@@ -1151,7 +1268,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].today_prices_total
+        if data[DATA_GAS] and data[DATA_GAS].today_prices_total else None,
+        attr_fn=lambda data: {'today_prices': data[DATA_GAS].asdict(
+            'total', today_only=True, timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] and data[DATA_GAS].today_prices_total else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_all_in",
@@ -1161,7 +1283,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_total
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_total else None,
+        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
+            'total', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_total else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_min",
@@ -1171,13 +1298,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_min.total
-        if data[DATA_GAS].tomorrow_min
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_min
         else None,
         attr_fn=lambda data: {
             ATTR_TIME: data[DATA_GAS].tomorrow_min.date_from
-            if data[DATA_GAS].tomorrow_min
-            else None
+            if data[DATA_GAS] and data[DATA_GAS].tomorrow_min
+            else {}
         }
     ),
     FrankEnergieEntityDescription(
@@ -1188,13 +1316,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_max.total
-        if data[DATA_GAS].tomorrow_max
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_max
         else None,
         attr_fn=lambda data: {
             ATTR_TIME: data[DATA_GAS].tomorrow_max.date_from
-            if data[DATA_GAS].tomorrow_max
-            else None
+            if data[DATA_GAS] and data[DATA_GAS].tomorrow_max
+            else {}
         }
     ),
     FrankEnergieEntityDescription(
@@ -1205,11 +1334,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].upcoming_avg.market_price
-        if data[DATA_GAS].upcoming_avg else None,
+        if data[DATA_GAS] else None,
         attr_fn=lambda data: {
-            'prices': data[DATA_GAS].asdict('marketPrice', upcoming_only=True, timezone="Europe/Amsterdam")
-            if data[DATA_GAS].upcoming_avg else {}
+            'prices': data[DATA_GAS].asdict('market_price', upcoming_only=True, timezone="Europe/Amsterdam")
+            if data[DATA_GAS] else {}
         }
     ),
     FrankEnergieEntityDescription(
@@ -1220,11 +1350,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: data[DATA_GAS].upcoming_min.total,
+        service_name=SERVICE_NAME_GAS_PRICES,
+        value_fn=lambda data: data[DATA_GAS].upcoming_min.total
+        if data[DATA_GAS] else None,
         attr_fn=lambda data: {
             ATTR_TIME: data[DATA_GAS].upcoming_min.date_from
         }
-        if data[DATA_ELECTRICITY].upcoming_min else {},
+        if data[DATA_GAS] else {},
     ),
     FrankEnergieEntityDescription(
         key="gas_upcoming_max",
@@ -1234,10 +1366,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: data[DATA_GAS].upcoming_max.total,
+        service_name=SERVICE_NAME_GAS_PRICES,
+        value_fn=lambda data: data[DATA_GAS].upcoming_max.total
+        if data[DATA_GAS] else None,
         attr_fn=lambda data: {
             ATTR_TIME: data[DATA_GAS].upcoming_max.date_from
         }
+        if data[DATA_GAS] else {},
     ),
     FrankEnergieEntityDescription(
         key="average_electricity_price_upcoming_all_in",
@@ -1289,7 +1424,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         if data[DATA_ELECTRICITY].upcoming_avg else None,
         attr_fn=lambda data: {
             'average_electricity_price_upcoming_market': data[DATA_ELECTRICITY].upcoming_market_avg,
-            'upcoming_market_prices': data[DATA_ELECTRICITY].asdict('marketPrice', upcoming_only=True)
+            'upcoming_market_prices': data[DATA_ELECTRICITY].asdict('market_price', upcoming_only=True)
         }
     ),
     FrankEnergieEntityDescription(
@@ -1330,10 +1465,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: sum(
-            data[DATA_GAS].today_gas_before6am) / len(data[DATA_GAS].today_gas_before6am),
+            data[DATA_GAS].today_gas_before6am) / len(data[DATA_GAS].today_gas_before6am)
+        if data[DATA_GAS] else None,
         attr_fn=lambda data: {"Number of hours": len(
             data[DATA_GAS].today_gas_before6am)}
+        if data[DATA_GAS] else None,
     ),
     FrankEnergieEntityDescription(
         key="gas_markup_after6am",
@@ -1343,10 +1481,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: sum(
-            data[DATA_GAS].today_gas_after6am) / len(data[DATA_GAS].today_gas_after6am),
+            data[DATA_GAS].today_gas_after6am) / len(data[DATA_GAS].today_gas_after6am)
+        if data[DATA_GAS] else None,
         attr_fn=lambda data: {"Number of hours": len(
             data[DATA_GAS].today_gas_after6am)}
+        if data[DATA_GAS] else None,
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_before6am",
@@ -1356,11 +1497,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (sum(data[DATA_GAS].tomorrow_gas_before6am) / len(
             data[DATA_GAS].tomorrow_gas_before6am))
-        if data[DATA_GAS].tomorrow_gas_before6am else None,
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_gas_before6am else None,
         attr_fn=lambda data: {"Number of hours": len(
             data[DATA_GAS].tomorrow_gas_before6am)}
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_gas_before6am else None,
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_after6am",
@@ -1370,11 +1513,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
+        service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (sum(data[DATA_GAS].tomorrow_gas_after6am) / len(
             data[DATA_GAS].tomorrow_gas_after6am))
-        if data[DATA_GAS].tomorrow_gas_after6am else None,
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_gas_after6am else None,
         attr_fn=lambda data: {"Number of hours": len(
             data[DATA_GAS].tomorrow_gas_after6am)}
+        if data[DATA_GAS] and data[DATA_GAS].tomorrow_gas_after6am else None,
     ),
     FrankEnergieEntityDescription(
         key="actual_costs_until_last_meter_reading_date",
@@ -1749,6 +1894,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
+        is_gas=True,
         value_fn=lambda data: data[DATA_USAGE].gas.costs_total
         if data[DATA_USAGE].gas
         else None,
@@ -1766,6 +1912,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
+        is_gas=True,
         value_fn=lambda data: data[DATA_USAGE].gas.usage_total
         if data[DATA_USAGE].gas
         else None,
@@ -1783,6 +1930,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
+        is_feed_in=True,
         value_fn=lambda data: data[DATA_USAGE].feed_in.costs_total
         if data[DATA_USAGE].feed_in
         else None,
@@ -1800,6 +1948,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
+        is_feed_in=True,
         value_fn=lambda data: data[DATA_USAGE].feed_in.usage_total
         if data[DATA_USAGE].feed_in
         else None,
@@ -2227,6 +2376,15 @@ class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
         self._update_job = HassJob(self._handle_scheduled_update)
         self._unsub_update = None
 
+        # Zet enabled_default op False bij feed-in sensor zonder waarde
+        if description.is_feed_in:
+            user_data = coordinator.data.get(DATA_USER)
+            estimated_feed_in = 0
+            if user_data and hasattr(user_data, "connections") and user_data.connections:
+                estimated_feed_in = getattr(user_data.connections[0], "estimatedFeedIn", 0) or 0
+
+            self._attr_entity_registry_enabled_default = estimated_feed_in > 0
+
         super().__init__(coordinator)
 
     async def async_update(self):
@@ -2296,6 +2454,18 @@ def _build_dynamic_enode_sensor_descriptions(
     chargers = enode_data.chargers
     if not isinstance(chargers, list) or not chargers:
         return descriptions
+
+    total_charge_capacity = sum(
+        charger.charge_settings.capacity
+        for charger in chargers
+        if charger.charge_settings and charger.charge_settings.capacity is not None
+    )
+
+    total_charge_rate = sum(
+        charger.charge_state.charge_rate
+        for charger in chargers
+        if charger.charge_state and charger.charge_state.charge_rate is not None
+    )
 
     for i, charger in enumerate(chargers):
         descriptions.extend([
@@ -2580,6 +2750,43 @@ def _build_dynamic_enode_sensor_descriptions(
             )
         ])
 
+    descriptions.extend([
+        FrankEnergieEntityDescription(
+            key="total_charge_capacity",
+            name="Total Charge Capacity",
+            native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            authenticated=True,
+            service_name=SERVICE_NAME_ENODE_CHARGERS,
+            icon="mdi:flash",
+            device_class=SensorDeviceClass.ENERGY,
+            value_fn=lambda _, : total_charge_capacity,
+            attr_fn=lambda data: {
+                "chargers capacity": {
+                    charger.id: charger.charge_settings.capacity
+                    for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                }
+                if DATA_ENODE_CHARGERS in data and getattr(data[DATA_ENODE_CHARGERS], "chargers", None) else {}
+            }
+        ),
+        FrankEnergieEntityDescription(
+            key="total_charge_rate",
+            name="Total Charge Rate",
+            native_unit_of_measurement=UnitOfPower.KILO_WATT,
+            authenticated=True,
+            service_name=SERVICE_NAME_ENODE_CHARGERS,
+            icon="mdi:flash",
+            device_class=SensorDeviceClass.POWER,
+            value_fn=lambda _, : total_charge_rate,
+            attr_fn=lambda data: {
+                "chargers charge rate": {
+                    charger.id: charger.charge_state.charge_rate
+                    for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                }
+                if DATA_ENODE_CHARGERS in data and getattr(data[DATA_ENODE_CHARGERS], "chargers", None) else {}
+            }
+        )
+    ])
+
     return descriptions
 
 
@@ -2649,7 +2856,7 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
     descriptions: list[FrankEnergieEntityDescription] = []
 
     _LOGGER.debug("Building dynamic smart batteries descriptions...")
-    _LOGGER.debug("Raw batteries data: %s", batteries)
+    # _LOGGER.debug("Raw batteries data: %s", batteries)
     # Check if batteries is empty
     if not batteries:
         _LOGGER.debug("No batteries found.")
@@ -2659,12 +2866,15 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
     if not isinstance(batteries, list):
         _LOGGER.error("Batteries data is not a list.")
         return descriptions
-    first_type = type(batteries[0])
-    _LOGGER.debug("First battery type: %s", first_type)
+    # first_type = type(batteries[0])  # <class 'python_frank_energie.models.SmartBattery'>
+    # _LOGGER.debug("First battery type: %s", first_type)
     # Check if batteries contain SmartBattery instances
     # if not all(isinstance(b, SmartBatteries.SmartBattery) for b in batteries):
     #    _LOGGER.error("Not all items in batteries are SmartBattery instances.")
     #    return
+
+    total_battery_capacity = 0
+    total_max_charge_power = 0
 
     for i, battery in enumerate(batteries):
         if not hasattr(battery, "id"):
@@ -2672,8 +2882,20 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
             continue
 
         base_key = f"smart_battery_{i}"
-        name_prefix = f"Battery {i+1}"
+        name_prefix = f"Battery {i + 1}"
+
+        # Capture values immediately to avoid lambda late binding
+        battery_brand = battery.brand
+        battery_capacity = battery.capacity
+        battery_reference = battery.external_reference
         battery_id = battery.id
+        battery_max_charge_power = battery.max_charge_power
+        battery_provider = battery.provider
+        battery_created_at = battery.created_at
+        battery_updated_at = battery.updated_at
+
+        total_battery_capacity += battery_capacity
+        total_max_charge_power += battery_max_charge_power
 
         descriptions.extend([
             FrankEnergieEntityDescription(
@@ -2682,17 +2904,17 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:battery",
-                value_fn=lambda data, i=i: battery.brand,
+                value_fn=lambda _, val=battery_brand: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_capacity",
-                name=f"{name_prefix} Capacity (kWh)",
+                name=f"{name_prefix} Capacity",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:battery-charging",
                 device_class=SensorDeviceClass.ENERGY,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-                value_fn=lambda data, _id=battery.id: battery.capacity,
+                value_fn=lambda _, val=battery_capacity: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_external_reference",
@@ -2700,7 +2922,7 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:identifier",
-                value_fn=lambda data, _id=battery.id: battery.external_reference,
+                value_fn=lambda _, val=battery_reference: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_id",
@@ -2708,17 +2930,17 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:fingerprint",
-                value_fn=lambda data, _id=battery_id: battery.id,
+                value_fn=lambda _, val=battery_id: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_max_charge_power",
-                name=f"{name_prefix} Max Charge Power (kW)",
+                name=f"{name_prefix} Max Charge Power",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
-                value_fn=lambda data, _id=battery.id: battery.max_charge_power,
+                value_fn=lambda _, val=battery_max_charge_power: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_provider",
@@ -2726,7 +2948,7 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:factory",
-                value_fn=lambda data, _id=battery.id: battery.provider,
+                value_fn=lambda _, val=battery_provider: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_created_at",
@@ -2735,7 +2957,7 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:calendar-clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
-                value_fn=lambda data, _id=battery.id: battery.created_at,
+                value_fn=lambda _, val=battery_created_at: val,
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_updated_at",
@@ -2744,9 +2966,230 @@ def _build_dynamic_smart_batteries_descriptions(batteries: SmartBatteriesData) -
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:calendar-clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
-                value_fn=lambda data, _id=battery.id: battery.updated_at,
+                value_fn=lambda _, val=battery_updated_at: val,
             ),
         ])
+
+    descriptions.extend([
+        FrankEnergieEntityDescription(
+            key="total_capacity",
+            name="Total Capacity",
+            authenticated=True,
+            service_name=SERVICE_NAME_BATTERIES,
+            icon="mdi:battery-charging",
+            device_class=SensorDeviceClass.ENERGY,
+            native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            value_fn=lambda _, val=total_battery_capacity: val,
+        ),
+        FrankEnergieEntityDescription(
+            key="total_max_charge_power",
+            name="Total Max Charge Power",
+            authenticated=True,
+            service_name=SERVICE_NAME_BATTERIES,
+            icon="mdi:flash",
+            device_class=SensorDeviceClass.POWER,
+            native_unit_of_measurement=UnitOfPower.KILO_WATT,
+            value_fn=lambda _, val=total_max_charge_power: val,
+        ),
+    ])
+
+    return descriptions
+
+
+def old_build_dynamic_battery_session_descriptions(battery_id: str) -> list[FrankEnergieEntityDescription]:
+    """Return dynamic sensor descriptions for battery session metrics."""
+    return [
+        FrankEnergieEntityDescription(
+            key=f"{battery_id}_trading_result",
+            name=f"Trading Result {battery_id}",
+            icon="mdi:chart-line",
+            device_class=SensorDeviceClass.MONETARY,
+            native_unit_of_measurement=CURRENCY_EURO,
+            authenticated=True,
+            service_name=SERVICE_NAME_BATTERY_SESSIONS,
+            value_fn=lambda data, battery_id=battery_id: (
+                getattr(data[DATA_BATTERY_SESSIONS].get(battery_id), "period_trading_result", None)
+                if data.get(DATA_BATTERY_SESSIONS) else None
+            ),
+            attr_fn=lambda data, battery_id=battery_id: (
+                vars(data[DATA_BATTERY_SESSIONS].get(battery_id))  # or .__dict__
+                if data.get(DATA_BATTERY_SESSIONS) and battery_id in data[DATA_BATTERY_SESSIONS] else {}
+            ),
+            suggested_display_precision=2,
+            is_battery_session=True,
+        ),
+        FrankEnergieEntityDescription(
+            key=f"{battery_id}_trading_result_2",
+            name=f"Trading Result {battery_id} 2",
+            icon="mdi:chart-line",
+            device_class=SensorDeviceClass.MONETARY,
+            native_unit_of_measurement=CURRENCY_EURO,
+            authenticated=True,
+            service_name=SERVICE_NAME_BATTERY_SESSIONS,
+            value_fn=lambda data, battery_id=battery_id: (
+                data[DATA_BATTERY_SESSIONS][battery_id].period_trading_result
+                if DATA_BATTERY_SESSIONS in data and battery_id in data[DATA_BATTERY_SESSIONS] else None
+            ),
+            attr_fn=lambda data, battery_id=battery_id: {
+                "battery_session": data[DATA_BATTERY_SESSIONS].get(battery_id, {})
+                if DATA_BATTERY_SESSIONS in data else {}
+            },
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            suggested_display_precision=2,
+            is_battery_session=True,
+        ),
+    ]
+
+
+def old2_build_dynamic_battery_session_descriptions(
+    battery_ids: list[str],
+    include_total: bool = True
+) -> list[FrankEnergieEntityDescription]:
+    """Generate sensor descriptions for all smart battery sessions, including total if desired."""
+    descriptions: list[FrankEnergieEntityDescription] = []
+
+    for battery_id in battery_ids:
+        descriptions.extend([
+            FrankEnergieEntityDescription(
+                key=f"{battery_id}_trading_result",
+                name=f"Trading Result {battery_id}",
+                icon="mdi:chart-line",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: getattr(data, "period_trading_result", None),
+                attr_fn=lambda data: vars(data) if data else {},
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            ),
+            FrankEnergieEntityDescription(
+                key=f"{battery_id}_total_result",
+                name=f"Total Result {battery_id}",
+                icon="mdi:chart-box-outline",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: getattr(data, "period_total_result", None),
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            ),
+            FrankEnergieEntityDescription(
+                key=f"{battery_id}_epex_result",
+                name=f"EPEX Result {battery_id}",
+                icon="mdi:flash",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: getattr(data, "period_epex_result", None),
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            ),
+            FrankEnergieEntityDescription(
+                key=f"{battery_id}_imbalance_result",
+                name=f"Imbalance Result {battery_id}",
+                icon="mdi:scale-balance",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: getattr(data, "period_imbalance_result", None),
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            ),
+            FrankEnergieEntityDescription(
+                key=f"{battery_id}_frank_slim",
+                name=f"Frank Slim Result {battery_id}",
+                icon="mdi:robot",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: getattr(data, "period_frank_slim", None),
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            ),
+        ])
+
+    if include_total:
+        # Voeg één gecombineerde totaalsensor toe
+        descriptions.append(
+            FrankEnergieEntityDescription(
+                key="all_batteries_total_result",
+                name="Total Result (All Batteries)",
+                icon="mdi:chart-donut",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: sum(
+                    getattr(session, "period_total_result", 0)
+                    for session in data.values()
+                    if session and hasattr(session, "period_total_result")
+                ) if isinstance(data, dict) else None,
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            )
+        )
+
+    return descriptions
+
+
+def _build_dynamic_battery_session_descriptions(
+    battery_ids: list[str],
+    include_total: bool = True
+) -> list[FrankEnergieEntityDescription]:
+    """Genereer sensorbeschrijvingen voor alle smart battery sessions."""
+    descriptions: list[FrankEnergieEntityDescription] = []
+
+    for battery_id in battery_ids:
+        for base_description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
+            desc = FrankEnergieEntityDescription(
+                key=f"battery_{battery_id}_{base_description.key}",
+                name=f"{base_description.name} {battery_id}",
+                icon=base_description.icon,
+                device_class=base_description.device_class,
+                state_class=base_description.state_class,
+                native_unit_of_measurement=base_description.native_unit_of_measurement,
+                suggested_display_precision=base_description.suggested_display_precision,
+                entity_category=base_description.entity_category,
+                authenticated=True,
+                service_name=base_description.service_name,
+                value_fn=base_description.value_fn,
+                attr_fn=base_description.attr_fn,
+            )
+            descriptions.append(desc)
+
+    if include_total:
+        # Voeg één gecombineerde totaalsensor toe
+        # Deze sensor verwacht dat alle sessies in FrankEnergieCoordinator.data[DATA_BATTERY_SESSIONS] zitten als dict[battery_id → SmartBatterySessions]
+        descriptions.append(
+            FrankEnergieEntityDescription(
+                key="battery_all_total_result",
+                name="Total Result (All Batteries)",
+                icon="mdi:chart-donut",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: sum(
+                    getattr(session, "period_total_result", 0.0)
+                    for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
+                    if session and hasattr(session, "period_total_result")
+                ) if isinstance(data.get(DATA_BATTERY_SESSIONS, None), dict) else None,
+                attr_fn=lambda data: {
+                    "battery_ids": list(data.get(DATA_BATTERY_SESSIONS, {}).keys()),
+                    "values": [
+                        getattr(session, "period_total_result", None)
+                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
+                    ]
+                },
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
+            )
+        )
 
     return descriptions
 
@@ -2760,49 +3203,73 @@ async def async_setup_entry(
     _LOGGER.debug("Setting up Frank Energie sensors for entry: %s", config_entry.entry_id)
 
     coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][CONF_COORDINATOR]
-    session_coordinator: FrankEnergieBatterySessionCoordinator | None = (
-        hass.data[DOMAIN][config_entry.entry_id].get(DATA_BATTERY_SESSIONS)
-    )
+    batteries = coordinator.data.get(DATA_BATTERIES, [])
+    battery_sessions = coordinator.data.get(DATA_BATTERY_SESSIONS, [])
 
-    if not session_coordinator:
-        _LOGGER.warning("Battery session coordinator not found for entry %s", config_entry.entry_id)
+    session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = {}
+    entities: list = []
 
-    if DATA_BATTERY_SESSIONS in hass.data[DOMAIN][config_entry.entry_id]:
-        session_coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_BATTERY_SESSIONS]
-    else:
-        _LOGGER.warning("Battery session coordinator not found for entry %s", config_entry.entry_id)
-
-    device_id = "cm3sunryl0000tc3nhygweghn"
-    if DATA_BATTERIES in coordinator.data and coordinator.data[DATA_BATTERIES]:
+    if batteries and batteries.smart_batteries:
         api = coordinator.api  # type: ignore[attr-defined]
-        session_coordinator: FrankEnergieBatterySessionCoordinator = FrankEnergieBatterySessionCoordinator(
-            hass,
-            config_entry,
-            api,
-            device_id
-        )
 
-        try:
-            await session_coordinator.async_config_entry_first_refresh()
-        except Exception as err:
-            _LOGGER.exception("Failed to refresh battery session coordinator: %s", err)
-        else:
-            hass.data[DOMAIN][config_entry.entry_id][DATA_BATTERY_SESSIONS] = session_coordinator
-            _LOGGER.debug("Battery session coordinator initialized and stored for entry %s", config_entry.entry_id)
-    else:
-        session_coordinator = None
-        _LOGGER.debug("No smart batteries found for entry %s; skipping battery session coordinator setup",
-                      config_entry.entry_id)
+        # Set up session coordinators per battery
+        for battery in batteries.smart_batteries:
+            device_id = battery.id
+            session_coordinator = FrankEnergieBatterySessionCoordinator(
+                hass,
+                config_entry,
+                api,
+                device_id
+            )
+
+            try:
+                await session_coordinator.async_config_entry_first_refresh()
+            except Exception as err:
+                _LOGGER.exception(
+                    "Failed to refresh battery session coordinator for device %s: %s",
+                    device_id,
+                    err
+                )
+                continue
+
+            session_coordinators[device_id] = session_coordinator
+
+        hass.data[DOMAIN][config_entry.entry_id][DATA_BATTERY_SESSIONS] = session_coordinators
 
     # Add an entity for each sensor type, when authenticated is True,
     # only add the entity if the user is authenticated
     # entities: list[SensorEntity] = []
     # entities: list[FrankEnergieSensor] = []
     # entities: list[FrankEnergieBatterySessionSensor] = []
+
+    # Safely access user segments from DATA_USER_SITES
+    user_segments = getattr(coordinator.data.get(DATA_USER_SITES), "segments", [])
+
+    # Safely access user data, default to an empty dictionary if None
+    user_data = coordinator.data.get(DATA_USER, {})
+    batteries = coordinator.data.get(DATA_BATTERIES, {})
+    chargers = coordinator.data.get(DATA_ENODE_CHARGERS, {})
+
+    # Safely access user data (defaulting to an empty dictionary if None)
+    connections = user_data.get("connections", []) if isinstance(user_data, dict) else []
+    estimated_feed_in = connections[0].get("estimatedFeedIn", 0) if connections else 0
+
     entities: list = [
-        FrankEnergieSensor(coordinator, description, config_entry)
+        FrankEnergieSensor(
+            coordinator,
+            description,
+            config_entry,
+        )
         for description in SENSOR_TYPES
-        if not description.authenticated or coordinator.api.is_authenticated
+        if (
+            (not description.authenticated or coordinator.api.is_authenticated)
+            and (not description.is_gas or "GAS" in user_segments)
+            # Do not create feed-in sensor if estimated_feed_in is 0
+            and (not description.is_feed_in or estimated_feed_in > 0)
+            # and (not description.is_battery or batteries is not None)
+            # and (not description.is_charger or chargers is not None)
+            # and (not description.is_battery_session or session_coordinator is not None)
+        )
     ]
 
     # _LOGGER.debug("coordinator.enode_chargers: %d", coordinator.data.get('enode_chargers'))
@@ -2847,6 +3314,8 @@ async def async_setup_entry(
         _LOGGER.debug("Number of smart battery sensors: %d", len(batteries.smart_batteries))
         _LOGGER.debug("Setting up smart battery type: %s", type(batteries.smart_batteries))  # <class 'list'>
         dynamic_battery_descriptions = _build_dynamic_smart_batteries_descriptions(batteries.smart_batteries)
+        sensor_descriptions = list(STATIC_BATTERY_SENSOR_TYPES) + \
+            dynamic_battery_descriptions
         for i, battery in enumerate(batteries.smart_batteries):
             _LOGGER.debug("Setting up smart battery: %s", battery)
             _LOGGER.debug("Setting up smart battery type: %s", type(battery))
@@ -2859,33 +3328,43 @@ async def async_setup_entry(
             _LOGGER.debug("Setting up smart battery created_at: %s", battery.created_at)
             _LOGGER.debug("Setting up smart battery updated_at: %s", battery.updated_at)
             _LOGGER.debug("Setting up smart battery capacity: %s", battery.capacity)
-            sensor_descriptions = list(STATIC_BATTERY_SENSOR_TYPES) + \
-                dynamic_battery_descriptions
 
             for description in sensor_descriptions:
                 if not description.authenticated or coordinator.api.is_authenticated:
                     entities.append(FrankEnergieSensor(coordinator, description, config_entry))
-                    _LOGGER.debug("Added sensor for battery %d: %s", i, description.key)
+                    _LOGGER.debug("Added sensor for %s", description.key)
 
-            # Create sensors for each battery session if session coordinator is available
-            if session_coordinator and session_coordinator.data:
-                # for battery_id in session_coordinator.data:
-                for battery_id in session_coordinator.data.sessions:
-                    _LOGGER.debug("Creating battery session sensors for battery: %s", battery_id)
-                    for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
+            # Create sensors for each battery session coordinator
+            for battery_id, session_coordinator in session_coordinators.items():
+                descriptions = _build_dynamic_battery_session_descriptions([battery_id], include_total=False)
+                sessions_data = session_coordinator.data
+                if sessions_data and sessions_data.sessions:
+                    _LOGGER.debug("Creating dynamic battery session sensors for battery: %s", battery_id)
+                    for description in descriptions:
                         if not description.authenticated or coordinator.api.is_authenticated:
-                            _LOGGER.debug("Adding battery session sensor: %s for battery: %s",
-                                          description.key, battery_id.trading_result)
-                            entities.append(
-                                FrankEnergieBatterySessionSensor(
-                                    coordinator,
-                                    session_coordinator,
-                                    description,
-                                    battery_id
-                                )
+                            sensor = FrankEnergieBatterySessionSensor(
+                                coordinator=session_coordinator,
+                                description=description,
+                                battery_id=battery_id,
+                                is_total=False,
                             )
-            else:
-                _LOGGER.debug("No session coordinator data found for entry %s", config_entry.entry_id)
+                            entities.append(sensor)
+                else:
+                    _LOGGER.debug(
+                        "No session data found in session coordinator for battery %s (entry %s)",
+                        battery_id,
+                        config_entry.entry_id
+                    )
+
+            total_descriptions = _build_dynamic_battery_session_descriptions([], include_total=True)
+            for desc in total_descriptions:
+                sensor = FrankEnergieBatterySessionSensor(
+                    coordinator=coordinator,  # hoofdcoördinator!
+                    description=desc,
+                    battery_id="all_batteries",
+                    is_total=True,
+                )
+                entities.append(sensor)
 
     # Register the sensors to Home Assistant
     try:

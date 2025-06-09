@@ -4,19 +4,20 @@
 # version 2025.4.30
 
 import asyncio
+import logging
 import sys
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Callable, Optional, TypedDict
+from typing import Any, Callable, Optional, TypedDict
 
 import aiohttp
-from homeassistant.config_entries import ConfigEntry  # type: ignore
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN  # type: ignore
-from homeassistant.core import HomeAssistant  # type: ignore
-from homeassistant.exceptions import ConfigEntryAuthFailed  # type: ignore
-from homeassistant.helpers.update_coordinator import (  # type: ignore
-    DataUpdateCoordinator,  # type: ignore
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
     UpdateFailed,
-)  # type: ignore
+)
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import AuthException, RequestException
 from python_frank_energie.models import (
@@ -27,14 +28,15 @@ from python_frank_energie.models import (
     PeriodUsageAndCosts,
     PriceData,
     SmartBatteries,
+    SmartBatteryDetails,
     SmartBatterySessions,
     User,
     UserSites,
 )
 
 from .const import (
-    _LOGGER,
     DATA_BATTERIES,
+    DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
@@ -45,6 +47,8 @@ from .const import (
     DATA_USER,
     DATA_USER_SITES,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -79,7 +83,11 @@ class FrankEnergieData(TypedDict):
     DATA_BATTERIES: Optional[SmartBatteries]
     """Optional smart batteries data."""
 
-    DATA_BATTERY_SESSIONS: Optional[SmartBatterySessions]
+    DATA_BATTERY_DETAILS: Optional[SmartBatteryDetails]
+    """Optional smart battery details data."""
+
+    # DATA_BATTERY_SESSIONS: Optional[SmartBatterySessions]
+    DATA_BATTERY_SESSIONS: Optional[list[SmartBatterySessions]]
     """Optional smart battery sessions data."""
 
 
@@ -96,6 +104,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.entry = entry
         self.api = api
         self.site_reference = entry.data.get("site_reference", None)
+        self.country_code: str | None = self.hass.config.country
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = {
             DATA_ELECTRICITY: None,
@@ -107,10 +116,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             DATA_USER_SITES: None,
             DATA_ENODE_CHARGERS: None,
             DATA_BATTERIES: None,
+            DATA_BATTERY_DETAILS: None,
             DATA_BATTERY_SESSIONS: None,
         }
         self._update_interval = timedelta(minutes=60)
         self._last_update_success = False
+        _LOGGER.debug(
+            "Initializing Frank Energie coordinator with country_code: %s",
+            self.country_code,
+        )
 
         super().__init__(
             hass,
@@ -127,12 +141,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         tomorrow = today + timedelta(days=1)
 
         # Fetch today's prices and user data
-        prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_sessions = await self._fetch_today_data(today, tomorrow)
+        prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions = await self._fetch_today_data(today, tomorrow)
 
         # Fetch tomorrow's prices if it's after 13:00 UTC
         prices_tomorrow = await self._fetch_tomorrow_data(tomorrow) if datetime.now(timezone.utc).hour >= self.FETCH_TOMORROW_HOUR_UTC else None
 
-        return self._aggregate_data(prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_sessions)
+        return self._aggregate_data(prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions)
 
     async def _fetch_today_data(self, today: date, tomorrow: date):
         """Fetch all relevant Frank Energie data for today."""
@@ -186,46 +200,94 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             _LOGGER.debug("Data user: %s", data_user)
 
-            if self.api.is_authenticated and data_user:
-                _LOGGER.debug("Data user smartCharging: %s", data_user.smartCharging.get("isActivated"))
+            if data_user:
+                is_smart_charging = data_user.smartCharging.get("isActivated")
+                is_smart_charging = True
+
+            # Check if smart charging is activated and retrieve smart charging data
+            # Gebruik echte of testdata afhankelijk van context
             data_enode_chargers = (
                 await self.api.enode_chargers(self.site_reference, start_date)
-                # use this in production
-                # if self.api.is_authenticated and data_user.smartCharging.get("isActivated")
-                # Use this for testing, enabling smart charging testdata
-                if self.api.is_authenticated
+                if self.api.is_authenticated and is_smart_charging
                 else None
             )
+
             _LOGGER.debug("Data enode chargers: %s", data_enode_chargers)
 
-            if self.api.is_authenticated and data_user:
-                _LOGGER.debug("Data user Batteries: %s", data_user.smartCharging.get("isActivated"))
             data_smart_batteries = (
-                # await self.api.smart_batteries(self.site_reference, start_date)
                 await self.api.smart_batteries()
                 # use this in production
-                # if self.api.is_authenticated and data_user.smartCharging.get("isActivated")
+                # if self.api.is_authenticated and is_smart_charging
                 # Use this for testing, enabling smart charging testdata
-                if self.api.is_authenticated
+                if self.api.is_authenticated and is_smart_charging
                 else None
             )
+
             _LOGGER.debug("Data smart batteries: %s", data_smart_batteries)
 
+            data_smart_battery_details = []
+            if self.api.is_authenticated and data_smart_batteries:
+                _LOGGER.debug("Data smart batteries: %s", data_smart_batteries.smart_batteries)
+
+            if data_smart_batteries and data_smart_batteries.smart_batteries:
+                for battery in data_smart_batteries.smart_batteries:
+                    if not battery:
+                        continue
+
+                    _LOGGER.debug("Smart battery ID: %s", battery.id)
+                    if not self.api.is_authenticated:
+                        _LOGGER.warning("API not authenticated. Skipping battery ID: %s", battery.id)
+                        continue
+                    try:
+                        details = await self.api.smart_battery_details(
+                            battery.id
+                        )
+                        if details:
+                            data_smart_battery_details.extend(details)
+                    except Exception as err:
+                        _LOGGER.error("Failed to fetch details for battery %s: %s", battery.id, err)
+                        continue
+                    _LOGGER.debug("Battery details: %s", details)
+                    _LOGGER.debug("Device ID: %s", battery.id)
+            else:
+                _LOGGER.debug("No smart batteries found")
+
+            _LOGGER.debug("Data smart battery details: %s", data_smart_battery_details)
+
+            data_smart_battery_sessions = []
             # if self.api.is_authenticated and data_user:
             # _LOGGER.debug("Data user Batteries: %s", data_user.smartCharging.get("isActivated"))
-            device_id = data_smart_batteries.smart_batteries[0].id if data_smart_batteries and data_smart_batteries.smart_batteries else None
-            _LOGGER.debug("Device ID: %s", device_id)
-            data_smart_battery_sessions = (
-                await self.api.smart_battery_sessions(device_id, start_date, tomorrow)
-                # use this in production
-                # if self.api.is_authenticated and data_user.smartCharging.get("isActivated")
-                # Use this for testing, enabling smart charging testdata
-                if self.api.is_authenticated
-                else None
-            )
-            _LOGGER.debug("Data smart battery sessions: %s", data_smart_battery_sessions)
+            if data_smart_batteries and data_smart_batteries.smart_batteries:
+                for battery in data_smart_batteries.smart_batteries:
+                    if not battery:
+                        continue
 
-            return prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_sessions
+                    _LOGGER.debug("Smart battery ID coord: %s", battery.id)
+                    if not self.api.is_authenticated:
+                        _LOGGER.warning("API not authenticated. Skipping battery ID: %s", battery.id)
+                        continue
+                    try:
+                        sessions = await self.api.smart_battery_sessions(
+                            battery.id, start_date, tomorrow
+                        )
+                        if sessions and isinstance(sessions.sessions, list):
+                            _LOGGER.debug("Appending %d session(s) for battery %s", len(sessions.sessions), battery.id)
+                            # data_smart_battery_sessions.extend(sessions)
+                            data_smart_battery_sessions.append(sessions)
+                        else:
+                            _LOGGER.warning(
+                                "No valid sessions list found in SmartBatterySessions for battery %s", battery.id)
+                    except Exception as err:
+                        _LOGGER.error("Failed to fetch sessions for battery %s: %s", battery.id, err)
+                        continue
+                    _LOGGER.debug("Battery sessions: %s", sessions)
+                    _LOGGER.debug("Device ID: %s", battery.id)
+            else:
+                _LOGGER.debug("No smart batteries found")
+
+            _LOGGER.debug("Data smart battery session: %s", data_smart_battery_sessions)
+
+            return prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions
 
         except UpdateFailed as err:
             electricity = self.data.get(DATA_ELECTRICITY)
@@ -266,12 +328,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             await self.__try_renew_token()
             raise UpdateFailed(ex) from ex
 
-    def _aggregate_data(self, prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_sessions):
+    def _aggregate_data(self, prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions) -> dict:
         """Aggregate the fetched data into a single returnable dictionary."""
 
+        # Aggregate the data into a single dictionary
         result = {
-            DATA_ELECTRICITY: prices_today.electricity,
-            DATA_GAS: prices_today.gas,
             DATA_MONTH_SUMMARY: data_month_summary,
             DATA_INVOICES: data_invoices,
             DATA_USAGE: data_period_usage,
@@ -279,8 +340,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             DATA_USER_SITES: user_sites,
             DATA_ENODE_CHARGERS: data_enode_chargers,
             DATA_BATTERIES: data_smart_batteries,
+            DATA_BATTERY_DETAILS: data_smart_battery_details,
             DATA_BATTERY_SESSIONS: data_smart_battery_sessions,
         }
+        result[DATA_ELECTRICITY] = None
+        result[DATA_GAS] = None
+
+        if prices_today is not None:
+            if prices_today.electricity is not None:
+                result[DATA_ELECTRICITY] = prices_today.electricity
+            if prices_today.gas is not None:
+                result[DATA_GAS] = prices_today.gas
 
         if prices_tomorrow is not None:
             if prices_tomorrow.electricity is not None:
@@ -289,6 +359,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 result[DATA_GAS] += prices_tomorrow.gas
 
         return result
+
+    def _is_smart_charging_enabled(self, data_user) -> bool:
+        """Check if smart charging is enabled for the user."""
+        if not data_user:
+            return False
+        smart_charging = data_user.smartCharging
+        return isinstance(smart_charging, dict) and smart_charging.get("isActivated", False) is True
 
     async def __fetch_prices_with_fallback(self, start_date: date, end_date: date) -> MarketPrices:
         """Fetch prices with fallback mechanism."""
@@ -356,6 +433,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Failed to renew token: %s. Starting user reauth flow", ex)
             # Consider setting the coordinator to an error state or handling the error appropriately
             raise ConfigEntryAuthFailed from ex
+
+    async def _fetch_authenticated(self, method: Callable, *args) -> Any:
+        """Execute authenticated API call with logging."""
+        if not self.api.is_authenticated:
+            _LOGGER.warning("API not authenticated. Skipping %s", method.__name__)
+            return None
+        try:
+            result = await method(*args)
+            _LOGGER.debug("Fetched data from %s: %s", method.__name__, result)
+            return result
+        except Exception as err:
+            _LOGGER.error("Failed to fetch %s: %s", method.__name__, err)
+            return None
 
 
 class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySessions]):

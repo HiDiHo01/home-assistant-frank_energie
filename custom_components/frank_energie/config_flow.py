@@ -1,5 +1,6 @@
 """Config flow for Frank Energie integration."""
 # config_flow.py
+import asyncio
 import logging
 from collections.abc import Mapping
 from typing import Any, Optional
@@ -258,8 +259,16 @@ class ConfigFlow(config_entries.ConfigFlow):
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
             )
 
-            # Fetch user sites using the FrankEnergie API
-            user_sites = await api.UserSites()
+            # Fetch user sites with retry using the FrankEnergie API
+            for _ in range(2):
+                try:
+                    user_sites = await api.UserSites()
+                    break
+                except ConnectionException:
+                    await asyncio.sleep(1)
+            else:
+                raise ConnectionException("Failed to connect to Frank Energie API after retries")
+
             _LOGGER.debug("All user_sites: %s", user_sites)
 
             # Check if the user has any delivery sites
@@ -313,12 +322,13 @@ class ConfigFlow(config_entries.ConfigFlow):
             _LOGGER.debug("data CONF_USERNAME: %s", data[CONF_USERNAME])
             # unique_id = data[CONF_SITE] + data[CONF_USERNAME]
             # unique_id = f"{data[CONF_SITE]}_{data[CONF_USERNAME]}"
-            unique_id = f"{data[CONF_SITE]}"
+            unique_id = f"{data[CONF_SITE] or data.get(CONF_USERNAME, "frank_energie")}"
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
         return self.async_create_entry(
-            title=data.get(CONF_USERNAME, "Frank Energie"), data=data
+            title=data.get(CONF_USERNAME, "Frank Energie"),
+            data=data
         )
 
     @staticmethod
@@ -344,6 +354,12 @@ class ConfigFlow(config_entries.ConfigFlow):
             _LOGGER.exception("Unexpected error creating title: %s", err)
             return "Onbekend adres"
 
+    def _login_schema(self, user_input: Optional[dict[str, Any]] = None) -> vol.Schema:
+        return vol.Schema({
+            vol.Required(CONF_USERNAME, default=user_input.get(CONF_USERNAME, "") if user_input else ""): str,
+            vol.Required(CONF_PASSWORD): str,
+        })
+
     def _show_login_form(self, errors: Optional[dict[str, str]] = None) -> FlowResult:
         username = (
             self._reauth_entry.data[CONF_USERNAME]
@@ -355,6 +371,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             {
                 vol.Required(CONF_USERNAME, default=username): str,
                 vol.Required(CONF_PASSWORD): str,
+                vol.Optional("debug_mode", default=False): bool
             }
         )
 

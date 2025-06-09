@@ -62,6 +62,12 @@
                 "Prices": "Prijzen"
             }
         },
+        "Frank Energie - Gasprices": {
+            "name": "Frank Energie - Gasprijzen",
+            "model": {
+                "Gasprices": "Gasprijzen"
+            }
+        },
         "Frank Energie - Costs": {
             "name": "Frank Energie - Kosten",
             "model": {

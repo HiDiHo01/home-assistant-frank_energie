@@ -15,6 +15,7 @@ from python_frank_energie.models import (
     MonthSummary,
     PeriodUsageAndCosts,
     SmartBatteries,
+    SmartBatteryDetails,
     SmartBatterySessions,
     User,
     UserSites,
@@ -25,12 +26,13 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2025.4.30"
+VERSION: Final[str] = "2025.5.1"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
 # --- URLs ---
-DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
+# DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
+DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
 API_CONF_URL: Final[str] = "https://www.frankenergie.nl/goedkoop"
 
 # --- Component Metadata ---
@@ -56,6 +58,7 @@ DATA_USER: Final[str] = "user"
 DATA_USER_SITES: Final[str] = "user_sites"
 DATA_DELIVERY_SITE: Final[str] = "delivery_site"
 DATA_BATTERIES: Final[str] = "smart_batteries"
+DATA_BATTERY_DETAILS: Final[str] = "smart_battery_details"
 DATA_BATTERY_SESSIONS: Final[str] = "smart_battery_sessions"
 DATA_ENODE_CHARGERS: Final[str] = "enode_chargers"
 
@@ -79,6 +82,11 @@ SERVICE_NAME_ELEC_CONN: Final[str] = "Electricity connection"
 SERVICE_NAME_GAS_CONN: Final[str] = "Gas connection"
 SERVICE_NAME_BATTERIES: Final[str] = "Batteries"
 SERVICE_NAME_BATTERY_SESSIONS: Final[str] = "Battery Sessions"
+SERVICE_NAME_BATTERY_SUMMARY: Final[str] = "Battery Summary"
+SERVICE_NAME_BATTERY_DETAILS: Final[str] = "Battery Details"
+SERVICE_NAME_INVOICES: Final[str] = "Invoices"
+SERVICE_NAME_MONTH_SUMMARY: Final[str] = "Month Summary"
+SERVICE_NAME_USER_SITES: Final[str] = "User Sites"
 SERVICE_NAME_ENODE_CHARGERS: Final[str] = "Chargers"
 
 # --- Display Constants ---
@@ -117,6 +125,9 @@ class DeviceResponseEntry:
 
     # Smart battery session details (if available)
     smart_battery_sessions: Optional[SmartBatterySessions] = None
+
+    # Smart battery details (if available)
+    smart_battery_details: Optional[SmartBatteryDetails] = None
 
     # Enode chargers details (if available)
     enode_chargers: Optional[EnodeChargers] = None
