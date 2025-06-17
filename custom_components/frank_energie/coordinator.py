@@ -1,7 +1,7 @@
 """ Coordinator implementation for Frank Energie integration.
     Fetching the latest data from Frank Energie and updating the states."""
 # coordinator.py
-# version 2025.4.30
+# version 2025.6.17
 
 import asyncio
 import logging
@@ -19,7 +19,11 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from python_frank_energie import FrankEnergie
-from python_frank_energie.exceptions import AuthException, RequestException
+from python_frank_energie.exceptions import (
+    AuthException,
+    AuthRequiredException,
+    RequestException,
+)
 from python_frank_energie.models import (
     EnodeChargers,
     Invoices,
@@ -144,7 +148,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions = await self._fetch_today_data(today, tomorrow)
 
         # Fetch tomorrow's prices if it's after 13:00 UTC
-        prices_tomorrow = await self._fetch_tomorrow_data(tomorrow) if datetime.now(timezone.utc).hour >= self.FETCH_TOMORROW_HOUR_UTC else None
+        prices_tomorrow = (
+            await self._fetch_tomorrow_data(tomorrow)
+            if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC
+            else None
+        )
 
         return self._aggregate_data(prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions)
 
@@ -165,64 +173,71 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 _LOGGER.debug(
                     "Fetching Frank Energie data_month_summary for today %s", await self.api.month_summary(self.site_reference))
 
-            user_sites = (
-                await self.api.UserSites()
-                if self.api.is_authenticated
-                else None
-            )
+            user_sites = None
+            _LOGGER.debug("Fetching Frank Energie user sites for today")
+            try:
+                if self.api.is_authenticated:
+                    user_sites = await self.api.UserSites(self.site_reference)
+            except AuthException as ex:
+                _LOGGER.warning("Authentication failed while fetching user sites: %s", ex)
             _LOGGER.debug("User sites: %s", user_sites)
 
-            data_month_summary = (
-                await self.api.month_summary(self.site_reference)
-                if self.api.is_authenticated
-                else None
-            )
+            data_month_summary = None
+            _LOGGER.debug("Fetching Frank Energie data_month_summary for today")
+            try:
+                if self.api.is_authenticated:
+                    data_month_summary = await self.api.month_summary(self.site_reference)
+            except AuthException as ex:
+                _LOGGER.warning("Authentication failed while fetching month summary: %s", ex)
             _LOGGER.debug("Data month_summary: %s", data_month_summary)
 
-            data_invoices = (
-                await self.api.invoices(self.site_reference)
-                if self.api.is_authenticated
-                else None
-            )
+            data_invoices = None
+            _LOGGER.debug("Fetching Frank Energie data_invoices for today")
+            try:
+                if self.api.is_authenticated:
+                    data_invoices = await self.api.invoices(self.site_reference)
+            except AuthException as ex:
+                _LOGGER.warning("Authentication failed while fetching invoices: %s", ex)
             _LOGGER.debug("Data invoices: %s", data_invoices)
 
-            data_period_usage = (
-                await self.api.period_usage_and_costs(self.site_reference, start_date)
-                if self.api.is_authenticated
-                else None
-            )
+            data_period_usage = None
+            _LOGGER.debug("Fetching Frank Energie data_period_usage for today")
+            try:
+                if self.api.is_authenticated:
+                    data_period_usage = await self.api.period_usage_and_costs(self.site_reference, start_date)
+            except AuthException as ex:
+                _LOGGER.warning("Authentication failed while fetching period usage: %s", ex)
             _LOGGER.debug("Data period_usage: %s", data_period_usage)
 
-            data_user = (
-                await self.api.user(self.site_reference)
-                if self.api.is_authenticated
-                else None
-            )
+            data_user = None
+            _LOGGER.debug("Fetching Frank Energie data_user for today")
+            try:
+                if self.api.is_authenticated:
+                    data_user = await self.api.user(self.site_reference)
+            except AuthException as ex:
+                _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
             _LOGGER.debug("Data user: %s", data_user)
 
             if data_user:
-                is_smart_charging = data_user.smartCharging.get("isActivated")
-                is_smart_charging = True
+                # is_smart_charging = data_user.smartCharging.get("isActivated")
+                # Check if smart charging is activated and retrieve smart battery data
+                is_smart_charging = self._is_smart_charging_enabled(data_user)
+                # is_smart_charging = True
 
             # Check if smart charging is activated and retrieve smart charging data
             # Gebruik echte of testdata afhankelijk van context
-            data_enode_chargers = (
-                await self.api.enode_chargers(self.site_reference, start_date)
-                if self.api.is_authenticated and is_smart_charging
-                else None
-            )
+            data_enode_chargers = None
+            if self.api.is_authenticated and is_smart_charging:
+                data_enode_chargers = await self.api.enode_chargers(self.site_reference, start_date)
 
             _LOGGER.debug("Data enode chargers: %s", data_enode_chargers)
 
-            data_smart_batteries = (
-                await self.api.smart_batteries()
+            data_smart_batteries = None
+            if self.api.is_authenticated and is_smart_charging:
+                data_smart_batteries = await self.api.smart_batteries()
                 # use this in production
                 # if self.api.is_authenticated and is_smart_charging
                 # Use this for testing, enabling smart charging testdata
-                if self.api.is_authenticated and is_smart_charging
-                else None
-            )
-
             _LOGGER.debug("Data smart batteries: %s", data_smart_batteries)
 
             data_smart_battery_details = []
@@ -306,6 +321,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             if str(ex).startswith("user-error:"):
                 raise ConfigEntryAuthFailed from ex
             raise UpdateFailed(ex) from ex
+
+        except AuthRequiredException as err:
+            _LOGGER.warning("Authentication failed: %s", err)
+            await self.__try_renew_token()
+            raise ConfigEntryAuthFailed("Authentication is required.") from err
 
         except AuthException as ex:
             _LOGGER.debug(

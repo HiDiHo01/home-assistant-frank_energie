@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.6.9"
+# VERSION = "2025.6.17"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -3364,7 +3364,7 @@ async def async_setup_entry(
                     battery_id="all_batteries",
                     is_total=True,
                 )
-                entities.append(sensor)
+                # entities.append(sensor)
 
     # Register the sensors to Home Assistant
     try:
