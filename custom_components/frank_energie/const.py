@@ -26,13 +26,13 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2025.6.9"
+VERSION: Final[str] = "2025.6.17"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
 # --- URLs ---
-# DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
-DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
+DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
+# DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
 API_CONF_URL: Final[str] = "https://www.frankenergie.nl/goedkoop"
 
 # --- Component Metadata ---
