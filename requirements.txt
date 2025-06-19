@@ -1,4 +1,4 @@
 # requirements.txt
 
 # Core dependencies
-python-frank-energie>=2025.6.9
+python-frank-energie>=2025.6.19
