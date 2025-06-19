@@ -15,11 +15,11 @@
     "name": "Frank Energie",
     "quality_scale": "silver",
     "requirements": [
-        "python-frank-energie==2025.6.17"
+        "python-frank-energie==2025.6.19"
     ],
     "supported_brands": [
         "Frank Energie"
     ],
     "translation_key": "frank_energie",
-    "version": "2025.6.17"
+    "version": "2025.6.19"
 }
