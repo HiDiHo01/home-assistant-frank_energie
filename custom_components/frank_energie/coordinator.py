@@ -1,7 +1,7 @@
 """ Coordinator implementation for Frank Energie integration.
     Fetching the latest data from Frank Energie and updating the states."""
 # coordinator.py
-# version 2025.6.17
+# version 2025.6.19
 
 import asyncio
 import logging
@@ -98,7 +98,15 @@ class FrankEnergieData(TypedDict):
 class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     """ Get the latest data and update the states. """
 
-    FETCH_TOMORROW_HOUR_UTC = 13
+    # Define the hour at which to fetch tomorrow's prices in UTC
+    # This is set to 12 UTC, which corresponds to 14:00 UTC+2
+    # If you want to change it to 13:00 UTC, uncomment the line
+    # FETCH_TOMORROW_HOUR_UTC = 13  # 13:00 UTC
+    # FETCH_TOMORROW_HOUR_UTC = 12  # 12:00 UTC
+    # This means that if the current time is after 13:00 UTC, the coordinator will fetch tomorrow's prices
+    # at 12:00 UTC,
+    # which corresponds to 14:00 in UTC+2 timezone (e.g., Central European Summer Time).
+    FETCH_TOMORROW_HOUR_UTC = 12  # 13  # 13:00 UTC 15:00 UTC+2
 
     def __init__(
         self, hass: HomeAssistant, entry: ConfigEntry, api: FrankEnergie
@@ -125,6 +133,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         }
         self._update_interval = timedelta(minutes=60)
         self._last_update_success = False
+        self.user_electricity_enabled = False
+        self.user_gas_enabled = False
         _LOGGER.debug(
             "Initializing Frank Energie coordinator with country_code: %s",
             self.country_code,
@@ -178,6 +188,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             try:
                 if self.api.is_authenticated:
                     user_sites = await self.api.UserSites(self.site_reference)
+                    if "ELECTRICITY" in user_sites.segments:
+                        self.user_electricity_enabled = True
+                    if "GAS" in user_sites.segments:
+                        self.user_gas_enabled = True
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching user sites: %s", ex)
             _LOGGER.debug("User sites: %s", user_sites)
@@ -388,13 +402,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         return isinstance(smart_charging, dict) and smart_charging.get("isActivated", False) is True
 
     async def __fetch_prices_with_fallback(self, start_date: date, end_date: date) -> MarketPrices:
-        """Fetch prices with fallback mechanism."""
+        """ Fetch prices with fallback mechanism.
+            This method attempts to fetch user-specific prices first, and if they are not available,
+            it falls back to public prices.
+        """
 
+        if self.hass.config.country == "BE":
+            public_prices: MarketPrices = await self.api.be_prices(start_date, end_date)
+        if self.hass.config.country == "NL" or self.hass.config.country is None:
+            public_prices: MarketPrices = await self.api.prices(start_date, end_date)
+
+        # If not logged in, return public prices
         if not self.api.is_authenticated:
-            return await self.api.prices(start_date, end_date)
+            return public_prices
 
-        # user_prices = await self.api.user_prices(start_date, end_date)
-        user_prices = await self.api.user_prices(start_date, self.site_reference, end_date)
+        user_prices: MarketPrices = await self.api.user_prices(self.site_reference, start_date, end_date)
 
         # if len(user_prices.gas.all) > 0 and len(user_prices.electricity.all) > 0:
         # if user_prices.gas.all and user_prices.electricity.all:
@@ -402,22 +424,27 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # If user_prices are available for both gas and electricity return them
             return user_prices
 
-        public_prices = await self.api.prices(start_date, end_date)
-
-        # Use public prices if no user prices are available
+        # Use public prices if no user prices are available as fallback
         if len(user_prices.gas.all) == 0:
             # if not user_prices.gas.all:
             # if user_prices.gas.all is None:
             _LOGGER.info(
                 "No gas prices found for user, falling back to public prices")
-            # user_prices.gas = public_prices.gas
-            user_prices.gas = None
+            if self.user_gas_enabled:
+                user_prices.gas = public_prices.gas
+            else:
+                # user_prices.gas = None # if user has no gas in users contract you want to reset gas prices
+                user_prices.gas = None
 
         if len(user_prices.electricity.all) == 0:
             # if user_prices.electricity.all is None:
             _LOGGER.info(
                 "No electricity prices found for user, falling back to public prices")
-            user_prices.electricity = public_prices.electricity
+            if self.user_electricity_enabled:
+                user_prices.electricity = public_prices.electricity
+            else:
+                # user_prices.electricity = None # if user has no electricity in users contract you want to reset electricity prices
+                user_prices.electricity = None
 
         return user_prices
 

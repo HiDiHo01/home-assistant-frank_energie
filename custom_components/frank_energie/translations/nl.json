@@ -1,5 +1,5 @@
 {
-    "title": "Frank Energie Nederland",
+    "title": "Frank Energie",
     "config": {
         "abort": {
             "already_configured": "Account is al toegevoegd",
@@ -419,6 +419,9 @@
             "invoice_upcoming_period": {
                 "name": "Factuurbedrag volgende maand"
             },
+            "contract_start_date": {
+                "name": "Contract startdatum"
+            },
             "proposition_type": {
                 "name": "Aanbod",
                 "state": {
@@ -440,10 +443,10 @@
             "country_code": {
                 "name": "Landcode"
             },
-            "costs_elelectricity_yesterday": {
+            "costs_electricity_yesterday": {
                 "name": "Kosten elektriciteit gisteren"
             },
-            "usage_elelectricity_yesterday": {
+            "usage_electricity_yesterday": {
                 "name": "Verbruik elektriciteit gisteren"
             },
             "costs_gas_yesterday": {

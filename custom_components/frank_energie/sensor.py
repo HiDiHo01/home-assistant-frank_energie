@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.6.17"
+# VERSION = "2025.6.21"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -1158,7 +1158,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-
         value_fn=lambda data: data[DATA_ELECTRICITY].next_hour.market_price
         if data[DATA_ELECTRICITY].next_hour else None,
         entity_registry_enabled_default=True
@@ -1336,7 +1335,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].upcoming_avg.market_price
-        if data[DATA_GAS] else None,
+        if data[DATA_GAS] and data[DATA_GAS].upcoming_avg.market_price else None,
         attr_fn=lambda data: {
             'prices': data[DATA_GAS].asdict('market_price', upcoming_only=True, timezone="Europe/Amsterdam")
             if data[DATA_GAS] else {}
@@ -1851,9 +1850,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             'Invoices': data[DATA_INVOICES].AllInvoicesDictForPreviousYear}
     ),
     FrankEnergieEntityDescription(
-        key="costs_elelectricity_yesterday",
-        name="Costs elelectricity yesterday",
-        translation_key="costs_elelectricity_yesterday",
+        key="costs_electricity_yesterday",
+        name="Costs electricity yesterday",
+        translation_key="costs_electricity_yesterday",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
@@ -1868,9 +1867,10 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         } if data[DATA_USAGE].electricity else {}
     ),
     FrankEnergieEntityDescription(
-        key="usage_elelectricity_yesterday",
-        name="Usage elelectricity yesterday",
-        translation_key="usage_elelectricity_yesterday",
+        key="usage_electricity_yesterday",
+        name="Usage electricity yesterday",
+        translation_key="usage_electricity_yesterday",
+        icon="mdi:flash-auto",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -1906,6 +1906,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="usage_gas_yesterday",
         name="Usage gas yesterday",
         translation_key="usage_gas_yesterday",
+        icon="mdi:meter-gas",
         device_class=SensorDeviceClass.GAS,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
@@ -1922,7 +1923,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gains_feed_in_yesterday",
-        name="Gains feed_in yesterday",
+        name="Gains feed-in yesterday",
         translation_key="gains_feed_in_yesterday",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1935,13 +1936,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         if data[DATA_USAGE].feed_in
         else None,
         attr_fn=lambda data: {
-            "feed_in gains yesterday": data[DATA_USAGE].feed_in
+            "feed-in gains yesterday": data[DATA_USAGE].feed_in
         } if data[DATA_USAGE].feed_in else {}
     ),
     FrankEnergieEntityDescription(
         key="delivered_feed_in_yesterday",
         name="Delivered feed-in yesterday",
         translation_key="delivered_feed_in_yesterday",
+        icon="mdi:transmission-tower-export",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2040,7 +2042,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: data[DATA_USER].externalDetails.debtor.bankAccountNumber
-        if data[DATA_USER].externalDetails and data[DATA_USER].externalDetails.debtor else None
+        if data[DATA_USER].externalDetails and data[DATA_USER].externalDetails.debtor else None,
+        attr_fn=lambda data: (
+            {
+                "Ondertekend op": getattr(data[DATA_USER].activePaymentAuthorization, "signedAt", "-"),
+                "Status": getattr(data[DATA_USER].activePaymentAuthorization, "status", "-"),
+            }
+            if data[DATA_USER].activePaymentAuthorization
+            else {}
+        ),
     ),
     FrankEnergieEntityDescription(
         key="preferredAutomaticCollectionDay",
@@ -2132,6 +2142,26 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         else None
     ),
     FrankEnergieEntityDescription(
+        key="contractStartDate",
+        name="Contract Start Date",
+        translation_key="contract_start_date",
+        icon="mdi:file-document-outline",
+        authenticated=True,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: next(
+            (
+                dt_util.as_local(
+                    datetime.fromisoformat(
+                        connection["externalDetails"]["contract"]["startDate"].replace("Z", "+00:00")
+                    )
+                ).strftime(FORMAT_DATE)
+                for connection in getattr(data.get(DATA_USER), "connections", [])
+                if connection.get("externalDetails", {}).get("contract", {}).get("startDate")
+            ),
+            None,
+        ),
+    ),
+    FrankEnergieEntityDescription(
         key="contractStatus",
         name="Contract Status",
         translation_key="contract_status",
@@ -2139,11 +2169,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: next(
-            (connection['contractStatus'] for connection in data[DATA_USER].connections
-                if connection.get('contractStatus')), None
-        )
-        if data[DATA_USER].connections
-        else None
+            (
+                connection['contractStatus']
+                for connection in getattr(data.get(DATA_USER), "connections", [])
+                if connection.get('contractStatus')
+            ),
+            None,
+        ),
     ),
     FrankEnergieEntityDescription(
         key="deliveryStartDate",
