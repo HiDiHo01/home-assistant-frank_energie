@@ -1,0 +1,28 @@
+name: Validate
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: ~
+  schedule:
+    - cron: "0 0 * * 6"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate
+    steps:
+      - name: Check out code from GitHub
+        uses: actions/checkout@v4
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@master
