@@ -3,7 +3,6 @@
 	"name": "Frank Energie",
 	"content_in_root": false,
 	"country": "NL",
-	"domains": "frank_energie",
 	"render_readme": true,
 	"homeassistant": "2024.4.4",
 	"zip_release": true,
