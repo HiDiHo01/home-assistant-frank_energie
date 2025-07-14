@@ -10,7 +10,6 @@
     "loggers": [
         "frank_energie"
     ],
-    "manifest_version": 2,
     "name": "Frank Energie",
     "quality_scale": "silver",
     "requirements": [
