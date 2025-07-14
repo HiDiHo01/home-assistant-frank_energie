@@ -15,9 +15,5 @@
     "requirements": [
         "python-frank-energie==2025.7.2"
     ],
-    "supported_brands": [
-        "Frank Energie"
-    ],
-    "translation_key": "frank_energie",
     "version": "2025.7.2"
 }
