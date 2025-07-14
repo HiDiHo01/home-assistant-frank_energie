@@ -247,11 +247,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Data enode chargers: %s", data_enode_chargers)
 
             data_smart_batteries = None
-            if self.api.is_authenticated and is_smart_charging:
-                data_smart_batteries = await self.api.smart_batteries()
-                # use this in production
-                # if self.api.is_authenticated and is_smart_charging
-                # Use this for testing, enabling smart charging testdata
+            if self.api.is_authenticated:
+                try:
+                    data_smart_batteries = await self.api.smart_batteries()
+                except Exception as err:
+                    _LOGGER.debug("Failed to fetch smart batteries: %s", err)
+                    data_smart_batteries = None
             _LOGGER.debug("Data smart batteries: %s", data_smart_batteries)
 
             data_smart_battery_details = []
