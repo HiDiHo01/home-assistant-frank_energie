@@ -27,8 +27,7 @@
       },
       "site": {
         "title": "Selecteer leveringslocatie",
-        "description": "Kies de leveringslocatie die je toe wilt voegen.",
-        "site_reference": "Locatie referentie: %s"
+        "description": "Kies de leveringslocatie die je toe wilt voegen."
       }
     },
     "abort": {
