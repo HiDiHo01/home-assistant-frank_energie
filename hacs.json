@@ -4,7 +4,6 @@
 	"content_in_root": false,
 	"country": "NL",
 	"render_readme": true,
-	"homeassistant": "2024.4.4",
 	"zip_release": true,
 	"filename": "frank_energie.zip"
 }
