@@ -5,7 +5,6 @@
     "config_flow": true,
     "documentation": "https://github.com/HiDiHo01/home-assistant-frank_energie",
     "domain": "frank_energie",
-    "homeassistant": "2023.10.0",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/HiDiHo01/home-assistant-frank_energie/issues",
     "loggers": [
