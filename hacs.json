@@ -1,9 +1,10 @@
 
 {
+	"domain": "frank_energie",
 	"name": "Frank Energie",
 	"content_in_root": false,
 	"country": "NL",
+	"filename": "frank_energie.zip",
 	"render_readme": true,
-	"zip_release": true,
-	"filename": "frank_energie.zip"
+	"zip_release": true
 }
