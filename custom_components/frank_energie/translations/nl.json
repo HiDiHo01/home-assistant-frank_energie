@@ -518,6 +518,28 @@
                             "true": "Ja",
                             "false": "Nee"
                         }
+                    },
+                    "User Created At": {
+                        "name": "Gebruiker aangemaakt op"
+                    }
+                }
+            },
+            "smarttrading_isactivated": {
+                "name": "Slim handelen",
+                "state": {
+                    "True": "Actief",
+                    "False": "Niet actief"
+                },
+                "state_attributes": {
+                    "Available In Country": {
+                        "name": "Beschikbaar in Nederland",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    },
+                    "User Created At": {
+                        "name": "Gebruiker aangemaakt op"
                     }
                 }
             },

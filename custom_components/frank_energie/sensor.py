@@ -1867,6 +1867,24 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         } if data[DATA_USAGE].electricity else {}
     ),
     FrankEnergieEntityDescription(
+        key="costs_electricity_this_month",
+        name="Costs electricity this month",
+        translation_key="costs_electricity_this_month",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
+        authenticated=True,
+        service_name=SERVICE_NAME_USAGE,
+        value_fn=lambda data: data[DATA_USAGE].electricity.costs_this_month
+        if data[DATA_USAGE].electricity
+        else None,
+        attr_fn=lambda data: {
+            "Electricity costs this month": data[DATA_USAGE].electricity
+        } if data[DATA_USAGE].electricity and data[DATA_USAGE].electricity.costs_this_month else {},
+        entity_registry_enabled_default=False
+    ),
+    FrankEnergieEntityDescription(
         key="usage_electricity_yesterday",
         name="Usage electricity yesterday",
         translation_key="usage_electricity_yesterday",
@@ -2299,8 +2317,26 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         else None,
         attr_fn=lambda data: {
             'Provider': data[DATA_USER].smartCharging.get('provider'),
-            'Available In Country': data[DATA_USER].smartCharging.get('isAvailableInCountry')
+            'Available In Country': data[DATA_USER].smartCharging.get('isAvailableInCountry'),
+            'User Created At': data[DATA_USER].smartCharging.get('userCreatedAt')
             if data[DATA_USER].smartCharging
+            else []
+        }
+    ),
+    FrankEnergieEntityDescription(
+        key="smartTradingisActivated",
+        name="Smart Trading Activated",
+        translation_key="smarttrading_isactivated",
+        icon="mdi:ev-station",
+        authenticated=True,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: data[DATA_USER].smartTrading.get('isActivated')
+        if data[DATA_USER].smartTrading
+        else None,
+        attr_fn=lambda data: {
+            'Available In Country': data[DATA_USER].smartTrading.get('isAvailableInCountry'),
+            'User Created At': data[DATA_USER].smartTrading.get('userCreatedAt')
+            if data[DATA_USER].smartTrading
             else []
         }
     )

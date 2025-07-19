@@ -169,13 +169,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_today_data(self, today: date, tomorrow: date):
         """
         Fetches all relevant Frank Energie data for the current day, including prices, user sites, monthly summaries, invoices, usage, user info, Enode chargers, smart batteries, battery details, and battery sessions.
-        
+
         Attempts to retrieve user-specific and public data as available, handling authentication failures and falling back to cached data if necessary. Also manages token renewal on authentication errors.
-        
+
         Parameters:
             today (date): The current date for which data is being fetched.
             tomorrow (date): The next day, used for price and session range queries.
-        
+
         Returns:
             Tuple containing today's prices, month summary, invoices, user data, user sites, period usage, Enode chargers, smart batteries, smart battery details, and smart battery sessions.
         """
@@ -252,13 +252,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # Check if smart charging is activated and retrieve smart charging data
             # Gebruik echte of testdata afhankelijk van context
             data_enode_chargers = None
-            if self.api.is_authenticated and is_smart_charging:
-                data_enode_chargers = await self.api.enode_chargers(self.site_reference, start_date)
-
+            try:
+                if self.api.is_authenticated and is_smart_charging:
+                    data_enode_chargers = await self.api.enode_chargers(self.site_reference, start_date)
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch smart batteries: %s", err)
+                data_enode_chargers = None
             _LOGGER.debug("Data enode chargers: %s", data_enode_chargers)
 
             data_smart_batteries = None
             if self.api.is_authenticated:
+                # if self.api.is_authenticated and is_smart_charging:
+                # if self.api.is_authenticated and is_smart_trading:
                 try:
                     data_smart_batteries = await self.api.smart_batteries()
                 except Exception as err:
@@ -320,6 +325,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                                 "No valid sessions list found in SmartBatterySessions for battery %s", battery.id)
                     except Exception as err:
                         _LOGGER.error("Failed to fetch sessions for battery %s: %s", battery.id, err)
+                        sessions = None
                         continue
                     _LOGGER.debug("Battery sessions: %s", sessions)
                     _LOGGER.debug("Device ID: %s", battery.id)
@@ -412,6 +418,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return False
         smart_charging = data_user.smartCharging
         return isinstance(smart_charging, dict) and smart_charging.get("isActivated", False) is True
+
+    def _is_smart_trading_enabled(self, data_user) -> bool:
+        """Check if smart trading is enabled for the user."""
+        if not data_user:
+            return False
+        smart_trading = data_user.smartTrading
+        return isinstance(smart_trading, dict) and smart_trading.get("isActivated", False) is True
 
     async def __fetch_prices_with_fallback(self, start_date: date, end_date: date) -> MarketPrices:
         """ Fetch prices with fallback mechanism.
