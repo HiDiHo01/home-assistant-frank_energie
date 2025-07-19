@@ -1,4 +1,5 @@
 {
+    "title": "Frank Energie",
     "config": {
         "abort": {
             "already_configured": "Account is already configured",
@@ -23,7 +24,5 @@
                 "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account."
             }
         }
-    },
-    "title": "Frank Energie",
-    "average_electricity_price_upcoming_all_in": "Average electricity price upcoming hours (All-in)"
+    }
 }
