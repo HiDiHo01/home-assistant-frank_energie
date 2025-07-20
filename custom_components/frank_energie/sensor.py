@@ -1530,12 +1530,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[
-            DATA_MONTH_SUMMARY
-        ].actualCostsUntilLastMeterReadingDate,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].actualCostsUntilLastMeterReadingDate
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-        }
+        } if data[DATA_MONTH_SUMMARY] else {}
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_until_last_meter_reading_date",
@@ -1547,12 +1546,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[
-            DATA_MONTH_SUMMARY
-        ].expectedCostsUntilLastMeterReadingDate,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].expectedCostsUntilLastMeterReadingDate
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-        }
+        } if data[DATA_MONTH_SUMMARY] else {}
     ),
     FrankEnergieEntityDescription(
         key="difference_costs_until_last_meter_reading_date",
@@ -1564,12 +1562,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[
-            DATA_MONTH_SUMMARY
-        ].differenceUntilLastMeterReadingDate,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDate
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-        }
+        } if data[DATA_MONTH_SUMMARY] else {}
     ),
     FrankEnergieEntityDescription(
         key="difference_costs_per_day",
@@ -1581,12 +1578,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[
-            DATA_MONTH_SUMMARY
-        ].differenceUntilLastMeterReadingDateAvg,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDateAvg
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-        }
+        } if data[DATA_MONTH_SUMMARY] else {}
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_this_month",
@@ -1598,10 +1594,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[DATA_MONTH_SUMMARY].expectedCosts,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].expectedCosts
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Description": data[DATA_INVOICES].currentPeriodInvoice.PeriodDescription,
-        }
+        } if data[DATA_INVOICES] and data[DATA_INVOICES].currentPeriodInvoice else {}
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_per_day_this_month",
@@ -1613,11 +1610,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[DATA_MONTH_SUMMARY].expectedCostsPerDay,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].expectedCostsPerDay
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
             "Description": data[DATA_INVOICES].currentPeriodInvoice.PeriodDescription,
-        }
+        } if data[DATA_MONTH_SUMMARY] and data[DATA_INVOICES] and data[DATA_INVOICES].currentPeriodInvoice else {}
     ),
     FrankEnergieEntityDescription(
         key="costs_per_day_till_now_this_month",
@@ -1629,11 +1627,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: data[DATA_MONTH_SUMMARY].CostsPerDayTillNow,
+        value_fn=lambda data: data[DATA_MONTH_SUMMARY].CostsPerDayTillNow
+        if data[DATA_MONTH_SUMMARY] else None,
         attr_fn=lambda data: {
             "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
             "Description": data[DATA_INVOICES].currentPeriodInvoice.PeriodDescription,
-        }
+        } if data[DATA_MONTH_SUMMARY] and data[DATA_INVOICES] and data[DATA_INVOICES].currentPeriodInvoice else {}
     ),
     FrankEnergieEntityDescription(
         key="invoice_previous_period",
@@ -1860,11 +1859,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         value_fn=lambda data: data[DATA_USAGE].electricity.costs_total
-        if data[DATA_USAGE].electricity
+        if data[DATA_USAGE] and data[DATA_USAGE].electricity
         else None,
         attr_fn=lambda data: {
             "Electricity costs yesterday": data[DATA_USAGE].electricity
-        } if data[DATA_USAGE].electricity else {}
+        } if data[DATA_USAGE] and data[DATA_USAGE].electricity else {}
     ),
     FrankEnergieEntityDescription(
         key="costs_electricity_this_month",
@@ -1876,12 +1875,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
-        value_fn=lambda data: data[DATA_USAGE].electricity.costs_this_month
-        if data[DATA_USAGE].electricity
+        value_fn=lambda data: data[DATA_USAGE].electricity.costs_total
+        if data[DATA_USAGE] and data[DATA_USAGE].electricity
         else None,
         attr_fn=lambda data: {
-            "Electricity costs this month": data[DATA_USAGE].electricity
-        } if data[DATA_USAGE].electricity and data[DATA_USAGE].electricity.costs_this_month else {},
+            "Electricity costs total": data[DATA_USAGE].electricity.costs_total
+        } if data[DATA_USAGE] and data[DATA_USAGE].electricity and hasattr(data[DATA_USAGE].electricity, 'costs_total') else {},
         entity_registry_enabled_default=False
     ),
     FrankEnergieEntityDescription(
@@ -1896,11 +1895,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         value_fn=lambda data: data[DATA_USAGE].electricity.usage_total
-        if data[DATA_USAGE].electricity
+        if data[DATA_USAGE] and data[DATA_USAGE].electricity
         else None,
         attr_fn=lambda data: {
             "Electricity usage yesterday": data[DATA_USAGE].electricity
-        } if data[DATA_USAGE].electricity else {}
+        } if data[DATA_USAGE] and data[DATA_USAGE].electricity else {}
     ),
     FrankEnergieEntityDescription(
         key="costs_gas_yesterday",
@@ -1914,11 +1913,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_USAGE,
         is_gas=True,
         value_fn=lambda data: data[DATA_USAGE].gas.costs_total
-        if data[DATA_USAGE].gas
+        if data[DATA_USAGE] and data[DATA_USAGE].gas
         else None,
         attr_fn=lambda data: {
             "Gas costs gas": data[DATA_USAGE].gas
-        } if data[DATA_USAGE].gas else {}
+        } if data[DATA_USAGE] and data[DATA_USAGE].gas else {}
     ),
     FrankEnergieEntityDescription(
         key="usage_gas_yesterday",
@@ -1933,11 +1932,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_USAGE,
         is_gas=True,
         value_fn=lambda data: data[DATA_USAGE].gas.usage_total
-        if data[DATA_USAGE].gas
+        if data[DATA_USAGE] and data[DATA_USAGE].gas
         else None,
         attr_fn=lambda data: {
             "Gas usage yesterday": data[DATA_USAGE].gas
-        } if data[DATA_USAGE].gas else {}
+        } if data[DATA_USAGE] and data[DATA_USAGE].gas else {}
     ),
     FrankEnergieEntityDescription(
         key="gains_feed_in_yesterday",

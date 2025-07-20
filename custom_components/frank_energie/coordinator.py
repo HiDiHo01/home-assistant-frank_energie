@@ -22,6 +22,7 @@ from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
     AuthException,
     AuthRequiredException,
+    FrankEnergieException,
     RequestException,
 )
 from python_frank_energie.models import (
@@ -147,6 +148,47 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             update_interval=self._update_interval
         )
 
+    def _is_in_delivery_site(self, data_month_summary, data_invoices, user_sites) -> bool:
+        """
+        Detect if this is an IN_DELIVERY site based on available data.
+
+        Returns True if the site appears to be in IN_DELIVERY status
+        (no historical data available yet).
+        """
+        # Check for typical IN_DELIVERY indicators
+        has_no_month_summary = data_month_summary is None
+        has_no_invoices = data_invoices is None
+
+        # Additional check: if user_sites exists but has no usage segments
+        has_limited_segments = (
+            user_sites is not None
+            and hasattr(user_sites, 'segments')
+            and len(user_sites.segments) == 0
+        )
+
+        # Site is likely IN_DELIVERY if it has no historical data
+        return has_no_month_summary and (has_no_invoices or has_limited_segments)
+
+    def _log_in_delivery_status(self, is_in_delivery: bool) -> None:
+        """
+        Log a single, clear message about IN_DELIVERY status to keep logs clean.
+        """
+        if is_in_delivery and not hasattr(self, '_in_delivery_logged'):
+            _LOGGER.info(
+                "Frank Energie site appears to be in IN_DELIVERY status. "
+                "Price data is available, but usage and billing data will become "
+                "available once your energy delivery begins. This is normal for new customers."
+            )
+            # Mark that we've logged this to avoid spam
+            self._in_delivery_logged = True
+        elif not is_in_delivery and hasattr(self, '_in_delivery_logged'):
+            _LOGGER.info(
+                "Frank Energie site now has historical data available. "
+                "All sensors should be fully functional."
+            )
+            # Clear the flag so we can log again if status changes back
+            delattr(self, '_in_delivery_logged')
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Get the latest data from Frank Energie."""
 
@@ -192,13 +234,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Fetching Frank Energie data for site_reference %s", self.site_reference)
             if self.site_reference is not None:
                 _LOGGER.debug(
-                    "Fetching Frank Energie data_month_summary for today %s", await self.api.month_summary(self.site_reference))
+                    "Preparing to fetch Frank Energie data_month_summary for site %s", self.site_reference)
 
             user_sites = None
             _LOGGER.debug("Fetching Frank Energie user sites for today")
             try:
                 if self.api.is_authenticated:
-                    user_sites = await self.api.UserSites(self.site_reference)
+                    user_sites = await self.api.UserSites()
                     if "ELECTRICITY" in user_sites.segments:
                         self.user_electricity_enabled = True
                     if "GAS" in user_sites.segments:
@@ -214,6 +256,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     data_month_summary = await self.api.month_summary(self.site_reference)
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching month summary: %s", ex)
+            except (RequestException, FrankEnergieException) as ex:
+                # Check if this looks like an IN_DELIVERY "No reading dates" error
+                error_msg = str(ex).lower()
+                if "no reading dates" in error_msg:
+                    _LOGGER.debug("No historical data available yet (typical for IN_DELIVERY sites): %s", ex)
+                else:
+                    _LOGGER.warning("No month summary data available: %s", ex)
+            except Exception as ex:
+                # Check for GraphQL errors that might contain "No reading dates found"
+                error_msg = str(ex).lower()
+                if "no reading dates found" in error_msg:
+                    _LOGGER.debug("No historical data available yet (typical for IN_DELIVERY sites): %s", ex)
+                else:
+                    _LOGGER.error("Unexpected error while fetching month summary: %s", ex)
             _LOGGER.debug("Data month_summary: %s", data_month_summary)
 
             data_invoices = None
@@ -223,6 +279,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     data_invoices = await self.api.invoices(self.site_reference)
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching invoices: %s", ex)
+            except (RequestException, FrankEnergieException) as ex:
+                # For IN_DELIVERY sites, missing invoice data is expected
+                error_msg = str(ex).lower()
+                if "no reading dates" in error_msg:
+                    _LOGGER.debug("No invoice data available yet (typical for IN_DELIVERY sites): %s", ex)
+                else:
+                    _LOGGER.debug("No invoice data available (normal for IN_DELIVERY sites): %s", ex)
+            except Exception as ex:
+                # Check for any other errors that might contain "No reading dates"
+                error_msg = str(ex).lower()
+                if "no reading dates" in error_msg:
+                    _LOGGER.debug("No invoice data available yet (typical for IN_DELIVERY sites): %s", ex)
+                else:
+                    _LOGGER.error("Unexpected error while fetching invoices: %s", ex)
             _LOGGER.debug("Data invoices: %s", data_invoices)
 
             data_period_usage = None
@@ -232,6 +302,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     data_period_usage = await self.api.period_usage_and_costs(self.site_reference, start_date)
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching period usage: %s", ex)
+            except (RequestException, FrankEnergieException) as ex:
+                # For IN_DELIVERY sites, missing usage data is expected
+                error_msg = str(ex).lower()
+                if "no reading dates" in error_msg:
+                    _LOGGER.debug("No usage data available yet (typical for IN_DELIVERY sites): %s", ex)
+                else:
+                    _LOGGER.debug("No period usage data available (normal for IN_DELIVERY sites): %s", ex)
+            except Exception as ex:
+                # Check for any other errors that might contain "No reading dates"
+                error_msg = str(ex).lower()
+                if "no reading dates" in error_msg:
+                    _LOGGER.debug("No usage data available yet (typical for IN_DELIVERY sites): %s", ex)
+                else:
+                    _LOGGER.error("Unexpected error while fetching period usage: %s", ex)
             _LOGGER.debug("Data period_usage: %s", data_period_usage)
 
             data_user = None
@@ -241,34 +325,40 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     data_user = await self.api.user(self.site_reference)
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
+            except (RequestException, FrankEnergieException) as ex:
+                _LOGGER.warning("No user data available: %s", ex)
+            except Exception as ex:
+                _LOGGER.error("Unexpected error while fetching user data: %s", ex)
             _LOGGER.debug("Data user: %s", data_user)
 
+            # Initialize feature flags
+            is_smart_charging = False
+            is_smart_trading = False
             if data_user:
-                # is_smart_charging = data_user.smartCharging.get("isActivated")
-                # Check if smart charging is activated and retrieve smart battery data
+                # Check if smart charging and trading are activated
                 is_smart_charging = self._is_smart_charging_enabled(data_user)
-                # is_smart_charging = True
+                is_smart_trading = self._is_smart_trading_enabled(data_user)
 
             # Check if smart charging is activated and retrieve smart charging data
-            # Gebruik echte of testdata afhankelijk van context
             data_enode_chargers = None
             try:
                 if self.api.is_authenticated and is_smart_charging:
                     data_enode_chargers = await self.api.enode_chargers(self.site_reference, start_date)
             except Exception as err:
-                _LOGGER.debug("Failed to fetch smart batteries: %s", err)
+                _LOGGER.debug("Failed to fetch enode chargers: %s", err)
                 data_enode_chargers = None
             _LOGGER.debug("Data enode chargers: %s", data_enode_chargers)
 
             data_smart_batteries = None
-            if self.api.is_authenticated:
-                # if self.api.is_authenticated and is_smart_charging:
-                # if self.api.is_authenticated and is_smart_trading:
+            if self.api.is_authenticated and is_smart_trading:
+                # Only fetch smart batteries if smart trading is enabled
                 try:
                     data_smart_batteries = await self.api.smart_batteries()
                 except Exception as err:
                     _LOGGER.debug("Failed to fetch smart batteries: %s", err)
                     data_smart_batteries = None
+            elif self.api.is_authenticated and not is_smart_trading:
+                _LOGGER.debug("Smart trading not enabled, skipping smart batteries fetch")
             _LOGGER.debug("Data smart batteries: %s", data_smart_batteries)
 
             data_smart_battery_details = []
@@ -333,6 +423,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 _LOGGER.debug("No smart batteries found")
 
             _LOGGER.debug("Data smart battery session: %s", data_smart_battery_sessions)
+
+            # Detect and log IN_DELIVERY status for clean user experience
+            is_in_delivery = self._is_in_delivery_site(data_month_summary, data_invoices, user_sites)
+            self._log_in_delivery_status(is_in_delivery)
 
             return prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions
 
@@ -605,7 +699,6 @@ async def run_hourly(start_time: datetime, end_time: datetime, interval: timedel
         if start_time <= now <= end_time:
             await method()
         await asyncio.sleep(interval.total_seconds())
-#         await asyncio.sleep(interval)
 
 
 async def hourly_refresh(coordinator: FrankEnergieCoordinator) -> None:
