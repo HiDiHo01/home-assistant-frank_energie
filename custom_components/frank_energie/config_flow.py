@@ -28,7 +28,7 @@ from python_frank_energie.exceptions import AuthException, ConnectionException
 from .const import CONF_SITE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "2025.4.24"
+VERSION = "2025.7.19"
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -103,68 +103,117 @@ class ConfigFlow(config_entries.ConfigFlow):
         )
 
         try:
-            api = FrankEnergie(
+            async with FrankEnergie(
                 auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
-            )
-            user_sites = await api.UserSites()
-            _LOGGER.debug("All user_sites: %s", user_sites)
-            # Check if the user has any delivery sites
-            if not user_sites or not user_sites.deliverySites:
-                raise Exception("No delivery sites found for this account")
-            all_delivery_sites = [
-                site for site in user_sites.deliverySites if hasattr(site, "status")
-            ]
+            ) as api:
+                user_sites = await api.UserSites()
+                _LOGGER.debug("All user_sites: %s", user_sites)
 
-            # filter out all sites that are not in delivery
-            in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
-            _LOGGER.debug("All user_sites with status IN_DELIVERY: %s", in_delivery_sites)
+                # Check if the user has any delivery sites
+                if not user_sites or not user_sites.deliverySites:
+                    _LOGGER.warning("No delivery sites found for this account")
+                    raise NoDeliverySitesError("No delivery sites found for this account")
 
-            if not in_delivery_sites:
-                raise Exception("No suitable sites found for this account")
+                # Log all available sites with their statuses for debugging
+                _LOGGER.debug("Available delivery sites count: %d", len(user_sites.deliverySites))
+                for i, site in enumerate(user_sites.deliverySites):
+                    status = getattr(site, "status", "NO_STATUS")
+                    _LOGGER.debug("Site %d: status=%s, site=%s", i, status, site)
 
-            number_of_sites = len(in_delivery_sites)
+                # Get all sites that have a status attribute
+                all_delivery_sites = [
+                    site for site in user_sites.deliverySites if hasattr(site, "status")
+                ]
 
-            if number_of_sites > 0:
-                first_site = in_delivery_sites[0]
+                # First try to filter for sites with status "IN_DELIVERY"
+                in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
+                _LOGGER.debug("Sites with status IN_DELIVERY: %d", len(in_delivery_sites))
 
-            if number_of_sites == 1:
-                # for backward compatibility (do nothing)
-                # Check if entry with CONF_USERNAME exists, then abort
-                # if CONF_USERNAME in user_input:
-                if user_input and CONF_USERNAME in user_input:
-                    await self.async_set_unique_id(user_input[CONF_USERNAME])
-                    self._abort_if_unique_id_configured()
+                # If no "IN_DELIVERY" sites found, try other possible active statuses
+                suitable_sites = in_delivery_sites
+                if not suitable_sites:
+                    # Try other potentially valid statuses
+                    other_valid_statuses = ["ACTIVE", "CONNECTED", "ENABLED", "OPERATIONAL"]
+                    for status in other_valid_statuses:
+                        sites_with_status = [site for site in all_delivery_sites if site.status == status]
+                        if sites_with_status:
+                            _LOGGER.info("No IN_DELIVERY sites found, using sites with status %s: %d", status, len(sites_with_status))
+                            suitable_sites = sites_with_status
+                            break
 
-                # Create entry with unique_id as user_sites.deliverySites[0].reference
-                self.sign_in_data[CONF_SITE] = first_site.reference
-                # self.sign_in_data[CONF_USERNAME] = self.create_title(first_site)
-                self.sign_in_data["site_title"] = self.create_title(first_site)
-                # return await self._async_create_entry(self.sign_in_data)
+                # If still no suitable sites found, use any sites that have an address (likely to be valid)
+                if not suitable_sites:
+                    sites_with_address = [site for site in all_delivery_sites if hasattr(site, "address") and site.address]
+                    if sites_with_address:
+                        _LOGGER.info("Found %d site(s) ready for setup (IN_DELIVERY or similar status)", len(sites_with_address))
+                        suitable_sites = sites_with_address
 
-            # Prepare site options for selection
-            site_options = [
-                {
-                    "value": site.reference,
-                    "label": self.create_title(site)
-                }
-                for site in in_delivery_sites
-            ]
+                # Last resort: use all available sites if they have the required attributes for creating a title
+                if not suitable_sites:
+                    sites_with_required_attrs = []
+                    for site in user_sites.deliverySites:
+                        try:
+                            # Test if we can create a title (this will fail if required attributes are missing)
+                            self.create_title(site)
+                            sites_with_required_attrs.append(site)
+                        except Exception as e:
+                            _LOGGER.debug("Site cannot be used (missing required attributes): %s", e)
+                            continue
 
-            default_site = first_site.reference
+                    if sites_with_required_attrs:
+                        _LOGGER.warning("Using all available sites with required attributes: %d", len(sites_with_required_attrs))
+                        suitable_sites = sites_with_required_attrs
 
-            options = {
-                vol.Required(CONF_SITE, default=default_site): SelectSelector(
-                    SelectSelectorConfig(
-                        options=site_options,
-                        mode=SelectSelectorMode.LIST,
+                if not suitable_sites:
+                    # Provide detailed error message
+                    available_statuses = [getattr(site, "status", "NO_STATUS") for site in user_sites.deliverySites]
+                    error_msg = f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, Statuses: {set(available_statuses)}"
+                    _LOGGER.error(error_msg)
+                    raise NoSitesFoundError(error_msg)
+
+                number_of_sites = len(suitable_sites)
+                _LOGGER.info("Found %d suitable sites for selection", number_of_sites)
+
+                first_site = suitable_sites[0]  # We know suitable_sites is not empty at this point
+
+                if number_of_sites == 1:
+                    # for backward compatibility (do nothing)
+                    # Check if entry with CONF_USERNAME exists, then abort
+                    # if CONF_USERNAME in user_input:
+                    if user_input and CONF_USERNAME in user_input:
+                        await self.async_set_unique_id(user_input[CONF_USERNAME])
+                        self._abort_if_unique_id_configured()
+
+                    # Create entry with unique_id as user_sites.deliverySites[0].reference
+                    self.sign_in_data[CONF_SITE] = first_site.reference
+                    # self.sign_in_data[CONF_USERNAME] = self.create_title(first_site)
+                    self.sign_in_data["site_title"] = self.create_title(first_site)
+                    # return await self._async_create_entry(self.sign_in_data)
+
+                # Prepare site options for selection
+                site_options = [
+                    {
+                        "value": site.reference,
+                        "label": self.create_title(site)
+                    }
+                    for site in suitable_sites
+                ]
+
+                default_site = first_site.reference
+
+                options = {
+                    vol.Required(CONF_SITE, default=default_site): SelectSelector(
+                        SelectSelectorConfig(
+                            options=site_options,
+                            mode=SelectSelectorMode.LIST,
+                        )
                     )
-                )
-            }
+                }
 
-            return self.async_show_form(
-                step_id="site", data_schema=vol.Schema(options), errors=errors
-            )
+                return self.async_show_form(
+                    step_id="site", data_schema=vol.Schema(options), errors=errors
+                )
 
         except AuthException:
             _LOGGER.error("Authentication failed during site fetch")
@@ -179,6 +228,22 @@ class ConfigFlow(config_entries.ConfigFlow):
                 step_id="login",
                 data_schema=data_schema,
                 errors={"base": "connection_error"},
+            )
+        except NoDeliverySitesError as err:
+            _LOGGER.error("No delivery sites found: %s", err)
+            errors = {"base": "no_delivery_sites"}
+            return self.async_show_form(
+                step_id="site",
+                data_schema=self._site_error_schema(),
+                errors=errors,
+            )
+        except NoSitesFoundError as err:
+            _LOGGER.error("No suitable sites found: %s", err)
+            errors = {"base": "no_suitable_sites"}
+            return self.async_show_form(
+                step_id="site",
+                data_schema=self._site_error_schema(),
+                errors=errors,
             )
         except Exception as err:
             _LOGGER.exception("Failed to retrieve delivery sites: %s", err)
@@ -254,42 +319,59 @@ class ConfigFlow(config_entries.ConfigFlow):
         """Retrieve available delivery sites for the user."""
         try:
             # Initialize the FrankEnergie API with the access and refresh tokens
-            api = FrankEnergie(
+            async with FrankEnergie(
                 auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
-            )
+            ) as api:
+                # Fetch user sites with retry using the FrankEnergie API
+                for _ in range(2):
+                    try:
+                        user_sites = await api.UserSites()
+                        break
+                    except ConnectionException:
+                        await asyncio.sleep(1)
+                else:
+                    raise ConnectionException("Failed to connect to Frank Energie API after retries")
 
-            # Fetch user sites with retry using the FrankEnergie API
-            for _ in range(2):
-                try:
-                    user_sites = await api.UserSites()
-                    break
-                except ConnectionException:
-                    await asyncio.sleep(1)
-            else:
-                raise ConnectionException("Failed to connect to Frank Energie API after retries")
+                _LOGGER.debug("All user_sites: %s", user_sites)
 
-            _LOGGER.debug("All user_sites: %s", user_sites)
+                # Check if the user has any delivery sites
+                if not user_sites or not user_sites.deliverySites:
+                    raise NoDeliverySitesError("No delivery sites found for this account")
 
-            # Check if the user has any delivery sites
-            if not user_sites or not user_sites.deliverySites:
-                raise NoDeliverySitesError("No delivery sites found for this account")
+                # Filter sites that have the status attribute
+                all_delivery_sites = [
+                    site for site in user_sites.deliverySites if hasattr(site, "status")
+                ]
 
-            # Filter sites that are in delivery and have the status attribute
-            all_delivery_sites = [
-                site for site in user_sites.deliverySites if hasattr(site, "status")
-            ]
+                # First try sites with status "IN_DELIVERY"
+                in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
+                _LOGGER.debug("Sites with status IN_DELIVERY: %d", len(in_delivery_sites))
 
-            # Filter out all sites that are not in delivery
-            in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
-            _LOGGER.debug("All user_sites with status IN_DELIVERY: %s", in_delivery_sites)
+                # If no "IN_DELIVERY" sites, try other potentially valid statuses
+                suitable_sites = in_delivery_sites
+                if not suitable_sites:
+                    other_valid_statuses = ["ACTIVE", "CONNECTED", "ENABLED", "OPERATIONAL"]
+                    for status in other_valid_statuses:
+                        sites_with_status = [site for site in all_delivery_sites if site.status == status]
+                        if sites_with_status:
+                            suitable_sites = sites_with_status
+                            break
 
-            # Raise an exception if no suitable sites are found
-            if not in_delivery_sites:
-                raise NoSitesFoundError("No suitable sites found for this account")
+                # If still no suitable sites, use any sites with required attributes
+                if not suitable_sites:
+                    sites_with_address = [site for site in all_delivery_sites if hasattr(site, "address") and site.address]
+                    if sites_with_address:
+                        suitable_sites = sites_with_address
 
-            # Return a list of site names or identifiers from the available sites
-            return [site.name for site in in_delivery_sites]
+                # Raise an exception if no suitable sites are found
+                if not suitable_sites:
+                    available_statuses = [getattr(site, "status", "NO_STATUS") for site in user_sites.deliverySites]
+                    error_msg = f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, Statuses: {set(available_statuses)}"
+                    raise NoSitesFoundError(error_msg)
+
+                # Return a list of site names or identifiers from the available sites
+                return [site.name for site in suitable_sites]
 
         except NoDeliverySitesError as e:
             _LOGGER.error("No delivery sites found for user %s: %s", username, str(e))

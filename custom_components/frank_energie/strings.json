@@ -30,6 +30,13 @@
         "description": "Kies de leveringslocatie die je toe wilt voegen."
       }
     },
+    "error": {
+      "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord.",
+      "connection_error": "Verbindingsfout met Frank Energie API.",
+      "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
+      "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
+      "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw."
+    },
     "abort": {
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     }
