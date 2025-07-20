@@ -1,4 +1,0 @@
-# requirements.txt
-
-# Core dependencies
-python-frank-energie>=2025.7.2
