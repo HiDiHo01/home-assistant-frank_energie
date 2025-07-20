@@ -6,7 +6,11 @@
             "reauth_successful": "Re-authentication was successful"
         },
         "error": {
-            "invalid_auth": "Credentials rejected, please check your username and password."
+            "invalid_auth": "Credentials rejected, please check your username and password.",
+            "connection_error": "Connection error with Frank Energie API.",
+            "no_delivery_sites": "No delivery sites found for this account.",
+            "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
+            "site_retrieval_failed": "Error retrieving delivery sites. Please try again later."
         },
         "step": {
             "login": {

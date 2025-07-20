@@ -6,7 +6,11 @@
             "reauth_successful": "Opnieuw inloggen gelukt"
         },
         "error": {
-            "invalid_auth": "Inloggegevens niet geaccepteerd, controleer de gegevens en probeer het opnieuw."
+            "invalid_auth": "Inloggegevens niet geaccepteerd, controleer de gegevens en probeer het opnieuw.",
+            "connection_error": "Verbindingsfout met Frank Energie API.",
+            "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
+            "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
+            "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw."
         },
         "flow_title": "Frank Energie",
         "step": {
