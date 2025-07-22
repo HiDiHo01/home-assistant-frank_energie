@@ -1,0 +1,18 @@
+name: Add issues to backlog project
+
+on:
+  issues:
+    types:
+      - labeled
+
+jobs:
+  add_to_backlog:
+    if: github.event.label.name == 'type: backlog'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add to classic project board
+        uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/users/HiDiHo01/projects/2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
