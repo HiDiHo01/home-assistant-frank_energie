@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Add to GitHub Project (v2)
-        uses: actions/add-to-project@v1
+        uses: actions/add-to-project@v2
         with:
           project-url: https://github.com/users/HiDiHo01/projects/2
           github-token: ${{ secrets.GITHUB_TOKEN }}
