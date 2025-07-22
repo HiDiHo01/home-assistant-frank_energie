@@ -2,7 +2,7 @@ name: 📋 Backlog Item
 description: Voeg een nieuw item toe aan de backlog
 title: "[Backlog] "
 labels: ["type: backlog"]
-projects: ["HiDiHo01/Frank-Energie-Project"]  # Pas dit aan met jouw projectnaam
+projects: ["HiDiHo01/2"]
 assignees: []
 
 body:
@@ -10,9 +10,25 @@ body:
     id: description
     attributes:
       label: Beschrijving
-      description: Beschrijf wat er moet gebeuren of verbeterd moet worden.
+      description: Geef een heldere beschrijving van wat er moet gebeuren.
     validations:
       required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context of motivatie
+      description: Waarom is dit item nodig? Wat is het probleem of de aanleiding?
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptatiecriteria
+      description: Wat moet er minimaal werken of aanwezig zijn?
+    validations:
+      required: false
 
   - type: checkboxes
     id: criteria
@@ -30,6 +46,7 @@ body:
     id: priority
     attributes:
       label: Prioriteit
+      description: Selecteer de prioriteit
       options:
         - 🔴 Hoog
         - 🟠 Middel
