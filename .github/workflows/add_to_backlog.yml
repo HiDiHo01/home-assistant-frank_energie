@@ -7,11 +7,11 @@ on:
 
 jobs:
   add_to_backlog:
-    if: github.event.label.name == 'type: backlog'
+    if: github.event.label.name == 'type:backlog'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Add to classic project board
+      - name: Add to GitHub Project (v2)
         uses: actions/add-to-project@v1
         with:
           project-url: https://github.com/users/HiDiHo01/projects/2
