@@ -115,13 +115,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     FETCH_TOMORROW_HOUR_UTC = 12  # 13  # 13:00 UTC 15:00 UTC+2
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, api: FrankEnergie
+        self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
     ) -> None:
         """Initialize the data object."""
         self.hass = hass
-        self.entry = entry
+        self.config_entry = config_entry
         self.api = api
-        self.site_reference = entry.data.get("site_reference", None)
+        self.site_reference = config_entry.data.get("site_reference", None)
         self.country_code: str | None = self.hass.config.country
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = {
@@ -150,7 +150,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             hass,
             _LOGGER,
             name="Frank Energie coordinator",
-            update_interval=self._update_interval
+            update_interval=self._update_interval,
+            config_entry=config_entry,
         )
 
     def _is_in_delivery_site(self, data_month_summary, data_invoices, user_sites) -> bool:
@@ -232,7 +233,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         try:
             _LOGGER.debug(
-                "Fetching Frank Energie data for today %s", self.entry.entry_id)
+                "Fetching Frank Energie data for today %s", self.config_entry.entry_id)
             prices_today = await self.__fetch_prices_with_fallback(today, tomorrow)
 
             _LOGGER.debug(
@@ -606,7 +607,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 CONF_TOKEN: updated_tokens.refreshToken,
             }
             # Update the config entry with the new tokens
-            self.hass.config_entries.async_update_entry(self.entry, data=data)
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
 
             _LOGGER.debug("Successfully renewed token")
 
@@ -640,7 +641,7 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: ConfigEntry,
+        config_entry: ConfigEntry,
         api: FrankEnergie,
         device_id: str,
     ) -> None:
@@ -654,7 +655,7 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
             device_id (str): The smart battery device ID.
         """
         self.api = api
-        self.site_reference = entry.data.get("site_reference")
+        self.site_reference = config_entry.data.get("site_reference")
         self.device_id = device_id
 
         super().__init__(
@@ -722,11 +723,11 @@ async def hourly_refresh(coordinator: FrankEnergieCoordinator) -> None:
     await coordinator.async_refresh()
 
 
-async def start_coordinator(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def start_coordinator(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
     """Start the coordinator."""
     async with aiohttp.ClientSession() as session:
-        api = FrankEnergie(session, entry.data["access_token"])
-        coordinator = FrankEnergieCoordinator(hass, entry, api)
+        api = FrankEnergie(session, config_entry.data["access_token"])
+        coordinator = FrankEnergieCoordinator(hass, config_entry, api)
         await coordinator.async_refresh()
 
         today = datetime.now(timezone.utc)
