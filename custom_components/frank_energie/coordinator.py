@@ -7,7 +7,7 @@ import asyncio
 import logging
 import sys
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Callable, Optional, TypedDict
+from typing import Any, Callable, TypedDict
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -27,6 +27,7 @@ from python_frank_energie.exceptions import (
 )
 from python_frank_energie.models import (
     EnodeChargers,
+    EnodeVehicles,
     Invoices,
     MarketPrices,
     MonthSummary,
@@ -45,6 +46,7 @@ from .const import (
     DATA_BATTERY_SESSIONS,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
@@ -61,38 +63,41 @@ if sys.platform == 'win32':
 
 class FrankEnergieData(TypedDict):
     """ Represents data fetched from Frank Energie API. """
-    DATA_ELECTRICITY: PriceData
+    DATA_ELECTRICITY: PriceData | None
     """Electricity price data."""
 
-    DATA_GAS: PriceData
+    DATA_GAS: PriceData | None
     """Gas price data."""
 
-    DATA_MONTH_SUMMARY: Optional[MonthSummary]
+    DATA_MONTH_SUMMARY: MonthSummary | None
     """Optional summary data for the month."""
 
-    DATA_INVOICES: Optional[Invoices]
+    DATA_INVOICES: Invoices | None
     """Optional invoices data."""
 
-    DATA_USAGE: Optional[PeriodUsageAndCosts]
+    DATA_USAGE: PeriodUsageAndCosts | None
     """Optional user data."""
 
-    DATA_USER: Optional[User]
+    DATA_USER: User | None
     """Optional user data."""
 
-    DATA_USER_SITES: Optional[UserSites]
+    DATA_USER_SITES: UserSites | None
     """Optional user sites."""
 
-    DATA_ENODE_CHARGERS: Optional[EnodeChargers]
+    DATA_ENODE_CHARGERS: EnodeChargers | None
     """Optional Enode chargers data."""
 
-    DATA_BATTERIES: Optional[SmartBatteries]
+    DATA_ENODE_VEHICLES: EnodeVehicles | None
+    """Optional Enode vehicles data."""
+
+    DATA_BATTERIES: SmartBatteries | None
     """Optional smart batteries data."""
 
-    DATA_BATTERY_DETAILS: Optional[SmartBatteryDetails]
+    DATA_BATTERY_DETAILS: SmartBatteryDetails | None
     """Optional smart battery details data."""
 
-    # DATA_BATTERY_SESSIONS: Optional[SmartBatterySessions]
-    DATA_BATTERY_SESSIONS: Optional[list[SmartBatterySessions]]
+    DATA_BATTERY_SESSIONS: SmartBatterySessions | None
+    # DATA_BATTERY_SESSIONS: Optional[list[SmartBatterySessions]] | None
     """Optional smart battery sessions data."""
 
 
@@ -197,16 +202,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         tomorrow = today + timedelta(days=1)
 
         # Fetch today's prices and user data
-        prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions = await self._fetch_today_data(today, tomorrow)
+        prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions, data_enode_vehicles = await self._fetch_today_data(today, tomorrow)
 
-        # Fetch tomorrow's prices if it's after 13:00 UTC
+        # Fetch tomorrow's prices if it's after 12:00 UTC
         prices_tomorrow = (
             await self._fetch_tomorrow_data(tomorrow)
             if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC
             else None
         )
 
-        return self._aggregate_data(prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions)
+        return self._aggregate_data(prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions, data_enode_vehicles)
 
     async def _fetch_today_data(self, today: date, tomorrow: date):
         """
@@ -424,11 +429,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             _LOGGER.debug("Data smart battery session: %s", data_smart_battery_sessions)
 
+            data_enode_vehicles = []
+            # Fetch Enode vehicles if smart trading is enabled
+            try:
+                if self.api.is_authenticated and is_smart_charging:
+                    data_enode_vehicles = await self.api.enode_vehicles()
+                    _LOGGER.debug("Fetched Enode vehicles: %s", data_enode_vehicles)
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
+                data_enode_vehicles = None
+
             # Detect and log IN_DELIVERY status for clean user experience
             is_in_delivery = self._is_in_delivery_site(data_month_summary, data_invoices, user_sites)
             self._log_in_delivery_status(is_in_delivery)
 
-            return prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions
+            return prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions, data_enode_vehicles
 
         except UpdateFailed as err:
             electricity = self.data.get(DATA_ELECTRICITY)
@@ -474,7 +489,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             await self.__try_renew_token()
             raise UpdateFailed(ex) from ex
 
-    def _aggregate_data(self, prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions) -> dict:
+    def _aggregate_data(self, prices_today, prices_tomorrow, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions, data_enode_vehicles) -> dict:
         """Aggregate the fetched data into a single returnable dictionary."""
 
         # Aggregate the data into a single dictionary
@@ -488,6 +503,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             DATA_BATTERIES: data_smart_batteries,
             DATA_BATTERY_DETAILS: data_smart_battery_details,
             DATA_BATTERY_SESSIONS: data_smart_battery_sessions,
+            DATA_ENODE_VEHICLES: data_enode_vehicles,
         }
         result[DATA_ELECTRICITY] = None
         result[DATA_GAS] = None
@@ -544,7 +560,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return user_prices
 
         # Use public prices if no user prices are available as fallback
-        if len(user_prices.gas.all) == 0:
+        if not getattr(user_prices.gas, "all", None) or len(user_prices.gas.all) == 0:
             # if not user_prices.gas.all:
             # if user_prices.gas.all is None:
             _LOGGER.info(
@@ -555,7 +571,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 # user_prices.gas = None # if user has no gas in users contract you want to reset gas prices
                 user_prices.gas = None
 
-        if len(user_prices.electricity.all) == 0:
+        if not getattr(user_prices.electricity, "all", None) or len(user_prices.electricity.all) == 0:
             # if user_prices.electricity.all is None:
             _LOGGER.info(
                 "No electricity prices found for user, falling back to public prices")

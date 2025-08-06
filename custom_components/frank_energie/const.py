@@ -5,11 +5,12 @@ Constants used in the Frank Energie integration.
 
 import logging
 from dataclasses import dataclass
-from typing import Final, Optional
+from typing import Final
 
 from homeassistant.const import CURRENCY_EURO, UnitOfEnergy, UnitOfVolume
 from python_frank_energie.models import (
     EnodeChargers,
+    EnodeVehicles,
     Invoices,
     MarketPrices,
     MonthSummary,
@@ -26,7 +27,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2025.7.29"
+VERSION: Final[str] = "2025.8.6"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
@@ -61,6 +62,7 @@ DATA_BATTERIES: Final[str] = "smart_batteries"
 DATA_BATTERY_DETAILS: Final[str] = "smart_battery_details"
 DATA_BATTERY_SESSIONS: Final[str] = "smart_battery_sessions"
 DATA_ENODE_CHARGERS: Final[str] = "enode_chargers"
+DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 
 # --- Attribute Constants ---
 ATTR_TIME: Final[str] = "from_time"
@@ -88,6 +90,7 @@ SERVICE_NAME_INVOICES: Final[str] = "Invoices"
 SERVICE_NAME_MONTH_SUMMARY: Final[str] = "Month Summary"
 SERVICE_NAME_USER_SITES: Final[str] = "User Sites"
 SERVICE_NAME_ENODE_CHARGERS: Final[str] = "Chargers"
+SERVICE_NAME_ENODE_VEHICLES: Final[str] = "Vehicles"
 
 # --- Display Constants ---
 DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
@@ -100,37 +103,40 @@ class DeviceResponseEntry:
     """Data class describing a single response entry."""
 
     # Electricity prices and details
-    electricity: MarketPrices
+    electricity: MarketPrices | None
 
     # Gas prices and details
-    gas: MarketPrices
+    gas: MarketPrices | None
 
     # Monthly summary (if available)
-    month_summary: Optional[MonthSummary] = None
+    month_summary: MonthSummary = None
 
     # Invoice details (if available)
-    invoices: Optional[Invoices] = None
+    invoices: Invoices | None = None
 
     # Usage information (if available)
-    usage: Optional[PeriodUsageAndCosts] = None
+    usage: PeriodUsageAndCosts | None = None
 
     # User information (if available)
-    user: Optional[User] = None
+    user: User | None = None
 
     # User Sites information (if available. this replaces delivery site)
-    user_sites: Optional[UserSites] = None
+    user_sites: UserSites | None = None
 
     # Smart battery details (if available)
-    smart_batteries: Optional[SmartBatteries] = None
+    smart_batteries: SmartBatteries | None = None
 
     # Smart battery session details (if available)
-    smart_battery_sessions: Optional[SmartBatterySessions] = None
+    smart_battery_sessions: SmartBatterySessions | None = None
 
     # Smart battery details (if available)
-    smart_battery_details: Optional[SmartBatteryDetails] = None
+    smart_battery_details: SmartBatteryDetails | None = None
 
     # Enode chargers details (if available)
-    enode_chargers: Optional[EnodeChargers] = None
+    enode_chargers: EnodeChargers | None = None
+
+    # Vehicles details (if available)
+    vehicles: EnodeVehicles | None = None  # Placeholder for vehicle data, if any
 
 
 # Log loading of constants (move to init.py for better practice)

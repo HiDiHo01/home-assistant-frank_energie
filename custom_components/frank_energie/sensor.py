@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.6.21"
+# VERSION = "2025.8.6"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -27,6 +27,7 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.core import HassJob, HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import event
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
@@ -45,6 +46,7 @@ from .const import (
     DATA_BATTERY_SESSIONS,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
@@ -57,6 +59,7 @@ from .const import (
     SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_COSTS,
     SERVICE_NAME_ENODE_CHARGERS,
+    SERVICE_NAME_ENODE_VEHICLES,
     SERVICE_NAME_GAS_PRICES,
     SERVICE_NAME_PRICES,
     SERVICE_NAME_USAGE,
@@ -143,6 +146,16 @@ class FrankEnergieEntityDescription(SensorEntityDescription):
         return self.authenticated
 
 
+@dataclass(frozen=True, kw_only=True)
+class EnodeVehicleEntityDescription(SensorEntityDescription):
+    """Describes a sensor for an Enode vehicle."""
+
+    value_fn: Callable[[dict], object]
+    attr_fn: Callable[[dict], dict] = field(default_factory=lambda: (lambda _: {}))
+    authenticated: bool = False
+    service_name: str = SERVICE_NAME_ENODE_VEHICLES
+
+
 @dataclass
 class ChargerSensorDescription:
     """Describes a charger sensor entity."""
@@ -151,7 +164,7 @@ class ChargerSensorDescription:
     device_class: Optional[str] = None
     state_class: Optional[str] = None
     native_unit_of_measurement: Optional[str] = None
-    authenticated: bool = True
+    authenticated: bool = False
     service_name: str = SERVICE_NAME_ENODE_CHARGERS
     icon: Optional[str] = None
     value_fn: Callable[[dict], StateType] = field(default_factory=lambda: lambda _: STATE_UNKNOWN)
@@ -224,7 +237,7 @@ class old_FrankEnergieBatterySessionSensor(
             return None
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, object] | None:
         """Return the state attributes."""
         data = self.coordinator.data
         if not data:
@@ -275,7 +288,7 @@ class FrankEnergieBatterySessionSensor(
         self._is_total = is_total
 
     @property
-    def native_value(self) -> float | int | str | None:
+    def native_value(self) -> StateType:
         """Return the native value of the sensor."""
         try:
             value = self.entity_description.value_fn(self.coordinator.data)
@@ -287,7 +300,7 @@ class FrankEnergieBatterySessionSensor(
             return None
 
     @property
-    def extra_state_attributes(self) -> dict | None:
+    def extra_state_attributes(self) -> dict[str, object] | None:
         """Return optional state attributes."""
         try:
             if self.entity_description.attr_fn:
@@ -313,6 +326,50 @@ class FrankEnergieBatterySessionSensor(
     def _logger(self):
         import logging
         return logging.getLogger(f"{DOMAIN}.sensor")
+
+
+class EnodeVehicleSensor(SensorEntity):
+    _attr_has_entity_name = True  # Allow entity name to be set in the UI
+    _attr_entity_registry_enabled_default = True  # Default to enabled in entity registry
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        description: EnodeVehicleEntityDescription,
+        vehicle_data: dict,
+        vehicle_index: int,
+    ) -> None:
+        self.coordinator = coordinator
+        self.entity_description = description
+        self._vehicle_id = vehicle_data["id"]
+        self._vehicle_data = vehicle_data
+        self._vehicle_index = vehicle_index
+
+        vehicle_name = f"{vehicle_data['information']['brand']} {vehicle_data['information']['model']}"
+        self._attr_unique_id = f"{DOMAIN}_{self._vehicle_id}_{description.key}"
+        self._attr_name = description.name
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._vehicle_id)},
+            manufacturer=vehicle_data.get("information", {}).get("brand"),
+            model=vehicle_data.get("information", {}).get("model"),
+            serial_number=vehicle_data.get("information", {}).get("vin", None),
+            name=vehicle_name,
+            hw_version=str(vehicle_data.get("information", {}).get("year")),
+        )
+
+    @property
+    def native_value(self) -> StateType:
+        return self.entity_description.value_fn(self._vehicle_data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        return self.entity_description.attr_fn(self._vehicle_data)
+
+    @property
+    def available(self) -> bool:
+        """Return True if the native_value is valid."""
+        value = self.native_value
+        return bool(value not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None))
 
 
 def format_user_name(data: dict) -> Optional[str]:
@@ -381,6 +438,247 @@ STATIC_BATTERY_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
 )
 
+ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
+    EnodeVehicleEntityDescription(
+        key="vehicle_name",
+        name="Vehicle Name",
+        icon="mdi:car",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: f"{data.get('information').get('brand')} {data.get('information').get('model')}",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="can_smart_charge",
+        name="Can Smart Charge",
+        icon="mdi:car-electric",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("canSmartCharge"),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="is_reachable",
+        name="Vehicle Reachable",
+        icon="mdi:car-connected",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("isReachable"),
+    ),
+    EnodeVehicleEntityDescription(
+        key="battery_capacity",
+        name="Battery Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("batteryCapacity"),
+    ),
+    EnodeVehicleEntityDescription(
+        key="battery_level",
+        name="Battery Level",
+        icon="mdi:battery",
+        native_unit_of_measurement="%",
+        device_class=SensorDeviceClass.BATTERY,
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("batteryLevel", None),
+    ),
+    EnodeVehicleEntityDescription(
+        key="charge_limit",
+        name="Charge Limit",
+        icon="mdi:battery-charging-70",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("chargeLimit"),
+    ),
+    EnodeVehicleEntityDescription(
+        key="charge_rate",
+        name="Charge Rate",
+        icon="mdi:flash",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("chargeRate", None),
+    ),
+    EnodeVehicleEntityDescription(
+        key="charge_time_remaining",
+        name="Charge Time Remaining",
+        icon="mdi:clock-fast",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("chargeTimeRemaining", None),
+    ),
+    EnodeVehicleEntityDescription(
+        key="vehicle_range",
+        name="Estimated Range",
+        icon="mdi:map-marker-distance",
+        native_unit_of_measurement="km",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("range", None),
+    ),
+    EnodeVehicleEntityDescription(
+        key="is_charging",
+        name="Is Charging",
+        icon="mdi:ev-station",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("isCharging", None),
+    ),
+    EnodeVehicleEntityDescription(
+        key="charge_last_updated",
+        name="Charge Last Updated",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-outline",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: datetime.fromisoformat(
+            data.get("chargeState", {}).get("lastUpdated", "").replace("Z", "+00:00")),
+    ),
+    EnodeVehicleEntityDescription(
+        key="is_fully_charged",
+        name="Fully Charged",
+        icon="mdi:battery-check",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("isFullyCharged"),
+    ),
+    EnodeVehicleEntityDescription(
+        key="is_plugged_in",
+        name="Is Plugged In",
+        icon="mdi:power-plug",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("isPluggedIn", None),
+    ),
+    EnodeVehicleEntityDescription(
+        key="power_delivery_state",
+        name="Power Delivery State",
+        icon="mdi:transmission-tower",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeState", {}).get("powerDeliveryState"),
+    ),
+    EnodeVehicleEntityDescription(
+        key="smart_charging_enabled",
+        name="Smart Charging Enabled",
+        icon="mdi:car-electric",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeSettings", {}).get("isSmartChargingEnabled", None),
+        entity_category=EntityCategory.CONFIG,
+    ),
+    EnodeVehicleEntityDescription(
+        key="solar_charging_enabled",
+        name="Solar Charging Enabled",
+        icon="mdi:solar-power",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeSettings", {}).get("isSolarChargingEnabled", None),
+        entity_category=EntityCategory.CONFIG,
+    ),
+    EnodeVehicleEntityDescription(
+        key="last_seen",
+        name="Last Seen",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: datetime.fromisoformat(data.get("lastSeen", "").replace("Z", "+00:00")),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="calculated_deadline",
+        name="Calculated Deadline",
+        icon="mdi:calendar-clock",
+        authenticated=True,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: datetime.fromisoformat(
+            data.get("chargeSettings", {}).get("calculatedDeadline", "").replace("Z", "+00:00")),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="deadline",
+        name="Charging Deadline",
+        icon="mdi:calendar-end",
+        authenticated=True,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: (
+            datetime.fromisoformat(data["chargeSettings"]["deadline"].replace("Z", "+00:00"))
+            if isinstance(data.get("chargeSettings", {}).get("deadline"), str)
+            else None
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="charge_settings_id",
+        name="Charge Settings ID",
+        icon="mdi:identifier",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeSettings", {}).get("id"),
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    EnodeVehicleEntityDescription(
+        key="max_charge_limit",
+        name="Max Charge Limit",
+        icon="mdi:battery-high",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeSettings", {}).get("maxChargeLimit"),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="min_charge_limit",
+        name="Min Charge Limit",
+        icon="mdi:battery-low",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("chargeSettings", {}).get("minChargeLimit"),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="vehicle_vin",
+        name="VIN",
+        icon="mdi:card-account-details",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: data.get("information", {}).get("vin"),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="intervention_description",
+        name="Intervention Description",
+        icon="mdi:alert-circle-outline",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: (data.get("interventions") or {}).get("description", None),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    EnodeVehicleEntityDescription(
+        key="intervention_title",
+        name="Intervention Title",
+        icon="mdi:alert-decagram",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data: (data.get("interventions") or {}).get("title", None),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+] + [
+    EnodeVehicleEntityDescription(
+        key=f"charging_hour_{day}",
+        name=f"Charging Hour {day.capitalize()}",
+        icon="mdi:clock-time-four-outline",
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_VEHICLES,
+        value_fn=lambda data, d=day: data.get("chargeSettings", {}).get(f"hour{d.capitalize()}"),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
+    for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+]
+
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, ...]] = (
     FrankEnergieEntityDescription(
         key="device_id",
@@ -391,6 +689,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         state_class=None,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: data.device_id,
+        entity_registry_enabled_default=False,
     ),
     FrankEnergieEntityDescription(
         key="period_start_date",
@@ -1887,7 +2186,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="usage_electricity_yesterday",
         name="Usage electricity yesterday",
         translation_key="usage_electricity_yesterday",
-        icon="mdi:flash-auto",
+        icon="mdi:transmission-tower-import",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -2387,7 +2686,7 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
 
     @property
-    def native_value(self):
+    def native_value(self) -> StateType:
         return self.entity_description.value_fn(self._charger)
 
 
@@ -2446,10 +2745,17 @@ class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
         # Zet enabled_default op False bij feed-in sensor zonder waarde
         if description.is_feed_in:
             user_data = coordinator.data.get(DATA_USER)
-            estimated_feed_in = 0
-            if user_data and hasattr(user_data, "connections") and user_data.connections:
-                estimated_feed_in = getattr(user_data.connections[0], "estimatedFeedIn", 0) or 0
+            connection = user_data.connections[0]
+            estimated_feed_in = int(connection.get("estimatedFeedIn"))
+            _LOGGER.debug("estimated_feed_in = %s", estimated_feed_in)
+            _LOGGER.debug("has connections = %s", hasattr(user_data, "connections"))
+            _LOGGER.debug("user connections = %s", user_data.connections)
+            _LOGGER.debug("estimated_feed_in > 0 = %s", estimated_feed_in > 0)
 
+            if user_data and connection:
+                estimated_feed_in = int(connection.get("estimatedFeedIn"))
+
+            _LOGGER.debug("_attr_entity_registry_enabled_default = %s", estimated_feed_in > 0)
             self._attr_entity_registry_enabled_default = estimated_feed_in > 0
 
         super().__init__(coordinator)
@@ -2493,7 +2799,7 @@ class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
         self.async_schedule_update_ha_state(True)
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, object] | None:
         """Return the cached state attributes, if available."""
         if self.coordinator.data:
             return self.entity_description.attr_fn(self.coordinator.data)
@@ -3313,13 +3619,48 @@ async def async_setup_entry(
     user_segments = getattr(coordinator.data.get(DATA_USER_SITES), "segments", [])
 
     # Safely access user data, default to an empty dictionary if None
-    user_data = coordinator.data.get(DATA_USER, {})
+
+    user_data = None
+    if coordinator.api.is_authenticated:
+        user_data = coordinator.data.get(DATA_USER, {})
+        connections = user_data.connections
+        first_connection = connections[0]
+        estimated_feed_in = first_connection.get("estimatedFeedIn")
+        _LOGGER.debug("estimated_feed_in1: %s", estimated_feed_in)
+    _LOGGER.debug("user_data: %s", user_data)
     batteries = coordinator.data.get(DATA_BATTERIES, {})
     chargers = coordinator.data.get(DATA_ENODE_CHARGERS, {})
+    vehicles = coordinator.data.get(DATA_ENODE_VEHICLES, {})
 
     # Safely access user data (defaulting to an empty dictionary if None)
-    connections = user_data.get("connections", []) if isinstance(user_data, dict) else []
-    estimated_feed_in = connections[0].get("estimatedFeedIn", 0) if connections else 0
+    connections: list[dict] = []
+    first_connection: dict | None = None
+    estimated_feed_in: float | None = None
+
+    if isinstance(user_data, object) and hasattr(user_data, "connections"):
+        if isinstance(user_data.connections, list):
+            connections = user_data.connections
+        else:
+            _LOGGER.warning(
+                "Expected user_data.connections to be a list, got %s",
+                type(user_data.connections).__name__
+            )
+    else:
+        _LOGGER.warning(
+            "user_data does not have attribute 'connections' or is not valid: %s",
+            type(user_data).__name__
+        )
+
+    if connections:
+        first_connection = connections[0]
+        if isinstance(first_connection, dict):
+            estimated_feed_in = first_connection.get("estimatedFeedIn")
+        else:
+            _LOGGER.warning("Expected first connection to be a dict, got %s", type(first_connection).__name__)
+    else:
+        _LOGGER.debug("No connections found in user_data")
+
+    _LOGGER.debug("estimated_feed_in: %s", estimated_feed_in)
 
     entities: list = [
         FrankEnergieSensor(
@@ -3331,13 +3672,21 @@ async def async_setup_entry(
         if (
             (not description.authenticated or coordinator.api.is_authenticated)
             and (not description.is_gas or "GAS" in user_segments)
-            # Do not create feed-in sensor if estimated_feed_in is 0
-            and (not description.is_feed_in or estimated_feed_in > 0)
+            and (not description.is_feed_in or (estimated_feed_in is not None and estimated_feed_in > 0))
+            and not (
+                description.service_name == SERVICE_NAME_GAS_PRICES
+                and coordinator.api.is_authenticated
+                and "GAS" not in user_segments
+
+            )
             # and (not description.is_battery or batteries is not None)
             # and (not description.is_charger or chargers is not None)
             # and (not description.is_battery_session or session_coordinator is not None)
         )
     ]
+
+    if coordinator.api.is_authenticated and "GAS" not in user_segments:
+        await _disable_gas_price_sensors(hass, config_entry)
 
     # _LOGGER.debug("coordinator.enode_chargers: %d", coordinator.data.get('enode_chargers'))
     # _LOGGER.debug("coordinator.enode_chargers chargers: %d", coordinator.data['enode_chargers'].chargers)
@@ -3433,12 +3782,49 @@ async def async_setup_entry(
                 )
                 # entities.append(sensor)
 
+            enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+            num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
+            _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
+
+            if enode_vehicles and enode_vehicles.vehicles:
+                enode_vehicle_sensors = []
+
+                for i, vehicle in enumerate(enode_vehicles.vehicles):
+                    for description in ENODE_VEHICLE_SENSOR_TYPES:
+                        enode_vehicle_sensors.append(
+                            EnodeVehicleSensor(coordinator, description, vehicle, i)
+                        )
+
+                for entity in enode_vehicle_sensors:
+                    _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
+
+                entities.extend(enode_vehicle_sensors)
+
     # Register the sensors to Home Assistant
     try:
-        async_add_entities(entities, True)
+        async_add_entities(entities, update_before_add=True)
     except Exception as e:
         _LOGGER.error("Failed to add entities for entry %s: %s", config_entry.entry_id, str(e))
 
     _LOGGER.debug("All sensors added for entry: %s", config_entry.entry_id)
+
+
+async def _disable_gas_price_sensors(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Disable gas price sensors if user is authenticated but has no gas contract."""
+    entity_registry = er.async_get(hass)
+
+    for entity_id, entity_entry in entity_registry.entities.items():
+        if (
+            entity_entry.platform == DOMAIN
+            and entity_entry.config_entry_id == entry.entry_id
+            and entity_entry.domain == "sensor"
+            and SERVICE_NAME_GAS_PRICES in entity_entry.unique_id.lower()
+            and not entity_entry.disabled
+        ):
+            _LOGGER.info("Disabling gas price sensor '%s' (no gas contract)", entity_id)
+            entity_registry.async_update_entity(
+                entity_id=entity_id,
+                disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+            )
 
 # EnodeChargers(chargers=[EnodeCharger(can_smart_charge=True, charge_settings=ChargeSettings(calculated_deadline=datetime.datetime(2025, 3, 24, 6, 0, tzinfo=datetime.timezone.utc), capacity=75, deadline=None, hour_friday=420, hour_monday=420, hour_saturday=420, hour_sunday=420, hour_thursday=420, hour_tuesday=420, hour_wednesday=420, id='cm3rogazq06pz13p8eucfutnx', initial_charge=0, initial_charge_timestamp=datetime.datetime(2024, 11, 21, 19, 0, 15, 396000, tzinfo=datetime.timezone.utc), is_smart_charging_enabled=True, is_solar_charging_enabled=False, max_charge_limit=80, min_charge_limit=20), charge_state=ChargeState(battery_capacity=None, battery_level=None, charge_limit=None, charge_rate=None, charge_time_remaining=None, is_charging=False, is_fully_charged=None, is_plugged_in=False, last_updated=datetime.datetime(2025, 3, 23, 16, 6, 57, tzinfo=datetime.timezone.utc), power_delivery_state='UNPLUGGED', range=None), id='cm3rogazq06pz13p8eucfutnx', information={'brand': 'Wallbox', 'model': 'Pulsar Plus', 'year': None}, interventions=[], is_reachable=True, last_seen=datetime.datetime(2025, 3, 23, 16, 24, 51, 913000, tzinfo=datetime.timezone.utc)), EnodeCharger(can_smart_charge=True, charge_settings=ChargeSettings(calculated_deadline=datetime.datetime(2025, 3, 24, 6, 0, tzinfo=datetime.timezone.utc), capacity=75, deadline=None, hour_friday=420, hour_monday=420, hour_saturday=420, hour_sunday=420, hour_thursday=420, hour_tuesday=420, hour_wednesday=420, id='cm3rogap606pu13p8w08epzjx', initial_charge=0, initial_charge_timestamp=datetime.datetime(2024, 11, 21, 19, 0, 15, 16000, tzinfo=datetime.timezone.utc), is_smart_charging_enabled=True, is_solar_charging_enabled=False, max_charge_limit=80, min_charge_limit=20), charge_state=ChargeState(battery_capacity=None, battery_level=None, charge_limit=None, charge_rate=10.71, charge_time_remaining=None, is_charging=True, is_fully_charged=None, is_plugged_in=True, last_updated=datetime.datetime(2025, 3, 23, 16, 23, 53, tzinfo=datetime.timezone.utc), power_delivery_state='PLUGGED_IN:CHARGING', range=None), id='cm3rogap606pu13p8w08epzjx', information={'brand': 'Wallbox', 'model': 'Pulsar Plus', 'year': None}, interventions=[], is_reachable=True, last_seen=datetime.datetime(2025, 3, 23, 16, 24, 50, 746000, tzinfo=datetime.timezone.utc))])
