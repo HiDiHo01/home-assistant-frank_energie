@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.8.6"
+# VERSION = "2025.8.17"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -373,7 +373,9 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
             return {}
 
         try:
-            return self.entity_description.attr_fn(latest_vehicle_data) or {}
+            if hasattr(self.entity_description, "attr_fn") and self.entity_description.attr_fn:
+                return self.entity_description.attr_fn(latest_vehicle_data) or {}
+            return {}
         except Exception as err:  # pylint: disable=broad-except
             _LOGGER.error("Could not get attributes for %s: %s", self.entity_id, err)
             return {}
