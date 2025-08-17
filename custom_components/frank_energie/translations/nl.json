@@ -79,9 +79,9 @@
             }
         },
         "Frank Energie - Usage": {
-            "name": "Frank Energie - Gebruik",
+            "name": "Frank Energie - Inzicht",
             "model": {
-                "Usage": "Gebruik"
+                "Usage": "Inzicht"
             }
         },
         "Frank Energie - User": {
@@ -101,67 +101,15 @@
             "model": {
                 "Batteries": "Batterijen"
             }
+        },
+        "Frank Energie - Vehicles": {
+            "name": "Frank Energie - Voertuigen",
+            "model": {
+                "Vehicles": "Voertuigen"
+            }
         }
     },
     "entity": {
-        "binary_sensor": {
-            "sun": {
-                "name": "Zon",
-                "state": {
-                    "on": "Boven de horizon",
-                    "off": "Onder de horizon"
-                },
-                "state_attributes": {
-                    "sunrise": {
-                        "name": "Zonsopkomst"
-                    },
-                    "sunset": {
-                        "name": "Zonsondergang"
-                    },
-                    "sun_chance0": {
-                        "name": "Zonkans vandaag"
-                    },
-                    "sun_chance1": {
-                        "name": "Zonkans morgen"
-                    },
-                    "sun_chance2": {
-                        "name": "Zonkans overmorgen"
-                    }
-                }
-            },
-            "alarm": {
-                "name": "Waarschuwing",
-                "state_attributes": {
-                    "title": {
-                        "name": "Titel"
-                    },
-                    "description": {
-                        "name": "Beschrijving"
-                    },
-                    "code": {
-                        "name": "Code",
-                        "state": {
-                            "groen": "Groen",
-                            "geel": "Geel",
-                            "oranje": "Oranje",
-                            "rood": "Rood"
-                        }
-                    },
-                    "next_code": {
-                        "name": "Volgende code",
-                        "state": {
-                            "groen": "Groen",
-                            "geel": "Geel",
-                            "oranje": "Oranje",
-                            "rood": "Rood"
-                        }
-                    },
-                    "timestamp": {
-                        "name": "Volgende waarschuwing"
-                    }
-                }
-            }
-        },
         "sensor": {
             "current_electricity_price": {
                 "name": "Huidige elektriciteitsprijs (All-in)",
@@ -463,7 +411,7 @@
                 "name": "Opbrengst elektriciteit gisteren"
             },
             "delivered_feed_in_yesterday": {
-                "name": "Geleverde elektriciteit gisteren"
+                "name": "Teruggeleverde elektriciteit gisteren"
             },
             "delivery_site": {
                 "name": "Leveringslocatie",
@@ -594,6 +542,12 @@
             },
             "preferred_automatic_collection_day": {
                 "name": "Voorkeur automatische incasso dag"
+            },
+            "vehicle_name": {
+                "name": "Naam voertuig"
+            },
+            "mini_cooper_vehicle_name": {
+                "name": "Naam voertuig"
             }
         }
     }

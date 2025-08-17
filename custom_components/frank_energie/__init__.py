@@ -19,7 +19,8 @@ from .exceptions import NoSuitableSitesFoundError
 _LOGGER = logging.getLogger(__name__)
 
 # PLATFORMS = [Platform.SENSOR, "frank_energie_diagnostic_sensor"]
-PLATFORMS = [Platform.SENSOR]
+# PLATFORMS = [Platform.SENSOR]
+PLATFORMS: list[str] = [Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

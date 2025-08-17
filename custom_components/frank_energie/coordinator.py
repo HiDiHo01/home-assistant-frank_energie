@@ -27,6 +27,7 @@ from python_frank_energie.exceptions import (
 )
 from python_frank_energie.models import (
     EnodeChargers,
+    EnodeVehicle,
     EnodeVehicles,
     Invoices,
     MarketPrices,
@@ -97,7 +98,6 @@ class FrankEnergieData(TypedDict):
     """Optional smart battery details data."""
 
     DATA_BATTERY_SESSIONS: SmartBatterySessions | None
-    # DATA_BATTERY_SESSIONS: Optional[list[SmartBatterySessions]] | None
     """Optional smart battery sessions data."""
 
 
@@ -630,6 +630,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.error("Failed to fetch %s: %s", method.__name__, err)
             return None
 
+    def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
+        vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
+        return EnodeVehicles(vehicles=vehicles_list)
+
 
 class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySessions]):
     """
@@ -663,6 +667,7 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
             _LOGGER,
             name="Frank Energie Battery Sessions",
             update_interval=timedelta(minutes=60),
+            config_entry=config_entry,
         )
 
     async def _async_update_data(self) -> SmartBatterySessions:

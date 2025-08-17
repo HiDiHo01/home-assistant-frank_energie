@@ -27,7 +27,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2025.8.6"
+VERSION: Final[str] = "2025.8.17"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
@@ -35,6 +35,13 @@ UNIQUE_ID: Final[str] = "frank_energie"
 DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
 # DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
 API_CONF_URL: Final[str] = "https://www.frankenergie.nl/goedkoop"
+SITE_NL = "https://www.frankenergie.nl/nl"
+SITE_BE = "https://www.frankenergie.be/nl"
+CUSTOMER_SERVICE_NL = "klantenservice@frankenergie.nl"
+CUSTOMER_SERVICE_BE = "klantenservice@frankenergie.be"
+CONTACT_NL_URL = "https://klantenservice.frankenergie.nl/hc/nl-nl"
+PHONE_NL = "+31207900114"
+WHATSAPP_NL = "+31649163884"
 
 # --- Component Metadata ---
 ICON: Final[str] = "mdi:currency-eur"
