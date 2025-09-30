@@ -27,7 +27,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2025.8.17"
+VERSION: Final[str] = "2025.9.30"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
@@ -54,7 +54,7 @@ CONF_REFRESH_TOKEN: Final[str] = "refresh_token"
 CONF_SITE: Final[str] = "site_reference"
 
 # --- Default values for some config constants ---
-DEFAULT_REFRESH_INTERVAL: Final[int] = 3600
+DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
 
 # --- Data Fields ---
 DATA_ELECTRICITY: Final[str] = "electricity"

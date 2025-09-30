@@ -1,7 +1,7 @@
 """ Coordinator implementation for Frank Energie integration.
     Fetching the latest data from Frank Energie and updating the states."""
 # coordinator.py
-# version 2025.6.19
+# version 2025.9.30
 
 import asyncio
 import logging
@@ -54,6 +54,7 @@ from .const import (
     DATA_USAGE,
     DATA_USER,
     DATA_USER_SITES,
+    DEFAULT_REFRESH_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             DATA_BATTERY_DETAILS: None,
             DATA_BATTERY_SESSIONS: None,
         }
-        self._update_interval = timedelta(minutes=60)
+        self._update_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
         self._last_update_success = False
         self.user_electricity_enabled = False
         self.user_gas_enabled = False
@@ -414,7 +415,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         )
                         if sessions and isinstance(sessions.sessions, list):
                             _LOGGER.debug("Appending %d session(s) for battery %s", len(sessions.sessions), battery.id)
-                            # data_smart_battery_sessions.extend(sessions)
                             data_smart_battery_sessions.append(sessions)
                         else:
                             _LOGGER.warning(

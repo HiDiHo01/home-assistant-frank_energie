@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.8.17"
+# VERSION = "2025.9.30"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -873,12 +873,11 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
             "sessions": [
                 {
                     "date": s.date,
-                    "trading_result": s.trading_result,
-                    "cumulative_trading_result": s.cumulative_trading_result,
+                    "result": s.result,
+                    "cumulative_result": s.cumulative_result,
                 }
                 for s in data.sessions
             ],
-            "total_trading_result": data.total_trading_result,
         }
     ),
     FrankEnergieEntityDescription(
@@ -923,7 +922,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         suggested_display_precision=2,
         state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: data.total_trading_result,
+        value_fn=lambda data: data.sessions[0].cumulative_result,
     ),
 )
 
