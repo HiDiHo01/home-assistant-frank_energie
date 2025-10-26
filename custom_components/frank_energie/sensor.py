@@ -1518,6 +1518,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=0,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data[DATA_ELECTRICITY].length,
+        attr_fn=lambda data: {'DST': True}
+        if data[DATA_ELECTRICITY].length == 25 or data[DATA_ELECTRICITY].length == 49 else {},
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True
     ),
