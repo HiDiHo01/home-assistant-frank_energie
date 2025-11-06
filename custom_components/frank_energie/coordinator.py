@@ -516,9 +516,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 result[DATA_GAS] = prices_today.gas
 
         if prices_tomorrow is not None:
-            if prices_tomorrow.electricity is not None:
+            if result[DATA_ELECTRICITY] is not None and prices_tomorrow.electricity is not None:
                 result[DATA_ELECTRICITY] += prices_tomorrow.electricity
-            if prices_tomorrow.gas is not None:
+            if result[DATA_GAS] is not None and prices_tomorrow.gas is not None:
                 result[DATA_GAS] += prices_tomorrow.gas
 
         return result
