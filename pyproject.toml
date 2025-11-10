@@ -9,7 +9,7 @@ python = "^3.13"
 python-frank-energie = "^2025.11.6"
 
 [tool.poetry.dev-dependencies]
-pytest = "^8.3"
+pytest = "^9.0"
 flake8 = "^7.1"
 
 [build-system]
