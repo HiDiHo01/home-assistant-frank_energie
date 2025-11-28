@@ -32,8 +32,8 @@ ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
 # --- URLs ---
-DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
-# DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
+# DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
+DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
 API_CONF_URL: Final[str] = "https://www.frankenergie.nl/goedkoop"
 SITE_NL = "https://www.frankenergie.nl/nl"
 SITE_BE = "https://www.frankenergie.be/nl"
@@ -52,9 +52,14 @@ CONF_COORDINATOR: Final[str] = "coordinator"
 CONF_AUTH_TOKEN: Final[str] = "auth_token"
 CONF_REFRESH_TOKEN: Final[str] = "refresh_token"
 CONF_SITE: Final[str] = "site_reference"
+CONF_RESOLUTION: Final[str] = "resolution"  # 15-minute price resolution
 
 # --- Default values for some config constants ---
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
+DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
+DEFAULT_RESOLUTION = "PT15M"
+
+SUPPORTED_RESOLUTIONS = ["PT15M", "PT60M"]
 
 # --- Data Fields ---
 DATA_ELECTRICITY: Final[str] = "electricity"
@@ -98,9 +103,6 @@ SERVICE_NAME_MONTH_SUMMARY: Final[str] = "Month Summary"
 SERVICE_NAME_USER_SITES: Final[str] = "User Sites"
 SERVICE_NAME_ENODE_CHARGERS: Final[str] = "Chargers"
 SERVICE_NAME_ENODE_VEHICLES: Final[str] = "Vehicles"
-
-# --- Display Constants ---
-DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
 
 # --- Device Response Data Class ---
 

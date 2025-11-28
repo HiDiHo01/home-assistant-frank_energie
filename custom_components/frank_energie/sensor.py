@@ -6,7 +6,7 @@ Sensor platform for Frank Energie integration."""
 
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Final, Optional, Union
 from zoneinfo import ZoneInfo
 
@@ -935,8 +935,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        value_fn=lambda data: data[DATA_ELECTRICITY].current_hour.total
-        if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour else None,
+        value_fn=lambda data: data[DATA_ELECTRICITY].current.total
+        if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current else None,
         attr_fn=lambda data: {"prices": data[DATA_ELECTRICITY].asdict(
             "total", timezone="Europe/Amsterdam")
         }
@@ -1733,7 +1733,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].upcoming_avg.market_price
-        if data[DATA_GAS] and data[DATA_GAS].upcoming_avg.market_price else None,
+        if data[DATA_GAS] and data[DATA_GAS].upcoming_avg else None,
         attr_fn=lambda data: {
             'prices': data[DATA_GAS].asdict('market_price', upcoming_only=True, timezone="Europe/Amsterdam")
             if data[DATA_GAS] else {}
@@ -2862,6 +2862,7 @@ class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
     async def async_update(self):
         """Get the latest data and updates the states."""
         try:
+            await self.coordinator.async_request_refresh()
             data = self.coordinator.data
             self._attr_native_value = self.entity_description.value_fn(data)
         except (TypeError, IndexError, ValueError):
@@ -2880,9 +2881,24 @@ class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
             self._unsub_update()
             self._unsub_update = None
 
-        # Schedule the next update at exactly the next whole hour sharp
-        # next_update_time = datetime.now(timezone.utc).replace(minute=0, second=0) + timedelta(hours=1)
-        next_update_time = dt_util.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        # Schedule the next update at exactly the next whole hour sharp or every quarter hour
+        # TODO: Use hour updates when prices are available hourly only
+        now = dt_util.now(timezone.utc)
+        minute = now.minute
+        if minute >= 45:
+            # Next whole hour
+            next_update_time = (
+                now.replace(minute=0, second=0, microsecond=0)
+                + timedelta(hours=1)
+            )
+        else:
+            # Round up to next quarter: 0 → 15, 1–14 → 15, 15–29 → 30, 30–44 → 45
+            next_quarter = ((minute // 15) + 1) * 15
+            next_update_time = (
+                now.replace(minute=0, second=0, microsecond=0)
+                + timedelta(minutes=next_quarter)
+            )
+
         self._unsub_update = event.async_track_point_in_utc_time(
             self.hass,
             self._update_job,
