@@ -59,28 +59,79 @@ Middels [apex-card](https://github.com/RomRider/apexcharts-card) is het mogelijk
 
 ```yaml 
 type: custom:apexcharts-card
-graph_span: 48h
+graph_span: 46h
 span:
   start: day
 now:
   show: true
   label: Nu
+  color: darkblue
 header:
   show: true
-  title: Energieprijs per uur (€/kwh)
+  title: Energieprijs per uur (€/kWh) voor 48 uur
+  show_states: false
+  colorize_states: true
 series:
-  - entity: sensor.frank_energie_prices_current_electricity_price_all_in
+  - entity: sensor.frank_energie_prijzen_huidige_elektriciteitsprijs_all_in
+    name: Prijs
     show:
       legend_value: false
-    stroke_width: 2
+    stroke_width: 0
     float_precision: 3
     type: column
-    opacity: 0.3
-    color: '#03b2cb'
+    opacity: 1
+    color: "#44739e"
+    color_threshold:
+      - value: 0
+        color: "#4473ff"
+      - value: 0.19
+        color: "#4473cf"
+      - value: 0.2
+        color: "#99ff00"
+      - value: 0.25
+        color: "#6fff00"
+      - value: 0.26
+        color: "#1aff00"
+      - value: 0.27
+        color: "#00ee00"
+      - value: 0.28
+        color: "#00bb00"
+      - value: 0.29
+        color: green
+      - value: 0.3
+        color: "#eaff00"
+      - value: 0.31
+        color: "#ffff00"
+      - value: 0.32
+        color: "#ffc40c"
+      - value: 0.33
+        color: darkorange
+      - value: 0.35
+        color: orangered
+      - value: 0.375
+        color: "#ff0000"
+      - value: 0.4
+        color: "#df0000"
+      - value: 0.425
+        color: "#af0000"
+      - value: 0.45
+        color: darkred
     data_generator: |
       return entity.attributes.prices.map((record, index) => {
         return [record.from, record.price];
       });
+experimental:
+  color_threshold: true
+apex_config:
+  chart:
+    height: 300px
+    animations:
+      enabled: true
+      easing: easeinout
+      speed: 2000
+      animateGradually:
+        enabled: true
+        delay: 500
 ```
 
 #### Voorbeeld 2 - Komende 10 uur
@@ -96,26 +147,71 @@ span:
 now:
   show: true
   label: Nu
+  color: darkblue
 header:
   show: true
-  show_states: true
+  title: Energieprijs per uur (€/kWh) voor 48 uur
+  show_states: false
   colorize_states: true
-yaxis:
-  - decimals: 2
-    min: 0
-    max: '|+0.10|'
 series:
-  - entity: sensor.current_electricity_price_all_in
+  - entity: sensor.frank_energie_prijzen_huidige_elektriciteitsprijs_all_in
+    name: Prijs
     show:
-      in_header: raw
       legend_value: false
-    stroke_width: 2
-    float_precision: 4
+    stroke_width: 0
+    float_precision: 3
     type: column
-    opacity: 0.3
-    color: '#03b2cb'
+    opacity: 1
+    color: "#44739e"
+    color_threshold:
+      - value: 0
+        color: "#4473ff"
+      - value: 0.19
+        color: "#4473cf"
+      - value: 0.2
+        color: "#99ff00"
+      - value: 0.25
+        color: "#6fff00"
+      - value: 0.26
+        color: "#1aff00"
+      - value: 0.27
+        color: "#00ee00"
+      - value: 0.28
+        color: "#00bb00"
+      - value: 0.29
+        color: green
+      - value: 0.3
+        color: "#eaff00"
+      - value: 0.31
+        color: "#ffff00"
+      - value: 0.32
+        color: "#ffc40c"
+      - value: 0.33
+        color: darkorange
+      - value: 0.35
+        color: orangered
+      - value: 0.375
+        color: "#ff0000"
+      - value: 0.4
+        color: "#df0000"
+      - value: 0.425
+        color: "#af0000"
+      - value: 0.45
+        color: darkred
     data_generator: |
       return entity.attributes.prices.map((record, index) => {
         return [record.from, record.price];
       });
+experimental:
+  color_threshold: true
+apex_config:
+  chart:
+    height: 300px
+    animations:
+      enabled: true
+      easing: easeinout
+      speed: 2000
+      animateGradually:
+        enabled: true
+        delay: 500
 ```
