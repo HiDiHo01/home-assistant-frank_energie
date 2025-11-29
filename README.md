@@ -59,7 +59,7 @@ Middels [apex-card](https://github.com/RomRider/apexcharts-card) is het mogelijk
 
 ```yaml 
 type: custom:apexcharts-card
-graph_span: 46h
+graph_span: 48h
 span:
   start: day
 now:
