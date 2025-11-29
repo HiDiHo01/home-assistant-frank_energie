@@ -68,7 +68,7 @@ now:
   color: darkblue
 header:
   show: true
-  title: Energieprijs per uur (€/kWh) voor 48 uur
+  title: Energieprijs (€/kWh) voor 48 uur
   show_states: false
   colorize_states: true
 series:
@@ -150,7 +150,7 @@ now:
   color: darkblue
 header:
   show: true
-  title: Energieprijs per uur (€/kWh) voor 48 uur
+  title: Energieprijs (€/kWh) voor 10 uur
   show_states: false
   colorize_states: true
 series:
