@@ -4,6 +4,7 @@ version = 1
 auto_approve_usernames = ["dependabot"]
 
 [merge]
+automerge_label = "automerge"
 method = "squash"
 
 [merge.automerge_dependencies]
