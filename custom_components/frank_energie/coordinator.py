@@ -1003,7 +1003,8 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
         """
         self.api = api
         self.site_reference = config_entry.data.get("site_reference")
-        self.device_id = config_entry.data.get("device_id")
+        # self.device_id = config_entry.data.get("device_id")
+        self.device_id = device_id
 
         super().__init__(
             hass,
