@@ -13,6 +13,6 @@
         "frank_energie"
     ],
     "quality_scale": "silver",
-    "requirements": ["python-frank-energie==2025.11.29"],
-    "version": "2025.11.29"
+    "requirements": ["python-frank-energie==2025.12.29"],
+    "version": "2025.12.29"
 }
