@@ -1,4 +1,4 @@
-﻿""" Coordinator implementation for Frank Energie integration.
+""" Coordinator implementation for Frank Energie integration.
     Fetching the latest data from Frank Energie and updating the states."""
 # coordinator.py
 # version 2025.9.30
