@@ -990,6 +990,7 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
         hass: HomeAssistant,
         config_entry: ConfigEntry,
         api: FrankEnergie,
+        device_id: str,
     ) -> None:
         """
         Initialize the battery session coordinator.
@@ -1010,7 +1011,6 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
             name="Frank Energie Battery Sessions",
             update_interval=timedelta(minutes=60),
             config_entry=config_entry,
-            device_id=self.device_id,
         )
 
     async def _async_update_data(self) -> SmartBatterySessions:
