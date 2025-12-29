@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.9.30"
+# VERSION = "2025.12.17"
 
 import logging
 from dataclasses import asdict, dataclass, field
@@ -20,6 +20,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CURRENCY_EURO,
+    MATCH_ALL,
     PERCENTAGE,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -78,31 +79,71 @@ _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
 
-@dataclass
+# @dataclass
+@dataclass(slots=True)
 class FrankEnergieEntityDescription(SensorEntityDescription):
-    """Describes Frank Energie sensor entity."""
+    """Describes a Frank Energie sensor entity.
 
+    This description is used to define static sensor metadata.
+    All statistics-relevant fields MUST be stable and defined upfront.
+    """
+
+    # Core metadata
     authenticated: bool = False
     service_name: str | None = SERVICE_NAME_PRICES
-    value_fn: Callable[[dict], StateType] = field(default=lambda _: STATE_UNKNOWN)
-    attr_fn: Callable[[dict], dict[str, Union[StateType, list, None]]] | None = None
+    # value_fn: Callable[[dict], StateType] = field(default=lambda _: STATE_UNKNOWN)
+    # attr_fn: Callable[[dict], dict[str, object]] | None = None
+    value_fn: Callable[[dict], StateType] = field(
+        default=lambda _: STATE_UNKNOWN
+    )
+#    attr_fn: Callable[[dict], dict[str, object]] = field(
+#        default_factory=dict
+#    )
+    attr_fn: Callable[[dict], dict[str, object]] = field(default_factory=lambda: lambda data: {})
+
+    # Flags for filtering
     is_gas: bool = False
     is_electricity: bool = False
     is_feed_in: bool = False  # used to filter based on estimatedFeedIn
     is_battery_session: bool = False
 
-    def __init__(
+    # Define which sensors should not have their attributes recorded
+    _no_record_keys: frozenset[str] = field(
+        default=frozenset(
+            {
+                "elec_all",
+                "gas_all",
+                "elec_tax",
+                "elec_tax_markup",
+                "elec_market",
+                "elec_avg",
+                "elec_tomorrow_avg",
+                "elec_market_upcoming",
+                "elec_upcoming",
+                "average_electricity_price_upcoming_all_in",
+                "average_electricity_price_upcoming_market",
+                "average_electricity_price_upcoming_market_tax",
+                "average_electricity_price_upcoming_market_tax_markup",
+            }
+        ),
+        init=False,
+        repr=False,
+    )
+
+    def old__init__(
         self,
         key: str,
         name: str,
         device_class: Union[str, SensorDeviceClass] | None = None,
-        state_class: str | None = None,
+        # state_class: str | None = None,
+        state_class: SensorStateClass | None = None,
         native_unit_of_measurement: str | None = None,
         suggested_display_precision: int | None = None,
         authenticated: bool | None = None,
         service_name: Union[str, None] = None,
         value_fn: Callable[[dict], StateType] | None = None,
-        attr_fn: Callable[[dict], dict[str, Union[StateType, list, None]]] | None = None,
+        # attr_fn: Callable[[dict], dict[str, Union[StateType, list, None]]] | None = None,
+        attr_fn: Callable[[dict], dict[str, object]] | None = None,
         entity_registry_enabled_default: bool = True,
         entity_registry_visible_default: bool = True,
         entity_category: Union[str, EntityCategory] | None = None,
@@ -139,17 +180,39 @@ class FrankEnergieEntityDescription(SensorEntityDescription):
         self.is_feed_in = is_feed_in
         self.is_battery_session = is_battery_session
 
+    def __post_init__(self):
+        # Device class correct omzetten
+        if isinstance(self.device_class, str):
+            object.__setattr__(self, 'device_class', SensorDeviceClass(self.device_class))
+
+        # Entity category correct omzetten
+        if isinstance(self.entity_category, str):
+            object.__setattr__(self, 'entity_category', EntityCategory(self.entity_category))
+
+        # Defaults voor value_fn en attr_fn
+        if self.value_fn is None:
+            object.__setattr__(self, 'value_fn', lambda _: STATE_UNKNOWN)
+        if self.attr_fn is None:
+            object.__setattr__(self, 'attr_fn', lambda data: {})
+
     def get_state(self, data: dict) -> StateType:
         """Get the state value."""
         return self.value_fn(data)
 
-    def get_attributes(self, data: dict) -> dict[str, Union[StateType, list]]:
+    def get_attributes(self, data: dict) -> dict[str, object]:
         """Get the additional attributes."""
         return self.attr_fn(data)
 
     @property
+    def _unrecorded_attributes(self) -> frozenset[str]:
+        """Return attributes that should NOT be recorded by the recorder."""
+        if self.key in self._no_record_keys:
+            return frozenset({MATCH_ALL})
+        return frozenset()
+
+    @property
     def is_authenticated(self) -> bool:
-        """Check if the entity is authenticated."""
+        """Return whether this entity requires authentication."""
         return self.authenticated
 
 
@@ -431,12 +494,10 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             len(data[DATA_ENODE_CHARGERS].chargers)
             if DATA_ENODE_CHARGERS in data and data[DATA_ENODE_CHARGERS].chargers
-            else None
+            else STATE_UNKNOWN
         ),
         attr_fn=lambda data: {
-            "chargers": [asdict(charger) for charger in data[DATA_ENODE_CHARGERS].chargers]
-            if DATA_ENODE_CHARGERS in data and data[DATA_ENODE_CHARGERS].chargers
-            else []
+            "chargers": [asdict(charger) for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])]
         }
     ),
 )
@@ -2010,10 +2071,27 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_MONTH_SUMMARY].expectedCostsPerDay
         if data[DATA_MONTH_SUMMARY] else None,
-        attr_fn=lambda data: {
-            "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
-            "Description": data[DATA_INVOICES].currentPeriodInvoice.PeriodDescription,
-        } if data[DATA_MONTH_SUMMARY] and data[DATA_INVOICES] and data[DATA_INVOICES].currentPeriodInvoice else {}
+        attr_fn=lambda data: (
+            (
+                result := {}
+            )
+            or (
+                result.update({"Last update": month_summary.lastMeterReadingDate})
+                if (month_summary := data.get(DATA_MONTH_SUMMARY))
+                else None
+            )
+            or (
+                result.update(
+                    {"Description": invoices.currentPeriodInvoice.PeriodDescription}
+                )
+                if (
+                    (invoices := data.get(DATA_INVOICES))
+                    and invoices.currentPeriodInvoice
+                )
+                else None
+            )
+            or result
+        )
     ),
     FrankEnergieEntityDescription(
         key="costs_per_day_till_now_this_month",
@@ -2043,12 +2121,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].previousPeriodInvoice.TotalAmount
-        if data[DATA_INVOICES].previousPeriodInvoice
+        if data[DATA_INVOICES] and data[DATA_INVOICES].previousPeriodInvoice
         else None,
         attr_fn=lambda data: {
             "Start date": data[DATA_INVOICES].previousPeriodInvoice.StartDate,
             "Description": data[DATA_INVOICES].previousPeriodInvoice.PeriodDescription,
         }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].previousPeriodInvoice
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="invoice_current_period",
@@ -2061,12 +2141,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].currentPeriodInvoice.TotalAmount
-        if data[DATA_INVOICES].currentPeriodInvoice
+        if data[DATA_INVOICES] and data[DATA_INVOICES].currentPeriodInvoice
         else None,
         attr_fn=lambda data: {
             "Start date": data[DATA_INVOICES].currentPeriodInvoice.StartDate,
             "Description": data[DATA_INVOICES].currentPeriodInvoice.PeriodDescription,
         }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].currentPeriodInvoice
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="invoice_upcoming_period",
@@ -2079,12 +2161,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].upcomingPeriodInvoice.TotalAmount
-        if data[DATA_INVOICES].upcomingPeriodInvoice
+        if data[DATA_INVOICES] and data[DATA_INVOICES].upcomingPeriodInvoice
         else None,
         attr_fn=lambda data: {
             "Start date": data[DATA_INVOICES].upcomingPeriodInvoice.StartDate,
             "Description": data[DATA_INVOICES].upcomingPeriodInvoice.PeriodDescription,
         }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].upcomingPeriodInvoice
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="costs_this_year",
@@ -2097,11 +2181,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].TotalCostsThisYear
-        if data[DATA_INVOICES].TotalCostsThisYear
+        if data[DATA_INVOICES] and data[DATA_INVOICES].TotalCostsThisYear
         else None,
         attr_fn=lambda data: {
             'Invoices': data[DATA_INVOICES].AllInvoicesDictForThisYear
         }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].AllInvoicesDictForThisYear
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="total_costs",
@@ -2116,7 +2202,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: sum(
             invoice.TotalAmount for invoice in data[DATA_INVOICES].allPeriodsInvoices
         )
-        if data[DATA_INVOICES].allPeriodsInvoices
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
         else None,
         attr_fn=lambda data: {
             "Invoices": data[DATA_INVOICES].AllInvoicesDict,
@@ -2143,7 +2229,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].calculate_average_costs_per_month(
         )
-        if data[DATA_INVOICES].allPeriodsInvoices
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
         else None
     ),
     FrankEnergieEntityDescription(
@@ -2158,14 +2244,16 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_average_costs_per_year()
-            if data[DATA_INVOICES].allPeriodsInvoices
+            if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
             else None
         ),
         attr_fn=lambda data: {
             'Total amount': sum(invoice.TotalAmount for invoice in data[DATA_INVOICES].allPeriodsInvoices),
             'Number of years': len(data[DATA_INVOICES].get_all_invoices_dict_per_year()),
             'Invoices': data[DATA_INVOICES].get_all_invoices_dict_per_year(),
-        },
+        }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_year_corrected",
@@ -2179,11 +2267,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].calculate_average_costs_per_month(
         ) * 12
-        if data[DATA_INVOICES].allPeriodsInvoices
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
         else None,
         attr_fn=lambda data: {
             'Month average': data[DATA_INVOICES].calculate_average_costs_per_month(),
-            'Invoices': data[DATA_INVOICES].get_all_invoices_dict_per_year()}
+            'Invoices': data[DATA_INVOICES].get_all_invoices_dict_per_year()
+        }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_month_previous_year",
@@ -2197,7 +2288,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].calculate_average_costs_per_month(
             dt_util.now().year - 1)
-        if data[DATA_INVOICES].allPeriodsInvoices
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
         else None
     ),
     FrankEnergieEntityDescription(
@@ -2212,7 +2303,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].calculate_average_costs_per_month(
             dt_util.now().year)
-        if data[DATA_INVOICES].allPeriodsInvoices
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
         else None
     ),
     FrankEnergieEntityDescription(
@@ -2227,7 +2318,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].calculate_expected_costs_this_year(
         )
-        if data[DATA_INVOICES].allPeriodsInvoices
+        if data[DATA_INVOICES] and data[DATA_INVOICES].allPeriodsInvoices
         else None
     ),
     FrankEnergieEntityDescription(
@@ -2241,10 +2332,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: data[DATA_INVOICES].TotalCostsPreviousYear
-        if data[DATA_INVOICES].TotalCostsPreviousYear
+        if data[DATA_INVOICES] and data[DATA_INVOICES].TotalCostsPreviousYear
         else None,
         attr_fn=lambda data: {
-            'Invoices': data[DATA_INVOICES].AllInvoicesDictForPreviousYear}
+            'Invoices': data[DATA_INVOICES].AllInvoicesDictForPreviousYear
+        }
+        if data[DATA_INVOICES] and data[DATA_INVOICES].AllInvoicesDictForPreviousYear
+        else {}
     ),
     FrankEnergieEntityDescription(
         key="costs_electricity_yesterday",
@@ -2713,12 +2807,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         if data[DATA_USER].smartCharging
         else None,
         attr_fn=lambda data: {
-            'Provider': data[DATA_USER].smartCharging.get('provider'),
-            'Available In Country': data[DATA_USER].smartCharging.get('isAvailableInCountry'),
-            'User Created At': data[DATA_USER].smartCharging.get('userCreatedAt')
-            if data[DATA_USER].smartCharging
-            else []
-        }
+            k: v for k, v in {
+                "Provider": data[DATA_USER].smartCharging.get("provider") if data[DATA_USER].smartCharging else None,
+                "Available In Country": data[DATA_USER].smartCharging.get("isAvailableInCountry") if data[DATA_USER].smartCharging else None,
+                "User Created At": data[DATA_USER].smartCharging.get("userCreatedAt") if data[DATA_USER].smartCharging else None,
+            }.items() if v is not None
+        } if data[DATA_USER].smartCharging else []
     ),
     FrankEnergieEntityDescription(
         key="smartTradingisActivated",
@@ -2731,11 +2825,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         if data[DATA_USER].smartTrading
         else None,
         attr_fn=lambda data: {
-            'Available In Country': data[DATA_USER].smartTrading.get('isAvailableInCountry'),
-            'User Created At': data[DATA_USER].smartTrading.get('userCreatedAt')
-            if data[DATA_USER].smartTrading
-            else []
-        }
+            k: v for k, v in {
+                "Provider": data[DATA_USER].smartTrading.get("provider") if data[DATA_USER].smartTrading else None,
+                "Available In Country": data[DATA_USER].smartTrading.get("isAvailableInCountry") if data[DATA_USER].smartTrading else None,
+                "User Created At": data[DATA_USER].smartTrading.get("userCreatedAt") if data[DATA_USER].smartTrading else None,
+            }.items() if v is not None
+        } if data[DATA_USER].smartTrading else []
     )
 )
 
@@ -2808,6 +2903,11 @@ class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         """Initialize the sensor."""
         self.entity_description: FrankEnergieEntityDescription = description
+        self._attr_state_class = self.entity_description.state_class
+        self._attr_device_class = self.entity_description.device_class
+        self._attr_unit_of_measurement = (
+            self.entity_description.native_unit_of_measurement
+        )
         # if description.translation_key:
         #    self._attr_name = _(description.translation_key)
         self._attr_unique_id = f"{entry.unique_id}.{description.key}"

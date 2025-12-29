@@ -79,6 +79,9 @@ DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 # --- Attribute Constants ---
 ATTR_TIME: Final[str] = "from_time"
 
+# --- Event Attribute Constants ---
+EVENT_FRANK_ENERGIE = "frank_energie_event"
+
 # --- Unit Constants ---
 UNIT_ELECTRICITY: Final[str] = f"{CURRENCY_EURO}/{UnitOfEnergy.KILO_WATT_HOUR}"
 UNIT_GAS: Final[str] = f"{CURRENCY_EURO}/{UnitOfVolume.CUBIC_METERS}"

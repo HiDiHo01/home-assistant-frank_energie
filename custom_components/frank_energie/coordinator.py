@@ -1,19 +1,23 @@
-""" Coordinator implementation for Frank Energie integration.
+﻿""" Coordinator implementation for Frank Energie integration.
     Fetching the latest data from Frank Energie and updating the states."""
 # coordinator.py
 # version 2025.9.30
+from __future__ import annotations
 
 import asyncio
 import logging
 import sys
+import uuid
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Callable, Final, TypedDict
+from typing import Any, Callable, Final, Optional, TypedDict
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import async_get as async_get_device_registry
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -34,6 +38,7 @@ from python_frank_energie.models import (
     MarketPrices,
     MonthSummary,
     PeriodUsageAndCosts,
+    Price,
     PriceData,
     SmartBatteries,
     SmartBatteryDetails,
@@ -56,6 +61,8 @@ from .const import (
     DATA_USER,
     DATA_USER_SITES,
     DEFAULT_REFRESH_INTERVAL,
+    DOMAIN,
+    EVENT_FRANK_ENERGIE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -165,14 +172,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.cached_prices_tomorrow: dict | None = None
         self.last_fetch_today: datetime | None = None
         self.last_fetch_tomorrow: datetime | None = None
+        self._last_lowest_price_event: date | None = None
+        self._last_lowest_4h_event: date | None = None
 
-    def _is_in_delivery_site(self, data_month_summary, data_invoices, user_sites) -> bool:
+    def _is_not_in_delivery_site(self, data_month_summary, data_invoices, user_sites) -> bool:
         """
         Detect if this is an IN_DELIVERY site based on available data.
 
         Returns True if the site appears to be in IN_DELIVERY status
-        (no historical data available yet).
+        (historical data available).
         """
+        has_no_user_sites = user_sites is None
         # Check for typical IN_DELIVERY indicators
         has_no_month_summary = data_month_summary is None
         has_no_invoices = data_invoices is None
@@ -184,31 +194,138 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             and len(user_sites.segments) == 0
         )
 
-        # Site is likely IN_DELIVERY if it has no historical data
-        return has_no_month_summary and (has_no_invoices or has_limited_segments)
+        # Site is likely not IN_DELIVERY if it has no historical data
+        return has_no_user_sites or has_no_month_summary and (has_no_invoices or has_limited_segments)
 
-    def _log_in_delivery_status(self, is_in_delivery: bool) -> None:
+    def _log_not_in_delivery_status(self, is_not_in_delivery: bool) -> None:
         """
         Log a single, clear message about IN_DELIVERY status to keep logs clean.
         """
-        if is_in_delivery and not hasattr(self, '_in_delivery_logged'):
+        if not is_not_in_delivery and not hasattr(self, '_not_in_delivery_logged'):
             _LOGGER.info(
-                "Frank Energie site appears to be in IN_DELIVERY status. "
+                "Frank Energie site appears not to be in IN_DELIVERY status. "
                 "Price data is available, but usage and billing data will become "
                 "available once your energy delivery begins. This is normal for new customers."
             )
             # Mark that we've logged this to avoid spam
-            self._in_delivery_logged = True
-        elif not is_in_delivery and hasattr(self, '_in_delivery_logged'):
+            self._not_in_delivery_logged = True
+        elif not is_not_in_delivery and hasattr(self, '_not_in_delivery_logged'):
             _LOGGER.info(
                 "Frank Energie site now has historical data available. "
                 "All sensors should be fully functional."
             )
             # Clear the flag so we can log again if status changes back
-            delattr(self, '_in_delivery_logged')
+            delattr(self, '_not_in_delivery_logged')
+
+    async def _validate_device_id(self) -> str | None:
+        """
+        Validate that both the config_entry entry_id and device_id are valid.
+
+        Returns:
+            str | None: The valid device_id if all checks pass, otherwise None.
+        """
+        entry_id = self.config_entry.entry_id
+        device_id = self.device_id
+
+        if not device_id:
+            _LOGGER.error(
+                "Config entry %s has no device_id stored. Events will not be fired.",
+                entry_id
+            )
+            return None
+
+        dev_reg = async_get_device_registry(self.hass)
+        device = dev_reg.async_get(device_id)
+
+        if not device:
+            _LOGGER.error(
+                "Device with id %s (entry %s) does not exist in Home Assistant.",
+                device_id,
+                entry_id
+            )
+            return None
+
+        # OPTIONAL but recommended:
+        # ensure the device belongs to this config entry
+        if entry_id not in device.config_entries:
+            _LOGGER.error(
+                "Device %s is not associated with config entry %s. Ignoring event.",
+                device_id,
+                entry_id
+            )
+            return None
+
+        _LOGGER.debug(
+            "Validated device_id %s for config entry %s",
+            device_id,
+            entry_id
+        )
+
+        return device_id
+
+    async def _get_valid_device_id(
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+    ) -> Optional[str]:
+        """Return a valid device_id if it exists in HA, otherwise None."""
+
+        device_id = config_entry.data.get("device_id")
+
+        if not device_id:
+            _LOGGER.warning("No device_id found in config entry %s", config_entry.entry_id)
+            return None
+
+        dev_reg = async_get_device_registry(hass)
+        device = dev_reg.async_get(device_id)
+
+        if device is None:
+            _LOGGER.error(
+                "Device ID %s in config entry %s does not exist in Home Assistant",
+                device_id,
+                config_entry.entry_id,
+            )
+            return None
+
+        _LOGGER.debug("Validated device_id %s for entry %s", device_id, config_entry.entry_id)
+        return device_id
+
+    async def _ensure_device_id(self) -> str:
+        """Zorg dat config_entry altijd een device_id heeft."""
+        if "device_id" not in self.config_entry.data:
+            device_id = str(uuid.uuid4())
+            _LOGGER.warning(
+                "Config entry %s had geen device_id. Automatisch aangemaakt: %s",
+                self.config_entry.entry_id,
+                device_id,
+            )
+            # Config entry veilig updaten
+            new_data = {**self.config_entry.data, "device_id": device_id}
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+            return device_id
+        return self.config_entry.data["device_id"]
+
+    async def _ensure_device_registered(self):
+        """Zorg dat het device aanwezig is in de device registry."""
+        device_registry = dr.async_get(self.hass)
+        if not device_registry.async_get_device({(DOMAIN, self.device_id)}):
+            device_registry.async_get_or_create(
+                config_entry_id=self.config_entry.entry_id,
+                identifiers={(DOMAIN, self.device_id)},
+                name=self.config_entry.title,
+            )
+            _LOGGER.info("Device %s automatisch aangemaakt in device registry", self.device_id)
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch and cache data from Frank Energie with smart interval logic."""
+
+        # device_id = await self._validate_device_id()
+        # if not device_id:
+        # self.device_id = await self._ensure_device_id()
+        # device_id = await self._get_valid_device_id(self.hass, self.config_entry)
+        # if not self.device_id:
+        #     return  # no events fired
 
         now_utc = datetime.now(timezone.utc)
 
@@ -309,9 +426,77 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             data_enode_vehicles,
         )
 
+        lowest_elec_price = (
+            prices_today.electricity.today_min
+            if prices_today and prices_today.electricity
+            else None
+        )
+
+        if lowest_elec_price and self._should_fire_lowest_price_event(today):
+
+            start = lowest_elec_price.date_from
+            end = lowest_elec_price.date_till
+            self._price_resolution_minutes = int((end - start).total_seconds() / 60)
+
+            # Zorg dat start/end ook UTC zijn; converteer indien nodig
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+
+            if start <= now_utc < end:
+                self.hass.bus.async_fire(
+                    EVENT_FRANK_ENERGIE,
+                    {
+                        "entry_id": self.config_entry.entry_id,
+                        "action": "lowest_price",
+                        "resolution": self._price_resolution_minutes,
+                        "price": lowest_elec_price.total,
+                        "unit": "€/kWh",
+                        "start": start.isoformat(),
+                        "end": end.isoformat(),
+                    },
+                )
+                self._mark_lowest_price_event_fired(today)
+
+        prices = prices_today.electricity.today if prices_today and prices_today.electricity else None
+
+        if prices:
+            result = self._find_lowest_consecutive_hours(prices, window=4)
+
+            if result and self._should_fire_lowest_4h_event(today):
+                average_price, start_price, end_price = result
+
+                # Correcte price resolution: verschil tussen eerste 2 entries in prices
+                if len(prices) >= 2:
+                    first_interval = prices[0].date_from
+                    second_interval = prices[1].date_from
+                    self._price_resolution_minutes = int(
+                        (second_interval - first_interval).total_seconds() / 60
+                    )
+                else:
+                    self._price_resolution_minutes = 60  # fallback
+
+                if start_price.date_from <= now_utc < end_price.date_till:
+                    self.hass.bus.async_fire(
+                        EVENT_FRANK_ENERGIE,
+                        {
+                            "entry_id": self.config_entry.entry_id,
+                            "action": "lowest_4h_price",
+                            "hours": 4,
+                            "resolution": self._price_resolution_minutes,
+                            "average_price": round(average_price, 3),
+                            "unit": "€/kWh",
+                            "start": start_price.date_from,
+                            "end": end_price.date_till,
+                        },
+                    )
+
+                    self._mark_lowest_4h_event_fired(today)
+
         return self.cached_prices
 
-    async def _fetch_today_data(self, today: date, tomorrow: date):
+    async def _fetch_today_data(self, today: date, tomorrow: date) -> tuple:
         """
         Fetches all relevant Frank Energie data for the current day, including prices, user sites, monthly summaries, invoices, usage, user info, Enode chargers, smart batteries, battery details, and battery sessions.
 
@@ -360,6 +545,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     data_month_summary = await self.api.month_summary(self.site_reference)
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching month summary: %s", ex)
+                data_month_summary = MonthSummary.from_dict({})
             except (RequestException, FrankEnergieException) as ex:
                 # Check if this looks like an IN_DELIVERY "No reading dates" error
                 error_msg = str(ex).lower()
@@ -367,6 +553,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     _LOGGER.debug("No historical data available yet (typical for IN_DELIVERY sites): %s", ex)
                 else:
                     _LOGGER.warning("No month summary data available: %s", ex)
+                data_month_summary = MonthSummary.from_dict({})
             except Exception as ex:
                 # Check for GraphQL errors that might contain "No reading dates found"
                 error_msg = str(ex).lower()
@@ -374,6 +561,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     _LOGGER.debug("No historical data available yet (typical for IN_DELIVERY sites): %s", ex)
                 else:
                     _LOGGER.error("Unexpected error while fetching month summary: %s", ex)
+                data_month_summary = MonthSummary.from_dict({})
             _LOGGER.debug("Data month_summary: %s", data_month_summary)
 
             data_invoices = None
@@ -428,7 +616,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 if self.api.is_authenticated:
                     data_user = await self.api.user(self.site_reference)
                     if not self._connection_id:
-                        if data_user.sites and data_user.sites[0].contracts:
+                        if data_user.connections and data_user.connections[0].get("connectionId"):
                             self._connection_id = data_user.connections[0].get("connectionId")
             except AuthException as ex:
                 _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
@@ -549,8 +737,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 data_enode_vehicles = None
 
             # Detect and log IN_DELIVERY status for clean user experience
-            is_in_delivery = self._is_in_delivery_site(data_month_summary, data_invoices, user_sites)
-            self._log_in_delivery_status(is_in_delivery)
+            is_not_in_delivery = self._is_not_in_delivery_site(data_month_summary, data_invoices, user_sites)
+            self._log_not_in_delivery_status(is_not_in_delivery)
 
             return prices_today, data_month_summary, data_invoices, data_user, user_sites, data_period_usage, data_enode_chargers, data_smart_batteries, data_smart_battery_details, data_smart_battery_sessions, data_enode_vehicles
 
@@ -742,6 +930,49 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.error("Failed to fetch %s: %s", method.__name__, err)
             return None
 
+    def _find_lowest_consecutive_hours(
+        self,
+        prices: list[Price],
+        window: int,
+    ) -> tuple[float, Price, Price] | None:
+        """Find lowest average price for consecutive hours."""
+
+        if len(prices) < window:
+            return None
+
+        lowest_avg: float | None = None
+        lowest_start: Price | None = None
+        lowest_end: Price | None = None
+
+        for index in range(len(prices) - window + 1):
+            window_prices = prices[index: index + window]
+
+            avg_price = sum(price.total for price in window_prices) / window
+
+            if lowest_avg is None or avg_price < lowest_avg:
+                lowest_avg = avg_price
+                lowest_start = window_prices[0]
+                lowest_end = window_prices[-1]
+
+        if lowest_avg is None or lowest_start is None or lowest_end is None:
+            return None
+
+        return lowest_avg, lowest_start, lowest_end
+
+    def _should_fire_lowest_price_event(self, today: date) -> bool:
+        """Return True if the lowest-price event was not fired today."""
+        return self._last_lowest_price_event != today
+
+    def _mark_lowest_price_event_fired(self, today: date) -> None:
+        """Mark the lowest-price event as fired for today."""
+        self._last_lowest_price_event = today
+
+    def _should_fire_lowest_4h_event(self, today: date) -> bool:
+        return self._last_lowest_4h_event != today
+
+    def _mark_lowest_4h_event_fired(self, today: date) -> None:
+        self._last_lowest_4h_event = today
+
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
@@ -759,7 +990,6 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
         hass: HomeAssistant,
         config_entry: ConfigEntry,
         api: FrankEnergie,
-        device_id: str,
     ) -> None:
         """
         Initialize the battery session coordinator.
@@ -772,7 +1002,7 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
         """
         self.api = api
         self.site_reference = config_entry.data.get("site_reference")
-        self.device_id = device_id
+        self.device_id = config_entry.data.get("device_id")
 
         super().__init__(
             hass,
@@ -780,6 +1010,7 @@ class FrankEnergieBatterySessionCoordinator(DataUpdateCoordinator[SmartBatterySe
             name="Frank Energie Battery Sessions",
             update_interval=timedelta(minutes=60),
             config_entry=config_entry,
+            device_id=self.device_id,
         )
 
     async def _async_update_data(self) -> SmartBatterySessions:
@@ -844,7 +1075,10 @@ async def start_coordinator(hass: HomeAssistant, config_entry: ConfigEntry) -> N
     """Start the coordinator."""
     async with aiohttp.ClientSession() as session:
         api = FrankEnergie(session, config_entry.data["access_token"])
-        coordinator = FrankEnergieCoordinator(hass, config_entry, api)
+        coordinator = FrankEnergieCoordinator(hass,
+                                              config_entry,
+                                              api,
+                                              )
         await coordinator.async_refresh()
 
         today = datetime.now(timezone.utc)
