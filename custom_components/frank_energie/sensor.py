@@ -2,7 +2,7 @@
 Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.12.17"
+# VERSION = "2025.12.29"
 
 import logging
 from dataclasses import asdict, dataclass, field
