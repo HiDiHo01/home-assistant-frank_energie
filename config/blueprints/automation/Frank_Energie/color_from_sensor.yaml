@@ -1,0 +1,72 @@
+blueprint:
+  name: Light color from green to red based on sensor value
+  description: >
+    Set a light color smoothly from green (0) to red (100)
+    based on a numeric sensor value.
+  domain: automation
+  input:
+    sensor_entity:
+      name: Sensor (0–100)
+      description: Sensor providing a numeric value between 0 and 100
+      selector:
+        entity:
+          domain: sensor
+
+    light_target:
+      name: Light
+      description: Light to control
+      selector:
+        target:
+          entity:
+            domain: light
+
+    transition_time:
+      name: Transition time (seconds)
+      description: Time for the color transition
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+
+    brightness:
+      name: Brightness (%)
+      description: Brightness level of the light
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+mode: restart
+
+triggers:
+  - platform: state
+    entity_id: !input sensor_entity
+
+conditions:
+  - condition: template
+    value_template: >
+      {{ states(!input sensor_entity) | is_number }}
+
+  - condition: light.is_on
+    target: !input light_target
+    options:
+      behavior: any
+
+actions:
+  - service: light.turn_on
+    target: !input light_target
+    data:
+      brightness_pct: !input brightness
+      transition: !input transition_time
+      hs_color:
+        - >
+          {% set value = states(!input sensor_entity) | float %}
+          {% set clamped = max(0, min(value, 100)) %}
+          {{ (120 - (clamped * 1.2)) | round(0) }}
+        - 100
