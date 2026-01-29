@@ -1,0 +1,16 @@
+# https://www.home-assistant.io/integrations/default_config/
+default_config:
+
+# https://www.home-assistant.io/integrations/homeassistant/
+homeassistant:
+  debug: true
+
+# https://www.home-assistant.io/integrations/logger/
+logger:
+  default: info
+  logs:
+    custom_components.frank_energie: debug
+    custom_components.frank_energie.sensor: debug
+    python_frank_energie: debug
+    python_frank_energie.frank_energie: debug
+    python_frank_energie.models: debug
