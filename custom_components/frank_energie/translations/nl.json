@@ -6,11 +6,12 @@
             "reauth_successful": "Opnieuw inloggen gelukt"
         },
         "error": {
-            "invalid_auth": "Inloggegevens niet geaccepteerd, controleer de gegevens en probeer het opnieuw.",
+            "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
             "connection_error": "Verbindingsfout met Frank Energie API.",
             "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
             "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
-            "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw."
+            "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw.",
+            "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie."
         },
         "flow_title": "Frank Energie",
         "step": {
@@ -19,6 +20,11 @@
                 "data": {
                     "username": "Email",
                     "password": "Wachtwoord"
+                },
+                "error": {
+                    "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord",
+                    "connection_error": "Kan geen verbinding maken met Frank Energie",
+                    "unknown_error": "Onbekende fout opgetreden"
                 }
             },
             "user": {
@@ -222,7 +228,7 @@
                 "name": "Laagste elektriciteitsprijs komende uren (All-in)"
             },
             "elec_upcoming_max": {
-                "name": "Hoogste elektriciteitsprijs komende urenn (All-in)"
+                "name": "Hoogste elektriciteitsprijs komende uren (All-in)"
             },
             "elec_all": {
                 "name": "Gemiddelde elektriciteitsprijs alle uren (All-in)"
@@ -246,13 +252,13 @@
                 "name": "Huidige gas marktprijs"
             },
             "gas_tax_vat": {
-                "name": "Huidige gas energiebelasting prijs"
+                "name": "Huidige gas BTW prijs"
             },
             "gas_sourcing": {
                 "name": "Huidige gas inkoopvergoeding prijs"
             },
             "gas_tax_only": {
-                "name": "Huidige gas BTW prijs"
+                "name": "Huidige gas energiebelasting prijs"
             },
             "gas_today_avg_all_in": {
                 "name": "Gemiddelde gasprijs vandaag (All-in)"
@@ -373,6 +379,18 @@
             },
             "contract_start_date": {
                 "name": "Contract startdatum"
+            },
+            "contract_product_name": {
+                "name": "Contract productnaam"
+            },
+            "contract_price_resolution_state": {
+                "name": "Prijs resolutie"
+            },
+            "elec_contract_status": {
+                "name": "Elektriciteit contract status"
+            },
+            "gas_contract_status": {
+                "name": "Gas contract status"
             },
             "proposition_type": {
                 "name": "Aanbod",

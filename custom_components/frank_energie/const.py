@@ -9,6 +9,7 @@ from typing import Final
 
 from homeassistant.const import CURRENCY_EURO, UnitOfEnergy, UnitOfVolume
 from python_frank_energie.models import (
+    ContractPriceResolutionState,
     EnodeChargers,
     EnodeVehicles,
     Invoices,
@@ -62,6 +63,7 @@ DEFAULT_RESOLUTION = "PT15M"
 SUPPORTED_RESOLUTIONS = ["PT15M", "PT60M"]
 
 # --- Data Fields ---
+DATA_CONTRACT_PRICE_RESOLUTION_STATE: Final[str] = "contract_price_resolution_state"
 DATA_ELECTRICITY: Final[str] = "electricity"
 DATA_GAS: Final[str] = "gas"
 DATA_MONTH_SUMMARY: Final[str] = "month_summary"
@@ -77,7 +79,8 @@ DATA_ENODE_CHARGERS: Final[str] = "enode_chargers"
 DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 
 # --- Attribute Constants ---
-ATTR_TIME: Final[str] = "from_time"
+ATTR_FROM_TIME: Final[str] = "from_time"
+ATTR_TILL_TIME: Final[str] = "till_time"
 
 # --- Event Attribute Constants ---
 EVENT_FRANK_ENERGIE = "frank_energie_event"
@@ -149,6 +152,9 @@ class DeviceResponseEntry:
 
     # Vehicles details (if available)
     vehicles: EnodeVehicles | None = None  # Placeholder for vehicle data, if any
+
+    # Contract price resolution state (if available)
+    contract_price_resolution_state: ContractPriceResolutionState | None = None
 
 
 # Log loading of constants (move to init.py for better practice)
