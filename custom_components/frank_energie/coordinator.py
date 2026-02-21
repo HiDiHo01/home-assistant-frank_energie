@@ -222,7 +222,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             # Mark that we've logged this to avoid spam
             self._not_in_delivery_logged = True
-        elif not is_not_in_delivery and hasattr(self, '_in_delivery_logged'):
+        elif not is_not_in_delivery and hasattr(self, '_not_in_delivery_logged'):
             _LOGGER.info(
                 "Frank Energie site now has historical data available. "
                 "All sensors should be fully functional."
