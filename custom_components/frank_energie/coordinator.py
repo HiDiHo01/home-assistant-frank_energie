@@ -212,7 +212,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     def _log_not_in_delivery_status(self, is_not_in_delivery: bool) -> None:
         """
-        Log a single, clear message about IN_DELIVERY status to keep logs clean.
+        Log a single informational message when the site's IN_DELIVERY status changes to reduce repeated log entries.
+        
+        Parameters:
+            is_not_in_delivery (bool): True when the site appears to be not in IN_DELIVERY (no historical usage/billing data available); False when historical data is present.
         """
         if is_not_in_delivery and not hasattr(self, '_not_in_delivery_logged'):
             _LOGGER.info(
@@ -231,7 +234,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             delattr(self, '_not_in_delivery_logged')
 
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch and cache data from Frank Energie with smart interval logic."""
+        """
+        Update and return aggregated Frank Energie data by fetching today's (and, after a configured hour, tomorrow's) prices and related user, site, usage, invoice, enode device, and battery information.
+        
+        Adjusts the coordinator's refresh interval around price release windows and emits events for lowest price and lowest 4-hour price periods when those conditions are met. The returned data is the consolidated snapshot used by sensors and other consumers.
+        
+        Returns:
+            FrankEnergieData: Aggregated data including electricity and gas prices (today and optionally tomorrow), month summary, invoices, period usage and costs, user and user_sites information, enode chargers and vehicles, smart battery summaries/details/sessions, and contract price resolution state.
+        
+        Raises:
+            ConfigEntryAuthFailed: If authentication is required and cannot proceed.
+            UpdateFailed: For transient fetch or network errors and when authentication renewal fails temporarily.
+        """
 
         now_utc = datetime.now(timezone.utc)
         today = now_utc.date()
