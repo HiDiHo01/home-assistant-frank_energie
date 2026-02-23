@@ -1,0 +1,14 @@
+name: Claude Code Action Official
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  run-claude:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          trigger_phrase: "@claude"
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
