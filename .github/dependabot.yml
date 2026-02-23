@@ -20,3 +20,13 @@ updates:
       interval: "weekly"
       time: "05:00"
 
+  # Maintain dependencies for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    registries:
+      - github-packages
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
