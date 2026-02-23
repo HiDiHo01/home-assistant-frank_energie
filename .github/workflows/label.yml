@@ -19,21 +19,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  label:
-    name: Apply labels v4
+  labeler:
+    name: Apply labels
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-
-    steps:
-    - uses: actions/labeler@v6
-      with:
-        repo-token: "${{ secrets.GITHUB_TOKEN }}"
-
-  labeler:
-    name: Apply labels v5
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/labeler@v6
         with:
