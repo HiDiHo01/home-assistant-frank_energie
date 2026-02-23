@@ -12,7 +12,7 @@ If you enjoy using the `Frank Energie` integration and want to support its conti
 
 Feel like I've helped you out? You can buy me a coffee or become a sponsor!
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-fdd734?&logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/royarx) [![GitHub Sponsors](https://img.shields.io/badge/GitHub_Sponsors-30363d?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sponsors/royarx)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-fdd734?&logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/royarx) [![GitHub Sponsors](https://img.shields.io/badge/GitHub_Sponsors-30363d?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sponsors/HiDiHo01)
 
 ### 2. Contributing
 
