@@ -1,5 +1,13 @@
-# All pycache folders in all folders
+# Python caches / coverage artifacts
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # HA files to allow for local development
 .HA_VERSION
@@ -8,3 +16,28 @@ __pycache__/
 blueprints/
 *.log*
 *.db
+
+# JavaScript / build artifacts
+node_modules/
+build/
+dist/
+npm-debug.log*
+
+# Docusaurus local dev artifacts
+.docusaurus/
+.cache-loader/
+
+# macOS
+.DS_Store
+
+# Local release artifacts
+frank_energie.zip
+releasenote.md
+custom_components/frank_energie/v3-ReleaseNote.MD
+
+# Local agent/editor metadata (not part of integration runtime)
+/scripts/
+custom_components/frank_energie/.claude/
+custom_components/frank_energie/skills/
+custom_components/frank_energie/AGENTS.md
+custom_components/frank_energie/CLAUDE.md
