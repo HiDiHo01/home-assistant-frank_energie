@@ -1,0 +1,6 @@
+messages:
+  - role: system
+    content: You are a helpful assistant that finds errors in code
+  - role: user
+    content: 'Find errors in my code: {{input}}'
+model: xai/grok-3
