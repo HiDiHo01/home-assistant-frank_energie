@@ -7,10 +7,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Awaitable, Callable, Final, TypedDict
 
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError, ClientSession  # type: ignore
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
 from homeassistant.core import HomeAssistant
@@ -24,6 +25,7 @@ from python_frank_energie.exceptions import (
     AuthException,
     AuthRequiredException,
     FrankEnergieException,
+    NetworkError,
     RequestException,
 )
 from python_frank_energie.models import (
@@ -65,7 +67,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 if sys.platform == 'win32':
-    # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     if hasattr(asyncio, "set_event_loop_policy"):
         # Python 3.14-3.16
         try:
@@ -116,6 +117,22 @@ class FrankEnergieData(TypedDict):
     """Optional contract price resolution state."""
 
 
+@dataclass(frozen=True)
+class PricesTodayCache:
+    prices_today: PriceData
+    month_summary: MonthSummary
+    invoices: Invoices
+    user: User
+    user_sites: UserSites
+    period_usage: PeriodUsageAndCosts
+    enode_chargers: EnodeChargers
+    smart_batteries: SmartBatteries
+    smart_battery_details: SmartBatteryDetails
+    smart_battery_sessions: SmartBatterySessions
+    enode_vehicles: EnodeVehicles
+    contract_price_resolution_state: ContractPriceResolutionState
+
+
 class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     """ Get the latest data and update the states. """
 
@@ -140,7 +157,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._today_prices_logged: bool = False
         self._cache: dict = {}  # <--- hier cache je prijzen
         self.site_reference = config_entry.data.get("site_reference", None)
-        self.country_code: str | None = self.hass.config.country
+        self.country_code: str | None = self.hass.config.country  # replaced by hass_country_code
+        self._country_code: str | None = self.hass.config.country
+        self.hass_country_code: str | None = self.hass.config.country
+        self._user_country: str | None = self.country_code
         self._connection_id: str | None = None  # cache voor contractPriceResolutionState
         self._resolution_state: ContractPriceResolutionState | None = None
         self.enode_chargers: EnodeChargers | None = None
@@ -212,10 +232,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     def _log_not_in_delivery_status(self, is_not_in_delivery: bool) -> None:
         """
-        Log a single informational message when the site's IN_DELIVERY status changes to reduce repeated log entries.
-        
-        Parameters:
-            is_not_in_delivery (bool): True when the site appears to be not in IN_DELIVERY (no historical usage/billing data available); False when historical data is present.
+        Log a single, clear message about IN_DELIVERY status to keep logs clean.
         """
         if is_not_in_delivery and not hasattr(self, '_not_in_delivery_logged'):
             _LOGGER.info(
@@ -225,7 +242,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             # Mark that we've logged this to avoid spam
             self._not_in_delivery_logged = True
-        elif not is_not_in_delivery and hasattr(self, '_not_in_delivery_logged'):
+        elif not is_not_in_delivery and hasattr(self, '_in_delivery_logged'):
             _LOGGER.info(
                 "Frank Energie site now has historical data available. "
                 "All sensors should be fully functional."
@@ -234,18 +251,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             delattr(self, '_not_in_delivery_logged')
 
     async def _async_update_data(self) -> FrankEnergieData:
-        """
-        Update and return aggregated Frank Energie data by fetching today's (and, after a configured hour, tomorrow's) prices and related user, site, usage, invoice, enode device, and battery information.
-        
-        Adjusts the coordinator's refresh interval around price release windows and emits events for lowest price and lowest 4-hour price periods when those conditions are met. The returned data is the consolidated snapshot used by sensors and other consumers.
-        
-        Returns:
-            FrankEnergieData: Aggregated data including electricity and gas prices (today and optionally tomorrow), month summary, invoices, period usage and costs, user and user_sites information, enode chargers and vehicles, smart battery summaries/details/sessions, and contract price resolution state.
-        
-        Raises:
-            ConfigEntryAuthFailed: If authentication is required and cannot proceed.
-            UpdateFailed: For transient fetch or network errors and when authentication renewal fails temporarily.
-        """
+        """Fetch and cache data from Frank Energie with smart interval logic."""
+
+        _LOGGER.debug("Starting data update for Frank Energie coordinator (user: %s).",
+                      self.config_entry.title)
 
         now_utc = datetime.now(timezone.utc)
         today = now_utc.date()
@@ -352,6 +361,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             else:
                 prices_tomorrow = self.cached_prices_tomorrow
         else:
+            _LOGGER.debug("Not fetching tomorrow's prices yet (current hour: %s:00 UTC, fetch hour: %s:00 UTC).",
+                          now_utc.hour, self.FETCH_TOMORROW_HOUR_UTC)
             prices_tomorrow = None
 
         # ---------------------------------------------------
@@ -385,7 +396,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             end = lowest_elec_price.date_till
             self._price_resolution_minutes = int((end - start).total_seconds() / 60)
 
-            # Zorg dat start/end ook UTC zijn; converteer indien nodig
+            # We gaan ervan uit dat de API altijd UTC-tijden teruggeeft, maar we controleren het voor de zekerheid
             if start.tzinfo is None:
                 start = start.replace(tzinfo=timezone.utc)
             if end.tzinfo is None:
@@ -575,6 +586,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             try:
                 if self.api.is_authenticated:
                     data_user = await self.api.user(self.site_reference)
+                    if not self._country_code:
+                        country_code_raw = data_user.countryCode
+
+                        if not isinstance(country_code_raw, str) or not country_code_raw:
+                            raise RequestException("Missing or invalid 'countryCode' in user response")
+
+                        country_code = country_code_raw.upper()
+                        _LOGGER.debug("Resolved country_code: %s", country_code)
+
+                        if country_code not in {"NL", "BE"}:
+                            raise RequestException("Unsupported countryCode: %s" % country_code)
+                        self._country_code = country_code
                     if not self._connection_id:
                         if data_user and data_user.connections and data_user.connections[0].get("connectionId"):
                             # self._connection_id = data_user.connections[0].connectionId
@@ -599,6 +622,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     # resolution_state is already a ContractPriceResolutionState dataclass
                     if self._resolution_state and self._resolution_state.activeOption:
                         data_contract_price_resolution_state = self._resolution_state
+
+                        # Update options using async_update_entry instead of direct assignment
+                        options = dict(self.config_entry.options)
+                        options["resolution"] = self._resolution_state.activeOption
+                        self.hass.config_entries.async_update_entry(self.config_entry, options=options)
 
                     _LOGGER.debug("Good ContractPriceResolutionState: %s", self._resolution_state)
                 else:
@@ -638,12 +666,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 _LOGGER.debug("Smart trading not enabled, skipping smart batteries fetch")
             _LOGGER.debug("Data smart batteries: %s", data_smart_batteries)
 
-            data_smart_battery_details = []
             if self.api.is_authenticated and data_smart_batteries:
-                _LOGGER.debug("Data smart batteries: %s", data_smart_batteries.smart_batteries)
+                _LOGGER.debug("Data smart batteries: %s", data_smart_batteries.batteries)
 
-            if data_smart_batteries and data_smart_batteries.smart_batteries:
-                for battery in data_smart_batteries.smart_batteries:
+            if data_smart_batteries and data_smart_batteries.batteries:
+                for battery in data_smart_batteries.batteries:
                     if not battery:
                         continue
 
@@ -657,6 +684,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         )
                         if details:
                             data_smart_battery_details.append(details)
+
+                            # Merge settings from detailed response into battery object
+                            if details.smart_battery and details.smart_battery.settings:
+                                battery.settings = details.smart_battery.settings
+
+                            # Merge SUMMARY
+                            if details.smart_battery_summary:
+                                battery.summary = details.smart_battery_summary
+                            _LOGGER.debug(
+                                "Merged battery data %s | settings=%s summary=%s",
+                                battery.id,
+                                battery.settings,
+                                battery.summary,
+                            )
                     except Exception as err:
                         _LOGGER.error("Failed to fetch details for battery %s: %s", battery.id, err)
                         continue
@@ -670,8 +711,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             data_smart_battery_sessions = []
             # if self.api.is_authenticated and data_user:
             # _LOGGER.debug("Data user Batteries: %s", data_user.smartCharging.get("isActivated"))
-            if data_smart_batteries and data_smart_batteries.smart_batteries:
-                for battery in data_smart_batteries.smart_batteries:
+            if data_smart_batteries and data_smart_batteries.batteries:
+                for battery in data_smart_batteries.batteries:
                     if not battery:
                         continue
 
@@ -720,7 +761,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except UpdateFailed as err:
             if (
                 self.cached_prices_today
-                and self.cached_prices_today[0]
             ):
                 _LOGGER.warning(
                     "Update failed, but prices are cached: %s",
@@ -809,63 +849,79 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         smart_trading = data_user.smartTrading
         return isinstance(smart_trading, dict) and smart_trading.get("isActivated", False) is True
 
-    async def _fetch_prices_with_fallback(self, start_date: date, end_date: date) -> MarketPrices:
-        """ Fetch prices with fallback mechanism.
+    async def _fetch_prices_with_fallback(
+        self, start_date: date, end_date: date
+    ) -> MarketPrices:
+        """ Fetch prices with fallback to public prices and cached data.
             This method attempts to fetch user-specific prices first, and if they are not available,
             it falls back to public prices.
         """
+        public_prices: MarketPrices
+        country_code = self.hass.config.country if self.hass and self.hass.config else "NL"
 
-        if self.hass.config.country == "BE":
-            try:
-                public_prices: MarketPrices = await self.api.be_prices(start_date, end_date)
-            except UpdateFailed as err:
-                raise UpdateFailed("Failed to fetch data") from err
-        else:
-            active_option = (
-                self._resolution_state.activeOption
-                if self._resolution_state
-                else "PT60M"
+        try:
+            # For Belgium, we need to use a different endpoint for public prices
+            if country_code == "BE":
+                public_prices = await self.api.be_prices(start_date, end_date)
+            else:
+                # Determine resolution option for public prices based on contract price resolution state
+                resolution_active_option = (
+                    self._resolution_state.activeOption
+                    if self._resolution_state
+                    else "PT60M"
+                )
+                _LOGGER.debug(
+                    "Using contractPriceResolutionState active option: %s", resolution_active_option
+                )
+                public_prices = await self.api.prices(start_date, end_date, resolution_active_option)
+        except NetworkError as err:
+            _LOGGER.warning(
+                "Failed to fetch public prices, using cached prices if available: %s", err
             )
-            _LOGGER.debug("Using contractPriceResolutionState active option: %s", active_option)
-            try:
-                public_prices: MarketPrices = await self.api.prices(start_date, end_date, active_option)
-            except UpdateFailed as err:
-                raise UpdateFailed("Failed to fetch data") from err
+            # Use cached prices if available, otherwise create empty MarketPrices
+            return getattr(self, "_cached_prices", MarketPrices(electricity=PriceData([], "electricity"), gas=PriceData([], "gas"), energy_country=country_code))
 
-        # If not logged in, return public prices
         if not self.api.is_authenticated:
             return public_prices
+        _LOGGER.debug("API is authenticated, attempting to fetch user prices")
 
-        user_prices: MarketPrices = await self.api.user_prices(self.site_reference, start_date, end_date)
+        resolution_active_option = self._resolution_state.activeOption if self._resolution_state else "PT60M"
+        _LOGGER.debug(
+            "Fetching user prices for site_reference %s with country %s and resolution option %s",
+            self.site_reference, self._user_country, resolution_active_option
+        )
 
-        # if len(user_prices.gas.all) > 0 and len(user_prices.electricity.all) > 0:
-        # if user_prices.gas.all and user_prices.electricity.all:
-        if user_prices.gas is not None and user_prices.gas.all and user_prices.electricity is not None and user_prices.electricity.all:
-            # If user_prices are available for both gas and electricity return them
+        user_country = self._user_country or country_code
+
+        try:
+            user_prices = await self.api.user_prices(self.site_reference, user_country, start_date, end_date, resolution_active_option)
+        except NetworkError as err:
+            _LOGGER.warning(
+                "Failed to fetch user prices, falling back to public prices: %s", err
+            )
+            return public_prices
+
+        # Use user prices if both gas and electricity have data
+        if (
+            user_prices.gas is not None
+            and getattr(user_prices.gas, "all", None)
+            and user_prices.electricity is not None
+            and getattr(user_prices.electricity, "all", None)
+        ):
+            self._cached_prices = user_prices
             return user_prices
 
-        # Use public prices if no user prices are available as fallback
-        if user_prices.gas is None or not getattr(user_prices.gas, "all", None) or len(user_prices.gas.all) == 0:
-            # if not user_prices.gas.all:
-            # if user_prices.gas.all is None:
-            _LOGGER.info(
-                "No gas prices found for user, falling back to public prices")
-            if self.user_gas_enabled:
-                user_prices.gas = public_prices.gas
-            else:
-                # user_prices.gas = None # if user has no gas in users contract you want to reset gas prices
-                user_prices.gas = None
+        # Fallback logic
+        if user_prices.gas is None or not getattr(user_prices.gas, "all", None):
+            _LOGGER.info("No gas prices found for user, falling back to public prices")
+            user_prices.gas = public_prices.gas if self.user_gas_enabled else PriceData([], "gas")
 
-        if user_prices.electricity is None or not getattr(user_prices.electricity, "all", None) or len(user_prices.electricity.all) == 0:
-            # if user_prices.electricity.all is None:
-            _LOGGER.info(
-                "No electricity prices found for user, falling back to public prices")
-            if self.user_electricity_enabled:
-                user_prices.electricity = public_prices.electricity
-            else:
-                # user_prices.electricity = None # if user has no electricity in users contract you want to reset electricity prices
-                user_prices.electricity = None
+        if user_prices.electricity is None or not getattr(user_prices.electricity, "all", None):
+            _LOGGER.info("No electricity prices found for user, falling back to public prices")
+            user_prices.electricity = public_prices.electricity if self.user_electricity_enabled else PriceData([
+            ], "electricity")
 
+        self._cached_prices = user_prices
         return user_prices
 
     async def _handle_fetch_exceptions(self, ex):
@@ -1108,3 +1164,10 @@ async def start_coordinator(hass: HomeAssistant, config_entry: ConfigEntry) -> N
                          interval,
                          lambda: hourly_refresh(coordinator)
                          )
+
+
+def _parse_resolution(resolution: str) -> int:
+    """Convert ISO8601 duration (PT60M) to minutes."""
+    if resolution.startswith("PT") and resolution.endswith("M"):
+        return int(resolution[2:-1])
+    return 0

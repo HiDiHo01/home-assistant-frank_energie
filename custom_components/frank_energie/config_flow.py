@@ -16,7 +16,6 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
-
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -28,7 +27,7 @@ from python_frank_energie.exceptions import AuthException, ConnectionException
 from .const import CONF_SITE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "2026.02.05"
+VERSION = "2026.3.22"
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -60,8 +59,6 @@ class ConfigFlow(config_entries.ConfigFlow):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._errors: dict[str, str] = {}
-        # self._reauth_entry: Optional[config_entries.ConfigEntry] = None
         self._reauth_entry: Optional[ConfigEntry] = None
         self.sign_in_data: dict[str, Any] = {}
 
@@ -304,20 +301,6 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         return await self._async_create_entry({})
 
-    def _validate_user_input(self, user_input: dict[str, Any]) -> dict[str, str]:
-        """Validate user input for reconfiguration or login."""
-        errors = {}
-
-        username = user_input.get(CONF_USERNAME, "").strip()
-        password = user_input.get(CONF_PASSWORD, "").strip()
-
-        if not username:
-            errors[CONF_USERNAME] = "Username is required."
-        if not password:
-            errors[CONF_PASSWORD] = "Password is required."
-
-        return errors
-
     async def async_step_reconfigure(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -348,74 +331,82 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         return await self._handle_authentication_success(user_input, auth)
 
-    async def _get_available_sites(self, username: str) -> list[str]:
-        """Retrieve available delivery sites for the user."""
+    async def _get_available_sites(self, username: str) -> list[dict[str, str]]:
+        """Retrieve and normalize available delivery sites for the user."""
         try:
-            # Initialize the FrankEnergie API with the access and refresh tokens
-            async with FrankEnergie(
-                auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
-                refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
-            ) as api:
-                # Fetch user sites with retry using the FrankEnergie API
-                for _ in range(2):
-                    try:
-                        user_sites = await api.UserSites()
-                        break
-                    except ConnectionException:
-                        await asyncio.sleep(1)
-                else:
-                    raise ConnectionException("Failed to connect to Frank Energie API after retries")
+            user_sites = await self._fetch_user_sites_with_retry()
 
-                _LOGGER.debug("All user_sites: %s", user_sites)
+            if not user_sites or not user_sites.deliverySites:
+                raise NoDeliverySitesError("No delivery sites found for this account")
 
-                # Check if the user has any delivery sites
-                if not user_sites or not user_sites.deliverySites:
-                    raise NoDeliverySitesError("No delivery sites found for this account")
+            suitable_sites = self._filter_suitable_sites(user_sites.deliverySites)
 
-                # Filter sites that have the status attribute
-                all_delivery_sites = [
-                    site for site in user_sites.deliverySites if hasattr(site, "status")
+            if not suitable_sites:
+                available_statuses = [
+                    getattr(site, "status", "NO_STATUS")
+                    for site in user_sites.deliverySites
                 ]
+                raise NoSitesFoundError(
+                    "No suitable sites found. Available: %d, statuses: %s"
+                    % (len(user_sites.deliverySites), set(available_statuses))
+                )
 
-                # First try sites with status "IN_DELIVERY"
-                in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
-                _LOGGER.debug("Sites with status IN_DELIVERY: %d", len(in_delivery_sites))
+            return [
+                {
+                    "value": site.reference,
+                    "label": self.create_title(site),
+                }
+                for site in suitable_sites
+            ]
 
-                # If no "IN_DELIVERY" sites, try other potentially valid statuses
-                suitable_sites = in_delivery_sites
-                if not suitable_sites:
-                    other_valid_statuses = ["ACTIVE", "CONNECTED", "ENABLED", "OPERATIONAL"]
-                    for status in other_valid_statuses:
-                        sites_with_status = [site for site in all_delivery_sites if site.status == status]
-                        if sites_with_status:
-                            suitable_sites = sites_with_status
-                            break
+        except NoDeliverySitesError as err:
+            _LOGGER.error(
+                "No delivery sites found for user %s: %s",
+                username,
+                err,
+            )
+            return []
 
-                # If still no suitable sites, use any sites with required attributes
-                if not suitable_sites:
-                    sites_with_address = [site for site in all_delivery_sites if hasattr(
-                        site, "address") and site.address]
-                    if sites_with_address:
-                        suitable_sites = sites_with_address
+        except NoSitesFoundError as err:
+            _LOGGER.error(
+                "No suitable sites found for user %s: %s",
+                username,
+                err,
+            )
+            return []
 
-                # Raise an exception if no suitable sites are found
-                if not suitable_sites:
-                    available_statuses = [getattr(site, "status", "NO_STATUS") for site in user_sites.deliverySites]
-                    error_msg = f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, Statuses: {set(available_statuses)}"
-                    raise NoSitesFoundError(error_msg)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception(
+                "Unexpected error fetching sites for user %s: %s",
+                username,
+                err,
+            )
+            return []
 
-                # Return a list of site names or identifiers from the available sites
-                return [site.name for site in suitable_sites]
+    async def _fetch_user_sites_with_retry(self) -> object:
+        """Fetch user sites with retry logic."""
+        async with FrankEnergie(
+            auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN),
+            refresh_token=self.sign_in_data.get(CONF_TOKEN),
+        ) as api:
 
-        except NoDeliverySitesError as e:
-            _LOGGER.error("No delivery sites found for user %s: %s", username, str(e))
-            return []  # Return an empty list if no delivery sites are found
-        except NoSitesFoundError as e:
-            _LOGGER.error("No sites found error for user %s: %s", username, str(e))
-            return []  # Return an empty list if no suitable sites are found
-        except Exception as e:
-            _LOGGER.error("Error fetching sites for user %s: %s", username, str(e))
-            return []  # Return an empty list in case of error
+            last_err: Exception | None = None
+
+            for attempt in range(2):
+                try:
+                    return await api.UserSites()
+                except ConnectionException as err:
+                    last_err = err
+                    _LOGGER.warning(
+                        "UserSites fetch failed (attempt %d): %s",
+                        attempt + 1,
+                        err,
+                    )
+                    await asyncio.sleep(1)
+
+            raise ConnectionException(
+                "Failed to fetch user sites after retries"
+            ) from last_err
 
     # not in use yet, but can be used to filter sites in async_step_site
     def _filter_suitable_sites(self, delivery_sites: list[Any]) -> list[Any]:
@@ -467,13 +458,14 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data=updated_data,
             )
 
-        unique_id = data.get(CONF_USERNAME, "frank_energie")
-        if data.get(CONF_SITE, None):
-            _LOGGER.debug("CONF_SITE: %s", CONF_SITE)
-            _LOGGER.debug("data CONF_SITE: %s", data[CONF_SITE])
-            _LOGGER.debug("CONF_USERNAME: %s", CONF_USERNAME)
-            _LOGGER.debug("data CONF_USERNAME: %s", data[CONF_USERNAME])
-            unique_id = f"{data[CONF_SITE] or data.get(CONF_USERNAME, "frank_energie")}"
+        # unique_id = data.get(CONF_USERNAME, "frank_energie")
+        # if data.get(CONF_SITE, None):
+        #     _LOGGER.debug("CONF_SITE: %s", CONF_SITE)
+        #     _LOGGER.debug("data CONF_SITE: %s", data[CONF_SITE])
+        #     _LOGGER.debug("CONF_USERNAME: %s", CONF_USERNAME)
+        #     _LOGGER.debug("data CONF_USERNAME: %s", data[CONF_USERNAME])
+        #     unique_id = f"{data[CONF_SITE] or data.get(CONF_USERNAME, 'frank_energie')}"
+        unique_id = str(data.get(CONF_SITE) or data.get(CONF_USERNAME) or DOMAIN)
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
@@ -556,7 +548,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 raise ConnectionException("connection_error")
             except Exception as ex:
                 _LOGGER.exception("Unexpected error for user %s: %s", user_input[CONF_USERNAME], ex)
-                raise Exception("unknown_error")
+                raise RuntimeError("unknown_error") from ex
 
     async def _handle_authentication_success(
         self,
@@ -636,7 +628,7 @@ class NoSitesFoundError(Exception):
 class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
     """Frank Energie config flow options handler."""
 
-    def __init__(self, entry_data: dict) -> None:
+    def __init__(self, entry_data: dict[str, Any]) -> None:
         """Initialize Frank Energie options flow."""
         self.entry_data = entry_data
         self.options = dict(entry_data)  # Gebruik entry_data in plaats van config_entry.options

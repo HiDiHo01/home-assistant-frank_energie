@@ -5,11 +5,11 @@ import logging
 import warnings
 from typing import Any, Optional
 
-from homeassistant.config_entries import ConfigEntry  # type: ignore
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform  # type: ignore
-from homeassistant.core import HomeAssistant  # type: ignore
-from homeassistant.helpers.aiohttp_client import async_get_clientsession  # type: ignore
-from homeassistant.helpers.entity import Entity  # type: ignore
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.entity import Entity
 from python_frank_energie import FrankEnergie
 
 from .const import CONF_COORDINATOR, DOMAIN
@@ -19,8 +19,7 @@ from .exceptions import NoSuitableSitesFoundError
 _LOGGER = logging.getLogger(__name__)
 
 # PLATFORMS = [Platform.SENSOR, "frank_energie_diagnostic_sensor"]
-# PLATFORMS = [Platform.SENSOR]
-PLATFORMS: list[str] = [Platform.SENSOR, Platform.BUTTON]
+PLATFORMS: list[str] = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

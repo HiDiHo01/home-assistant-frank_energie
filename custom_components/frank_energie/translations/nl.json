@@ -252,13 +252,13 @@
                 "name": "Huidige gas marktprijs"
             },
             "gas_tax_vat": {
-                "name": "Huidige gas BTW prijs"
+                "name": "Huidige gas energiebelasting prijs"
             },
             "gas_sourcing": {
                 "name": "Huidige gas inkoopvergoeding prijs"
             },
             "gas_tax_only": {
-                "name": "Huidige gas energiebelasting prijs"
+                "name": "Huidige gas BTW prijs"
             },
             "gas_today_avg_all_in": {
                 "name": "Gemiddelde gasprijs vandaag (All-in)"
@@ -387,10 +387,18 @@
                 "name": "Prijs resolutie"
             },
             "elec_contract_status": {
-                "name": "Elektriciteit contract status"
+                "name": "Elektriciteit contract status",
+                "state": {
+                    "LOSS": "Gestopt",
+                    "SWITCHED": "Overgestapt"
+                }
             },
             "gas_contract_status": {
-                "name": "Gas contract status"
+                "name": "Gas contract status",
+                "state": {
+                    "LOSS": "Gestopt",
+                    "SWITCHED": "Overgestapt"
+                }
             },
             "proposition_type": {
                 "name": "Aanbod",

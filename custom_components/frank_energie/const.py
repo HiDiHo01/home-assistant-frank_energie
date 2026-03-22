@@ -28,7 +28,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2026.2.9"
+VERSION: Final[str] = "2026.3.22"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 
@@ -58,9 +58,10 @@ CONF_RESOLUTION: Final[str] = "resolution"  # 15-minute price resolution
 # --- Default values for some config constants ---
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
 DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
-DEFAULT_RESOLUTION = "PT15M"
+DEFAULT_RESOLUTION: Final[str] = "PT15M"
 
-SUPPORTED_RESOLUTIONS = ["PT15M", "PT60M"]
+SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
+SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
 
 # --- Data Fields ---
 DATA_CONTRACT_PRICE_RESOLUTION_STATE: Final[str] = "contract_price_resolution_state"
@@ -124,7 +125,7 @@ class DeviceResponseEntry:
     gas: MarketPrices | None
 
     # Monthly summary (if available)
-    month_summary: MonthSummary = None
+    month_summary: MonthSummary | None = None
 
     # Invoice details (if available)
     invoices: Invoices | None = None
