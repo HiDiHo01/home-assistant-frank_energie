@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
     CONF_AUTHENTICATION,
@@ -16,7 +16,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
+
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -69,7 +69,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         self,
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the login step with credentials and show friendly errors."""
         if not user_input:
             # Show login form for first time
@@ -106,7 +106,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         self,
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle possible multi site accounts."""
         if user_input and user_input.get(CONF_SITE) is not None:
             self.sign_in_data[CONF_SITE] = user_input[CONF_SITE]
@@ -289,7 +289,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     async def async_step_user(
         self,
         user_input: Optional[dict[str, Any]] = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle a flow initiated by the user."""
         if not user_input:
             data_schema = vol.Schema(
@@ -322,8 +322,13 @@ class ConfigFlow(config_entries.ConfigFlow):
         self,
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the reconfiguration step."""
+        if self._reauth_entry is None:
+            self._reauth_entry = self.hass.config_entries.async_get_entry(
+                self.context["entry_id"]
+            )
+
         if not user_input:
             return self._show_login_form()
 
@@ -332,10 +337,16 @@ class ConfigFlow(config_entries.ConfigFlow):
         if errors:
             return self._show_login_form(errors=errors)
 
-        auth = await self._authenticate(user_input)
-        if auth:
-            return await self._handle_authentication_success(user_input, auth)
-        return await self._handle_authentication_failure()
+        try:
+            auth = await self._authenticate(user_input)
+        except AuthException:
+            return await self._handle_authentication_failure(reason="invalid_auth")
+        except ConnectionException:
+            return await self._handle_authentication_failure(reason="connection_error")
+        except Exception:
+            return await self._handle_authentication_failure(reason="unknown_error")
+
+        return await self._handle_authentication_success(user_input, auth)
 
     async def _get_available_sites(self, username: str) -> list[str]:
         """Retrieve available delivery sites for the user."""
@@ -435,7 +446,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 continue
         return valid_sites
 
-    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle configuration by re-auth."""
         self._reauth_entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
@@ -446,16 +457,22 @@ class ConfigFlow(config_entries.ConfigFlow):
             raise ValueError("Reauthentication entry not found. Cannot continue reauthentication flow.")
         return await self.async_step_login()
 
-    async def _async_create_entry(self, data: dict[str, Any]) -> FlowResult:
-        """Create a configuration entry."""
+    async def _async_create_entry(self, data: dict[str, Any]) -> ConfigFlowResult:
+        """Create a configuration entry, or update the existing one during reconfigure."""
+        if self.source == config_entries.SOURCE_RECONFIGURE:
+            reconfigure_entry = self._get_reconfigure_entry()
+            updated_data = {**reconfigure_entry.data, **data}
+            return self.async_update_reload_and_abort(
+                reconfigure_entry,
+                data=updated_data,
+            )
+
         unique_id = data.get(CONF_USERNAME, "frank_energie")
         if data.get(CONF_SITE, None):
             _LOGGER.debug("CONF_SITE: %s", CONF_SITE)
             _LOGGER.debug("data CONF_SITE: %s", data[CONF_SITE])
             _LOGGER.debug("CONF_USERNAME: %s", CONF_USERNAME)
             _LOGGER.debug("data CONF_USERNAME: %s", data[CONF_USERNAME])
-            # unique_id = data[CONF_SITE] + data[CONF_USERNAME]
-            # unique_id = f"{data[CONF_SITE]}_{data[CONF_USERNAME]}"
             unique_id = f"{data[CONF_SITE] or data.get(CONF_USERNAME, "frank_energie")}"
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
@@ -498,7 +515,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         self,
         errors: Optional[dict[str, str]] = None,
         user_input: Optional[dict[str, Any]] = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Show the login form with optional errors and pre-filled username."""
         # Try to pre-fill username from reauth entry or last user input
         username = None
@@ -545,7 +562,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         self,
         user_input: dict[str, Any],
         auth: Authentication
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle successful authentication."""
         self.sign_in_data = {
             CONF_USERNAME: user_input[CONF_USERNAME],
@@ -553,9 +570,16 @@ class ConfigFlow(config_entries.ConfigFlow):
             CONF_TOKEN: auth.refreshToken
         }
         if self._reauth_entry:
+            # Preserve existing entry data (e.g. site_reference) and only overwrite tokens
+            updated_data = {
+                **self._reauth_entry.data,
+                CONF_USERNAME: self.sign_in_data[CONF_USERNAME],
+                CONF_ACCESS_TOKEN: self.sign_in_data[CONF_ACCESS_TOKEN],
+                CONF_TOKEN: self.sign_in_data[CONF_TOKEN],
+            }
             self.hass.config_entries.async_update_entry(
                 self._reauth_entry,
-                data=self.sign_in_data
+                data=updated_data
             )
             self.hass.async_create_task(
                 self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
@@ -566,7 +590,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     async def _handle_authentication_failure(
         self,
         reason: str = "invalid_auth"
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle authentication failure with a nice message."""
         return await self.async_step_login(errors={"base": reason})
 
@@ -617,7 +641,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         self.entry_data = entry_data
         self.options = dict(entry_data)  # Gebruik entry_data in plaats van config_entry.options
 
-    async def async_step_init(self, user_input: Optional[dict[str, Any]] = None) -> FlowResult:
+    async def async_step_init(self, user_input: Optional[dict[str, Any]] = None) -> ConfigFlowResult:
         """Manage the options."""
         return await self.async_step_user()
 
@@ -625,7 +649,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         self,
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
         if user_input is not None:
             self.options.update(user_input)
@@ -644,7 +668,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             errors=errors
         )
 
-    async def _update_options(self) -> FlowResult:
+    async def _update_options(self) -> ConfigFlowResult:
         """Update config entry options."""
         return self.async_create_entry(
             title=self.entry_data.get(CONF_USERNAME, "Frank Energie"),
