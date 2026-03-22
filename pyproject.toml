@@ -1,16 +1,16 @@
 [tool.poetry]
 name = "home-assistant-frank_energie"
-version = "2026.2.9"
+version = "2026.3.22"
 description = "A custom Home Assistant integration for Frank Energie."
 authors = ["HiDiHo <hidiho@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.13"
-python-frank-energie = "^2025.12.29"
+python-frank-energie = "^2026.3.22"
 
 [tool.poetry.dev-dependencies]
 pytest = "^9.0"
-flake8 = "^7.1"
+flake8 = "^7.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
