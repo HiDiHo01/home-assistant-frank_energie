@@ -91,6 +91,22 @@ _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
+# Pre-load timezone at module level to avoid blocking I/O in the event loop.
+# Uses zoneinfo (HA-recommended) instead of pytz.
+_LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
+
+
+def _localize_prices(prices: list[dict]) -> list[dict]:
+    """Convert UTC price timestamps to local timezone using zoneinfo."""
+    return [
+        {
+            **entry,
+            "from": entry["from"].astimezone(_LOCAL_TZ),
+            "till": entry["till"].astimezone(_LOCAL_TZ),
+        }
+        for entry in prices
+    ]
+
 # Battery session data type
 BatterySessionData = SmartBatterySessions | None
 BatterySessionCoordinator = DataUpdateCoordinator[BatterySessionData]
@@ -1183,8 +1199,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data[DATA_ELECTRICITY].current.total
         if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current else None,
-        attr_fn=lambda data: {"prices": data[DATA_ELECTRICITY].asdict(
-            "total", timezone="Europe/Amsterdam")
+        attr_fn=lambda data: {"prices": _localize_prices(data[DATA_ELECTRICITY].asdict(
+            "total"))
         }
     ),
     FrankEnergieEntityDescription(
@@ -1198,7 +1214,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: data[DATA_ELECTRICITY].current_hour.market_price
         if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour else None,
         attr_fn=lambda data: {
-            "prices": data[DATA_ELECTRICITY].asdict("market_price", timezone="Europe/Amsterdam")
+            "prices": _localize_prices(data[DATA_ELECTRICITY].asdict("market_price"))
         }
     ),
     FrankEnergieEntityDescription(
@@ -1212,7 +1228,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: data[DATA_ELECTRICITY].current_hour.market_price_with_tax
         if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour else None,
         attr_fn=lambda data: {
-            "prices": data[DATA_ELECTRICITY].asdict("market_price_with_tax", timezone="Europe/Amsterdam")
+            "prices": _localize_prices(data[DATA_ELECTRICITY].asdict("market_price_with_tax"))
         }
     ),
     FrankEnergieEntityDescription(
@@ -1228,7 +1244,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour else None
         ),
         attr_fn=lambda data: {
-            'prices': data[DATA_ELECTRICITY].asdict('market_price_tax', timezone="Europe/Amsterdam")
+            'prices': _localize_prices(data[DATA_ELECTRICITY].asdict('market_price_tax'))
         },
         entity_registry_enabled_default=True
     ),
@@ -1325,7 +1341,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: data[DATA_GAS].current_hour.market_price_with_tax
         if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         attr_fn=lambda data: {
-            "prices": data[DATA_GAS].asdict("market_price_with_tax", timezone="Europe/Amsterdam")}
+            "prices": _localize_prices(data[DATA_GAS].asdict("market_price_with_tax"))}
         if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
         entity_registry_enabled_default=True
     ),
@@ -1440,9 +1456,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             data[DATA_ELECTRICITY].today_avg
         ),
         attr_fn=lambda data: {
-            'prices': data[DATA_ELECTRICITY].asdict(
-                'total', today_only=True, timezone="Europe/Amsterdam"
-            )
+            'prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+                'total', today_only=True
+            ))
         }
     ),
     FrankEnergieEntityDescription(
@@ -1663,8 +1679,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: data[DATA_ELECTRICITY].tomorrow_average_price
         # value_fn=lambda data: data[DATA_ELECTRICITY].tomorrow_avg.total
         if data[DATA_ELECTRICITY].tomorrow_avg else None,
-        attr_fn=lambda data: {'tomorrow_prices': data[DATA_ELECTRICITY].asdict(
-            'total', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'tomorrow_prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+            'total', tomorrow_only=True))}
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_avg_tax",
@@ -1700,8 +1716,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data[DATA_ELECTRICITY].upcoming_avg.market_price
         if data[DATA_ELECTRICITY].upcoming_avg else None,
-        attr_fn=lambda data: {'upcoming_prices': data[DATA_ELECTRICITY].asdict(
-            'market_price', upcoming_only=True, timezone="Europe/Amsterdam")
+        attr_fn=lambda data: {'upcoming_prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+            'market_price', upcoming_only=True))
         }
         if data[DATA_ELECTRICITY].upcoming_avg else {}
     ),
@@ -1715,8 +1731,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data[DATA_ELECTRICITY].upcoming_avg.total
         if data[DATA_ELECTRICITY].upcoming_avg else None,
-        attr_fn=lambda data: {'upcoming_prices': data[DATA_ELECTRICITY].asdict(
-            'total', upcoming_only=True, timezone="Europe/Amsterdam")},
+        attr_fn=lambda data: {'upcoming_prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+            'total', upcoming_only=True))},
     ),
     FrankEnergieEntityDescription(
         key="elec_all",
@@ -1728,8 +1744,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data[DATA_ELECTRICITY].all_avg.total
         if data[DATA_ELECTRICITY].all_avg else None,
-        attr_fn=lambda data: {'all_prices': data[DATA_ELECTRICITY].asdict(
-            'total', timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'all_prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+            'total'))}
         if data[DATA_ELECTRICITY].all_avg else {},
         # attr_fn=lambda data: data[DATA_ELECTRICITY].all_attr,
     ),
@@ -1743,8 +1759,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: data[DATA_ELECTRICITY].current_hour.market_price_including_tax_and_markup
         if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour else None,
-        attr_fn=lambda data: {'prices': data[DATA_ELECTRICITY].asdict(
-            'market_price_including_tax_and_markup', timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+            'market_price_including_tax_and_markup'))}
         if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour else {},
         entity_registry_enabled_default=True
     ),
@@ -1761,8 +1777,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         if data[DATA_GAS] else None,
         # value_fn=lambda data: data[DATA_GAS].tomorrow_avg.total,
         # if data[DATA_GAS].tomorrow_avg else None,
-        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
-            'total', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'tomorrow_prices': _localize_prices(data[DATA_GAS].asdict(
+            'total', tomorrow_only=True))}
         if data[DATA_GAS] else {},
     ),
     FrankEnergieEntityDescription(
@@ -1776,8 +1792,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].current_hour.market_price_including_tax_and_markup
         if data[DATA_GAS] and data[DATA_GAS].current_hour else None,
-        attr_fn=lambda data: {'prices': data[DATA_GAS].asdict(
-            'market_price_including_tax_and_markup', timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'prices': _localize_prices(data[DATA_GAS].asdict(
+            'market_price_including_tax_and_markup'))}
         if data[DATA_GAS] and data[DATA_GAS].current_hour else {},
     ),
     FrankEnergieEntityDescription(
@@ -1893,8 +1909,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_market
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market else None,
-        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
-            'market_price', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'tomorrow_prices': _localize_prices(data[DATA_GAS].asdict(
+            'market_price', tomorrow_only=True))}
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market else {},
     ),
     FrankEnergieEntityDescription(
@@ -1908,8 +1924,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_market_tax
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax else None,
-        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
-            'market_price_tax', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'tomorrow_prices': _localize_prices(data[DATA_GAS].asdict(
+            'market_price_tax', tomorrow_only=True))}
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax else {},
     ),
     FrankEnergieEntityDescription(
@@ -1923,8 +1939,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_market_tax_markup
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax_markup else None,
-        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
-            'market_price_including_tax_and_markup', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'tomorrow_prices': _localize_prices(data[DATA_GAS].asdict(
+            'market_price_including_tax_and_markup', tomorrow_only=True))}
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax_markup else {},
     ),
     FrankEnergieEntityDescription(
@@ -1938,8 +1954,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].today_prices_total
         if data[DATA_GAS] and data[DATA_GAS].today_prices_total else None,
-        attr_fn=lambda data: {'today_prices': data[DATA_GAS].asdict(
-            'total', today_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'today_prices': _localize_prices(data[DATA_GAS].asdict(
+            'total', today_only=True))}
         if data[DATA_GAS] and data[DATA_GAS].today_prices_total else {},
     ),
     FrankEnergieEntityDescription(
@@ -1953,8 +1969,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: data[DATA_GAS].tomorrow_prices_total
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_total else None,
-        attr_fn=lambda data: {'tomorrow_prices': data[DATA_GAS].asdict(
-            'total', tomorrow_only=True, timezone="Europe/Amsterdam")}
+        attr_fn=lambda data: {'tomorrow_prices': _localize_prices(data[DATA_GAS].asdict(
+            'total', tomorrow_only=True))}
         if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_total else {},
     ),
     FrankEnergieEntityDescription(
@@ -2008,7 +2024,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         if data[DATA_GAS] and data[DATA_GAS].upcoming_avg and data[DATA_GAS].upcoming_avg.market_price
         else None,
         attr_fn=lambda data: {
-            'prices': data[DATA_GAS].asdict('market_price', upcoming_only=True, timezone="Europe/Amsterdam")
+            'prices': _localize_prices(data[DATA_GAS].asdict('market_price', upcoming_only=True))
             if data[DATA_GAS] else {}
         }
         if data[DATA_GAS] and data[DATA_GAS].upcoming_avg and data[DATA_GAS].upcoming_avg.market_price
@@ -2085,9 +2101,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                 'average_electricity_market_price_upcoming': (
                     data[DATA_ELECTRICITY].upcoming_avg.market_price
                 ),
-                'upcoming_prices': data[DATA_ELECTRICITY].asdict(
-                    'total', upcoming_only=True, timezone="Europe/Amsterdam"
-                ),
+                'upcoming_prices': _localize_prices(data[DATA_ELECTRICITY].asdict(
+                    'total', upcoming_only=True
+                )),
             }
             if data[DATA_ELECTRICITY] and data[DATA_ELECTRICITY].upcoming_avg
             else {}
