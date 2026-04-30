@@ -6,7 +6,6 @@
     ],
     "config_flow": true,
     "documentation": "https://github.com/HiDiHo01/home-assistant-frank_energie",
-    "homeassistant_version": "2026.5.0",
     "integration_type": "service",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/HiDiHo01/home-assistant-frank_energie/issues",
