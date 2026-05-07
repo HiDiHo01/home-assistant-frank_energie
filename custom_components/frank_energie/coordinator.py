@@ -415,11 +415,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         "end": end.isoformat(),
                     },
                 )
-                _LOGGER.warning("Firing frank_energie_event (lowest price): %s → %s : %s",
-                                lowest_elec_price.date_from,
-                                lowest_elec_price.date_till,
-                                lowest_elec_price.total,
-                                )
+                _LOGGER.debug("Firing frank_energie_event (lowest price): %s → %s : %s",
+                              lowest_elec_price.date_from,
+                              lowest_elec_price.date_till,
+                              lowest_elec_price.total,
+                              )
                 self._mark_lowest_price_event_fired(today)
 
         prices = prices_today.electricity.today if prices_today and prices_today.electricity else None
@@ -879,7 +879,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Failed to fetch public prices, using cached prices if available: %s", err
             )
             # Use cached prices if available, otherwise create empty MarketPrices
-            return getattr(self, "_cached_prices", MarketPrices(electricity=PriceData([], "electricity"), gas=PriceData([], "gas"), energy_country=country_code))
+            return getattr(self, "_cached_prices", MarketPrices(electricity=PriceData([], "electricity"), gas=PriceData([], "gas"), energy_country=country_code or "NL"))
 
         if not self.api.is_authenticated:
             return public_prices

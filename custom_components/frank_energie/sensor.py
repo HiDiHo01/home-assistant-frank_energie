@@ -3403,8 +3403,11 @@ class FrankEnergieSensor(
         try:
             await self.coordinator.async_request_refresh()
             data = self.coordinator.data
+            if data is None:
+                self._attr_native_value = None
+                return
             self._attr_native_value = self.entity_description.value_fn(data)
-        except (TypeError, IndexError, ValueError):
+        except (TypeError, IndexError, ValueError, AttributeError):
             # No data available
             self._attr_native_value = None
         except ZeroDivisionError as e:
