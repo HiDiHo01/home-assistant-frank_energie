@@ -217,3 +217,179 @@ apex_config:
         enabled: true
         delay: 500
 ```
+#### Voorbeeld 3 - Vandaag en morgen (conditional)
+
+![Apex graph voorbeeld 2](/images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
+
+```
+type: custom:apexcharts-card
+graph_span: 24h
+span:
+  start: day
+now:
+  show: true
+  label: Nu
+  color: darkblue
+header:
+  show: true
+  title: Energieprijs per kwartier (€/kWh) vandaag
+series:
+  - entity: sensor.frank_energie_prijzen_gemiddelde_elektriciteitsprijs_vandaag_all_in
+    name: Prijs
+    stroke_width: 0
+    float_precision: 3
+    type: column
+    opacity: 1
+    color: "#44739e"
+    color_threshold:
+      - value: 0
+        color: rgb(255,255,255)
+      - value: 0.05
+        color: rgb(240,240,255)
+      - value: 0.1
+        color: rgb(225,225,255)
+      - value: 0.11
+        color: rgb(200,200,255)
+      - value: 0.12
+        color: rgb(175,175,255)
+      - value: 0.13
+        color: rgb(150,150,255)
+      - value: 0.14
+        color: rgb(125,125,255)
+      - value: 0.15
+        color: rgb(100,100,255)
+      - value: 0.16
+        color: rgb(75,75,255)
+      - value: 0.17
+        color: rgb(50,50,255)
+      - value: 0.18
+        color: rgb(25,25,225)
+      - value: 0.19
+        color: rgb(0,0,255)
+      - value: 0.2
+        color: "#aaff66"
+      - value: 0.22
+        color: "#99ff00"
+      - value: 0.25
+        color: "#6fff00"
+      - value: 0.26
+        color: "#1aff00"
+      - value: 0.27
+        color: "#00ee00"
+      - value: 0.28
+        color: "#00bb00"
+      - value: 0.29
+        color: green
+      - value: 0.3
+        color: "#eaff00"
+      - value: 0.31
+        color: "#ffff00"
+      - value: 0.32
+        color: "#ffc40c"
+      - value: 0.33
+        color: darkorange
+      - value: 0.35
+        color: orangered
+      - value: 0.375
+        color: "#ff0000"
+      - value: 0.4
+        color: "#df0000"
+      - value: 0.425
+        color: "#af0000"
+      - value: 0.45
+        color: darkred
+    data_generator: |
+      return entity.attributes.prices.map((record, index) => {
+        return [record.from, record.price];
+      });
+experimental:
+  color_threshold: true
+```
+
+```
+type: conditional
+conditions:
+  - condition: state
+    entity: sensor.frank_energie_prijzen_gemiddelde_elektriciteitsprijs_morgen_all_in
+    state_not: unavailable
+card:
+  type: custom:apexcharts-card
+  graph_span: 24h
+  span:
+    start: day
+    offset: +24h
+  header:
+    show: true
+    title: Energieprijs per kwartier (€/kWh) morgen
+  series:
+    - entity: >-
+        sensor.frank_energie_prijzen_gemiddelde_elektriciteitsprijs_morgen_all_in
+      name: Prijs
+      stroke_width: 0
+      float_precision: 3
+      type: column
+      opacity: 1
+      color: "#44739e"
+      color_threshold:
+        - value: 0
+          color: rgb(255,255,255)
+        - value: 0.05
+          color: rgb(240,240,255)
+        - value: 0.1
+          color: rgb(225,225,255)
+        - value: 0.11
+          color: rgb(200,200,255)
+        - value: 0.12
+          color: rgb(175,175,255)
+        - value: 0.13
+          color: rgb(150,150,255)
+        - value: 0.14
+          color: rgb(125,125,255)
+        - value: 0.15
+          color: rgb(100,100,255)
+        - value: 0.16
+          color: rgb(75,75,255)
+        - value: 0.17
+          color: rgb(50,50,255)
+        - value: 0.18
+          color: rgb(25,25,225)
+        - value: 0.19
+          color: rgb(0,0,255)
+        - value: 0.2
+          color: "#99ff00"
+        - value: 0.25
+          color: "#6fff00"
+        - value: 0.26
+          color: "#1aff00"
+        - value: 0.27
+          color: "#00ee00"
+        - value: 0.28
+          color: "#00bb00"
+        - value: 0.29
+          color: green
+        - value: 0.3
+          color: "#eaff00"
+        - value: 0.31
+          color: "#ffff00"
+        - value: 0.32
+          color: "#ffc40c"
+        - value: 0.33
+          color: darkorange
+        - value: 0.35
+          color: orangered
+        - value: 0.375
+          color: "#ff0000"
+        - value: 0.4
+          color: "#df0000"
+        - value: 0.425
+          color: "#af0000"
+        - value: 0.45
+          color: darkred
+      data_generator: |
+        const tomorrowPrices = entity.attributes.tomorrow_prices;
+        return tomorrowPrices
+          ? tomorrowPrices.map((record, index) => [record.from, record.price])
+        : [0];
+  experimental:
+    color_threshold: true
+```
