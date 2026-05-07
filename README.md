@@ -57,7 +57,7 @@ Middels [apex-card](https://github.com/RomRider/apexcharts-card) is het mogelijk
 
 #### Voorbeeld 1 - Alle data
 
-![Apex graph voorbeeld 1](/images/example_1.png "Voorbeeld 1")
+![Apex graph voorbeeld 1](/images/48 uur per kwartier.png "Voorbeeld 1")
 
 ```yaml 
 type: custom:apexcharts-card
