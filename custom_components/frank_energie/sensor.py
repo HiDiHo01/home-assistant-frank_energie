@@ -189,7 +189,6 @@ class FrankEnergieEntityDescription(
     # Core metadata
     authenticated: bool = False
     service_name: str | None = SERVICE_NAME_PRICES
-    # service_name: str | None = None  # Optional: used for translation keys and icon selection
 
     # Function to extract the sensor value from the coordinator's data
     value_fn: Callable[[_DataT], StateType] = lambda _: STATE_UNKNOWN
@@ -284,7 +283,6 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             entity_category=EntityCategory(entity_category) if isinstance(entity_category, str) else entity_category
         )
         object.__setattr__(self, 'value_fn', value_fn or (lambda _: STATE_UNKNOWN))
-        # self.icon = icon
 
     def get_state(self, data: dict[str, object]) -> StateType:
         """Return validated state value."""

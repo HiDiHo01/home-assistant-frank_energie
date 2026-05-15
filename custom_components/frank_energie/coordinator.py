@@ -1,7 +1,7 @@
 """ Coordinator implementation for Frank Energie integration.
     Fetching the latest data from Frank Energie and updating the states."""
 # coordinator.py
-# version 2026.02.05
+# version 2026.05.10
 from __future__ import annotations
 
 import asyncio
@@ -894,7 +894,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         user_country = self._user_country or country_code
 
         try:
-            user_prices = await self.api.user_prices(self.site_reference, user_country, start_date, end_date, resolution_active_option)
+            user_prices = await self.api.user_prices(self.site_reference, user_country, start_date, end_date)
         except NetworkError as err:
             _LOGGER.warning(
                 "Failed to fetch user prices, falling back to public prices: %s", err
