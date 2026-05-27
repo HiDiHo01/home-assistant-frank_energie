@@ -188,3 +188,74 @@ async def test_adjust_update_interval_outside_window(coordinator):
         # 900 + 20 + 10 = 930 seconds
         assert coordinator.update_interval.total_seconds() == 930
         mock_randbelow.assert_called_once_with(71)
+
+
+@pytest.mark.asyncio
+async def test_fetch_today_data_caching(coordinator, mock_frank_energie):
+    """Test that static data is cached and not refetched on the same day, but refetched on a new day."""
+    from datetime import datetime, timezone, timedelta
+
+    mock_prices = MagicMock()
+    mock_prices.electricity.all = [MagicMock()]
+    mock_prices.gas.all = [MagicMock()]
+    mock_prices.electricity.today_min = MagicMock()
+    mock_frank_energie.user_prices.return_value = mock_prices
+    mock_frank_energie.month_summary.return_value = MagicMock()
+    mock_frank_energie.invoices.return_value = MagicMock()
+
+    mock_user = MagicMock()
+    mock_user.connections = []
+    mock_frank_energie.user.return_value = mock_user
+
+    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+
+    # First fetch (cache empty)
+    await coordinator._fetch_today_data(today, tomorrow)
+    assert mock_frank_energie.user_prices.call_count == 1
+    coordinator.last_fetch_today = datetime(2026, 5, 27, 14, 0, 0, tzinfo=timezone.utc)
+
+    # Second fetch on same day (should use cache)
+    await coordinator._fetch_today_data(today, tomorrow)
+    assert mock_frank_energie.user_prices.call_count == 1
+
+    # Fetch on a new day (cache should invalidate)
+    new_day = today + timedelta(days=1)
+    new_tomorrow = new_day + timedelta(days=1)
+    await coordinator._fetch_today_data(new_day, new_tomorrow)
+    assert mock_frank_energie.user_prices.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_today_data_auth_failure(coordinator, mock_frank_energie):
+    """Test auth failure triggers token renewal attempt and raises ConfigEntryAuthFailed."""
+    from datetime import datetime, timezone, timedelta
+    from python_frank_energie.exceptions import AuthRequiredException
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+
+    mock_frank_energie.user_prices.side_effect = AuthRequiredException("auth_required")
+    coordinator._try_renew_token = AsyncMock()
+
+    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._fetch_today_data(today, tomorrow)
+
+    coordinator._try_renew_token.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_today_data_network_failure(coordinator, mock_frank_energie):
+    """Test that a non-auth network failure raises UpdateFailed."""
+    from datetime import datetime, timezone, timedelta
+    from python_frank_energie.exceptions import RequestException
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    mock_frank_energie.user_prices.side_effect = RequestException("network_error")
+
+    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._fetch_today_data(today, tomorrow)
