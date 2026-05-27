@@ -26,9 +26,6 @@ async def frank_energie_config_entry(hass: HomeAssistant, enable_custom_integrat
     return config_entry
 
 
-
-
-
 def price_generator(base: float, var: float) -> list:
     """
     Return a list of 24 prices which has two peaks of price `base` and 3 bottoms of `base - 6 * var`.
@@ -65,6 +62,7 @@ async def test_sensors(
     hass: HomeAssistant,
 ):
     import zoneinfo
+
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=14, minute=15, second=0, microsecond=0)
@@ -86,30 +84,102 @@ async def test_sensors(
     await hass.async_block_till_done()
 
     # Check the state of all sensors which are enabled by default
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_price_all_in").state == "0.15"
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_market_price").state == "0.105"
     assert (
-        hass.states.get("sensor.frank_energie_prices_current_electricity_price_including_tax").state
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_all_in"
+        ).state
+        == "0.15"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_market_price"
+        ).state
+        == "0.105"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_including_tax"
+        ).state
         == "0.1125"
     )
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state == "1.23"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_market_price").state == "0.861"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_price_including_tax").state == "0.9225"
-    assert hass.states.get("sensor.frank_energie_gasprices_lowest_gas_price_today_all_in").state == "1.23"
-    assert hass.states.get("sensor.frank_energie_gasprices_highest_gas_price_today_all_in").state == "1.75"
-    assert hass.states.get("sensor.frank_energie_prices_lowest_electricity_price_today_all_in").state == "0.15"
-    assert hass.states.get("sensor.frank_energie_prices_highest_electricity_price_today_all_in").state == "0.5"
-    assert hass.states.get("sensor.frank_energie_prices_average_electricity_price_today_all_in").state == "0.20625"
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        == "1.23"
+    )
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_market_price").state
+        == "0.861"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_gasprices_current_gas_price_including_tax"
+        ).state
+        == "0.9225"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_gasprices_lowest_gas_price_today_all_in"
+        ).state
+        == "1.23"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_gasprices_highest_gas_price_today_all_in"
+        ).state
+        == "1.75"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_lowest_electricity_price_today_all_in"
+        ).state
+        == "0.15"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_highest_electricity_price_today_all_in"
+        ).state
+        == "0.5"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_average_electricity_price_today_all_in"
+        ).state
+        == "0.20625"
+    )
 
     # Check the default values of these sensors which are enabled by default
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_vat_price").state == "0.0075"
     assert (
-        hass.states.get("sensor.frank_energie_prices_current_electricity_sourcing_markup").state == "0.015"
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_vat_price"
+        ).state
+        == "0.0075"
     )
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_tax_only").state == "0.0225"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_vat_price").state == "0.1845"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_sourcing_price").state == "0.123"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_tax_only").state == "0.0615"
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_sourcing_markup"
+        ).state
+        == "0.015"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_tax_only"
+        ).state
+        == "0.0225"
+    )
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_vat_price").state
+        == "0.1845"
+    )
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_gasprices_current_gas_sourcing_price"
+        ).state
+        == "0.123"
+    )
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_tax_only").state
+        == "0.0615"
+    )
 
 
 async def test_sensors_get_data_of_current_hour(
@@ -119,6 +189,7 @@ async def test_sensors_get_data_of_current_hour(
     hass: HomeAssistant,
 ):
     import zoneinfo
+
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
@@ -138,16 +209,32 @@ async def test_sensors_get_data_of_current_hour(
     await hass.async_block_till_done()
 
     # Check the state at 5:15
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_price_all_in").state == "0.3"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state == "1.75"
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_all_in"
+        ).state
+        == "0.3"
+    )
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        == "1.75"
+    )
 
     # Change time to 12:15
     now = datetime.now(tz).replace(hour=12, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
     await trigger_update(hass, 7 * 3600)
 
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_price_all_in").state == "0.15"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state == "1.23"
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_all_in"
+        ).state
+        == "0.15"
+    )
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        == "1.23"
+    )
 
 
 async def test_sensors_no_data_for_tomorrow(
@@ -157,6 +244,7 @@ async def test_sensors_no_data_for_tomorrow(
     hass: HomeAssistant,
 ):
     import zoneinfo
+
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=20, minute=0, second=0, microsecond=0)
@@ -171,8 +259,16 @@ async def test_sensors_no_data_for_tomorrow(
     await hass.async_block_till_done()
 
     # Check the state at 5:15
-    assert hass.states.get("sensor.frank_energie_prices_current_electricity_price_all_in").state == "0.3"
-    assert hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state == "1.23"
+    assert (
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_all_in"
+        ).state
+        == "0.3"
+    )
+    assert (
+        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        == "1.23"
+    )
 
 
 async def test_sensors_hour_price_attr(
@@ -182,6 +278,7 @@ async def test_sensors_hour_price_attr(
     hass: HomeAssistant,
 ):
     import zoneinfo
+
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=20, minute=0, second=0, microsecond=0)
@@ -204,31 +301,108 @@ async def test_sensors_hour_price_attr(
     # Check the all in electricity prices
     price_attr = [
         a["price"]
-        for a in hass.states.get("sensor.frank_energie_prices_current_electricity_price_all_in").attributes[
-            "prices"
-        ]
+        for a in hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_all_in"
+        ).attributes["prices"]
     ]
     assert price_attr == price_generator(0.25, 0.05) + price_generator(0.3, 0.02)
 
     # Check the all in electricity prices
     price_attr = [
         a["price"]
-        for a in hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").attributes["prices"]
+        for a in hass.states.get(
+            "sensor.frank_energie_gasprices_current_gas_price_all_in"
+        ).attributes["prices"]
     ]
     assert price_attr == [1.75] * 6 + [1.23] * 24 + [0.75] * 18
 
     # For the other sensors just check if the prices attribute is there
     assert 48 == len(
-        hass.states.get("sensor.frank_energie_prices_current_electricity_market_price").attributes["prices"]
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_market_price"
+        ).attributes["prices"]
     )
     assert 48 == len(
-        hass.states.get("sensor.frank_energie_prices_current_electricity_price_including_tax").attributes[
-            "prices"
-        ]
+        hass.states.get(
+            "sensor.frank_energie_prices_current_electricity_price_including_tax"
+        ).attributes["prices"]
     )
     assert 48 == len(
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_market_price").attributes["prices"]
+        hass.states.get(
+            "sensor.frank_energie_gasprices_current_gas_market_price"
+        ).attributes["prices"]
     )
     assert 48 == len(
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_including_tax").attributes["prices"]
+        hass.states.get(
+            "sensor.frank_energie_gasprices_current_gas_price_including_tax"
+        ).attributes["prices"]
     )
+
+
+def test_frank_energie_sensor_native_value_with_datetime():
+    """FrankEnergieSensor should accept datetime from value_fn and expose it as native_value."""
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieEntityDescription,
+        FrankEnergieSensor,
+    )
+
+    test_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    # value_fn ignores its input and returns a datetime
+    description = FrankEnergieEntityDescription(
+        key="test_datetime",
+        name="Test datetime",
+        value_fn=lambda _data: test_dt,
+    )
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.data = {"test": "data"}
+
+    mock_entry = MagicMock()
+    mock_entry.unique_id = "test_unique_id"
+    mock_entry.entry_id = "test_entry_id"
+
+    sensor = FrankEnergieSensor(
+        coordinator=mock_coordinator, description=description, entry=mock_entry
+    )
+
+    native = sensor.native_value
+    assert native == test_dt
+    assert isinstance(native, datetime)
+
+
+def test_frank_energie_sensor_native_value_handles_exceptions_and_returns_none():
+    """FrankEnergieSensor.native_value should catch configured exceptions and return None."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieEntityDescription,
+        FrankEnergieSensor,
+    )
+
+    # value_fn that raises one of the handled exceptions (ValueError here)
+    def failing_value_fn(_data):
+        raise ValueError("test failure")
+
+    description = FrankEnergieEntityDescription(
+        key="test_exception",
+        name="Test exception",
+        value_fn=failing_value_fn,
+    )
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.data = {"test": "data"}
+
+    mock_entry = MagicMock()
+    mock_entry.unique_id = "test_unique_id"
+    mock_entry.entry_id = "test_entry_id"
+
+    sensor = FrankEnergieSensor(
+        coordinator=mock_coordinator, description=description, entry=mock_entry
+    )
+
+    # native_value should swallow the ValueError and return None instead of raising
+    assert sensor.native_value is None

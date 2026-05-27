@@ -1,10 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
-from custom_components.frank_energie.const import (DATA_ELECTRICITY, DATA_GAS,
-                                                   DATA_INVOICES,
-                                                   DATA_MONTH_SUMMARY,
-                                                   DATA_USER)
+from custom_components.frank_energie.const import (
+    DATA_ELECTRICITY,
+    DATA_GAS,
+    DATA_INVOICES,
+    DATA_MONTH_SUMMARY,
+    DATA_USER,
+)
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -42,8 +45,8 @@ def mock_config_entry():
         source="user",
         entry_id="123",
         state="loaded",
-        minor_version=1,      # Set this to the appropriate minor version
-        unique_id="test_unique_id"  # Ensure this is unique
+        minor_version=1,  # Set this to the appropriate minor version
+        unique_id="test_unique_id",  # Ensure this is unique
     )
 
 
@@ -68,7 +71,7 @@ async def test_fetch_today_data(coordinator, mock_frank_energie):
     mock_frank_energie.user_prices.return_value = mock_prices
     mock_frank_energie.month_summary.return_value = MagicMock()
     mock_frank_energie.invoices.return_value = MagicMock()
-    
+
     mock_user = MagicMock()
     mock_user.connections = []
     mock_frank_energie.user.return_value = mock_user
@@ -93,7 +96,7 @@ async def test_fetch_today_data(coordinator, mock_frank_energie):
         data_smart_battery_details,
         data_smart_battery_sessions,
         data_enode_vehicles,
-        data_contract_price_resolution_state
+        data_contract_price_resolution_state,
     ) = data
 
     assert prices_today == mock_prices
@@ -107,8 +110,7 @@ async def test_renew_token(coordinator, mock_frank_energie):
     """Test token renewal."""
     # Mock renewal of the token
     mock_frank_energie.renew_token.return_value = AsyncMock(
-        authToken='new_token',
-        refreshToken='new_refresh_token'
+        authToken="new_token", refreshToken="new_refresh_token"
     )
 
     await coordinator._try_renew_token()
@@ -116,10 +118,7 @@ async def test_renew_token(coordinator, mock_frank_energie):
     # Verify that the entry data was updated with new tokens
     coordinator.hass.config_entries.async_update_entry.assert_called_once_with(
         coordinator.config_entry,
-        data={
-            'access_token': 'new_token',
-            'token': 'new_refresh_token'
-        }
+        data={"access_token": "new_token", "token": "new_refresh_token"},
     )
 
 
@@ -137,9 +136,19 @@ async def test_aggregate_data(coordinator):
     data_user = MagicMock(spec=User)
 
     aggregated_data = coordinator._aggregate_data(
-        prices_today, prices_tomorrow,
-        data_month_summary, data_invoices, data_user,
-        None, None, None, None, None, None, None, None
+        prices_today,
+        prices_tomorrow,
+        data_month_summary,
+        data_invoices,
+        data_user,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )
 
     # Assertions
@@ -148,3 +157,34 @@ async def test_aggregate_data(coordinator):
     assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MagicMock)
     assert isinstance(aggregated_data[DATA_INVOICES], MagicMock)
     assert isinstance(aggregated_data[DATA_USER], MagicMock)
+
+
+@pytest.mark.asyncio
+async def test_adjust_update_interval_inside_window(coordinator):
+    """Test update interval adjustment inside the price release window."""
+    from datetime import datetime, timezone
+    from unittest.mock import patch
+
+    # Price release window is between 13:00 and 15:00 UTC
+    now_utc = datetime(2026, 5, 27, 14, 0, 0, tzinfo=timezone.utc)
+
+    with patch("secrets.randbelow", return_value=10) as mock_randbelow:
+        coordinator._adjust_update_interval(now_utc)
+        # 300 + 10 + 5 = 315 seconds
+        assert coordinator.update_interval.total_seconds() == 315
+        mock_randbelow.assert_called_once_with(41)
+
+
+@pytest.mark.asyncio
+async def test_adjust_update_interval_outside_window(coordinator):
+    """Test update interval adjustment outside the price release window."""
+    from datetime import datetime, timezone
+    from unittest.mock import patch
+
+    now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
+
+    with patch("secrets.randbelow", return_value=20) as mock_randbelow:
+        coordinator._adjust_update_interval(now_utc)
+        # 900 + 20 + 10 = 930 seconds
+        assert coordinator.update_interval.total_seconds() == 930
+        mock_randbelow.assert_called_once_with(71)

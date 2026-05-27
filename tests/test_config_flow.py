@@ -1,6 +1,5 @@
 """Tests for Frank Energie config flow."""
 
-
 import pytest
 
 from homeassistant import config_entries
@@ -15,7 +14,9 @@ from custom_components.frank_energie.const import (
     DOMAIN,
 )
 
-pytestmark = pytest.mark.usefixtures("enable_custom_integrations", "mock_setup_entry", "mock_setup_entry_success")
+pytestmark = pytest.mark.usefixtures(
+    "enable_custom_integrations", "mock_setup_entry", "mock_setup_entry_success"
+)
 
 USER_INPUT = {
     CONF_USERNAME: "user@example.com",
@@ -96,11 +97,16 @@ async def test_successful_login_flow(hass: HomeAssistant, mock_auth_success) -> 
     assert result2["step_id"] == "site"
 
 
-async def test_reauth_flow_success(hass: HomeAssistant, mock_auth_success, config_entry) -> None:
+async def test_reauth_flow_success(
+    hass: HomeAssistant, mock_auth_success, config_entry
+) -> None:
     """Test successful reauthentication."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
-        context={"source": config_entries.SOURCE_REAUTH, "entry_id": config_entry.entry_id},
+        context={
+            "source": config_entries.SOURCE_REAUTH,
+            "entry_id": config_entry.entry_id,
+        },
         data={CONF_USERNAME: config_entry.data[CONF_USERNAME]},
     )
 
@@ -115,9 +121,13 @@ async def test_reauth_flow_success(hass: HomeAssistant, mock_auth_success, confi
     assert result2["reason"] == "reauth_successful"
 
 
-async def test_options_flow_with_site(hass: HomeAssistant, config_entry_with_site) -> None:
+async def test_options_flow_with_site(
+    hass: HomeAssistant, config_entry_with_site
+) -> None:
     """Test options flow when site is available."""
-    result = await hass.config_entries.options.async_init(config_entry_with_site.entry_id)
+    result = await hass.config_entries.options.async_init(
+        config_entry_with_site.entry_id
+    )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] is None
