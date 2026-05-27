@@ -508,7 +508,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning(
                 "Authentication failed while fetching month summary: %s", ex
             )
-            return MonthSummary.from_dict({})
+            return None
         except (RequestException, FrankEnergieException, ClientError) as ex:
             error_msg = str(ex).lower()
             if "no reading dates" in error_msg:
@@ -518,7 +518,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
             else:
                 _LOGGER.warning("No month summary data available: %s", ex)
-            return MonthSummary.from_dict({})
+            return None
 
     async def _fetch_invoices(self) -> Invoices | None:
         """Fetch invoices from the API."""

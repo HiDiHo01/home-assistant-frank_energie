@@ -13,7 +13,10 @@ from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
+from python_frank_energie.exceptions import FrankEnergieException, RequestException
 from python_frank_energie.models import MonthSummary, Invoices, User
+from aiohttp import ClientError
+
 
 # Sample data for mocking
 mock_entry_data = {
@@ -318,3 +321,35 @@ async def test_fetch_today_data_dynamic_auth_failure(coordinator, mock_frank_ene
 
     # Verify token renewal was triggered
     coordinator._try_renew_token.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception_cls",
+    [
+        FrankEnergieException,
+        RequestException,
+        ClientError,
+    ],
+)
+async def test_fetch_month_summary_exceptions_return_none(
+    coordinator, mock_frank_energie, exception_cls
+):
+    """Test that _fetch_month_summary handles non-auth exceptions by returning None."""
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.month_summary.side_effect = exception_cls("test error")
+    result = await coordinator._fetch_month_summary()
+    assert result is None
+
+
+
+@pytest.mark.asyncio
+async def test_fetch_month_summary_auth_exception(coordinator, mock_frank_energie):
+    """Test that _fetch_month_summary handles authentication exceptions by returning None."""
+    from python_frank_energie.exceptions import AuthException
+
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.month_summary.side_effect = AuthException("auth error")
+    result = await coordinator._fetch_month_summary()
+    assert result is None
+
