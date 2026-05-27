@@ -128,11 +128,11 @@ class FrankEnergieBaseSensor(
         value_fn = self._entity_description.value_fn
         assert value_fn is not None
         value = value_fn(self.coordinator.data)
-        if isinstance(value, (str, int, float)) or value is None:
+        if isinstance(value, (str, int, float, datetime)) or value is None:
             return value
         raise TypeError(
             f"Invalid state type returned: {type(value).__name__}. "
-            "Expected str | int | float | None."
+            "Expected str | int | float | datetime | None."
         )
 
     @property
@@ -4082,7 +4082,8 @@ def _build_dynamic_smart_batteries_descriptions(
             ]
         )
 
-        # Settings sensors
+        # Settings sensors — lambdas navigate live through coordinator.data so
+        # values are always current after each poll (not frozen at setup time).
         if settings:
             descriptions.extend(
                 [
@@ -4092,8 +4093,24 @@ def _build_dynamic_smart_batteries_descriptions(
                         authenticated=True,
                         service_name=SERVICE_NAME_BATTERIES,
                         icon="mdi:battery",
-                        value_fn=lambda _, val=settings: val.battery_mode,
-                        attr_fn=lambda _, val=settings: asdict(val),
+                        value_fn=lambda data, idx=i: (
+                            b.settings.battery_mode
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.settings
+                            else None
+                        ),
+                        attr_fn=lambda data, idx=i: (
+                            asdict(b.settings)
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.settings
+                            else {}
+                        ),
                     ),
                     FrankEnergieEntityDescription(
                         key=f"{base_key}_imbalance_trading_strategy",
@@ -4101,13 +4118,29 @@ def _build_dynamic_smart_batteries_descriptions(
                         authenticated=True,
                         service_name=SERVICE_NAME_BATTERIES,
                         icon="mdi:chart-line",
-                        value_fn=lambda _, val=settings: val.imbalance_trading_strategy,
-                        attr_fn=lambda _, val=settings: asdict(val),
+                        value_fn=lambda data, idx=i: (
+                            b.settings.imbalance_trading_strategy
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.settings
+                            else None
+                        ),
+                        attr_fn=lambda data, idx=i: (
+                            asdict(b.settings)
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.settings
+                            else {}
+                        ),
                     ),
                 ]
             )
 
-        # Summary sensors
+        # Summary sensors — same live-lookup pattern to avoid stale closures.
         if summary:
             descriptions.extend(
                 [
@@ -4118,7 +4151,15 @@ def _build_dynamic_smart_batteries_descriptions(
                         service_name=SERVICE_NAME_BATTERIES,
                         icon="mdi:battery-high",
                         native_unit_of_measurement="%",
-                        value_fn=lambda _, val=summary: val.last_known_state_of_charge,
+                        value_fn=lambda data, idx=i: (
+                            b.summary.last_known_state_of_charge
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.summary
+                            else None
+                        ),
                     ),
                     FrankEnergieEntityDescription(
                         key=f"{base_key}_status",
@@ -4126,7 +4167,15 @@ def _build_dynamic_smart_batteries_descriptions(
                         authenticated=True,
                         service_name=SERVICE_NAME_BATTERIES,
                         icon="mdi:battery-clock",
-                        value_fn=lambda _, val=summary: val.last_known_status,
+                        value_fn=lambda data, idx=i: (
+                            b.summary.last_known_status
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.summary
+                            else None
+                        ),
                     ),
                     FrankEnergieEntityDescription(
                         key=f"{base_key}_last_update",
@@ -4135,7 +4184,15 @@ def _build_dynamic_smart_batteries_descriptions(
                         service_name=SERVICE_NAME_BATTERIES,
                         icon="mdi:clock-outline",
                         device_class=SensorDeviceClass.TIMESTAMP,
-                        value_fn=lambda _, val=summary: val.last_update,
+                        value_fn=lambda data, idx=i: (
+                            b.summary.last_update
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.summary
+                            else None
+                        ),
                     ),
                     FrankEnergieEntityDescription(
                         key=f"{base_key}_total_result",
@@ -4146,12 +4203,21 @@ def _build_dynamic_smart_batteries_descriptions(
                         native_unit_of_measurement=CURRENCY_EURO,
                         suggested_display_precision=2,
                         icon="mdi:currency-eur",
-                        value_fn=lambda _, val=summary: val.total_result,
+                        value_fn=lambda data, idx=i: (
+                            b.summary.total_result
+                            if (bats := data.get(DATA_BATTERIES))
+                            and bats.batteries
+                            and idx < len(bats.batteries)
+                            and (b := bats.batteries[idx])
+                            and b.summary
+                            else None
+                        ),
                     ),
                 ]
             )
 
-    # Aggregated sensors
+    # Aggregated sensors — computed live from coordinator.data so they always
+    # reflect the latest poll, not the battery list from integration startup.
     descriptions.extend(
         [
             FrankEnergieEntityDescription(
@@ -4163,7 +4229,10 @@ def _build_dynamic_smart_batteries_descriptions(
                 device_class=SensorDeviceClass.ENERGY,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
                 suggested_display_precision=2,
-                value_fn=lambda _, val=total_battery_capacity: val,
+                value_fn=lambda data: sum(
+                    (b.capacity or 0)
+                    for b in (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries
+                ) or None,
             ),
             FrankEnergieEntityDescription(
                 key="total_max_charge_power",
@@ -4174,7 +4243,10 @@ def _build_dynamic_smart_batteries_descriptions(
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
-                value_fn=lambda _, val=total_max_charge_power: val,
+                value_fn=lambda data: sum(
+                    (b.max_charge_power or 0)
+                    for b in (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries
+                ) or None,
             ),
             FrankEnergieEntityDescription(
                 key="total_max_discharge_power",
@@ -4185,7 +4257,10 @@ def _build_dynamic_smart_batteries_descriptions(
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
-                value_fn=lambda _, val=total_max_discharge_power: val,
+                value_fn=lambda data: sum(
+                    (b.max_discharge_power or 0)
+                    for b in (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries
+                ) or None,
             ),
             FrankEnergieEntityDescription(
                 key="total_result",
@@ -4196,7 +4271,11 @@ def _build_dynamic_smart_batteries_descriptions(
                 native_unit_of_measurement=CURRENCY_EURO,
                 suggested_display_precision=2,
                 icon="mdi:currency-eur",
-                value_fn=lambda _, val=total_result: val,
+                value_fn=lambda data: sum(
+                    (b.summary.total_result or 0)
+                    for b in (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries
+                    if b.summary
+                ) or None,
             ),
             FrankEnergieEntityDescription(
                 key="average_state_of_charge",
@@ -4207,8 +4286,18 @@ def _build_dynamic_smart_batteries_descriptions(
                 suggested_display_precision=0,
                 icon="mdi:battery-high",
                 native_unit_of_measurement="%",
-                value_fn=lambda _, val=total_state_of_charge: (
-                    val or 0) / number_of_batteries if number_of_batteries else 0,
+                value_fn=lambda data: (
+                    (total := sum(
+                        (b.summary.last_known_state_of_charge or 0)
+                        for b in (bats := data.get(DATA_BATTERIES)) and bats.batteries or []
+                        if b.summary
+                    ))
+                    / len([b for b in (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries if b.summary])
+                    if data.get(DATA_BATTERIES)
+                    and data.get(DATA_BATTERIES).batteries
+                    and any(b.summary for b in data.get(DATA_BATTERIES).batteries)
+                    else None
+                ),
             ),
         ]
     )
