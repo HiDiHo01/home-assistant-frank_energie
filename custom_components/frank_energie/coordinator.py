@@ -674,11 +674,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
                     return None
 
+            _LOGGER.debug(
+                "Dynamic fetch flags: is_smart_trading=%s, is_smart_charging=%s",
+                is_smart_trading,
+                is_smart_charging,
+            )
             _LOGGER.debug("Fetching dynamic interval data concurrently")
             data_enode_chargers, data_smart_batteries, data_enode_vehicles = await asyncio.gather(
                 fetch_enode_chargers(),
                 fetch_smart_batteries(),
                 fetch_enode_vehicles(),
+            )
+            _LOGGER.debug(
+                "Dynamic fetch result: batteries=%s",
+                data_smart_batteries,
             )
 
             # Fetch details and sessions for each smart battery concurrently
@@ -700,10 +709,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             if details.smart_battery_summary:
                                 battery.summary = details.smart_battery_summary
                             _LOGGER.debug(
-                                "Merged battery data %s | settings=%s summary=%s",
+                                "Merged battery data %s | settings=%s summary=%s | soc=%s last_update=%s",
                                 battery.id,
                                 battery.settings,
                                 battery.summary,
+                                battery.summary.last_known_state_of_charge if battery.summary else None,
+                                battery.summary.last_update if battery.summary else None,
                             )
                         return details
                     except Exception as err:
