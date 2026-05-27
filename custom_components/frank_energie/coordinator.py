@@ -764,6 +764,110 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._fetch_battery_sessions(battery, start_date, tomorrow),
         )
 
+    async def _get_static_data(
+        self, today: date, tomorrow: date, start_date: date
+    ) -> tuple[
+        MarketPrices | None,
+        UserSites | None,
+        MonthSummary | None,
+        Invoices | None,
+        PeriodUsageAndCosts | None,
+        User | None,
+        ContractPriceResolutionState | None,
+    ]:
+        """Fetch daily static data concurrently or return from cache."""
+        if (
+            self._static_prices_today is None
+            or self.last_fetch_today is None
+            or self.last_fetch_today.date() != today
+        ):
+            _LOGGER.debug("Fetching Frank Energie static daily data concurrently")
+            (
+                prices_today,
+                user_sites,
+                data_month_summary,
+                data_invoices,
+                data_period_usage,
+                data_user,
+            ) = await asyncio.gather(
+                self._fetch_prices_with_fallback(today, tomorrow),
+                self._fetch_user_sites(),
+                self._fetch_month_summary(),
+                self._fetch_invoices(),
+                self._fetch_period_usage(start_date),
+                self._fetch_user_data(),
+            )
+
+            # --- Haal contractPriceResolutionState op ---
+            data_contract_price_resolution_state = (
+                await self._fetch_contract_price_resolution_state(
+                    self._connection_id
+                )
+            )
+
+            self._static_prices_today = prices_today
+            self._static_month_summary = data_month_summary
+            self._static_invoices = data_invoices
+            self._static_user = data_user
+            self._static_user_sites = user_sites
+            self._static_period_usage = data_period_usage
+            self._static_contract_price_resolution_state = (
+                data_contract_price_resolution_state
+            )
+        else:
+            prices_today = self._static_prices_today
+            data_month_summary = self._static_month_summary
+            data_invoices = self._static_invoices
+            user_sites = self._static_user_sites
+            data_period_usage = self._static_period_usage
+            data_contract_price_resolution_state = (
+                self._static_contract_price_resolution_state
+            )
+            data_user = self._static_user
+
+        return (
+            prices_today,
+            user_sites,
+            data_month_summary,
+            data_invoices,
+            data_period_usage,
+            data_user,
+            data_contract_price_resolution_state,
+        )
+
+    async def _get_battery_details_and_sessions(
+        self,
+        data_smart_batteries: SmartBatteries | None,
+        start_date: date,
+        tomorrow: date,
+    ) -> tuple[list[SmartBatteryDetails], list[SmartBatterySessions]]:
+        """Fetch details and sessions for all smart batteries concurrently."""
+        details_list: list[SmartBatteryDetails] = []
+        sessions_list: list[SmartBatterySessions] = []
+
+        if not (data_smart_batteries and data_smart_batteries.batteries):
+            _LOGGER.debug("No smart batteries found")
+            return details_list, sessions_list
+
+        battery_tasks = [
+            self._fetch_battery_details_and_sessions(
+                battery, start_date, tomorrow
+            )
+            for battery in data_smart_batteries.batteries
+            if battery
+        ]
+        if not battery_tasks:
+            return details_list, sessions_list
+
+        results = await asyncio.gather(*battery_tasks)
+        for details, sessions in results:
+            if details:
+                details_list.append(details)
+            if sessions:
+                sessions_list.append(sessions)
+
+        return details_list, sessions_list
+
     async def _fetch_today_data(
         self, today: date, tomorrow: date
     ) -> tuple[
@@ -792,20 +896,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         Returns:
             Tuple containing today's prices, month summary, invoices, user data, user sites, period usage, Enode chargers, smart batteries, smart battery details, and smart battery sessions.
         """
-        # --- Initialiseer alle variabelen ---
-        prices_today: MarketPrices | None = None
-        data_month_summary: MonthSummary | None = None
-        data_invoices: Invoices | None = None
-        data_user: User | None = None
-        user_sites: UserSites | None = None
-        data_period_usage: PeriodUsageAndCosts | None = None
-        data_enode_chargers: dict[str, EnodeChargers] | None = None
-        data_smart_batteries: SmartBatteries | None = None
-        data_smart_battery_details: list[SmartBatteryDetails | None] = []
-        data_smart_battery_sessions: list[SmartBatterySessions | None] = []
-        data_enode_vehicles: EnodeVehicles | None = None
-        data_contract_price_resolution_state: ContractPriceResolutionState | None = None
-
         yesterday = today - timedelta(days=1)
         start_date = yesterday
 
@@ -814,54 +904,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Fetching Frank Energie data for today %s", self.config_entry.entry_id
             )
 
-            if (
-                self._static_prices_today is None
-                or self.last_fetch_today is None
-                or self.last_fetch_today.date() != today
-            ):
-                _LOGGER.debug("Fetching Frank Energie static daily data concurrently")
-                (
-                    prices_today,
-                    user_sites,
-                    data_month_summary,
-                    data_invoices,
-                    data_period_usage,
-                    data_user,
-                ) = await asyncio.gather(
-                    self._fetch_prices_with_fallback(today, tomorrow),
-                    self._fetch_user_sites(),
-                    self._fetch_month_summary(),
-                    self._fetch_invoices(),
-                    self._fetch_period_usage(start_date),
-                    self._fetch_user_data(),
-                )
-
-                # --- Haal contractPriceResolutionState op ---
-                data_contract_price_resolution_state = (
-                    await self._fetch_contract_price_resolution_state(
-                        self._connection_id
-                    )
-                )
-
-                self._static_prices_today = prices_today
-                self._static_month_summary = data_month_summary
-                self._static_invoices = data_invoices
-                self._static_user = data_user
-                self._static_user_sites = user_sites
-                self._static_period_usage = data_period_usage
-                self._static_contract_price_resolution_state = (
-                    data_contract_price_resolution_state
-                )
-            else:
-                prices_today = self._static_prices_today
-                data_month_summary = self._static_month_summary
-                data_invoices = self._static_invoices
-                user_sites = self._static_user_sites
-                data_period_usage = self._static_period_usage
-                data_contract_price_resolution_state = (
-                    self._static_contract_price_resolution_state
-                )
-                data_user = self._static_user
+            (
+                prices_today,
+                user_sites,
+                data_month_summary,
+                data_invoices,
+                data_period_usage,
+                data_user,
+                data_contract_price_resolution_state,
+            ) = await self._get_static_data(today, tomorrow, start_date)
 
             # Initialize feature flags
             is_smart_charging = False
@@ -882,26 +933,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 self._fetch_enode_vehicles(is_smart_charging),
             )
 
-            data_smart_battery_details = []
-            data_smart_battery_sessions = []
-
-            if data_smart_batteries and data_smart_batteries.batteries:
-                battery_tasks = [
-                    self._fetch_battery_details_and_sessions(
-                        battery, start_date, tomorrow
-                    )
-                    for battery in data_smart_batteries.batteries
-                    if battery
-                ]
-                if battery_tasks:
-                    results = await asyncio.gather(*battery_tasks)
-                    for details, sessions in results:
-                        if details:
-                            data_smart_battery_details.append(details)
-                        if sessions:
-                            data_smart_battery_sessions.append(sessions)
-            else:
-                _LOGGER.debug("No smart batteries found")
+            data_smart_battery_details, data_smart_battery_sessions = (
+                await self._get_battery_details_and_sessions(
+                    data_smart_batteries, start_date, tomorrow
+                )
+            )
 
             # Detect and log IN_DELIVERY status for clean user experience
             if self.api.is_authenticated:
