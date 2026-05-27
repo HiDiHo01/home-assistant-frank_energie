@@ -1,24 +1,17 @@
 """Tests for Frank Energie config flow."""
 
-from typing import Any
 
 import pytest
-from aiohttp import ClientConnectionError
-from syrupy.assertion import SnapshotAssertion
 
 from homeassistant import config_entries
 from homeassistant.const import (
-    CONF_ACCESS_TOKEN,
     CONF_PASSWORD,
-    CONF_TOKEN,
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.frank_energie.const import (
-    CONF_REFRESH_TOKEN,
-    CONF_SITE,
     DOMAIN,
 )
 

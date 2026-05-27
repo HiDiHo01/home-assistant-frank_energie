@@ -1,19 +1,16 @@
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry
-from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.util import dt
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     MockConfigEntry,
 )
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.frank_energie import const, sensor
+from custom_components.frank_energie import const
 from tests.utils import ResponseMocks
 
 

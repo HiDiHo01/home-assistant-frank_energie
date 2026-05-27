@@ -9,7 +9,7 @@ from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
-from python_frank_energie.models import PriceData, MonthSummary, Invoices, User
+from python_frank_energie.models import MonthSummary, Invoices, User
 
 # Sample data for mocking
 mock_entry_data = {
