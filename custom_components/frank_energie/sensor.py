@@ -4287,16 +4287,15 @@ def _build_dynamic_smart_batteries_descriptions(
                 icon="mdi:battery-high",
                 native_unit_of_measurement="%",
                 value_fn=lambda data: (
-                    (total := sum(
-                        (b.summary.last_known_state_of_charge or 0)
-                        for b in (bats := data.get(DATA_BATTERIES)) and bats.batteries or []
-                        if b.summary
-                    ))
-                    / len([b for b in (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries if b.summary])
-                    if data.get(DATA_BATTERIES)
-                    and data.get(DATA_BATTERIES).batteries
-                    and any(b.summary for b in data.get(DATA_BATTERIES).batteries)
-                    else None
+                    lambda bats: (
+                        sum(
+                            (b.summary.last_known_state_of_charge or 0)
+                            for b in bats
+                            if b.summary
+                        ) / len([b for b in bats if b.summary])
+                    ) if (summarised := [b for b in bats if b.summary]) else None
+                )(
+                    (data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()).batteries
                 ),
             ),
         ]
