@@ -339,10 +339,11 @@ async def test_sensors_hour_price_attr(
     )
 
 
-def test_frank_energie_sensor_native_value_with_datetime():
-    """FrankEnergieSensor should accept datetime from value_fn and expose it as native_value."""
+async def test_frank_energie_sensor_native_value_with_datetime(hass: HomeAssistant):
+    """FrankEnergieSensor should accept datetime from value_fn and expose it as native_value and timestamp state."""
     from datetime import datetime, timezone
     from unittest.mock import MagicMock
+    from homeassistant.components.sensor import SensorDeviceClass
 
     from custom_components.frank_energie.sensor import (
         FrankEnergieEntityDescription,
@@ -355,6 +356,7 @@ def test_frank_energie_sensor_native_value_with_datetime():
     description = FrankEnergieEntityDescription(
         key="test_datetime",
         name="Test datetime",
+        device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda _data: test_dt,
     )
 
@@ -368,6 +370,15 @@ def test_frank_energie_sensor_native_value_with_datetime():
     sensor = FrankEnergieSensor(
         coordinator=mock_coordinator, description=description, entry=mock_entry
     )
+    sensor.hass = hass
+    sensor.entity_id = "sensor.test_datetime"
+
+    # Write state to Home Assistant
+    sensor.async_write_ha_state()
+
+    state = hass.states.get("sensor.test_datetime")
+    assert state is not None
+    assert state.state == "2024-01-01T12:00:00+00:00"
 
     native = sensor.native_value
     assert native == test_dt
