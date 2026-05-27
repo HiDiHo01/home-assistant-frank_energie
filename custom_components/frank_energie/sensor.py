@@ -4999,6 +4999,7 @@ def _build_dynamic_smart_batteries_descriptions(
                             and idx < len(bats.batteries)
                             and (b := bats.batteries[idx])
                             and b.summary
+                            and b.summary.last_known_status != "STATUS_UNRELIABLE_DATA"
                             else None
                         ),
                     ),
@@ -5157,11 +5158,11 @@ def _build_dynamic_smart_batteries_descriptions(
                             sum(
                                 (b.summary.last_known_state_of_charge or 0)
                                 for b in bats
-                                if b.summary
+                                if b.summary and b.summary.last_known_status != "STATUS_UNRELIABLE_DATA"
                             )
-                            / len([b for b in bats if b.summary])
+                            / len([b for b in bats if b.summary and b.summary.last_known_status != "STATUS_UNRELIABLE_DATA"])
                         )
-                        if (summarised := [b for b in bats if b.summary])
+                        if (summarised := [b for b in bats if b.summary and b.summary.last_known_status != "STATUS_UNRELIABLE_DATA"])
                         else None
                     )
                 )(
