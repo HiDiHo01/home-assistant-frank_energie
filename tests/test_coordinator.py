@@ -281,3 +281,40 @@ async def test_fetch_today_data_network_failure(coordinator, mock_frank_energie)
 
     with pytest.raises(UpdateFailed):
         await coordinator._fetch_today_data(today, tomorrow)
+
+
+@pytest.mark.asyncio
+async def test_fetch_today_data_dynamic_auth_failure(coordinator, mock_frank_energie):
+    """Test that auth failures from dynamic endpoints propagate and trigger token renewal."""
+    from datetime import datetime, timezone, timedelta
+    from python_frank_energie.exceptions import AuthRequiredException
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+
+    # Setup mock return values for static data
+    mock_prices = MagicMock()
+    mock_prices.electricity.all = [MagicMock()]
+    mock_prices.gas.all = [MagicMock()]
+    mock_prices.electricity.today_min = MagicMock()
+    mock_frank_energie.user_prices.return_value = mock_prices
+    mock_frank_energie.month_summary.return_value = MagicMock()
+    mock_frank_energie.invoices.return_value = MagicMock()
+    mock_user = MagicMock()
+    mock_user.connections = []
+    # Make sure smart trading and charging are True so dynamic endpoints are queried
+    mock_user.smartTrading = {"isActivated": True}
+    mock_user.smartCharging = {"isActivated": True}
+    mock_frank_energie.user.return_value = mock_user
+
+    # Mock one of the dynamic calls to raise AuthRequiredException
+    mock_frank_energie.smart_batteries.side_effect = AuthRequiredException("auth_required")
+    coordinator._try_renew_token = AsyncMock()
+
+    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+
+    # Perform fetch - should raise ConfigEntryAuthFailed
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._fetch_today_data(today, tomorrow)
+
+    # Verify token renewal was triggered
+    coordinator._try_renew_token.assert_called_once()

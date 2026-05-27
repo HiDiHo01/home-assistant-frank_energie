@@ -653,6 +653,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             return await self.api.enode_chargers(self.site_reference, start_date)
+        except (AuthException, AuthRequiredException):
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -667,6 +669,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             return await self.api.smart_batteries()
+        except (AuthException, AuthRequiredException):
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -683,6 +687,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             vehicles = await self.api.enode_vehicles()
             _LOGGER.debug("Fetched Enode vehicles: %s", vehicles)
             return vehicles
+        except (AuthException, AuthRequiredException):
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -708,6 +714,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     battery.summary,
                 )
             return details
+        except (AuthException, AuthRequiredException):
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -739,6 +747,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     battery.id,
                 )
                 return None
+        except (AuthException, AuthRequiredException):
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as err:

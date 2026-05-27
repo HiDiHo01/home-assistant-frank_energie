@@ -1042,7 +1042,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
                     tzinfo=ZoneInfo("Europe/Amsterdam")
                 )
             )
-            if getattr(data, "period_start_date")
+            if data and getattr(data, "period_start_date", None)
             else None
         ),
     ),
