@@ -67,6 +67,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+_LOG_AUTH_TOKENS_EXPIRED: Final = "Authentication tokens expired, trying to renew them (%s)"
 
 if sys.platform == "win32":
     if hasattr(asyncio, "set_event_loop_policy"):
@@ -625,15 +626,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         country_code = country_code_raw.upper()
                         if country_code in {"NL", "BE"}:
                             self._country_code = country_code
-                if not self._connection_id:
-                    if (
-                        user_data
-                        and user_data.connections
-                        and user_data.connections[0].get("connectionId")
-                    ):
-                        self._connection_id = user_data.connections[0].get(
-                            "connectionId"
-                        )
+                if (
+                    not self._connection_id
+                    and user_data
+                    and user_data.connections
+                    and user_data.connections[0].get("connectionId")
+                ):
+                    self._connection_id = user_data.connections[0].get(
+                        "connectionId"
+                    )
                 return user_data
             except AuthException as ex:
                 _LOGGER.warning(
@@ -711,7 +712,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:
-                    _LOGGER.error(
+                    _LOGGER.exception(
                         "Error fetching ContractPriceResolutionState: %s", err
                     )
                     data_contract_price_resolution_state = None
@@ -823,7 +824,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     except asyncio.CancelledError:
                         raise
                     except Exception as err:
-                        _LOGGER.error(
+                        _LOGGER.exception(
                             "Failed to fetch details for battery %s: %s",
                             battery.id,
                             err,
@@ -925,9 +926,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise ConfigEntryAuthFailed("Authentication is required.") from err
 
         except AuthException as ex:
-            _LOGGER.debug(
-                "Authentication tokens expired, trying to renew them (%s)", ex
-            )
+            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
 
@@ -942,9 +941,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Error fetching Frank Energie data for tomorrow (%s)", err)
             return None
         except AuthException as ex:
-            _LOGGER.debug(
-                "Authentication tokens expired, trying to renew them (%s)", ex
-            )
+            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
 
@@ -1146,9 +1143,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if isinstance(ex, RequestException) and str(ex).startswith("user-error:"):
             raise ConfigEntryAuthFailed from ex
         if isinstance(ex, AuthException):
-            _LOGGER.debug(
-                "Authentication tokens expired, trying to renew them (%s)", ex
-            )
+            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
 
@@ -1167,7 +1162,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Successfully renewed token")
 
         except AuthException as ex:
-            _LOGGER.error("Failed to renew token: %s. Starting user reauth flow", ex)
+            _LOGGER.exception("Failed to renew token: %s. Starting user reauth flow", ex)
             # Consider setting the coordinator to an error state or handling the error appropriately
             raise ConfigEntryAuthFailed from ex
 

@@ -339,6 +339,7 @@ async def test_sensors_hour_price_attr(
     )
 
 
+@pytest.mark.asyncio
 async def test_frank_energie_sensor_native_value_with_datetime(hass: HomeAssistant):
     """FrankEnergieSensor should accept datetime from value_fn and expose it as native_value and timestamp state."""
     from datetime import datetime, timezone
