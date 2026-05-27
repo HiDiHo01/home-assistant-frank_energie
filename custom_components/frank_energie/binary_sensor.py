@@ -61,12 +61,14 @@ class FrankEnergieBinarySensor(
         super().__init__(coordinator)
 
         self.entity_description = description
-        self._battery_id = battery_id or description.key.split("_")[2] if "smart_battery_" in description.key else None
+        self._battery_id = (
+            battery_id or description.key.split("_")[2]
+            if "smart_battery_" in description.key
+            else None
+        )
         self._attr_unique_id = f"{config_entry.entry_id}_{description.key}"  # f"{battery_id}_{description.key}"
         self._attr_name = (
-            description.name
-            if isinstance(description.name, str)
-            else None
+            description.name if isinstance(description.name, str) else None
         )
         self._attr_icon = description.icon
         self._attr_device_class = description.device_class
@@ -119,7 +121,7 @@ class FrankEnergieBinarySensor(
 
 
 def _build_dynamic_smart_batteries_descriptions(
-    batteries: list["SmartBatteriesData._SmartBattery"]
+    batteries: list["SmartBatteriesData._SmartBattery"],
 ) -> list[FrankEnergieBinarySensorEntityDescription] | None:
     """Build dynamic entity descriptions for smart batteries."""
 
@@ -146,7 +148,9 @@ def _build_dynamic_smart_batteries_descriptions(
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:power-plug",
-                value_fn=lambda _, val=settings: bool(val.self_consumption_trading_allowed) if val else False,
+                value_fn=lambda _, val=settings: (
+                    bool(val.self_consumption_trading_allowed) if val else False
+                ),
                 attr_fn=lambda _, val=battery.settings: asdict(val) if val else {},
             ),
         )
@@ -166,35 +170,46 @@ async def async_setup_entry(
     ]
     coordinator: FrankEnergieCoordinator = coordinator_wrapper["coordinator"]
     _LOGGER.debug("Setting up binary sensors for entry %s", config_entry.entry_id)
-    _LOGGER.debug("Coordinator data: %s", coordinator.data)  # Log the entire coordinator data for debugging
+    _LOGGER.debug(
+        "Coordinator data: %s", coordinator.data
+    )  # Log the entire coordinator data for debugging
     # 'smart_batteries': None, 'smart_battery_details': [], 'smart_battery_sessions': []
-    _LOGGER.debug("Smart Batteries data: %s", coordinator.data.get(
-        "smart_batteries"))  # Log the smart batteries data for debugging
-    _LOGGER.debug("Smart Battery Details: %s", coordinator.data.get(
-        "smart_battery_details"))  # Log the smart battery details for debugging
-    _LOGGER.debug("Smart Battery Sessions: %s", coordinator.data.get(
-        "smart_battery_sessions"))  # Log the smart battery sessions for debugging
+    _LOGGER.debug(
+        "Smart Batteries data: %s", coordinator.data.get("smart_batteries")
+    )  # Log the smart batteries data for debugging
+    _LOGGER.debug(
+        "Smart Battery Details: %s", coordinator.data.get("smart_battery_details")
+    )  # Log the smart battery details for debugging
+    _LOGGER.debug(
+        "Smart Battery Sessions: %s", coordinator.data.get("smart_battery_sessions")
+    )  # Log the smart battery sessions for debugging
 
     batteries_data: SmartBatteriesData | None = coordinator.data.get("smart_batteries")
     if batteries_data:
-        _LOGGER.debug("Found1 Batteries data: %s", batteries_data)  # Log the entire data object for debugging
+        _LOGGER.debug(
+            "Found1 Batteries data: %s", batteries_data
+        )  # Log the entire data object for debugging
 
     # batteries_data: SmartBatteriesData | None = coordinator.data.get("batteries")
     if not batteries_data:
-        _LOGGER.debug("No batteries data found in coordinator. Cannot set up binary sensors.")
+        _LOGGER.debug(
+            "No batteries data found in coordinator. Cannot set up binary sensors."
+        )
         return
 
     # _LOGGER.debug("Found Batteries data: %s", batteries_data)  # Log the entire data object for debugging
 
-    batteries_list = getattr(batteries_data, "batteries")  # get the list of batteries from the data object
+    batteries_list = getattr(
+        batteries_data, "batteries"
+    )  # get the list of batteries from the data object
 
     # Log the number of batteries found for debugging
     _LOGGER.debug("Number of Batteries found: %s", len(batteries_list))
-    _LOGGER.debug("Batteries list: %s", batteries_list)  # Log the list of batteries for debugging
+    _LOGGER.debug(
+        "Batteries list: %s", batteries_list
+    )  # Log the list of batteries for debugging
 
-    binary_descriptions = _build_dynamic_smart_batteries_descriptions(
-        batteries_list
-    )
+    binary_descriptions = _build_dynamic_smart_batteries_descriptions(batteries_list)
 
     entities: list[FrankEnergieBinarySensor] = [
         FrankEnergieBinarySensor(coordinator, description, config_entry)
