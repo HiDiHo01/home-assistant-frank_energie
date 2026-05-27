@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -683,20 +684,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
                     return None
 
-            _LOGGER.debug(
-                "Dynamic fetch flags: is_smart_trading=%s, is_smart_charging=%s",
-                is_smart_trading,
-                is_smart_charging,
-            )
             _LOGGER.debug("Fetching dynamic interval data concurrently")
             data_enode_chargers, data_smart_batteries, data_enode_vehicles = await asyncio.gather(
                 fetch_enode_chargers(),
                 fetch_smart_batteries(),
                 fetch_enode_vehicles(),
-            )
-            _LOGGER.debug(
-                "Dynamic fetch result: batteries=%s",
-                data_smart_batteries,
             )
 
             # Fetch details and sessions for each smart battery concurrently
@@ -718,12 +710,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             if details.smart_battery_summary:
                                 battery.summary = details.smart_battery_summary
                             _LOGGER.debug(
-                                "Merged battery data %s | settings=%s summary=%s | soc=%s last_update=%s",
+                                "Merged battery data %s | settings=%s summary=%s",
                                 battery.id,
                                 battery.settings,
                                 battery.summary,
-                                battery.summary.last_known_state_of_charge if battery.summary else None,
-                                battery.summary.last_update if battery.summary else None,
                             )
                         return details
                     except Exception as err:
@@ -1009,11 +999,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
-        """Adjust coordinator update interval around price release windows."""
+        """Adjust coordinator update interval around price release windows with jitter to prevent thundering herd."""
         if self.PRICE_RELEASE_START_UTC <= now_utc.time() <= self.PRICE_RELEASE_END_UTC:
-            new_interval = timedelta(minutes=5)
+            # 5 minutes + 5 to 45 seconds jitter
+            new_interval = timedelta(seconds=300 + random.randint(5, 45))
         else:
-            new_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
+            # 15 minutes + 10 to 80 seconds jitter
+            # Positive jitter ensures sensor clock-aligned refreshes (exactly at 15m)
+            # do not trigger the coordinator API call early, keeping users desynchronized.
+            new_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL + random.randint(10, 80))
 
         if self.update_interval != new_interval:
             _LOGGER.debug("Update interval changed to %s", new_interval)
