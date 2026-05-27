@@ -24,18 +24,23 @@ PLATFORMS: list[str] = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the Frank Energie component from a config entry."""
-    _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
+    _LOGGER.debug(
+        "Setting up Frank Energie component for entry: %s", entry.entry_id)
     _LOGGER.debug("Setting up Frank Energie entry: %s", entry)
     _LOGGER.debug("Setting up Frank Energie entry data: %s", entry.data)
     _LOGGER.debug("Setting up Frank Energie entry domain: %s", entry.domain)
-    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s", entry.unique_id)
+    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s",
+                  entry.unique_id)
     _LOGGER.debug("Setting up Frank Energie entry options: %s", entry.options)
     component = FrankEnergieComponent(hass, entry)
     return await component.setup()
 
 
 async def async_setup_platform(
-    hass: HomeAssistant, config: dict[str, Any], async_add_entities, discovery_info=None
+    hass: HomeAssistant,
+    config: dict[str, Any],
+    async_add_entities,
+    discovery_info=None
 ) -> bool:
     """Set up the Frank Energie sensor platform.
     Deprecated for new development because Home Assistant encourages the use of
@@ -43,7 +48,7 @@ async def async_setup_platform(
     """
     warnings.warn(
         "async_setup_platform is deprecated; use config entries instead.",
-        DeprecationWarning,
+        DeprecationWarning
     )
     _LOGGER.debug("Setting up Frank Energie sensor platform")
     timezone = hass.config.time_zone  # Get the configured time zone
@@ -85,11 +90,8 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # Create API and Coordinator
         _LOGGER.debug("Creating Frank Energie API instance")
         clientsession = async_get_clientsession(self.hass)
-        api = FrankEnergie(
-            clientsession=clientsession,
-            auth_token=self.entry.data.get(CONF_ACCESS_TOKEN),
-            refresh_token=self.entry.data.get(CONF_TOKEN),
-        )
+        api = FrankEnergie(clientsession=clientsession, auth_token=self.entry.data.get(
+            CONF_ACCESS_TOKEN), refresh_token=self.entry.data.get(CONF_TOKEN))
         coordinator = self._create_frank_energie_coordinator(api)
 
         # Awaiting the coroutine method call
@@ -110,54 +112,40 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
     def _update_unique_id(self) -> None:
         """Update the unique ID of the config entry."""
-        if (
-            self.entry.unique_id is None
-            or self.entry.unique_id == "frank_energie_component"
-        ):
+        if self.entry.unique_id is None or self.entry.unique_id == "frank_energie_component":
             self.hass.config_entries.async_update_entry(
-                self.entry, unique_id="frank_energie"
-            )
+                self.entry, unique_id="frank_energie")
 
-    async def _select_site_reference(
-        self, coordinator: FrankEnergieCoordinator
-    ) -> None:
+    async def _select_site_reference(self, coordinator: FrankEnergieCoordinator) -> None:
         """Ensure a site reference is selected and stored in entry data."""
         """Select the site reference for the coordinator."""
         _LOGGER.debug("Selecting site reference for coordinator")
         """In Home Assistant worden deze attributen als volgt gebruikt:
 entry.data: bevat de gegevens die tijdens de initiële configuratie zijn opgeslagen (via config_flow).
 entry.options: bevat de gegevens die via een options flow zijn aangepast/nageleverd."""
-        access_token = self.entry.options.get(CONF_ACCESS_TOKEN) or self.entry.data.get(
-            CONF_ACCESS_TOKEN
-        )
+        access_token = self.entry.options.get(CONF_ACCESS_TOKEN) or self.entry.data.get(CONF_ACCESS_TOKEN)
         if self.entry.data.get("site_reference") is None and access_token:
-            site_reference, title = await self._get_site_reference_and_title(
-                coordinator
-            )
+            site_reference, title = await self._get_site_reference_and_title(coordinator)
             if not site_reference:
                 raise NoSuitableSitesFoundError(
-                    "No suitable sites found for this account"
-                )
+                    "No suitable sites found for this account")
 
             # Controleer of de titel correct is gegenereerd
             if not isinstance(title, str):
                 _LOGGER.warning(
-                    "Failed to generate title for the site reference: %s",
-                    site_reference,
-                )
+                    "Failed to generate title for the site reference: %s", site_reference)
                 return
 
-            _LOGGER.debug("Site reference: %s, Title: %s", site_reference, title)
+            _LOGGER.debug("Site reference: %s, Title: %s",
+                          site_reference, title)
             # Update entry data and title using async_update_entry method
             self.hass.config_entries.async_update_entry(
-                self.entry,
-                data={**self.entry.data, "site_reference": site_reference},
-                title=title,
+                self.entry, data={**self.entry.data, "site_reference": site_reference}, title=title
             )
 
-    async def _get_site_reference_and_title(
-        self, coordinator: FrankEnergieCoordinator
-    ) -> tuple[str, str]:
+    async def _get_site_reference_and_title(self,
+                                            coordinator: FrankEnergieCoordinator
+                                            ) -> tuple[str, str]:
         """Fetch site reference and human-readable title."""
         _LOGGER.debug("Getting site reference and title for coordinator")
 
@@ -170,8 +158,7 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
         # Controleer of er bezorgsites zijn gevonden
         if not user_sites:
             raise NoSuitableSitesFoundError(
-                "No suitable delivery sites found for this account"
-            )
+                "No suitable delivery sites found for this account")
 
         # Selecteer de eerste bezorgsite voor nu
         selected_site = user_sites[0]
@@ -184,9 +171,8 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
         # Retourneer de referentie van de site en de titel
         return selected_site.reference, title
 
-    def _create_frank_energie_coordinator(
-        self, api: FrankEnergie
-    ) -> FrankEnergieCoordinator:
+    def _create_frank_energie_coordinator(self, api: FrankEnergie
+                                          ) -> FrankEnergieCoordinator:
         """Create the Frank Energie Coordinator instance."""
         _LOGGER.debug("Creating Frank Energie Coordinator instance")
         return FrankEnergieCoordinator(self.hass, self.entry, api)
@@ -195,17 +181,15 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
         """Forward entry setups to appropriate platforms."""
         _LOGGER.debug("Starting to forward entry setups to platforms")
         try:
-            await self.hass.config_entries.async_forward_entry_setups(
-                self.entry, PLATFORMS
-            )
+            await self.hass.config_entries.async_forward_entry_setups(self.entry, PLATFORMS)
             _LOGGER.debug("Successfully forwarded entry setups to platforms")
         except Exception as e:
             _LOGGER.error("Error forwarding entry setups to platforms: %s", str(e))
             raise
 
-    async def _save_coordinator_to_hass_data(
-        self, coordinator: FrankEnergieCoordinator
-    ) -> None:
+    async def _save_coordinator_to_hass_data(self,
+                                             coordinator: FrankEnergieCoordinator
+                                             ) -> None:
         """Save the coordinator to the Home Assistant data."""
         _LOGGER.debug("Saving coordinator to Home Assistant data")
         hass_data = self.hass.data.setdefault(DOMAIN, {})
@@ -214,9 +198,7 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
     def _remove_entry_from_hass_data(self) -> None:
         """Remove the entry from the Home Assistant data."""
         _LOGGER.debug("Removing entry from Home Assistant data")
-        self.hass.data[DOMAIN].pop(
-            self.entry.entry_id, None
-        )  # Ensure no KeyError if entry_id does not exist
+        self.hass.data[DOMAIN].pop(self.entry.entry_id, None)  # Ensure no KeyError if entry_id does not exist
 
 
 class FrankEnergieDiagnosticSensor(Entity):
@@ -256,5 +238,4 @@ class FrankEnergieDiagnosticSensor(Entity):
             _LOGGER.error("Failed to update diagnostic sensor: %s", str(err))
             self._state = "error"
             raise ValueError(
-                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}"
-            ) from err
+                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}") from err

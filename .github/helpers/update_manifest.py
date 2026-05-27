@@ -17,9 +17,9 @@ def update_manifest():
     """Update the manifest file with the current date as the version number."""
     # Get the current date in YEAR.MONTH.DAY format
     release_date = datetime.now().strftime("%Y.%m.%d")
-
+    
     version = release_date  # Set version to the release date
-
+    
     # Check if version argument is passed (optional, can still override)
     for index, value in enumerate(sys.argv):
         if value in VERSION_FLAG:
@@ -36,7 +36,7 @@ def update_manifest():
     try:
         with open(MANIFEST_PATH, "r") as manifestfile:
             manifest = json.load(manifestfile)
-
+        
         # Update the version in the manifest
         manifest["version"] = version
 
@@ -44,7 +44,7 @@ def update_manifest():
             json.dump(manifest, manifestfile, indent=4, sort_keys=True)
 
         print(f"Manifest updated with version: {version}")
-
+        
     except FileNotFoundError:
         print(f"Error: The manifest file '{MANIFEST_PATH}' does not exist.")
     except json.JSONDecodeError:
