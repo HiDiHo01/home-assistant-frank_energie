@@ -10,6 +10,7 @@ from custom_components.frank_energie.const import (
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
+from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.models import MonthSummary, Invoices, User
@@ -21,10 +22,31 @@ mock_entry_data = {
 }
 
 
-def test_no_suitable_sites_found():
-    """Test case for NoSuitableSitesFoundError."""
+@pytest.mark.asyncio
+async def test_no_suitable_sites_found():
+    """NoSuitableSitesFoundError is raised when the API returns no delivery sites.
+
+    This exercises the real code path in FrankEnergieComponent._get_site_reference_and_title
+    rather than directly raising the exception, so the test fails if the guard
+    logic is removed or the exception class changes.
+    """
+    # Stub UserSites to return a response with an empty deliverySites list
+    mock_user_sites = MagicMock()
+    mock_user_sites.deliverySites = []
+
+    mock_api = AsyncMock(spec=FrankEnergie)
+    mock_api.UserSites = AsyncMock(return_value=mock_user_sites)
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.api = mock_api
+
+    mock_entry = MagicMock()
+    mock_hass = MagicMock()
+
+    component = FrankEnergieComponent(mock_hass, mock_entry)
+
     with pytest.raises(NoSuitableSitesFoundError):
-        raise NoSuitableSitesFoundError("No suitable sites found.")
+        await component._get_site_reference_and_title(mock_coordinator)
 
 
 @pytest.fixture

@@ -1135,7 +1135,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _handle_fetch_exceptions(self, ex):
         if isinstance(ex, UpdateFailed):
             if (
-                self.data[DATA_ELECTRICITY].get_future_prices()
+                self.data[DATA_ELECTRICITY] is not None
+                and self.data[DATA_ELECTRICITY].get_future_prices()
+                and self.data[DATA_GAS] is not None
                 and self.data[DATA_GAS].get_future_prices()
             ):
                 _LOGGER.warning(str(ex))
