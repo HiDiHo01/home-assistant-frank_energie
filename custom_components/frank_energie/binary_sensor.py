@@ -136,10 +136,6 @@ def _build_dynamic_smart_batteries_descriptions(
         settings = battery.settings
         _LOGGER.debug("Processing battery %d: %s", i, battery)
         _LOGGER.debug("Battery %d settings: %s", i, settings)
-        if settings:
-            mode = settings.battery_mode
-            strategy = settings.imbalance_trading_strategy
-            self_consumption_trading_allowed = settings.self_consumption_trading_allowed
 
         binary_descriptions.append(
             FrankEnergieBinarySensorEntityDescription(
