@@ -1093,18 +1093,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[tuple[FrankEnergieEntityDescription, 
         else None
     ),
     FrankEnergieEntityDescription(
-        key="period_trading_result",
-        name="Period Trading Result",
-        icon="mdi:currency-eur",
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        state_class="measurement",
-        service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: getattr(data, "sessions")[0].cumulative_result
-        if data and getattr(data, "sessions", None)
-        else None
-    ),
-    FrankEnergieEntityDescription(
         key="all_periods_trading_result",
         name="All Periods Trading Result",
         icon="mdi:currency-eur",
@@ -4933,7 +4921,7 @@ async def async_setup_entry(
         for description in SENSOR_TYPES
         if (
             (not description.authenticated or coordinator.api.is_authenticated)
-            and (not description.is_gas or "GAS" in user_segments)
+            and (not description.is_gas or not coordinator.api.is_authenticated or "GAS" in user_segments)
             and (not description.is_feed_in or (estimated_feed_in is not None and estimated_feed_in > 0))
             and not (
                 description.service_name == SERVICE_NAME_GAS_PRICES

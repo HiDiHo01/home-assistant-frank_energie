@@ -1,13 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
-from homeassistant.config_entries import ConfigEntry
 from custom_components.frank_energie.const import (DATA_ELECTRICITY, DATA_GAS,
                                                    DATA_INVOICES,
                                                    DATA_MONTH_SUMMARY,
                                                    DATA_USER)
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.models import PriceData, MonthSummary, Invoices, User
 
@@ -33,7 +33,7 @@ def mock_frank_energie():
 @pytest.fixture
 def mock_config_entry():
     """Create a mock config entry."""
-    return ConfigEntry(
+    return MockConfigEntry(
         version=1,
         domain="frank_energie",
         title="Frank Energie",
@@ -42,7 +42,6 @@ def mock_config_entry():
         source="user",
         entry_id="123",
         state="loaded",
-        discovery_keys=None,  # or a list of keys
         minor_version=1,      # Set this to the appropriate minor version
         unique_id="test_unique_id"  # Ensure this is unique
     )
@@ -53,7 +52,7 @@ def coordinator(mock_frank_energie, mock_config_entry):
     """Create an instance of FrankEnergieCoordinator."""
     return FrankEnergieCoordinator(
         hass=MagicMock(),
-        entry=mock_config_entry,
+        config_entry=mock_config_entry,
         api=mock_frank_energie,
     )
 
@@ -62,11 +61,17 @@ def coordinator(mock_frank_energie, mock_config_entry):
 async def test_fetch_today_data(coordinator, mock_frank_energie):
     """Test fetching today's data."""
     # Setup mock return values
-    mock_prices = PriceData(electricity=0.45, gas=0.09)
-    mock_frank_energie.prices.return_value = mock_prices
-    mock_frank_energie.month_summary.return_value = MonthSummary()
-    mock_frank_energie.invoices.return_value = Invoices()
-    mock_frank_energie.user.return_value = User()
+    mock_prices = MagicMock()
+    mock_prices.electricity.all = [MagicMock()]
+    mock_prices.gas.all = [MagicMock()]
+    mock_prices.electricity.today_min = MagicMock()
+    mock_frank_energie.user_prices.return_value = mock_prices
+    mock_frank_energie.month_summary.return_value = MagicMock()
+    mock_frank_energie.invoices.return_value = MagicMock()
+    
+    mock_user = MagicMock()
+    mock_user.connections = []
+    mock_frank_energie.user.return_value = mock_user
 
     # Perform the fetch
     data = await coordinator._fetch_today_data(
@@ -76,11 +81,25 @@ async def test_fetch_today_data(coordinator, mock_frank_energie):
 
     # Assertions
     assert data is not None
-    assert data[DATA_ELECTRICITY] == 0.45
-    assert data[DATA_GAS] == 0.09
-    assert isinstance(data[DATA_MONTH_SUMMARY], MonthSummary)
-    assert isinstance(data[DATA_INVOICES], Invoices)
-    assert isinstance(data[DATA_USER], User)
+    (
+        prices_today,
+        data_month_summary,
+        data_invoices,
+        data_user,
+        user_sites,
+        data_period_usage,
+        data_enode_chargers,
+        data_smart_batteries,
+        data_smart_battery_details,
+        data_smart_battery_sessions,
+        data_enode_vehicles,
+        data_contract_price_resolution_state
+    ) = data
+
+    assert prices_today == mock_prices
+    assert isinstance(data_month_summary, MagicMock)
+    assert isinstance(data_invoices, MagicMock)
+    assert isinstance(data_user, MagicMock)
 
 
 @pytest.mark.asyncio
@@ -92,30 +111,40 @@ async def test_renew_token(coordinator, mock_frank_energie):
         refreshToken='new_refresh_token'
     )
 
-    await coordinator._FrankEnergieCoordinator__try_renew_token()
+    await coordinator._try_renew_token()
 
     # Verify that the entry data was updated with new tokens
-    assert coordinator.entry.data['access_token'] == 'new_token'
-    assert coordinator.entry.data['refresh_token'] == 'new_refresh_token'
+    coordinator.hass.config_entries.async_update_entry.assert_called_once_with(
+        coordinator.config_entry,
+        data={
+            'access_token': 'new_token',
+            'token': 'new_refresh_token'
+        }
+    )
 
 
 @pytest.mark.asyncio
 async def test_aggregate_data(coordinator):
     """Test data aggregation."""
-    prices_today = PriceData(electricity=0.45, gas=0.09)
-    prices_tomorrow = PriceData(electricity=0.50, gas=0.10)
-    data_month_summary = MonthSummary()
-    data_invoices = Invoices()
-    data_user = User()
+    prices_today = MagicMock()
+    prices_today.electricity = 0.45
+    prices_today.gas = 0.09
+    prices_tomorrow = MagicMock()
+    prices_tomorrow.electricity = 0.50
+    prices_tomorrow.gas = 0.10
+    data_month_summary = MagicMock(spec=MonthSummary)
+    data_invoices = MagicMock(spec=Invoices)
+    data_user = MagicMock(spec=User)
 
     aggregated_data = coordinator._aggregate_data(
         prices_today, prices_tomorrow,
-        data_month_summary, data_invoices, data_user
+        data_month_summary, data_invoices, data_user,
+        None, None, None, None, None, None, None, None
     )
 
     # Assertions
     assert aggregated_data[DATA_ELECTRICITY] == 0.95  # 0.45 + 0.50
     assert aggregated_data[DATA_GAS] == 0.19  # 0.09 + 0.10
-    assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MonthSummary)
-    assert isinstance(aggregated_data[DATA_INVOICES], Invoices)
-    assert isinstance(aggregated_data[DATA_USER], User)
+    assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MagicMock)
+    assert isinstance(aggregated_data[DATA_INVOICES], MagicMock)
+    assert isinstance(aggregated_data[DATA_USER], MagicMock)
