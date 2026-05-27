@@ -832,10 +832,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            state
-            if (state := data.get("chargeState", {}).get("powerDeliveryState"))
-            is not None
-            and isinstance(state, str)
+            data.get("chargeState", {}).get("powerDeliveryState")
+            if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -848,10 +846,10 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
         value_fn=lambda data: (
-            value
-            if (value := data.get("chargeSettings", {}).get("isSmartChargingEnabled"))
-            is not None
-            and isinstance(value, bool)
+            data.get("chargeSettings", {}).get("isSmartChargingEnabled")
+            if isinstance(
+                data.get("chargeSettings", {}).get("isSmartChargingEnabled"), bool
+            )
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -863,10 +861,10 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            value
-            if (value := data.get("chargeSettings", {}).get("isSolarChargingEnabled"))
-            is not None
-            and isinstance(value, bool)
+            data.get("chargeSettings", {}).get("isSolarChargingEnabled")
+            if isinstance(
+                data.get("chargeSettings", {}).get("isSolarChargingEnabled"), bool
+            )
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -877,13 +875,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         device_class=SensorDeviceClass.TIMESTAMP,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if (value := data.get("lastSeen")) is not None
-            and isinstance(value, str)
-            and value
-            else None
-        ),
+        value_fn=lambda data: _parse_iso_datetime(data.get("lastSeen")),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     EnodeVehicleEntityDescription(
@@ -893,13 +885,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         device_class=SensorDeviceClass.TIMESTAMP,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if (value := data.get("chargeSettings", {}).get("calculatedDeadline"))
-            is not None
-            and isinstance(value, str)
-            and value
-            else None
+        value_fn=lambda data: _parse_iso_datetime(
+            data.get("chargeSettings", {}).get("calculatedDeadline")
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -1023,10 +1010,14 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data, d=day: (
-            _next_weekday_datetime(WEEKDAYS.index(d), minutes // 60, minutes % 60)
-            if (minutes := data.get("chargeSettings", {}).get(f"hour{d.capitalize()}"))
-            is not None
-            and isinstance(minutes, int)
+            _next_weekday_datetime(
+                WEEKDAYS.index(d),
+                data.get("chargeSettings", {}).get(f"hour{d.capitalize()}") // 60,
+                data.get("chargeSettings", {}).get(f"hour{d.capitalize()}") % 60,
+            )
+            if isinstance(
+                data.get("chargeSettings", {}).get(f"hour{d.capitalize()}"), int
+            )
             else None
         ),
         device_class=SensorDeviceClass.TIMESTAMP,
