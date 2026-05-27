@@ -31,6 +31,7 @@ DOMAIN: Final[str] = "frank_energie"
 VERSION: Final[str] = "2026.5.10"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
+TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"
 
 # --- URLs ---
 # DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
@@ -82,6 +83,8 @@ DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 # --- Attribute Constants ---
 ATTR_FROM_TIME: Final[str] = "from_time"
 ATTR_TILL_TIME: Final[str] = "till_time"
+ATTR_LAST_UPDATE: Final[str] = "Last update"
+ATTR_START_DATE: Final[str] = "Start date"
 
 # --- Event Attribute Constants ---
 EVENT_FRANK_ENERGIE = "frank_energie_event"

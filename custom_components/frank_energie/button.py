@@ -1,5 +1,4 @@
 import logging
-from typing import TYPE_CHECKING
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -8,16 +7,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 
-if TYPE_CHECKING:
-    pass
-
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up refresh buttons for Frank Energie coordinators."""
     entry_data = hass.data[DOMAIN][entry.entry_id]
@@ -30,7 +24,7 @@ async def async_setup_entry(
             FrankEnergieRefreshButton(
                 entry_id=entry.entry_id,
                 coordinator=entry_data["coordinator"],
-                name="Refresh Frank Energie Prices"
+                name="Refresh Frank Energie Prices",
             )
         )
 
@@ -40,7 +34,7 @@ async def async_setup_entry(
             FrankEnergieRefreshButton(
                 entry_id=entry.entry_id,
                 coordinator=entry_data["battery_session_coordinator"],
-                name="Refresh Battery Sessions"
+                name="Refresh Battery Sessions",
             )
         )
 
@@ -50,7 +44,7 @@ async def async_setup_entry(
             FrankEnergieRefreshButton(
                 entry_id=entry.entry_id,
                 coordinator=entry_data["charger_coordinator"],
-                name="Refresh Chargers"
+                name="Refresh Chargers",
             )
         )
 
@@ -67,7 +61,7 @@ class FrankEnergieRefreshButton(ButtonEntity):
         self,
         entry_id: str,
         coordinator: object,  # at runtime any coordinator type
-        name: str
+        name: str,
     ) -> None:
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{name.lower().replace(' ', '_')}"

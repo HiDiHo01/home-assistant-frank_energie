@@ -83,7 +83,7 @@ class FrankEnergieBinarySensor(
         )
         self._attr_device_info = DeviceInfo(
             identifiers=device_info_identifiers,
-            name=f"{COMPONENT_TITLE} - {description.service_name}" or None,
+            name=f"{COMPONENT_TITLE} - {description.service_name}",
             translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
             manufacturer=COMPONENT_TITLE,
             model=description.service_name,
