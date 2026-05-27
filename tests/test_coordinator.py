@@ -318,3 +318,26 @@ async def test_fetch_today_data_dynamic_auth_failure(coordinator, mock_frank_ene
 
     # Verify token renewal was triggered
     coordinator._try_renew_token.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_month_summary_exception(coordinator, mock_frank_energie):
+    """Test that _fetch_month_summary handles generic/request exceptions by returning None."""
+    from python_frank_energie.exceptions import FrankEnergieException
+
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.month_summary.side_effect = FrankEnergieException("site_reference error")
+    result = await coordinator._fetch_month_summary()
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_month_summary_auth_exception(coordinator, mock_frank_energie):
+    """Test that _fetch_month_summary handles authentication exceptions by returning None."""
+    from python_frank_energie.exceptions import AuthException
+
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.month_summary.side_effect = AuthException("auth error")
+    result = await coordinator._fetch_month_summary()
+    assert result is None
+
