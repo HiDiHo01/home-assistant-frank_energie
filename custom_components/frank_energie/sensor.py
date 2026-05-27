@@ -4776,12 +4776,6 @@ def _build_dynamic_smart_batteries_descriptions(
         _LOGGER.debug("No batteries found.")
         return descriptions
 
-    total_battery_capacity: float = 0
-    total_max_charge_power: float = 0
-    total_max_discharge_power: float = 0
-    total_state_of_charge: int | float = 0
-    total_result: float = 0
-
     for i, battery in enumerate(batteries):
         if not hasattr(battery, "id"):
             _LOGGER.warning("Battery at index %s has no ID. Skipping.", i)
@@ -4803,25 +4797,6 @@ def _build_dynamic_smart_batteries_descriptions(
 
         settings = battery.settings
         summary = battery.summary
-
-        if capacity:
-            total_battery_capacity += capacity or 0
-
-        if max_charge_power:
-            total_max_charge_power += max_charge_power or 0
-
-        if max_discharge_power:
-            total_max_discharge_power += max_discharge_power or 0
-
-        # if summary and hasattr(summary, 'last_known_state_of_charge') and isinstance(summary.last_known_state_of_charge, (int, float)):
-        total_state_of_charge += summary.last_known_state_of_charge
-
-        if (
-            summary
-            and hasattr(summary, "total_result")
-            and isinstance(summary.total_result, (int, float))
-        ):
-            total_result += summary.total_result
 
         _LOGGER.debug(
             "Battery %s parsed | settings=%s summary=%s",
@@ -4878,7 +4853,7 @@ def _build_dynamic_smart_batteries_descriptions(
                     device_class=SensorDeviceClass.POWER,
                     native_unit_of_measurement=UnitOfPower.KILO_WATT,
                     suggested_display_precision=1,
-                    value_fn=lambda _, val=battery.max_discharge_power: val,
+                    value_fn=lambda _, val=max_discharge_power: val,
                 ),
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_capacity",
