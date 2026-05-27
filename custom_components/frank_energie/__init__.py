@@ -100,7 +100,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         await coordinator.async_config_entry_first_refresh()
 
         # Save the coordinator to Home Assistant data
-        await self._save_coordinator_to_hass_data(coordinator)
+        self._save_coordinator_to_hass_data(coordinator)
 
         # Forward entry setups to appropriate platforms
         _LOGGER.debug("Forwarding entry setups to platforms")
