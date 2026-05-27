@@ -305,6 +305,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 raise UpdateFailed("Authentication temporarily failed") from err
 
             except (RequestException, FrankEnergieException, ClientError) as err:
+                # FrankEnergieException can wrap AuthException ("Not authorized")
+                # Route auth errors to _try_renew_token instead of treating as network error
+                if "Not authorized" in str(err) or "Unauthorized" in str(err):
+                    _LOGGER.warning(
+                        "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err)
+                    await self._try_renew_token()
+                    raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
                 _LOGGER.warning(
                     "Temporary network error while fetching Frank Energie data: %s",
                     err,
