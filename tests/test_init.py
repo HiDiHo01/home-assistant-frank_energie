@@ -26,7 +26,7 @@ async def test_setup_entry_success(
     now = datetime.now(tz).replace(hour=10, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
 
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     aioclient_responses.add(
         start_of_day,
         [0.2] * 24,
@@ -91,7 +91,7 @@ async def test_unload_entry(
     now = datetime.now(tz).replace(hour=10, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
 
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     aioclient_responses.add(
         start_of_day,
         [0.2] * 24,

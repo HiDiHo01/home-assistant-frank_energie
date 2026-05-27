@@ -708,6 +708,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     else:
                         data_contract_price_resolution_state = None
 
+                except asyncio.CancelledError:
+                    raise
                 except Exception as err:
                     _LOGGER.error(
                         "Error fetching ContractPriceResolutionState: %s", err
@@ -750,6 +752,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     return await self.api.enode_chargers(
                         self.site_reference, start_date
                     )
+                except asyncio.CancelledError:
+                    raise
                 except Exception as err:
                     _LOGGER.debug("Failed to fetch enode chargers: %s", err)
                     return None
@@ -759,6 +763,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     return None
                 try:
                     return await self.api.smart_batteries()
+                except asyncio.CancelledError:
+                    raise
                 except Exception as err:
                     _LOGGER.debug("Failed to fetch smart batteries: %s", err)
                     return None
@@ -770,6 +776,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     vehicles = await self.api.enode_vehicles()
                     _LOGGER.debug("Fetched Enode vehicles: %s", vehicles)
                     return vehicles
+                except asyncio.CancelledError:
+                    raise
                 except Exception as err:
                     _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
                     return None
@@ -812,6 +820,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                                 battery.summary,
                             )
                         return details
+                    except asyncio.CancelledError:
+                        raise
                     except Exception as err:
                         _LOGGER.error(
                             "Failed to fetch details for battery %s: %s",
@@ -838,6 +848,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                                 battery.id,
                             )
                             return None
+                    except asyncio.CancelledError:
+                        raise
                     except Exception as err:
                         _LOGGER.error(
                             "Failed to fetch sessions for battery %s: %s",
@@ -1346,6 +1358,8 @@ class FrankEnergieBatterySessionCoordinator(
         except ConfigEntryAuthFailed as ex:
             _LOGGER.error("Authentication failed: %s", ex)
             raise ex
+        except asyncio.CancelledError:
+            raise
         except Exception as ex:
             raise UpdateFailed(
                 "Unexpected error while fetching battery session data: %s" % ex

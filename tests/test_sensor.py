@@ -67,7 +67,7 @@ async def test_sensors(
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=14, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     aioclient_responses.add(
         start_of_day,
         [0.2] * 10 + [0.25, 0.3, 0.5, 0.4] + [0.15] * 10,
@@ -194,7 +194,7 @@ async def test_sensors_get_data_of_current_hour(
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     aioclient_responses.add(
         start_of_day, [0.3] * 12 + [0.15] * 12, [1.75] * 6 + [1.23] * 18
     )
@@ -249,7 +249,7 @@ async def test_sensors_no_data_for_tomorrow(
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=20, minute=0, second=0, microsecond=0)
     freezer.move_to(now)
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # First response is for today's data, 2nd for tomorrow's data
     aioclient_responses.add(start_of_day, [0.3] * 24, [1.75] * 6 + [1.23] * 18)
@@ -283,7 +283,7 @@ async def test_sensors_hour_price_attr(
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
     now = datetime.now(tz).replace(hour=20, minute=0, second=0, microsecond=0)
     freezer.move_to(now)
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # First response is for today's data, 2nd for tomorrow's data
     aioclient_responses.add(
