@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_setup_platform(
-    hass: HomeAssistant, config: dict[str, Any], async_add_entities, discovery_info=None
+    hass: HomeAssistant, config: dict[str, Any], async_add_entities
 ) -> bool:
     """Set up the Frank Energie sensor platform.
     Deprecated for new development because Home Assistant encourages the use of
@@ -203,7 +203,7 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
             _LOGGER.exception("Error forwarding entry setups to platforms")
             raise
 
-    async def _save_coordinator_to_hass_data(
+    def _save_coordinator_to_hass_data(
         self, coordinator: FrankEnergieCoordinator
     ) -> None:
         """Save the coordinator to the Home Assistant data."""
@@ -250,10 +250,7 @@ class FrankEnergieDiagnosticSensor(Entity):
         # to fetch diagnostic data and update the sensor state accordingly
         try:
             self._state = await self._frank_energie.get_diagnostic_data()
-        except Exception as err:
+        except Exception:
             # Handle specific exceptions and raise more descriptive ones if necessary
             _LOGGER.exception("Failed to update diagnostic sensor")
             self._state = "error"
-            raise ValueError(
-                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}"
-            ) from err

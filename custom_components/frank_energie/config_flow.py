@@ -107,6 +107,21 @@ class ConfigFlow(config_entries.ConfigFlow):
             )
             return await self._handle_authentication_failure(reason="unknown_error")
 
+    def _find_sites_by_status(
+        self, all_delivery_sites: list, statuses: list[str]
+    ) -> list:
+        """Return the first non-empty set of sites matching any of the given statuses."""
+        for status in statuses:
+            sites = [site for site in all_delivery_sites if site.status == status]
+            if sites:
+                _LOGGER.info(
+                    "No IN_DELIVERY sites found, using sites with status %s: %d",
+                    status,
+                    len(sites),
+                )
+                return sites
+        return []
+
     def _get_suitable_sites(self, user_sites) -> list:
         """Filter and return the most suitable delivery sites from user_sites."""
         # Log all available sites with their statuses for debugging
@@ -128,30 +143,12 @@ class ConfigFlow(config_entries.ConfigFlow):
         ]
         _LOGGER.debug("Sites with status IN_DELIVERY: %d", len(in_delivery_sites))
 
-        # If no "IN_DELIVERY" sites found, try other possible active statuses
-        suitable_sites = in_delivery_sites
-        if not suitable_sites:
-            # Try other potentially valid statuses
-            other_valid_statuses = [
-                "ACTIVE",
-                "CONNECTED",
-                "ENABLED",
-                "OPERATIONAL",
-            ]
-            for status in other_valid_statuses:
-                sites_with_status = [
-                    site for site in all_delivery_sites if site.status == status
-                ]
-                if sites_with_status:
-                    _LOGGER.info(
-                        "No IN_DELIVERY sites found, using sites with status %s: %d",
-                        status,
-                        len(sites_with_status),
-                    )
-                    suitable_sites = sites_with_status
-                    break
+        # If no "IN_DELIVERY" sites, try other possible active statuses
+        suitable_sites = in_delivery_sites or self._find_sites_by_status(
+            all_delivery_sites, ["ACTIVE", "CONNECTED", "ENABLED", "OPERATIONAL"]
+        )
 
-        # If still no suitable sites found, use any sites that have an address (likely to be valid)
+        # If still no suitable sites found, use any sites that have an address
         if not suitable_sites:
             sites_with_address = [
                 site
@@ -165,12 +162,11 @@ class ConfigFlow(config_entries.ConfigFlow):
                 )
                 suitable_sites = sites_with_address
 
-        # Last resort: use all available sites if they have the required attributes for creating a title
+        # Last resort: use any sites that have the required attributes to create a title
         if not suitable_sites:
             sites_with_required_attrs = []
             for site in user_sites.deliverySites:
                 try:
-                    # Test if we can create a title (this will fail if required attributes are missing)
                     self.create_title(site)
                     sites_with_required_attrs.append(site)
                 except Exception as e:
@@ -178,7 +174,6 @@ class ConfigFlow(config_entries.ConfigFlow):
                         "Site cannot be used (missing required attributes): %s",
                         e,
                     )
-                    continue
 
             if sites_with_required_attrs:
                 _LOGGER.warning(
@@ -188,7 +183,6 @@ class ConfigFlow(config_entries.ConfigFlow):
                 suitable_sites = sites_with_required_attrs
 
         if not suitable_sites:
-            # Provide detailed error message
             available_statuses = [
                 getattr(site, "status", "NO_STATUS")
                 for site in user_sites.deliverySites
@@ -488,9 +482,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 "Reauthentication entry with ID %s not found, aborting reauth flow.",
                 self.context["entry_id"],
             )
-            raise ValueError(
-                "Reauthentication entry not found. Cannot continue reauthentication flow."
-            )
+            return self.async_abort(reason="reauth_entry_not_found")
         return await self.async_step_login()
 
     async def _async_create_entry(self, data: dict[str, Any]) -> ConfigFlowResult:
