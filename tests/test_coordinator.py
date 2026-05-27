@@ -140,7 +140,7 @@ async def test_renew_token(coordinator, mock_frank_energie):
     # Verify that the entry data was updated with new tokens
     coordinator.hass.config_entries.async_update_entry.assert_called_once_with(
         coordinator.config_entry,
-        data={"access_token": "new_token", "token": "new_refresh_token"},
+        data={"access_token": "new_token", "token": "new_refresh_token"},  # NOSONAR
     )
 
 
@@ -174,8 +174,8 @@ async def test_aggregate_data(coordinator):
     )
 
     # Assertions
-    assert aggregated_data[DATA_ELECTRICITY] == 0.95  # 0.45 + 0.50
-    assert aggregated_data[DATA_GAS] == 0.19  # 0.09 + 0.10
+    assert aggregated_data[DATA_ELECTRICITY] == pytest.approx(0.95)  # 0.45 + 0.50
+    assert aggregated_data[DATA_GAS] == pytest.approx(0.19)  # 0.09 + 0.10
     assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MagicMock)
     assert isinstance(aggregated_data[DATA_INVOICES], MagicMock)
     assert isinstance(aggregated_data[DATA_USER], MagicMock)

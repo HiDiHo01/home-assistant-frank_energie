@@ -60,7 +60,7 @@ async def test_setup_entry_auth_failure(
         data={
             "username": "test@example.com",
             "access_token": "expired_token",
-            "token": "expired_refresh_token",
+            "token": "expired_refresh_token",  # NOSONAR
         },
         entry_id="1234abcd",
     )
