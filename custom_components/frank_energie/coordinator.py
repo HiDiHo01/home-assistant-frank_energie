@@ -635,16 +635,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 user_sites = self._static_user_sites
                 data_period_usage = self._static_period_usage
                 data_contract_price_resolution_state = self._static_contract_price_resolution_state
-
-                # Fetch fresh user data on subsequent polls to ensure dynamic toggles (smart trading/charging)
-                # are updated, and to trigger backend device status refreshes.
-                fetched_user = await fetch_user_data()
-                if fetched_user:
-                    data_user = fetched_user
-                    self._static_user = fetched_user
-                else:
-                    _LOGGER.debug("Failed to fetch fresh user data; falling back to cached user data")
-                    data_user = self._static_user
+                data_user = self._static_user
 
             # Initialize feature flags
             is_smart_charging = False
