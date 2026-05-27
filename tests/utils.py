@@ -48,12 +48,14 @@ class ResponseMocks:
                 const.DATA_URL,
                 json={
                     "data": {
-                        "marketPricesElectricity": self._generate_prices_response(
-                            start_date, electricity_prices
-                        ),
-                        "marketPricesGas": self._generate_prices_response(
-                            start_date, gas_prices
-                        ),
+                        "marketPrices": {
+                            "electricityPrices": self._generate_prices_response(
+                                start_date, electricity_prices
+                            ),
+                            "gasPrices": self._generate_prices_response(
+                                start_date, gas_prices
+                            ),
+                        }
                     }
                 },
                 headers={"Content-Type": CONTENT_TYPE_JSON},
@@ -72,6 +74,7 @@ class ResponseMocks:
                 "marketPriceTax": 0.05 * price,
                 "sourcingMarkupPrice": 0.1 * price,
                 "energyTaxPrice": 0.15 * price,
+                "perUnit": "kwh",
             }
             for i, price in enumerate(all_in_prices)
         ]
