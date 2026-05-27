@@ -3266,6 +3266,16 @@ class FrankEnergieSensor(
     # _attr_device_class = SensorDeviceClass.MONETARY
     # _attr_state_class = SensorStateClass.MEASUREMENT
 
+    @property
+    def native_value(self) -> StateType:
+        """Return the state of the sensor."""
+        if self.coordinator.data is None:
+            return None
+        try:
+            return self.entity_description.value_fn(self.coordinator.data)
+        except (TypeError, IndexError, ValueError, AttributeError):
+            return None
+
     _no_record_keys: ClassVar[frozenset[str]] = frozenset(
         {
             "elec_all",
