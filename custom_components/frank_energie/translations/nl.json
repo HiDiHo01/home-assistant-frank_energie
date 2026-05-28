@@ -574,6 +574,37 @@
             },
             "mini_cooper_vehicle_name": {
                 "name": "Naam voertuig"
+            },
+            "pv_total_bonus": {
+                "name": "Totale bonus"
+            },
+            "pv_operational_status": {
+                "name": "Operationele status"
+            },
+            "pv_steering_status": {
+                "name": "Sturingsstatus"
+            }
+        },
+        "switch": {
+            "smart_charging": {
+                "name": "Slim laden"
+            },
+            "smart_trading": {
+                "name": "Slim handelen"
+            },
+            "smart_feed_in": {
+                "name": "Slim terugleveren"
+            },
+            "self_consumption_trading_allowed": {
+                "name": "Handelen op eigen verbruik toegestaan"
+            },
+            "pv_steering_enabled": {
+                "name": "Sturing ingeschakeld"
+            }
+        },
+        "datetime": {
+            "charging_deadline": {
+                "name": "Vertrektijd"
             }
         }
     }

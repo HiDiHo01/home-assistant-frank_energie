@@ -27,7 +27,10 @@
       },
       "site": {
         "title": "Selecteer leveringslocatie",
-        "description": "Kies de leveringslocatie die je toe wilt voegen."
+        "description": "Kies de leveringslocatie die je toe wilt voegen.",
+        "data": {
+          "site_reference": "Leveringslocatie"
+        }
       }
     },
     "error": {
@@ -39,6 +42,41 @@
     },
     "abort": {
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "pv_total_bonus": {
+        "name": "Total bonus"
+      },
+      "pv_operational_status": {
+        "name": "Operational status"
+      },
+      "pv_steering_status": {
+        "name": "Steering status"
+      }
+    },
+    "switch": {
+      "smart_charging": {
+        "name": "Smart charging"
+      },
+      "smart_trading": {
+        "name": "Smart trading"
+      },
+      "smart_feed_in": {
+        "name": "Smart feed-in"
+      },
+      "self_consumption_trading_allowed": {
+        "name": "Self consumption trading allowed"
+      },
+      "pv_steering_enabled": {
+        "name": "Steering enabled"
+      }
+    },
+    "datetime": {
+      "charging_deadline": {
+        "name": "Charging deadline"
+      }
     }
   }
 }

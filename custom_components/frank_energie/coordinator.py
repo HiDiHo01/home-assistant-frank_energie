@@ -46,6 +46,9 @@ from python_frank_energie.models import (
     SmartBatterySessions,
     User,
     UserSites,
+    SmartPvSystems,
+    SmartPvSystemSummary,
+    UserSmartFeedInStatus,
 )
 
 from .const import (
@@ -62,6 +65,9 @@ from .const import (
     DATA_USAGE,
     DATA_USER,
     DATA_USER_SITES,
+    DATA_PV_SYSTEMS,
+    DATA_PV_SUMMARY,
+    DATA_USER_SMART_FEED_IN,
     DEFAULT_REFRESH_INTERVAL,
     EVENT_FRANK_ENERGIE,
 )
@@ -118,6 +124,15 @@ class FrankEnergieData(TypedDict):
     battery_sessions: SmartBatterySessions | None
     """Optional smart battery sessions data."""
 
+    smart_pv_systems: SmartPvSystems | None
+    """Optional smart PV systems data."""
+
+    smart_pv_summary: dict[str, SmartPvSystemSummary] | None
+    """Optional smart PV system summary data."""
+
+    user_smart_feed_in: UserSmartFeedInStatus | None
+    """Optional user smart feed-in status."""
+
     contract_price_resolution_state: ContractPriceResolutionState | None
     """Optional contract price resolution state."""
 
@@ -135,6 +150,9 @@ class PricesTodayCache:
     smart_battery_details: SmartBatteryDetails
     smart_battery_sessions: SmartBatterySessions
     enode_vehicles: EnodeVehicles
+    smart_pv_systems: SmartPvSystems
+    smart_pv_summary: dict[str, SmartPvSystemSummary]
+    user_smart_feed_in: UserSmartFeedInStatus
     contract_price_resolution_state: ContractPriceResolutionState
 
 
@@ -185,6 +203,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             DATA_BATTERIES: None,
             DATA_BATTERY_DETAILS: None,
             DATA_BATTERY_SESSIONS: None,
+            DATA_ENODE_VEHICLES: None,
+            DATA_PV_SYSTEMS: None,
+            DATA_PV_SUMMARY: None,
+            DATA_USER_SMART_FEED_IN: None,
             DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
         }
         self._update_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
@@ -306,6 +328,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 data_smart_battery_details,
                 data_smart_battery_sessions,
                 data_enode_vehicles,
+                data_pv_systems,
+                data_pv_summary,
+                data_user_smart_feed_in,
                 data_contract_price_resolution_state,
             ) = await self._fetch_today_data(today, tomorrow)
             if (
@@ -355,6 +380,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             data_smart_battery_details,
             data_smart_battery_sessions,
             data_enode_vehicles,
+            data_pv_systems,
+            data_pv_summary,
+            data_user_smart_feed_in,
             data_contract_price_resolution_state,
         )
 
@@ -400,6 +428,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             data_smart_battery_details,
             data_smart_battery_sessions,
             data_enode_vehicles,
+            data_pv_systems,
+            data_pv_summary,
+            data_user_smart_feed_in,
             data_contract_price_resolution_state,
         )
 
@@ -667,7 +698,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self, is_smart_charging: bool
     ) -> EnodeVehicles | None:
         """Fetch Enode vehicles from the API."""
-        if not (self.api.is_authenticated and is_smart_charging):
+        if not self.api.is_authenticated:
             return None
         try:
             vehicles = await self.api.enode_vehicles()
@@ -679,6 +710,48 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except Exception as err:
             _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
+            return None
+
+    async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
+        """Fetch Smart PV systems from the API."""
+        if not self.api.is_authenticated:
+            return None
+        try:
+            return await self.api.smart_pv_systems()
+        except (AuthException, AuthRequiredException):
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
+            return None
+
+    async def _fetch_smart_pv_summary(self, device_id: str) -> SmartPvSystemSummary | None:
+        """Fetch Smart PV system summary from the API."""
+        if not self.api.is_authenticated:
+            return None
+        try:
+            return await self.api.smart_pv_system_summary(device_id)
+        except (AuthException, AuthRequiredException):
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _LOGGER.debug("Failed to fetch smart PV system summary for %s: %s", device_id, err)
+            return None
+
+    async def _fetch_user_smart_feed_in(self) -> UserSmartFeedInStatus | None:
+        """Fetch user smart feed-in status from the API."""
+        if not self.api.is_authenticated:
+            return None
+        try:
+            return await self.api.user_smart_feed_in()
+        except (AuthException, AuthRequiredException):
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _LOGGER.debug("Failed to fetch user smart feed-in status: %s", err)
             return None
 
     async def _fetch_battery_details(self, battery) -> SmartBatteryDetails | None:
@@ -871,10 +944,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         list[SmartBatteryDetails | None],
         list[SmartBatterySessions | None],
         EnodeVehicles | None,
+        SmartPvSystems | None,
+        dict[str, SmartPvSystemSummary] | None,
+        UserSmartFeedInStatus | None,
         ContractPriceResolutionState | None,
     ]:
         """
-        Fetches all relevant Frank Energie data for the current day, including prices, user sites, monthly summaries, invoices, usage, user info, Enode chargers, smart batteries, battery details, and battery sessions.
+        Fetches all relevant Frank Energie data for the current day, including prices, user sites, monthly summaries, invoices, usage, user info, Enode chargers, smart batteries, battery details, battery sessions, and smart PV systems.
 
         Attempts to retrieve user-specific and public data as available, handling authentication failures and falling back to cached data if necessary. Also manages token renewal on authentication errors.
 
@@ -883,7 +959,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             tomorrow (date): The next day, used for price and session range queries.
 
         Returns:
-            Tuple containing today's prices, month summary, invoices, user data, user sites, period usage, Enode chargers, smart batteries, smart battery details, and smart battery sessions.
+            Tuple containing today's data components including Smart PV systems and summaries.
         """
         yesterday = today - timedelta(days=1)
         start_date = yesterday
@@ -916,10 +992,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 data_enode_chargers,
                 data_smart_batteries,
                 data_enode_vehicles,
+                data_pv_systems,
+                data_user_smart_feed_in,
             ) = await asyncio.gather(
                 self._fetch_enode_chargers(start_date, is_smart_charging),
                 self._fetch_smart_batteries(is_smart_trading),
                 self._fetch_enode_vehicles(is_smart_charging),
+                self._fetch_smart_pv_systems(),
+                self._fetch_user_smart_feed_in(),
             )
 
             (
@@ -928,6 +1008,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             ) = await self._get_battery_details_and_sessions(
                 data_smart_batteries, start_date, tomorrow
             )
+
+            data_pv_summary = {}
+            if data_pv_systems and data_pv_systems.systems:
+                pv_tasks = [
+                    self._fetch_smart_pv_summary(system.id)
+                    for system in data_pv_systems.systems
+                    if system
+                ]
+                pv_summaries = await asyncio.gather(*pv_tasks)
+                for system, summary in zip(data_pv_systems.systems, pv_summaries):
+                    if summary:
+                        data_pv_summary[system.id] = summary
 
             # Detect and log IN_DELIVERY status for clean user experience
             if self.api.is_authenticated:
@@ -948,6 +1040,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 data_smart_battery_details,
                 data_smart_battery_sessions,
                 data_enode_vehicles,
+                data_pv_systems,
+                data_pv_summary,
+                data_user_smart_feed_in,
                 data_contract_price_resolution_state,
             )
 
@@ -1005,6 +1100,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         data_smart_battery_details,
         data_smart_battery_sessions,
         data_enode_vehicles,
+        data_pv_systems,
+        data_pv_summary,
+        data_user_smart_feed_in,
         data_contract_price_resolution_state,
     ) -> FrankEnergieData:
         """Aggregate the fetched data into a single returnable dictionary."""
@@ -1021,6 +1119,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             DATA_BATTERY_DETAILS: data_smart_battery_details,
             DATA_BATTERY_SESSIONS: data_smart_battery_sessions,
             DATA_ENODE_VEHICLES: data_enode_vehicles,
+            DATA_PV_SYSTEMS: data_pv_systems,
+            DATA_PV_SUMMARY: data_pv_summary,
+            DATA_USER_SMART_FEED_IN: data_user_smart_feed_in,
             DATA_CONTRACT_PRICE_RESOLUTION_STATE: data_contract_price_resolution_state,
             DATA_ELECTRICITY: None,
             DATA_GAS: None,
@@ -1048,20 +1149,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not data_user:
             return False
         smart_charging = data_user.smartCharging
-        return (
-            isinstance(smart_charging, dict)
-            and smart_charging.get("isActivated", False) is True
-        )
+        if isinstance(smart_charging, dict):
+            return smart_charging.get("isActivated", False) is True
+        return getattr(smart_charging, "isActivated", False) is True
 
     def _is_smart_trading_enabled(self, data_user) -> bool:
         """Check if smart trading is enabled for the user."""
         if not data_user:
             return False
         smart_trading = data_user.smartTrading
-        return (
-            isinstance(smart_trading, dict)
-            and smart_trading.get("isActivated", False) is True
-        )
+        if isinstance(smart_trading, dict):
+            return smart_trading.get("isActivated", False) is True
+        return getattr(smart_trading, "isActivated", False) is True
 
     async def _fetch_public_prices_for_range(
         self, start_date: date, end_date: date, country_code: str

@@ -63,6 +63,8 @@ from .const import (
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
+    DATA_PV_SYSTEMS,
+    DATA_PV_SUMMARY,
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
@@ -586,6 +588,90 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
         """Update stored data for the sensor."""
         self._vehicle_data = data
         self.async_write_ha_state()
+
+
+class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEntity):
+    """Representation of a Frank Energie Smart PV sensor."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        system_id: str,
+        sensor_type: str,  # "total_bonus", "operational_status", "steering_status"
+    ) -> None:
+        """Initialize the PV sensor."""
+        super().__init__(coordinator)
+        self._system_id = system_id
+        self._sensor_type = sensor_type
+
+        # Find the PV system in the coordinator data to get metadata (brand, model, name)
+        systems_obj = coordinator.data.get(DATA_PV_SYSTEMS)
+        pv_system = None
+        if systems_obj and systems_obj.systems:
+            pv_system = next((s for s in systems_obj.systems if s.id == system_id), None)
+
+        brand = pv_system.brand if (pv_system and pv_system.brand) else "Frank Energie"
+        model = pv_system.model if (pv_system and pv_system.model) else "Smart PV"
+        display_name = pv_system.display_name if (pv_system and pv_system.display_name) else f"Smart PV {system_id}"
+        serial_number = (
+            pv_system.inverter_serial_numbers[0]
+            if pv_system and pv_system.inverter_serial_numbers
+            else None
+        )
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, system_id)},
+            manufacturer=brand,
+            model=model,
+            name=display_name,
+            serial_number=serial_number,
+        )
+
+        self._attr_unique_id = f"{DOMAIN}_{system_id}_{sensor_type}"
+        self._attr_translation_key = f"pv_{sensor_type}"
+
+        if sensor_type == "total_bonus":
+            self._attr_name = "Total bonus"
+            self._attr_native_unit_of_measurement = CURRENCY_EURO
+            self._attr_device_class = SensorDeviceClass.MONETARY
+            self._attr_state_class = SensorStateClass.TOTAL
+            self._attr_icon = "mdi:currency-eur"
+            self._attr_suggested_display_precision = 2
+        elif sensor_type == "operational_status":
+            self._attr_name = "Operational status"
+            self._attr_icon = "mdi:information-outline"
+        elif sensor_type == "steering_status":
+            self._attr_name = "Steering status"
+            self._attr_icon = "mdi:solar-power"
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the state of the sensor."""
+        summary_dict = self.coordinator.data.get(DATA_PV_SUMMARY)
+        if not summary_dict:
+            return None
+        summary = summary_dict.get(self._system_id)
+        if not summary:
+            return None
+
+        if self._sensor_type == "total_bonus":
+            return summary.total_bonus
+        if self._sensor_type == "operational_status":
+            return summary.operational_status
+        if self._sensor_type == "steering_status":
+            if summary.steering_status is not None:
+                return summary.steering_status
+            systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
+            if systems_obj and systems_obj.systems:
+                pv_system = next((s for s in systems_obj.systems if s.id == self._system_id), None)
+                if pv_system:
+                    return pv_system.steering_status
+            return None
+
+        return None
 
 
 def format_user_name(data: dict) -> str | None:
@@ -5419,6 +5505,17 @@ async def async_setup_entry(
             _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
 
         entities.extend(enode_vehicle_sensors)
+
+    pv_systems = coordinator.data.get(DATA_PV_SYSTEMS)
+    if pv_systems and pv_systems.systems:
+        _LOGGER.debug("Setting up smart PV sensors for %d systems", len(pv_systems.systems))
+        for system in pv_systems.systems:
+            if system:
+                entities.extend([
+                    FrankEnergiePvSensor(coordinator, system.id, "total_bonus"),
+                    FrankEnergiePvSensor(coordinator, system.id, "operational_status"),
+                    FrankEnergiePvSensor(coordinator, system.id, "steering_status"),
+                ])
 
     try:
         async_add_entities(entities, update_before_add=True)
