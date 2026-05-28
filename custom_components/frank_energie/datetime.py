@@ -214,9 +214,15 @@ class FrankEnergieChargerDeadlineEntity(
 
         # Charger information is a plain dict (not a dataclass like vehicle)
         info = charger.information if charger else {}
-        brand = info.get("brand", "Frank Energie") if isinstance(info, dict) else "Frank Energie"
+        brand = (
+            info.get("brand", "Frank Energie")
+            if isinstance(info, dict)
+            else "Frank Energie"
+        )
         model = info.get("model", "Charger") if isinstance(info, dict) else "Charger"
-        name = f"{brand} {model}".strip() if (brand or model) else f"Charger {charger_id}"
+        name = (
+            f"{brand} {model}".strip() if (brand or model) else f"Charger {charger_id}"
+        )
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, charger_id)},

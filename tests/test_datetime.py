@@ -46,7 +46,7 @@ def test_vehicle_deadline_properties(mock_coordinator, mock_config_entry):
     mock_vehicle.information.brand = "Audi"
     mock_vehicle.information.model = "e-tron"
     mock_vehicle.charge_settings = MagicMock()
-    
+
     test_dt = datetime(2026, 5, 28, 7, 0, tzinfo=timezone.utc)
     mock_vehicle.charge_settings.calculated_deadline = test_dt
 
@@ -134,7 +134,7 @@ def test_charger_deadline_properties(mock_coordinator, mock_config_entry):
     mock_charger.id = charger_id
     mock_charger.information = {"brand": "Wallbox", "model": "Copper"}
     mock_charger.charge_settings = MagicMock()
-    
+
     test_dt = datetime(2026, 5, 28, 13, 15, tzinfo=timezone.utc)
     mock_charger.charge_settings.calculated_deadline = test_dt
 

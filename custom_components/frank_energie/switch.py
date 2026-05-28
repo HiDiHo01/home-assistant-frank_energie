@@ -92,7 +92,9 @@ class FrankEnergieEnodeSmartChargingSwitch(
             if (vehicle and vehicle.information)
             else "Vehicle"
         )
-        name = f"{brand} {model}".strip() if (brand or model) else f"Vehicle {vehicle_id}"
+        name = (
+            f"{brand} {model}".strip() if (brand or model) else f"Vehicle {vehicle_id}"
+        )
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, vehicle_id)},

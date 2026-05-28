@@ -63,15 +63,9 @@ async def async_setup_entry(
 
     # --- Disable action buttons (only when authenticated) ---
     if coordinator.api.is_authenticated:
-        entities.append(
-            FrankEnergieDisableSmartTradingButton(coordinator, entry)
-        )
-        entities.append(
-            FrankEnergieDisableSmartFeedInButton(coordinator, entry)
-        )
-        entities.append(
-            FrankEnergieDisableSmartHvacButton(coordinator, entry)
-        )
+        entities.append(FrankEnergieDisableSmartTradingButton(coordinator, entry))
+        entities.append(FrankEnergieDisableSmartFeedInButton(coordinator, entry))
+        entities.append(FrankEnergieDisableSmartHvacButton(coordinator, entry))
 
     if entities:
         async_add_entities(entities)

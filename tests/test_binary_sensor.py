@@ -135,7 +135,9 @@ def test_smart_hvac_binary_sensor(mock_coordinator, mock_config_entry):
     assert sensor.is_on is None
 
 
-def test_battery_self_consumption_trading_binary_sensor(mock_coordinator, mock_config_entry):
+def test_battery_self_consumption_trading_binary_sensor(
+    mock_coordinator, mock_config_entry
+):
     """Test battery self-consumption trading binary sensor builds and evaluates properly."""
     mock_battery = MagicMock()
     mock_battery.id = "bat_123"

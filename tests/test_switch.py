@@ -72,9 +72,7 @@ def test_enode_smart_charging_switch_properties(mock_coordinator, mock_config_en
 
 
 @pytest.mark.asyncio
-async def test_enode_smart_charging_switch_actions(
-    mock_coordinator, mock_config_entry
-):
+async def test_enode_smart_charging_switch_actions(mock_coordinator, mock_config_entry):
     """Test turn_on and turn_off actions."""
     vehicle_id = "vehicle_1"
     mock_vehicle = MagicMock()

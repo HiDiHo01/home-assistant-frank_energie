@@ -20,8 +20,6 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DOMAIN,
-    DATA_BATTERIES,
-    DATA_BATTERY_DETAILS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
     SERVICE_NAME_BATTERIES,
@@ -345,7 +343,9 @@ def _build_dynamic_smart_batteries_descriptions(
                 icon="mdi:home-battery",
                 # Each battery gets its own child device under Frank Energie - Batteries
                 child_device_id=battery.id,
-                child_device_name=f"{battery.brand} Battery" if battery.brand else f"Battery {i + 1}",
+                child_device_name=f"{battery.brand} Battery"
+                if battery.brand
+                else f"Battery {i + 1}",
                 child_device_manufacturer=battery.brand or COMPONENT_TITLE,
                 value_fn=lambda _, val=settings: (
                     bool(val.self_consumption_trading_allowed) if val else False
@@ -374,7 +374,9 @@ async def async_setup_entry(
 
     if coordinator.api.is_authenticated:
         # --- User-level smart feature state sensors ---
-        entities.append(FrankEnergieSmartChargingBinarySensor(coordinator, config_entry))
+        entities.append(
+            FrankEnergieSmartChargingBinarySensor(coordinator, config_entry)
+        )
         entities.append(FrankEnergieSmartTradingBinarySensor(coordinator, config_entry))
         entities.append(FrankEnergieSmartFeedInBinarySensor(coordinator, config_entry))
         entities.append(FrankEnergieSmartHvacBinarySensor(coordinator, config_entry))
@@ -384,7 +386,9 @@ async def async_setup_entry(
     if batteries_data:
         batteries_list = getattr(batteries_data, "batteries", [])
         _LOGGER.debug("Number of Batteries found: %s", len(batteries_list))
-        binary_descriptions = _build_dynamic_smart_batteries_descriptions(batteries_list)
+        binary_descriptions = _build_dynamic_smart_batteries_descriptions(
+            batteries_list
+        )
         entities.extend(
             FrankEnergieBinarySensor(coordinator, description, config_entry)
             for description in binary_descriptions
