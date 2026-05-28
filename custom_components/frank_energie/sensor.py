@@ -106,13 +106,18 @@ def _format_battery_date(date_val) -> datetime | None:
     Returns a datetime (not a str) so that SensorDeviceClass.TIMESTAMP sensors
     receive a value with a .tzinfo attribute as required by Home Assistant.
     """
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
     if not date_val:
         return None
     if isinstance(date_val, str):
-        return datetime.strptime(date_val, "%Y-%m-%d").replace(
-            tzinfo=ZoneInfo(TIMEZONE_AMSTERDAM)
+        return datetime.strptime(date_val, "%Y-%m-%d").replace(tzinfo=tz)
+    if isinstance(date_val, datetime):
+        return (
+            date_val.astimezone(tz)
+            if date_val.tzinfo is not None
+            else date_val.replace(tzinfo=tz)
         )
-    return date_val.replace(tzinfo=ZoneInfo(TIMEZONE_AMSTERDAM))
+    return datetime.combine(date_val, datetime.min.time(), tz)
 
 
 def _parse_site_date(date_str: str | None) -> str | None:
