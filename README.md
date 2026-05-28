@@ -219,7 +219,7 @@ apex_config:
 ```
 #### Voorbeeld 3 - Vandaag en morgen (conditional)
 
-![Apex graph voorbeeld 2](/images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
+![Apex graph voorbeeld 3](/images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
 
 ```
 type: custom:apexcharts-card
@@ -392,4 +392,150 @@ card:
         : [0];
   experimental:
     color_threshold: true
+```
+
+#### Voorbeeld 4 - Kosten per maand dit jaar
+
+![Apex graph voorbeeld 4](/images/kosten%20per%20maand%20dit%20jaar.png "Voorbeeld 4")
+
+```
+type: custom:apexcharts-card
+graph_span: 11month
+span:
+  start: year
+header:
+  show: true
+  title: Kosten per maand dit jaar
+now:
+  show: true
+  color: darkblue
+  label: Nu
+series:
+  - entity: sensor.frank_energie_kosten_kosten_dit_jaar
+    name: Kosten
+    stroke_width: 0
+    float_precision: 2
+    show:
+      header_color_threshold: false
+      extremas: true
+    type: column
+    opacity: 0.7
+    color: "#44739e"
+    color_threshold:
+      - value: 0
+        color: rgb(67,255,71)
+      - value: 10
+        color: rgb(67,220,71)
+      - value: 20
+        color: rgb(67,190,71)
+      - value: 30
+        color: rgb(67,160,71)
+      - value: 40
+        color: rgb(67,130,71)
+      - value: 50
+        color: rgb(67,100,71)
+      - value: 60
+        color: darkorange
+      - value: 80
+        color: orangered
+      - value: 100
+        color: red
+      - value: 125
+        color: darkred
+    data_generator: >
+      const Invoices = entity.attributes.Invoices;
+
+      if (typeof Invoices !== 'object' || Invoices === null) {
+        console.error('Invoices attribute is not an object:', Invoices);
+        return [0];
+      }
+
+      //console.log('Invoices:', Invoices);
+      // Transform the object into an array of objects
+
+      const invoicesArray = Object.entries(Invoices).map(([periodDescription,
+      data]) => ({
+        period_description: data['Period description'],
+        start_date: data['Start date'],
+        total_amount: data['Total amount'] || 0
+      }));
+
+      //console.log('Invoices Array:', invoicesArray);
+
+      const data = invoicesArray.map((record) => [record.start_date, 
+      record.total_amount, record.period_description]);
+
+      //console.log('Data:', data);
+
+      return data;
+experimental:
+  color_threshold: true
+```
+
+#### Voorbeeld 5 - Kosten per maand vorig jaar
+
+![Apex graph voorbeeld 5](/images/kosten%20per%20maand%20vorig%20jaar.png "Voorbeeld 5")
+
+```
+type: custom:apexcharts-card
+graph_span: 11months
+span:
+  start: year
+  offset: "-12months"
+header:
+  show: true
+  title: Kosten per maand vorig jaar
+series:
+  - entity: sensor.frank_energie_kosten_kosten_vorig_jaar
+    name: Kosten
+    stroke_width: 0
+    float_precision: 2
+    show:
+      header_color_threshold: false
+      extremas: true
+    type: column
+    opacity: 0.7
+    color: "#44739e"
+    color_threshold:
+      - value: 0
+        color: "#44739e"
+      - value: 20
+        color: green
+      - value: 40
+        color: darkgreen
+      - value: 60
+        color: darkorange
+      - value: 80
+        color: orangered
+      - value: 100
+        color: darkred
+    data_generator: >
+      const Invoices = entity.attributes.Invoices;
+
+      if (typeof Invoices !== 'object' || Invoices === null) {
+        console.error('Invoices attribute is not an object:', Invoices);
+        return [0];
+      }
+
+      //console.log('Invoices:', Invoices);
+      // Transform the object into an array of objects
+
+      const invoicesArray = Object.entries(Invoices).map(([periodDescription,
+      data]) => ({
+        period_description: data['Period description'],
+        start_date: data['Start date'],
+        total_amount: data['Total amount'] || 0
+      }));
+
+      //console.log('Invoices Array:', invoicesArray);
+
+      const data = invoicesArray.map((record) => [record.start_date, 
+      record.total_amount, record.period_description]);
+
+      //console.log('Data:', data);
+
+      return data;
+experimental:
+  color_threshold: true
+
 ```
