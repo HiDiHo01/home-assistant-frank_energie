@@ -50,6 +50,12 @@ class FrankEnergieBinarySensorEntityDescription(
 
     entity_registry_enabled_default: bool = True
 
+    # If set, creates a per-item child device instead of the shared service device.
+    # The child device will have via_device pointing to the service_name device.
+    child_device_id: str | None = None
+    child_device_name: str | None = None
+    child_device_manufacturer: str | None = None
+
 
 class FrankEnergieBinarySensor(
     CoordinatorEntity[FrankEnergieCoordinator],
@@ -91,15 +97,33 @@ class FrankEnergieBinarySensor(
             if description.service_name == "" or description.service_name is None
             else {(DOMAIN, f"{config_entry.entry_id}_{description.service_name}")}
         )
-        self._attr_device_info = DeviceInfo(
-            identifiers=device_info_identifiers,
-            name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
-            manufacturer=COMPONENT_TITLE,
-            model=description.service_name,
-            configuration_url=API_CONF_URL,
-            entry_type=DeviceEntryType.SERVICE,
-        )
+
+        if description.child_device_id:
+            # Per-item device (e.g. individual battery) as a child of the service device
+            parent_id = (
+                f"{config_entry.entry_id}_{description.service_name}"
+                if description.service_name
+                else config_entry.entry_id
+            )
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, description.child_device_id)},
+                name=description.child_device_name or description.child_device_id,
+                manufacturer=description.child_device_manufacturer or COMPONENT_TITLE,
+                model=description.service_name,
+                configuration_url=API_CONF_URL,
+                entry_type=DeviceEntryType.SERVICE,
+                via_device=(DOMAIN, parent_id),
+            )
+        else:
+            self._attr_device_info = DeviceInfo(
+                identifiers=device_info_identifiers,
+                name=f"{COMPONENT_TITLE} - {description.service_name}",
+                translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
+                manufacturer=COMPONENT_TITLE,
+                model=description.service_name,
+                configuration_url=API_CONF_URL,
+                entry_type=DeviceEntryType.SERVICE,
+            )
 
     @property
     def is_on(self) -> bool | None:
@@ -324,6 +348,10 @@ def _build_dynamic_smart_batteries_descriptions(
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:home-battery",
+                # Each battery gets its own child device under Frank Energie - Batteries
+                child_device_id=battery.id,
+                child_device_name=f"{battery.brand} Battery" if battery.brand else f"Battery {i + 1}",
+                child_device_manufacturer=battery.brand or COMPONENT_TITLE,
                 value_fn=lambda _, val=settings: (
                     bool(val.self_consumption_trading_allowed) if val else False
                 ),

@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     DATA_ENODE_VEHICLES,
+    SERVICE_NAME_ENODE_VEHICLES,
 )
 from .coordinator import FrankEnergieCoordinator
 
@@ -99,6 +100,7 @@ class FrankEnergieEnodeSmartChargingSwitch(
             manufacturer=brand,
             model=model,
             name=name,
+            via_device=(DOMAIN, f"{config_entry.entry_id}_{SERVICE_NAME_ENODE_VEHICLES}"),
         )
 
     @property

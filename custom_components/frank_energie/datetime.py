@@ -16,6 +16,8 @@ from .const import (
     DOMAIN,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
+    SERVICE_NAME_ENODE_CHARGERS,
+    SERVICE_NAME_ENODE_VEHICLES,
 )
 from .coordinator import FrankEnergieCoordinator
 
@@ -129,11 +131,17 @@ class FrankEnergieVehicleDeadlineEntity(
             manufacturer=brand,
             model=model,
             name=name,
+            via_device=(DOMAIN, f"{config_entry.entry_id}_{SERVICE_NAME_ENODE_VEHICLES}"),
         )
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the current charging deadline."""
+        """Return the next calculated charging deadline from Frank.
+
+        Uses ``calculated_deadline`` (Frank's computed next target based on the
+        per-weekday hour schedule) rather than the nullable ``deadline`` field
+        which is a one-time override and can be a stale past date.
+        """
         enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
         if not enode_vehicles or not enode_vehicles.vehicles:
             return None
@@ -142,7 +150,7 @@ class FrankEnergieVehicleDeadlineEntity(
         )
         if not vehicle or not vehicle.charge_settings:
             return None
-        return vehicle.charge_settings.deadline
+        return vehicle.charge_settings.calculated_deadline
 
     async def async_set_value(self, value: datetime) -> None:
         """Set the EV charging deadline via EnodeUpdateVehicleChargeSettings."""
@@ -218,11 +226,17 @@ class FrankEnergieChargerDeadlineEntity(
             manufacturer=brand,
             model=model,
             name=name,
+            via_device=(DOMAIN, f"{config_entry.entry_id}_{SERVICE_NAME_ENODE_CHARGERS}"),
         )
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the current charging deadline."""
+        """Return the next calculated charging deadline from Frank.
+
+        Uses ``calculated_deadline`` (Frank's computed next target based on the
+        per-weekday hour schedule) rather than the nullable ``deadline`` field
+        which is a one-time override and can be a stale past date.
+        """
         enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
         if not enode_chargers or not enode_chargers.chargers:
             return None
@@ -231,7 +245,7 @@ class FrankEnergieChargerDeadlineEntity(
         )
         if not charger or not charger.charge_settings:
             return None
-        return charger.charge_settings.deadline
+        return charger.charge_settings.calculated_deadline
 
     async def async_set_value(self, value: datetime) -> None:
         """Set the charger charging deadline via EnodeUpdateChargerChargeSettings."""
