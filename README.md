@@ -539,3 +539,31 @@ experimental:
   color_threshold: true
 
 ```
+
+#### Voorbeeld 1 - Laagste en hoogste prijs vandaag
+
+![markdown voorbeeld 5](/images/vandaag%20laagste%20hoogste.png "Voorbeeld 1")
+
+```
+type: markdown
+content: >-
+  <h1><ha-alert title="Frank Energie"></h1><h2>Vandaag is de prijs van stroom
+  per kWh
+
+  het laagst tussen
+  {{as_timestamp(state_attr('sensor.frank_energie_prijzen_laagste_elektriciteitsprijs_vandaag_all_in',
+  'from_time'))|timestamp_custom(' %H:%M')|replace(" 0", "")}} en
+  {{(as_timestamp(state_attr('sensor.frank_energie_prijzen_laagste_elektriciteitsprijs_vandaag_all_in',
+  'till_time')))|timestamp_custom(' %H:%M')|replace(" 0", "")}} (€
+  {{states('sensor.frank_energie_prijzen_laagste_elektriciteitsprijs_vandaag_all_in')|round(3)}})
+  en
+
+  het hoogst tussen
+  {{as_timestamp(state_attr('sensor.frank_energie_prijzen_hoogste_elektriciteitsprijs_vandaag_all_in',
+  'from_time'))|timestamp_custom(' %H:%M')|replace(" 0", "")}} en
+  {{(as_timestamp(state_attr('sensor.frank_energie_prijzen_hoogste_elektriciteitsprijs_vandaag_all_in',
+  'till_time')))|timestamp_custom(' %H:%M')|replace(" 0", "")}} (€
+  {{states('sensor.frank_energie_prijzen_hoogste_elektriciteitsprijs_vandaag_all_in')|round(3)}}).
+
+  </h2></ha-alert>
+```
