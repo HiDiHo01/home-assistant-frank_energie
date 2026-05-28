@@ -19,6 +19,7 @@ from .const import (
     DATA_ENODE_VEHICLES,
 )
 from .coordinator import FrankEnergieCoordinator
+from .helpers import build_charge_settings_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,29 +58,6 @@ async def async_setup_entry(
 
     if entities:
         async_add_entities(entities)
-
-
-def _build_charge_settings_input(settings) -> dict:
-    """Build the full charge settings dict required by the mutation.
-
-    All 13 fields must be present — the API does not support partial updates.
-    We read the current values from the coordinator and only override what
-    the user explicitly changed (deadline in this case).
-    """
-    return {
-        "id": settings.id,
-        "isSmartChargingEnabled": settings.is_smart_charging_enabled,
-        "isSolarChargingEnabled": settings.is_solar_charging_enabled,
-        "minChargeLimit": settings.min_charge_limit,
-        "maxChargeLimit": settings.max_charge_limit,
-        "hourMonday": settings.hour_monday,
-        "hourTuesday": settings.hour_tuesday,
-        "hourWednesday": settings.hour_wednesday,
-        "hourThursday": settings.hour_thursday,
-        "hourFriday": settings.hour_friday,
-        "hourSaturday": settings.hour_saturday,
-        "hourSunday": settings.hour_sunday,
-    }
 
 
 class FrankEnergieEnodeDeadlineEntity(
@@ -146,7 +124,7 @@ class FrankEnergieEnodeDeadlineEntity(
             )
             return
 
-        input_data = _build_charge_settings_input(device.charge_settings)
+        input_data = build_charge_settings_input(device.charge_settings)
         input_data["deadline"] = value.isoformat()
 
         _LOGGER.debug(

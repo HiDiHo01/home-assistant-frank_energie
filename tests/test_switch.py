@@ -10,7 +10,9 @@ from custom_components.frank_energie.switch import (
 )
 
 
-def test_enode_smart_charging_switch_properties(mock_coordinator, mock_config_entry):
+def test_enode_smart_charging_switch_properties(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
     """Test properties of the Enode smart charging switch."""
     vehicle_id = "vehicle_1"
 
@@ -23,12 +25,10 @@ def test_enode_smart_charging_switch_properties(mock_coordinator, mock_config_en
     assert switch.unique_id == f"{DOMAIN}_{vehicle_id}_enode_smart_charging"
 
     # Test with vehicle matching ID but without charge settings
-    mock_vehicle = MagicMock()
-    mock_vehicle.id = vehicle_id
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id, brand="Tesla", model="Model 3"
+    )
     mock_vehicle.charge_settings = None
-    mock_vehicle.information = MagicMock()
-    mock_vehicle.information.brand = "Tesla"
-    mock_vehicle.information.model = "Model 3"
 
     mock_vehicles = MagicMock()
     mock_vehicles.vehicles = [mock_vehicle]
@@ -55,28 +55,17 @@ def test_enode_smart_charging_switch_properties(mock_coordinator, mock_config_en
 
 
 @pytest.mark.asyncio
-async def test_enode_smart_charging_switch_actions(mock_coordinator, mock_config_entry):
+async def test_enode_smart_charging_switch_actions(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
     """Test turn_on and turn_off actions."""
     vehicle_id = "vehicle_1"
-    mock_vehicle = MagicMock()
-    mock_vehicle.id = vehicle_id
-    mock_vehicle.information = None
-
-    mock_settings = MagicMock()
-    mock_settings.id = "set_123"
-    mock_settings.deadline = None
-    mock_settings.is_smart_charging_enabled = False
-    mock_settings.is_solar_charging_enabled = False
-    mock_settings.min_charge_limit = 20
-    mock_settings.max_charge_limit = 80
-    mock_settings.hour_monday = 420
-    mock_settings.hour_tuesday = 420
-    mock_settings.hour_wednesday = 420
-    mock_settings.hour_thursday = 420
-    mock_settings.hour_friday = 420
-    mock_settings.hour_saturday = 420
-    mock_settings.hour_sunday = 420
-    mock_vehicle.charge_settings = mock_settings
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        brand=None,
+        model=None,
+        charge_settings_kwargs={"is_smart_charging_enabled": False},
+    )
 
     mock_vehicles = MagicMock()
     mock_vehicles.vehicles = [mock_vehicle]
@@ -102,7 +91,9 @@ async def test_enode_smart_charging_switch_actions(mock_coordinator, mock_config
     mock_coordinator.async_request_refresh.reset_mock()
 
     # Test turn off success
-    mock_settings.is_smart_charging_enabled = True  # Simulate switch state change
+    mock_vehicle.charge_settings.is_smart_charging_enabled = (
+        True  # Simulate switch state change
+    )
     await switch.async_turn_off()
     mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
     mock_coordinator.async_request_refresh.assert_called_once()

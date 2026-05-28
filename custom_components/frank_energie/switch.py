@@ -17,6 +17,7 @@ from .const import (
     DATA_ENODE_VEHICLES,
 )
 from .coordinator import FrankEnergieCoordinator
+from .helpers import build_charge_settings_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,25 +47,6 @@ async def async_setup_entry(
 
     if entities:
         async_add_entities(entities)
-
-
-def _build_charge_settings_input(settings) -> dict:
-    """Build the full charge settings dict required by the mutation."""
-    return {
-        "id": settings.id,
-        "deadline": settings.deadline.isoformat() if settings.deadline else None,
-        "isSmartChargingEnabled": settings.is_smart_charging_enabled,
-        "isSolarChargingEnabled": settings.is_solar_charging_enabled,
-        "minChargeLimit": settings.min_charge_limit,
-        "maxChargeLimit": settings.max_charge_limit,
-        "hourMonday": settings.hour_monday,
-        "hourTuesday": settings.hour_tuesday,
-        "hourWednesday": settings.hour_wednesday,
-        "hourThursday": settings.hour_thursday,
-        "hourFriday": settings.hour_friday,
-        "hourSaturday": settings.hour_saturday,
-        "hourSunday": settings.hour_sunday,
-    }
 
 
 class FrankEnergieEnodeSmartChargingSwitch(
@@ -151,7 +133,7 @@ class FrankEnergieEnodeSmartChargingSwitch(
             )
             return
 
-        input_data = _build_charge_settings_input(vehicle.charge_settings)
+        input_data = build_charge_settings_input(vehicle.charge_settings)
         input_data["isSmartChargingEnabled"] = True
 
         _LOGGER.debug("Enabling Enode smart charging for vehicle %s", self._vehicle_id)
@@ -183,7 +165,7 @@ class FrankEnergieEnodeSmartChargingSwitch(
             )
             return
 
-        input_data = _build_charge_settings_input(vehicle.charge_settings)
+        input_data = build_charge_settings_input(vehicle.charge_settings)
         input_data["isSmartChargingEnabled"] = False
 
         _LOGGER.debug("Disabling Enode smart charging for vehicle %s", self._vehicle_id)

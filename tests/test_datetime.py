@@ -12,7 +12,9 @@ from custom_components.frank_energie.datetime import (
 )
 
 
-def test_vehicle_deadline_properties(mock_coordinator, mock_config_entry):
+def test_vehicle_deadline_properties(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
     """Test properties of the vehicle deadline entity."""
     vehicle_id = "veh_123"
 
@@ -24,13 +26,10 @@ def test_vehicle_deadline_properties(mock_coordinator, mock_config_entry):
     assert entity.native_value is None
 
     # Test when vehicle exists with settings
-    mock_vehicle = MagicMock()
-    mock_vehicle.id = vehicle_id
-    mock_vehicle.information.brand = "Audi"
-    mock_vehicle.information.model = "e-tron"
-    mock_vehicle.charge_settings = MagicMock()
-
     test_dt = datetime(2026, 5, 28, 7, 0, tzinfo=timezone.utc)
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id, brand="Audi", model="e-tron"
+    )
     mock_vehicle.charge_settings.calculated_deadline = test_dt
 
     mock_vehicles = MagicMock()
@@ -46,25 +45,17 @@ def test_vehicle_deadline_properties(mock_coordinator, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_vehicle_deadline_set_value(mock_coordinator, mock_config_entry):
+async def test_vehicle_deadline_set_value(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
     """Test setting value for the vehicle deadline entity."""
     vehicle_id = "veh_123"
-    mock_vehicle = MagicMock()
-    mock_vehicle.id = vehicle_id
-    mock_vehicle.information = None
-    mock_vehicle.charge_settings = MagicMock()
-    mock_vehicle.charge_settings.id = "set_123"
-    mock_vehicle.charge_settings.is_smart_charging_enabled = True
-    mock_vehicle.charge_settings.is_solar_charging_enabled = False
-    mock_vehicle.charge_settings.min_charge_limit = 20
-    mock_vehicle.charge_settings.max_charge_limit = 80
-    mock_vehicle.charge_settings.hour_monday = 420
-    mock_vehicle.charge_settings.hour_tuesday = 420
-    mock_vehicle.charge_settings.hour_wednesday = 420
-    mock_vehicle.charge_settings.hour_thursday = 420
-    mock_vehicle.charge_settings.hour_friday = 420
-    mock_vehicle.charge_settings.hour_saturday = 420
-    mock_vehicle.charge_settings.hour_sunday = 420
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        brand=None,
+        model=None,
+        charge_settings_kwargs={"is_smart_charging_enabled": True},
+    )
 
     mock_vehicles = MagicMock()
     mock_vehicles.vehicles = [mock_vehicle]
@@ -101,7 +92,9 @@ async def test_vehicle_deadline_set_value(mock_coordinator, mock_config_entry):
     mock_coordinator.async_request_refresh.assert_called_once()
 
 
-def test_charger_deadline_properties(mock_coordinator, mock_config_entry):
+def test_charger_deadline_properties(
+    mock_coordinator, mock_config_entry, create_mock_charger
+):
     """Test properties of the charger deadline entity."""
     charger_id = "chg_123"
 
@@ -113,12 +106,10 @@ def test_charger_deadline_properties(mock_coordinator, mock_config_entry):
     assert entity.native_value is None
 
     # Test when charger exists with settings
-    mock_charger = MagicMock()
-    mock_charger.id = charger_id
-    mock_charger.information = {"brand": "Wallbox", "model": "Copper"}
-    mock_charger.charge_settings = MagicMock()
-
     test_dt = datetime(2026, 5, 28, 13, 15, tzinfo=timezone.utc)
+    mock_charger = create_mock_charger(
+        charger_id=charger_id, brand="Wallbox", model="Copper"
+    )
     mock_charger.charge_settings.calculated_deadline = test_dt
 
     mock_chargers = MagicMock()
@@ -134,25 +125,29 @@ def test_charger_deadline_properties(mock_coordinator, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_charger_deadline_set_value(mock_coordinator, mock_config_entry):
+async def test_charger_deadline_set_value(
+    mock_coordinator, mock_config_entry, create_mock_charger
+):
     """Test setting value for the charger deadline entity."""
     charger_id = "chg_123"
-    mock_charger = MagicMock()
-    mock_charger.id = charger_id
-    mock_charger.information = None
-    mock_charger.charge_settings = MagicMock()
-    mock_charger.charge_settings.id = "set_456"
-    mock_charger.charge_settings.is_smart_charging_enabled = False
-    mock_charger.charge_settings.is_solar_charging_enabled = True
-    mock_charger.charge_settings.min_charge_limit = 10
-    mock_charger.charge_settings.max_charge_limit = 90
-    mock_charger.charge_settings.hour_monday = 480
-    mock_charger.charge_settings.hour_tuesday = 480
-    mock_charger.charge_settings.hour_wednesday = 480
-    mock_charger.charge_settings.hour_thursday = 480
-    mock_charger.charge_settings.hour_friday = 480
-    mock_charger.charge_settings.hour_saturday = 480
-    mock_charger.charge_settings.hour_sunday = 480
+    mock_charger = create_mock_charger(
+        charger_id=charger_id,
+        brand=None,
+        model=None,
+        charge_settings_kwargs={
+            "id": "set_456",
+            "is_solar_charging_enabled": True,
+            "min_charge_limit": 10,
+            "max_charge_limit": 90,
+            "hour_monday": 480,
+            "hour_tuesday": 480,
+            "hour_wednesday": 480,
+            "hour_thursday": 480,
+            "hour_friday": 480,
+            "hour_saturday": 480,
+            "hour_sunday": 480,
+        },
+    )
 
     mock_chargers = MagicMock()
     mock_chargers.chargers = [mock_charger]
@@ -190,32 +185,17 @@ async def test_charger_deadline_set_value(mock_coordinator, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_vehicle_deadline_set_value_failure(mock_coordinator, mock_config_entry):
+async def test_vehicle_deadline_set_value_failure(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
     """Test vehicle deadline set_value handles API failure by not refreshing."""
-    from unittest.mock import MagicMock
-    from datetime import datetime, timezone
-    from custom_components.frank_energie.datetime import (
-        FrankEnergieVehicleDeadlineEntity,
-    )
-
     vehicle_id = "veh_123"
-    mock_vehicle = MagicMock()
-    mock_vehicle.id = vehicle_id
-    mock_vehicle.information = None
-    mock_vehicle.charge_settings = MagicMock()
-    mock_vehicle.charge_settings.id = "set_123"
-    mock_vehicle.charge_settings.deadline = None
-    mock_vehicle.charge_settings.is_smart_charging_enabled = True
-    mock_vehicle.charge_settings.is_solar_charging_enabled = False
-    mock_vehicle.charge_settings.min_charge_limit = 20
-    mock_vehicle.charge_settings.max_charge_limit = 80
-    mock_vehicle.charge_settings.hour_monday = 420
-    mock_vehicle.charge_settings.hour_tuesday = 420
-    mock_vehicle.charge_settings.hour_wednesday = 420
-    mock_vehicle.charge_settings.hour_thursday = 420
-    mock_vehicle.charge_settings.hour_friday = 420
-    mock_vehicle.charge_settings.hour_saturday = 420
-    mock_vehicle.charge_settings.hour_sunday = 420
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        brand=None,
+        model=None,
+        charge_settings_kwargs={"is_smart_charging_enabled": True},
+    )
 
     mock_vehicles = MagicMock()
     mock_vehicles.vehicles = [mock_vehicle]
@@ -235,32 +215,29 @@ async def test_vehicle_deadline_set_value_failure(mock_coordinator, mock_config_
 
 
 @pytest.mark.asyncio
-async def test_charger_deadline_set_value_failure(mock_coordinator, mock_config_entry):
+async def test_charger_deadline_set_value_failure(
+    mock_coordinator, mock_config_entry, create_mock_charger
+):
     """Test charger deadline set_value handles API failure by not refreshing."""
-    from unittest.mock import MagicMock
-    from datetime import datetime, timezone
-    from custom_components.frank_energie.datetime import (
-        FrankEnergieChargerDeadlineEntity,
-    )
-
     charger_id = "chg_123"
-    mock_charger = MagicMock()
-    mock_charger.id = charger_id
-    mock_charger.information = None
-    mock_charger.charge_settings = MagicMock()
-    mock_charger.charge_settings.id = "set_456"
-    mock_charger.charge_settings.deadline = None
-    mock_charger.charge_settings.is_smart_charging_enabled = False
-    mock_charger.charge_settings.is_solar_charging_enabled = True
-    mock_charger.charge_settings.min_charge_limit = 10
-    mock_charger.charge_settings.max_charge_limit = 90
-    mock_charger.charge_settings.hour_monday = 480
-    mock_charger.charge_settings.hour_tuesday = 480
-    mock_charger.charge_settings.hour_wednesday = 480
-    mock_charger.charge_settings.hour_thursday = 480
-    mock_charger.charge_settings.hour_friday = 480
-    mock_charger.charge_settings.hour_saturday = 480
-    mock_charger.charge_settings.hour_sunday = 480
+    mock_charger = create_mock_charger(
+        charger_id=charger_id,
+        brand=None,
+        model=None,
+        charge_settings_kwargs={
+            "id": "set_456",
+            "is_solar_charging_enabled": True,
+            "min_charge_limit": 10,
+            "max_charge_limit": 90,
+            "hour_monday": 480,
+            "hour_tuesday": 480,
+            "hour_wednesday": 480,
+            "hour_thursday": 480,
+            "hour_friday": 480,
+            "hour_saturday": 480,
+            "hour_sunday": 480,
+        },
+    )
 
     mock_chargers = MagicMock()
     mock_chargers.chargers = [mock_charger]
