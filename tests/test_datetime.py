@@ -187,3 +187,93 @@ async def test_charger_deadline_set_value(mock_coordinator, mock_config_entry):
         expected_payload
     )
     mock_coordinator.async_request_refresh.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_vehicle_deadline_set_value_failure(mock_coordinator, mock_config_entry):
+    """Test vehicle deadline set_value handles API failure by not refreshing."""
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone
+    from custom_components.frank_energie.datetime import (
+        FrankEnergieVehicleDeadlineEntity,
+    )
+
+    vehicle_id = "veh_123"
+    mock_vehicle = MagicMock()
+    mock_vehicle.id = vehicle_id
+    mock_vehicle.information = None
+    mock_vehicle.charge_settings = MagicMock()
+    mock_vehicle.charge_settings.id = "set_123"
+    mock_vehicle.charge_settings.deadline = None
+    mock_vehicle.charge_settings.is_smart_charging_enabled = True
+    mock_vehicle.charge_settings.is_solar_charging_enabled = False
+    mock_vehicle.charge_settings.min_charge_limit = 20
+    mock_vehicle.charge_settings.max_charge_limit = 80
+    mock_vehicle.charge_settings.hour_monday = 420
+    mock_vehicle.charge_settings.hour_tuesday = 420
+    mock_vehicle.charge_settings.hour_wednesday = 420
+    mock_vehicle.charge_settings.hour_thursday = 420
+    mock_vehicle.charge_settings.hour_friday = 420
+    mock_vehicle.charge_settings.hour_saturday = 420
+    mock_vehicle.charge_settings.hour_sunday = 420
+
+    mock_vehicles = MagicMock()
+    mock_vehicles.vehicles = [mock_vehicle]
+    mock_coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
+
+    entity = FrankEnergieVehicleDeadlineEntity(
+        mock_coordinator, mock_config_entry, vehicle_id
+    )
+
+    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = False
+
+    new_deadline = datetime(2026, 5, 29, 7, 0, tzinfo=timezone.utc)
+    await entity.async_set_value(new_deadline)
+
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_charger_deadline_set_value_failure(mock_coordinator, mock_config_entry):
+    """Test charger deadline set_value handles API failure by not refreshing."""
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone
+    from custom_components.frank_energie.datetime import (
+        FrankEnergieChargerDeadlineEntity,
+    )
+
+    charger_id = "chg_123"
+    mock_charger = MagicMock()
+    mock_charger.id = charger_id
+    mock_charger.information = None
+    mock_charger.charge_settings = MagicMock()
+    mock_charger.charge_settings.id = "set_456"
+    mock_charger.charge_settings.deadline = None
+    mock_charger.charge_settings.is_smart_charging_enabled = False
+    mock_charger.charge_settings.is_solar_charging_enabled = True
+    mock_charger.charge_settings.min_charge_limit = 10
+    mock_charger.charge_settings.max_charge_limit = 90
+    mock_charger.charge_settings.hour_monday = 480
+    mock_charger.charge_settings.hour_tuesday = 480
+    mock_charger.charge_settings.hour_wednesday = 480
+    mock_charger.charge_settings.hour_thursday = 480
+    mock_charger.charge_settings.hour_friday = 480
+    mock_charger.charge_settings.hour_saturday = 480
+    mock_charger.charge_settings.hour_sunday = 480
+
+    mock_chargers = MagicMock()
+    mock_chargers.chargers = [mock_charger]
+    mock_coordinator.data = {DATA_ENODE_CHARGERS: mock_chargers}
+
+    entity = FrankEnergieChargerDeadlineEntity(
+        mock_coordinator, mock_config_entry, charger_id
+    )
+
+    mock_coordinator.api.enode_update_charger_charge_settings.return_value = False
+
+    new_deadline = datetime(2026, 5, 29, 7, 0, tzinfo=timezone.utc)
+    await entity.async_set_value(new_deadline)
+
+    mock_coordinator.api.enode_update_charger_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_not_called()

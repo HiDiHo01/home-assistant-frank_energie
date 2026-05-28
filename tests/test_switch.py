@@ -61,7 +61,22 @@ async def test_enode_smart_charging_switch_actions(mock_coordinator, mock_config
     mock_vehicle = MagicMock()
     mock_vehicle.id = vehicle_id
     mock_vehicle.information = None
-    mock_vehicle.charge_settings = MagicMock()
+
+    mock_settings = MagicMock()
+    mock_settings.id = "set_123"
+    mock_settings.deadline = None
+    mock_settings.is_smart_charging_enabled = False
+    mock_settings.is_solar_charging_enabled = False
+    mock_settings.min_charge_limit = 20
+    mock_settings.max_charge_limit = 80
+    mock_settings.hour_monday = 420
+    mock_settings.hour_tuesday = 420
+    mock_settings.hour_wednesday = 420
+    mock_settings.hour_thursday = 420
+    mock_settings.hour_friday = 420
+    mock_settings.hour_saturday = 420
+    mock_settings.hour_sunday = 420
+    mock_vehicle.charge_settings = mock_settings
 
     mock_vehicles = MagicMock()
     mock_vehicles.vehicles = [mock_vehicle]
@@ -72,13 +87,35 @@ async def test_enode_smart_charging_switch_actions(mock_coordinator, mock_config
     )
 
     # Test turn on success
-    mock_coordinator.api.enode_enable_smart_charging.return_value = True
+    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = True
     await switch.async_turn_on()
-    mock_coordinator.api.enode_enable_smart_charging.assert_called_once()
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
     mock_coordinator.async_request_refresh.assert_called_once()
 
+    # Verify input_data had isSmartChargingEnabled = True
+    call_arg = mock_coordinator.api.enode_update_vehicle_charge_settings.call_args[0][0]
+    assert call_arg["isSmartChargingEnabled"] is True
+    assert call_arg["id"] == "set_123"
+
+    # Reset mock
+    mock_coordinator.api.enode_update_vehicle_charge_settings.reset_mock()
+    mock_coordinator.async_request_refresh.reset_mock()
+
     # Test turn off success
-    mock_coordinator.api.enode_disable_smart_charging.return_value = True
+    mock_settings.is_smart_charging_enabled = True  # Simulate switch state change
     await switch.async_turn_off()
-    mock_coordinator.api.enode_disable_smart_charging.assert_called_once()
-    assert mock_coordinator.async_request_refresh.call_count == 2
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_called_once()
+
+    call_arg = mock_coordinator.api.enode_update_vehicle_charge_settings.call_args[0][0]
+    assert call_arg["isSmartChargingEnabled"] is False
+
+    # Reset mock
+    mock_coordinator.api.enode_update_vehicle_charge_settings.reset_mock()
+    mock_coordinator.async_request_refresh.reset_mock()
+
+    # Test turn on failure
+    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = False
+    await switch.async_turn_on()
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_not_called()

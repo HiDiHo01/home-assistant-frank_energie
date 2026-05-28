@@ -48,14 +48,32 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
+def _build_charge_settings_input(settings) -> dict:
+    """Build the full charge settings dict required by the mutation."""
+    return {
+        "id": settings.id,
+        "deadline": settings.deadline.isoformat() if settings.deadline else None,
+        "isSmartChargingEnabled": settings.is_smart_charging_enabled,
+        "isSolarChargingEnabled": settings.is_solar_charging_enabled,
+        "minChargeLimit": settings.min_charge_limit,
+        "maxChargeLimit": settings.max_charge_limit,
+        "hourMonday": settings.hour_monday,
+        "hourTuesday": settings.hour_tuesday,
+        "hourWednesday": settings.hour_wednesday,
+        "hourThursday": settings.hour_thursday,
+        "hourFriday": settings.hour_friday,
+        "hourSaturday": settings.hour_saturday,
+        "hourSunday": settings.hour_sunday,
+    }
+
+
 class FrankEnergieEnodeSmartChargingSwitch(
     CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity
 ):
     """Switch to enable/disable Enode smart charging for a vehicle.
 
-    This is the only bidirectional switch in the integration — both
-    EnodeEnableSmartCharging and EnodeDisableSmartCharging are confirmed
-    direct mutations in the Frank app API.
+    This is the only bidirectional switch in the integration — toggled
+    via the vehicle-scoped EnodeUpdateVehicleChargeSettings mutation.
     """
 
     _attr_has_entity_name = True
@@ -118,8 +136,28 @@ class FrankEnergieEnodeSmartChargingSwitch(
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable Enode smart charging."""
+        enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+        if not enode_vehicles or not enode_vehicles.vehicles:
+            _LOGGER.error("Cannot enable smart charging: no vehicle data available")
+            return
+
+        vehicle = next(
+            (v for v in enode_vehicles.vehicles if v.id == self._vehicle_id), None
+        )
+        if not vehicle or not vehicle.charge_settings:
+            _LOGGER.error(
+                "Cannot enable smart charging: vehicle %s not found or has no charge settings",
+                self._vehicle_id,
+            )
+            return
+
+        input_data = _build_charge_settings_input(vehicle.charge_settings)
+        input_data["isSmartChargingEnabled"] = True
+
         _LOGGER.debug("Enabling Enode smart charging for vehicle %s", self._vehicle_id)
-        success = await self.coordinator.api.enode_enable_smart_charging()
+        success = await self.coordinator.api.enode_update_vehicle_charge_settings(
+            input_data
+        )
         if success:
             await self.coordinator.async_request_refresh()
         else:
@@ -130,8 +168,28 @@ class FrankEnergieEnodeSmartChargingSwitch(
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable Enode smart charging."""
+        enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+        if not enode_vehicles or not enode_vehicles.vehicles:
+            _LOGGER.error("Cannot disable smart charging: no vehicle data available")
+            return
+
+        vehicle = next(
+            (v for v in enode_vehicles.vehicles if v.id == self._vehicle_id), None
+        )
+        if not vehicle or not vehicle.charge_settings:
+            _LOGGER.error(
+                "Cannot disable smart charging: vehicle %s not found or has no charge settings",
+                self._vehicle_id,
+            )
+            return
+
+        input_data = _build_charge_settings_input(vehicle.charge_settings)
+        input_data["isSmartChargingEnabled"] = False
+
         _LOGGER.debug("Disabling Enode smart charging for vehicle %s", self._vehicle_id)
-        success = await self.coordinator.api.enode_disable_smart_charging()
+        success = await self.coordinator.api.enode_update_vehicle_charge_settings(
+            input_data
+        )
         if success:
             await self.coordinator.async_request_refresh()
         else:
