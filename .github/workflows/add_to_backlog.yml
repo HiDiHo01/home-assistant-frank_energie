@@ -1,5 +1,9 @@
 name: Add issues to backlog project
 
+permissions:
+  contents: read
+  issues: read
+
 on:
   issues:
     types:
