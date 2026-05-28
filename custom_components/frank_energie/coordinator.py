@@ -1175,11 +1175,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
 
         brand = pv_system.brand if (pv_system and pv_system.brand) else "Frank Energie"
-        model = pv_system.model if (pv_system and pv_system.model) else "Smart PV"
+        model = pv_system.model if (pv_system and pv_system.model) else None
         display_name = (
             pv_system.display_name
             if (pv_system and pv_system.display_name)
-            else f"Smart PV {system_id}"
+            else " ".join(filter(None, [brand, model])) or "Smart PV"
         )
         serial_number = (
             pv_system.inverter_serial_numbers[0]

@@ -50,8 +50,9 @@ class FrankEnergieBinarySensorEntityDescription(
 
     entity_registry_enabled_default: bool = True
 
-    # If set, creates a per-item child device instead of the shared service device.
-    # The child device will have via_device pointing to the service_name device.
+    # If set, creates a per-item device (e.g. individual battery) instead of the
+    # shared service device.  No parent link (via_device) — omitted as it proved
+    # unreliable across HA versions.
     child_device_id: str | None = None
     child_device_name: str | None = None
     child_device_manufacturer: str | None = None
@@ -99,20 +100,14 @@ class FrankEnergieBinarySensor(
         )
 
         if description.child_device_id:
-            # Per-item device (e.g. individual battery) as a child of the service device.
-            # No entry_type here — batteries are physical hardware, not services.
-            parent_id = (
-                f"{config_entry.entry_id}_{description.service_name}"
-                if description.service_name
-                else config_entry.entry_id
-            )
+            # Per-item device (e.g. individual battery). Named from brand/model.
+            # No entry_type — batteries are physical hardware, not services.
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, description.child_device_id)},
                 name=description.child_device_name or description.child_device_id,
                 manufacturer=description.child_device_manufacturer or COMPONENT_TITLE,
                 model=description.service_name,
                 configuration_url=API_CONF_URL,
-                via_device=(DOMAIN, parent_id),
             )
         else:
             self._attr_device_info = DeviceInfo(
