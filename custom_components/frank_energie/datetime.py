@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
+    DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
 )
 from .coordinator import FrankEnergieCoordinator
@@ -33,6 +34,7 @@ async def async_setup_entry(
     entities: list[DateTimeEntity] = []
 
     if coordinator.api.is_authenticated:
+        # EV vehicle charging deadlines
         enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
         if enode_vehicles and enode_vehicles.vehicles:
             for vehicle in enode_vehicles.vehicles:
@@ -42,17 +44,51 @@ async def async_setup_entry(
                     )
                 )
 
+        # Wall charger charging deadlines
+        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+        if enode_chargers and enode_chargers.chargers:
+            for charger in enode_chargers.chargers:
+                entities.append(
+                    FrankEnergieChargerDeadlineEntity(
+                        coordinator, config_entry, charger.id
+                    )
+                )
+
     if entities:
         async_add_entities(entities)
+
+
+def _build_charge_settings_input(settings) -> dict:
+    """Build the full charge settings dict required by the mutation.
+
+    All 13 fields must be present — the API does not support partial updates.
+    We read the current values from the coordinator and only override what
+    the user explicitly changed (deadline in this case).
+    """
+    return {
+        "id": settings.id,
+        "isSmartChargingEnabled": settings.is_smart_charging_enabled,
+        "isSolarChargingEnabled": settings.is_solar_charging_enabled,
+        "minChargeLimit": settings.min_charge_limit,
+        "maxChargeLimit": settings.max_charge_limit,
+        "hourMonday": settings.hour_monday,
+        "hourTuesday": settings.hour_tuesday,
+        "hourWednesday": settings.hour_wednesday,
+        "hourThursday": settings.hour_thursday,
+        "hourFriday": settings.hour_friday,
+        "hourSaturday": settings.hour_saturday,
+        "hourSunday": settings.hour_sunday,
+    }
 
 
 class FrankEnergieVehicleDeadlineEntity(
     CoordinatorEntity[FrankEnergieCoordinator], DateTimeEntity
 ):
-    """Representation of an editable EV charging deadline/departure time."""
+    """Editable charging deadline / departure time for an Enode EV vehicle."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:clock-end"
+    _attr_translation_key = "charging_deadline"
 
     def __init__(
         self,
@@ -64,8 +100,6 @@ class FrankEnergieVehicleDeadlineEntity(
         super().__init__(coordinator)
         self._config_entry = config_entry
         self._vehicle_id = vehicle_id
-        self._attr_name = "Charging deadline"
-        self._attr_translation_key = "charging_deadline"
         self._attr_unique_id = f"{DOMAIN}_{vehicle_id}_charging_deadline"
 
         # Find vehicle to get info for device registration
@@ -99,7 +133,7 @@ class FrankEnergieVehicleDeadlineEntity(
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the current datetime setting."""
+        """Return the current charging deadline."""
         enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
         if not enode_vehicles or not enode_vehicles.vehicles:
             return None
@@ -111,8 +145,123 @@ class FrankEnergieVehicleDeadlineEntity(
         return vehicle.charge_settings.deadline
 
     async def async_set_value(self, value: datetime) -> None:
-        """Set the charging deadline datetime."""
-        _LOGGER.warning(
-            "Changing the EV charging deadline to %s is currently unverified. Captured GraphQL mutations are required.",
-            value,
+        """Set the EV charging deadline via EnodeUpdateVehicleChargeSettings."""
+        enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+        if not enode_vehicles or not enode_vehicles.vehicles:
+            _LOGGER.error("Cannot set deadline: no vehicle data available")
+            return
+
+        vehicle = next(
+            (v for v in enode_vehicles.vehicles if v.id == self._vehicle_id), None
         )
+        if not vehicle or not vehicle.charge_settings:
+            _LOGGER.error(
+                "Cannot set deadline: vehicle %s not found or has no charge settings",
+                self._vehicle_id,
+            )
+            return
+
+        input_data = _build_charge_settings_input(vehicle.charge_settings)
+        input_data["deadline"] = value.isoformat()
+
+        _LOGGER.debug(
+            "Setting charging deadline for vehicle %s to %s", self._vehicle_id, value
+        )
+        success = await self.coordinator.api.enode_update_vehicle_charge_settings(
+            input_data
+        )
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error(
+                "Failed to set charging deadline for vehicle %s", self._vehicle_id
+            )
+
+
+class FrankEnergieChargerDeadlineEntity(
+    CoordinatorEntity[FrankEnergieCoordinator], DateTimeEntity
+):
+    """Editable charging deadline / departure time for an Enode wall charger."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:clock-end"
+    _attr_translation_key = "charging_deadline"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        config_entry: ConfigEntry,
+        charger_id: str,
+    ) -> None:
+        """Initialize the datetime entity."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._charger_id = charger_id
+        self._attr_unique_id = f"{DOMAIN}_{charger_id}_charging_deadline"
+
+        # Find charger for device info
+        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+        charger = None
+        if enode_chargers and enode_chargers.chargers:
+            charger = next(
+                (c for c in enode_chargers.chargers if c.id == charger_id), None
+            )
+
+        # Charger information is a plain dict (not a dataclass like vehicle)
+        info = charger.information if charger else {}
+        brand = info.get("brand", "Frank Energie") if isinstance(info, dict) else "Frank Energie"
+        model = info.get("model", "Charger") if isinstance(info, dict) else "Charger"
+        name = f"{brand} {model}".strip() if (brand or model) else f"Charger {charger_id}"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, charger_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the current charging deadline."""
+        enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+        if not enode_chargers or not enode_chargers.chargers:
+            return None
+        charger = next(
+            (c for c in enode_chargers.chargers if c.id == self._charger_id), None
+        )
+        if not charger or not charger.charge_settings:
+            return None
+        return charger.charge_settings.deadline
+
+    async def async_set_value(self, value: datetime) -> None:
+        """Set the charger charging deadline via EnodeUpdateChargerChargeSettings."""
+        enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+        if not enode_chargers or not enode_chargers.chargers:
+            _LOGGER.error("Cannot set deadline: no charger data available")
+            return
+
+        charger = next(
+            (c for c in enode_chargers.chargers if c.id == self._charger_id), None
+        )
+        if not charger or not charger.charge_settings:
+            _LOGGER.error(
+                "Cannot set deadline: charger %s not found or has no charge settings",
+                self._charger_id,
+            )
+            return
+
+        input_data = _build_charge_settings_input(charger.charge_settings)
+        input_data["deadline"] = value.isoformat()
+
+        _LOGGER.debug(
+            "Setting charging deadline for charger %s to %s", self._charger_id, value
+        )
+        success = await self.coordinator.api.enode_update_charger_charge_settings(
+            input_data
+        )
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error(
+                "Failed to set charging deadline for charger %s", self._charger_id
+            )
