@@ -19,13 +19,14 @@ from .exceptions import NoSuitableSitesFoundError
 _LOGGER = logging.getLogger(__name__)
 
 # PLATFORMS = [Platform.SENSOR, "frank_energie_diagnostic_sensor"]
-PLATFORMS: list[str] = [
+# Sensor must be listed separately — see _async_forward_entry_setups below.
+_DEPENDENT_PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
-    Platform.SENSOR,
     Platform.BUTTON,
     Platform.SWITCH,
     Platform.DATETIME,
 ]
+PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -198,11 +199,23 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
         return FrankEnergieCoordinator(self.hass, self.entry, api)
 
     async def _async_forward_entry_setups(self) -> None:
-        """Forward entry setups to appropriate platforms."""
+        """Forward entry setups to appropriate platforms.
+
+        The sensor platform is set up first and awaited before the dependent
+        platforms (binary_sensor, button, switch, datetime) run. This ensures
+        all parent service devices (Frank Energie - Batteries, Chargers, etc.)
+        are registered in the device registry before child devices attempt to
+        link to them via via_device.
+        """
         _LOGGER.debug("Starting to forward entry setups to platforms")
         try:
+            # 1. Register all sensor (parent) devices first.
             await self.hass.config_entries.async_forward_entry_setups(
-                self.entry, PLATFORMS
+                self.entry, [Platform.SENSOR]
+            )
+            # 2. Now set up all remaining platforms concurrently.
+            await self.hass.config_entries.async_forward_entry_setups(
+                self.entry, _DEPENDENT_PLATFORMS
             )
             _LOGGER.debug("Successfully forwarded entry setups to platforms")
         except Exception:

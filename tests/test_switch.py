@@ -1,184 +1,112 @@
 import pytest
 from unittest.mock import MagicMock
-from homeassistant.config_entries import ConfigEntry
 
 from custom_components.frank_energie.const import (
-    DATA_USER,
-    DATA_USER_SMART_FEED_IN,
-    DATA_BATTERY_DETAILS,
-    DATA_PV_SYSTEMS,
-    DATA_PV_SUMMARY,
+    DOMAIN,
+    DATA_ENODE_VEHICLES,
 )
 from custom_components.frank_energie.switch import (
-    FrankEnergieSmartChargingSwitch,
-    FrankEnergieSmartTradingSwitch,
-    FrankEnergieSmartFeedInSwitch,
-    FrankEnergieBatteryTradingSwitch,
-    FrankEnergiePvSteeringSwitch,
-)
-from python_frank_energie.models import (
-    UserSmartFeedInStatus,
-    SmartBatteryDetails,
-    SmartPvSystems,
-    SmartPvSystem,
-    SmartPvSystemSummary,
+    FrankEnergieEnodeSmartChargingSwitch,
 )
 
 
-@pytest.fixture
-def mock_coordinator():
-    coordinator = MagicMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    entry = MagicMock(spec=ConfigEntry)
-    entry.entry_id = "test_entry_id"
-    return entry
-
-
-def test_smart_charging_switch(mock_coordinator, mock_config_entry):
-    """Test the smart charging switch is_on property."""
-    switch = FrankEnergieSmartChargingSwitch(mock_coordinator, mock_config_entry)
+def test_enode_smart_charging_switch_properties(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
+    """Test properties of the Enode smart charging switch."""
+    vehicle_id = "vehicle_1"
 
     # Test when data is missing
     mock_coordinator.data = {}
-    assert switch.is_on is None
-
-    # Test when active (dict payload)
-    mock_coordinator.data = {DATA_USER: MagicMock(smartCharging={"isActivated": True})}
-    assert switch.is_on is True
-
-    # Test when inactive (dict payload)
-    mock_coordinator.data = {DATA_USER: MagicMock(smartCharging={"isActivated": False})}
-    assert switch.is_on is False
-
-    # Test with object attribute
-    mock_user = MagicMock()
-    mock_user.smartCharging = MagicMock()
-    mock_user.smartCharging.isActivated = True
-    mock_coordinator.data = {DATA_USER: mock_user}
-    assert switch.is_on is True
-
-
-def test_smart_trading_switch(mock_coordinator, mock_config_entry):
-    """Test the smart trading switch is_on property."""
-    switch = FrankEnergieSmartTradingSwitch(mock_coordinator, mock_config_entry)
-
-    # Test when data is missing
-    mock_coordinator.data = {}
-    assert switch.is_on is None
-
-    # Test when active (dict payload)
-    mock_coordinator.data = {DATA_USER: MagicMock(smartTrading={"isActivated": True})}
-    assert switch.is_on is True
-
-    # Test when inactive (dict payload)
-    mock_coordinator.data = {DATA_USER: MagicMock(smartTrading={"isActivated": False})}
-    assert switch.is_on is False
-
-
-def test_smart_feed_in_switch(mock_coordinator, mock_config_entry):
-    """Test the smart feed-in switch is_on property."""
-    switch = FrankEnergieSmartFeedInSwitch(mock_coordinator, mock_config_entry)
-
-    # Test when data is missing
-    mock_coordinator.data = {}
-    assert switch.is_on is None
-
-    # Test when active (dict payload)
-    mock_coordinator.data = {DATA_USER_SMART_FEED_IN: {"isActivated": True}}
-    assert switch.is_on is True
-
-    # Test when inactive (object payload)
-    mock_feed_in = MagicMock(spec=UserSmartFeedInStatus)
-    mock_feed_in.is_activated = False
-    mock_coordinator.data = {DATA_USER_SMART_FEED_IN: mock_feed_in}
-    assert switch.is_on is False
-
-
-def test_battery_trading_switch(mock_coordinator, mock_config_entry):
-    """Test the battery self-consumption trading switch is_on property."""
-    battery_id = "test_battery_id"
-    switch = FrankEnergieBatteryTradingSwitch(
-        mock_coordinator, mock_config_entry, battery_id
+    switch = FrankEnergieEnodeSmartChargingSwitch(
+        mock_coordinator, mock_config_entry, vehicle_id
     )
-
-    # Test when details are missing
-    mock_coordinator.data = {}
     assert switch.is_on is None
+    assert switch.unique_id == f"{DOMAIN}_{vehicle_id}_enode_smart_charging"
 
-    # Test when details have our battery, with setting active
-    mock_detail = MagicMock(spec=SmartBatteryDetails)
-    mock_detail.smart_battery = MagicMock()
-    mock_detail.smart_battery.id = battery_id
-    mock_detail.smart_battery.settings = MagicMock()
-    mock_detail.smart_battery.settings.self_consumption_trading_allowed = True
-
-    mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_detail]}
-    assert switch.is_on is True
-
-    # Test when details have a different battery id
-    mock_detail.smart_battery.id = "other_battery"
-    assert switch.is_on is None
-
-
-def test_pv_steering_switch(mock_coordinator, mock_config_entry):
-    """Test the PV steering switch is_on property."""
-    system_id = "pv_sys_1"
-
-    # Mock systems_obj for constructor
-    mock_system = MagicMock(spec=SmartPvSystem)
-    mock_system.id = system_id
-    mock_system.brand = "SolarEdge"
-    mock_system.model = "SE3000"
-    mock_system.display_name = "Tuin PV"
-    mock_system.inverter_serial_numbers = ["SE123456"]
-
-    mock_systems = MagicMock(spec=SmartPvSystems)
-    mock_systems.systems = [mock_system]
-    mock_coordinator.data = {DATA_PV_SYSTEMS: mock_systems}
-
-    switch = FrankEnergiePvSteeringSwitch(
-        mock_coordinator, mock_config_entry, system_id
+    # Test with vehicle matching ID but without charge settings
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id, brand="Tesla", model="Model 3"
     )
+    mock_vehicle.charge_settings = None
 
-    # Test when summary says active
-    mock_summary = MagicMock(spec=SmartPvSystemSummary)
-    mock_summary.steering_status = "ACTIVE"
-    mock_coordinator.data = {
-        DATA_PV_SYSTEMS: mock_systems,
-        DATA_PV_SUMMARY: {system_id: mock_summary},
-    }
+    mock_vehicles = MagicMock()
+    mock_vehicles.vehicles = [mock_vehicle]
+    mock_coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
+
+    switch = FrankEnergieEnodeSmartChargingSwitch(
+        mock_coordinator, mock_config_entry, vehicle_id
+    )
+    assert switch.is_on is None
+    assert switch.device_info["identifiers"] == {(DOMAIN, vehicle_id)}
+    assert switch.device_info["manufacturer"] == "Tesla"
+    assert switch.device_info["model"] == "Model 3"
+    assert switch.device_info["name"] == "Tesla Model 3"
+
+    # Test with vehicle matching ID and with charge settings
+    mock_settings = MagicMock()
+    mock_settings.is_smart_charging_enabled = True
+    mock_vehicle.charge_settings = mock_settings
     assert switch.is_on is True
 
-    # Test when summary says stopped, but system list says active
-    mock_summary.steering_status = "STOPPED"
-    mock_system.steering_status = "ACTIVE"
-    assert switch.is_on is False
-
-    # Test fallback to systems_obj when summary has no steering_status
-    mock_summary.steering_status = None
-    mock_system.steering_status = "STEERING"
-    assert switch.is_on is True
-
-    mock_system.steering_status = "INACTIVE"
+    # Test when disabled
+    mock_settings.is_smart_charging_enabled = False
     assert switch.is_on is False
 
 
 @pytest.mark.asyncio
-async def test_switch_actions(mock_coordinator, mock_config_entry):
-    """Test that turn_on and turn_off methods run without exceptions (logging warnings)."""
-    switches = [
-        FrankEnergieSmartChargingSwitch(mock_coordinator, mock_config_entry),
-        FrankEnergieSmartTradingSwitch(mock_coordinator, mock_config_entry),
-        FrankEnergieSmartFeedInSwitch(mock_coordinator, mock_config_entry),
-        FrankEnergieBatteryTradingSwitch(mock_coordinator, mock_config_entry, "bat1"),
-        FrankEnergiePvSteeringSwitch(mock_coordinator, mock_config_entry, "pv1"),
-    ]
+async def test_enode_smart_charging_switch_actions(
+    mock_coordinator, mock_config_entry, create_mock_vehicle
+):
+    """Test turn_on and turn_off actions."""
+    vehicle_id = "vehicle_1"
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        brand=None,
+        model=None,
+        charge_settings_kwargs={"is_smart_charging_enabled": False},
+    )
 
-    for switch in switches:
-        await switch.async_turn_on()
-        await switch.async_turn_off()
+    mock_vehicles = MagicMock()
+    mock_vehicles.vehicles = [mock_vehicle]
+    mock_coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
+
+    switch = FrankEnergieEnodeSmartChargingSwitch(
+        mock_coordinator, mock_config_entry, vehicle_id
+    )
+
+    # Test turn on success
+    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = True
+    await switch.async_turn_on()
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_called_once()
+
+    # Verify input_data had isSmartChargingEnabled = True
+    call_arg = mock_coordinator.api.enode_update_vehicle_charge_settings.call_args[0][0]
+    assert call_arg["isSmartChargingEnabled"] is True
+    assert call_arg["id"] == "set_123"
+
+    # Reset mock
+    mock_coordinator.api.enode_update_vehicle_charge_settings.reset_mock()
+    mock_coordinator.async_request_refresh.reset_mock()
+
+    # Test turn off success
+    mock_vehicle.charge_settings.is_smart_charging_enabled = (
+        True  # Simulate switch state change
+    )
+    await switch.async_turn_off()
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_called_once()
+
+    call_arg = mock_coordinator.api.enode_update_vehicle_charge_settings.call_args[0][0]
+    assert call_arg["isSmartChargingEnabled"] is False
+
+    # Reset mock
+    mock_coordinator.api.enode_update_vehicle_charge_settings.reset_mock()
+    mock_coordinator.async_request_refresh.reset_mock()
+
+    # Test turn on failure
+    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = False
+    await switch.async_turn_on()
+    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_request_refresh.assert_not_called()

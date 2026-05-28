@@ -131,3 +131,124 @@ def aioclient_responses(aioclient_mock, socket_enabled):
     )
 
     return responses
+
+
+@pytest.fixture
+def mock_coordinator():
+    from unittest.mock import AsyncMock, MagicMock
+
+    coordinator = MagicMock()
+    coordinator.data = {}
+    coordinator.api = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    return coordinator
+
+
+@pytest.fixture
+def mock_config_entry():
+    from unittest.mock import MagicMock
+    from homeassistant.config_entries import ConfigEntry
+
+    entry = MagicMock(spec=ConfigEntry)
+    entry.entry_id = "test_entry_id"
+    return entry
+
+
+@pytest.fixture
+def create_mock_charge_settings():
+    """Fixture returning a function to create mock charge settings."""
+    from unittest.mock import MagicMock
+
+    def _create(
+        id="set_123",
+        deadline=None,
+        is_smart_charging_enabled=False,
+        is_solar_charging_enabled=False,
+        min_charge_limit=20,
+        max_charge_limit=80,
+        hour_monday=420,
+        hour_tuesday=420,
+        hour_wednesday=420,
+        hour_thursday=420,
+        hour_friday=420,
+        hour_saturday=420,
+        hour_sunday=420,
+    ):
+        settings = MagicMock()
+        settings.id = id
+        settings.deadline = deadline
+        settings.is_smart_charging_enabled = is_smart_charging_enabled
+        settings.is_solar_charging_enabled = is_solar_charging_enabled
+        settings.min_charge_limit = min_charge_limit
+        settings.max_charge_limit = max_charge_limit
+        settings.hour_monday = hour_monday
+        settings.hour_tuesday = hour_tuesday
+        settings.hour_wednesday = hour_wednesday
+        settings.hour_thursday = hour_thursday
+        settings.hour_friday = hour_friday
+        settings.hour_saturday = hour_saturday
+        settings.hour_sunday = hour_sunday
+        settings.calculated_deadline = None
+        return settings
+
+    return _create
+
+
+@pytest.fixture
+def create_mock_vehicle(create_mock_charge_settings):
+    """Fixture returning a function to create a mock Enode vehicle."""
+    from unittest.mock import MagicMock
+
+    def _create(
+        vehicle_id="veh_123",
+        brand="Tesla",
+        model="Model 3",
+        charge_settings_kwargs=None,
+    ):
+        vehicle = MagicMock()
+        vehicle.id = vehicle_id
+        if brand or model:
+            vehicle.information = MagicMock()
+            vehicle.information.brand = brand
+            vehicle.information.model = model
+        else:
+            vehicle.information = None
+
+        if charge_settings_kwargs is not None:
+            vehicle.charge_settings = create_mock_charge_settings(
+                **charge_settings_kwargs
+            )
+        else:
+            vehicle.charge_settings = create_mock_charge_settings()
+        return vehicle
+
+    return _create
+
+
+@pytest.fixture
+def create_mock_charger(create_mock_charge_settings):
+    """Fixture returning a function to create a mock Enode charger."""
+    from unittest.mock import MagicMock
+
+    def _create(
+        charger_id="chg_123",
+        brand="Wallbox",
+        model="Copper",
+        charge_settings_kwargs=None,
+    ):
+        charger = MagicMock()
+        charger.id = charger_id
+        if brand or model:
+            charger.information = {"brand": brand, "model": model}
+        else:
+            charger.information = None
+
+        if charge_settings_kwargs is not None:
+            charger.charge_settings = create_mock_charge_settings(
+                **charge_settings_kwargs
+            )
+        else:
+            charger.charge_settings = create_mock_charge_settings()
+        return charger
+
+    return _create

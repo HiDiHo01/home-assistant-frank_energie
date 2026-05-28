@@ -45,6 +45,31 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "smart_charging": {
+        "name": "Smart Charging"
+      },
+      "smart_trading": {
+        "name": "Smart Trading"
+      },
+      "smart_feed_in": {
+        "name": "Smart Feed-In"
+      },
+      "smart_hvac": {
+        "name": "Smart HVAC"
+      }
+    },
+    "button": {
+      "disable_smart_trading": {
+        "name": "Disable Smart Trading"
+      },
+      "disable_smart_feed_in": {
+        "name": "Disable Smart Feed-In"
+      },
+      "disable_smart_hvac": {
+        "name": "Disable Smart HVAC"
+      }
+    },
     "sensor": {
       "pv_total_bonus": {
         "name": "Total bonus"
@@ -57,20 +82,8 @@
       }
     },
     "switch": {
-      "smart_charging": {
-        "name": "Smart charging"
-      },
-      "smart_trading": {
-        "name": "Smart trading"
-      },
-      "smart_feed_in": {
-        "name": "Smart feed-in"
-      },
-      "self_consumption_trading_allowed": {
-        "name": "Self consumption trading allowed"
-      },
-      "pv_steering_enabled": {
-        "name": "Steering enabled"
+      "enode_smart_charging": {
+        "name": "Smart Charging"
       }
     },
     "datetime": {
