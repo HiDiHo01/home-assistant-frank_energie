@@ -5287,19 +5287,15 @@ async def async_setup_entry(
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
-        static_sensor_descriptions = list(STATIC_ENODE_SENSOR_TYPES)
+        sensor_descriptions = list(
+            STATIC_ENODE_SENSOR_TYPES
+        ) + _build_dynamic_enode_sensor_descriptions(enode)
 
-        for i, charger in enumerate(enode.chargers):
-            sensor_descriptions = (
-                static_sensor_descriptions
-                + _build_dynamic_enode_sensor_descriptions(enode)
-            )
-
-            for description in sensor_descriptions:
-                if not description.authenticated or coordinator.api.is_authenticated:
-                    entities.append(
-                        FrankEnergieSensor(coordinator, description, config_entry)
-                    )
+        for description in sensor_descriptions:
+            if not description.authenticated or coordinator.api.is_authenticated:
+                entities.append(
+                    FrankEnergieSensor(coordinator, description, config_entry)
+                )
     # Add Enode charger sensors if available
     #    entities.extend(
     #        FrankEnergieSensor(coordinator, description, config_entry)
@@ -5406,25 +5402,23 @@ async def async_setup_entry(
                 )
                 # entities.append(sensor)
 
-            enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
-            num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
-            _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
+    enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+    num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
+    _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
 
-            if enode_vehicles and enode_vehicles.vehicles:
-                enode_vehicle_sensors = []
+    if enode_vehicles and enode_vehicles.vehicles:
+        enode_vehicle_sensors = []
 
-                for veh_idx, vehicle in enumerate(enode_vehicles.vehicles):
-                    for description in ENODE_VEHICLE_SENSOR_TYPES:
-                        enode_vehicle_sensors.append(
-                            EnodeVehicleSensor(
-                                hass, coordinator, description, vehicle, veh_idx
-                            )
-                        )
+        for veh_idx, vehicle in enumerate(enode_vehicles.vehicles):
+            for description in ENODE_VEHICLE_SENSOR_TYPES:
+                enode_vehicle_sensors.append(
+                    EnodeVehicleSensor(hass, coordinator, description, vehicle, veh_idx)
+                )
 
-                for entity in enode_vehicle_sensors:
-                    _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
+        for entity in enode_vehicle_sensors:
+            _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
 
-                entities.extend(enode_vehicle_sensors)
+        entities.extend(enode_vehicle_sensors)
 
     try:
         async_add_entities(entities, update_before_add=True)
