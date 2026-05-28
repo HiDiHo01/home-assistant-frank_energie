@@ -1,10 +1,8 @@
 import pytest
 from unittest.mock import MagicMock
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.device_registry import DeviceInfo
 
 from custom_components.frank_energie.const import (
-    DOMAIN,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
     DATA_BATTERY_DETAILS,
@@ -19,7 +17,6 @@ from custom_components.frank_energie.switch import (
     FrankEnergiePvSteeringSwitch,
 )
 from python_frank_energie.models import (
-    User,
     UserSmartFeedInStatus,
     SmartBatteryDetails,
     SmartPvSystems,
