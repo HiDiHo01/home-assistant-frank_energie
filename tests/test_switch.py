@@ -48,15 +48,11 @@ def test_smart_charging_switch(mock_coordinator, mock_config_entry):
     assert switch.is_on is None
 
     # Test when active (dict payload)
-    mock_coordinator.data = {
-        DATA_USER: MagicMock(smartCharging={"isActivated": True})
-    }
+    mock_coordinator.data = {DATA_USER: MagicMock(smartCharging={"isActivated": True})}
     assert switch.is_on is True
 
     # Test when inactive (dict payload)
-    mock_coordinator.data = {
-        DATA_USER: MagicMock(smartCharging={"isActivated": False})
-    }
+    mock_coordinator.data = {DATA_USER: MagicMock(smartCharging={"isActivated": False})}
     assert switch.is_on is False
 
     # Test with object attribute
@@ -76,15 +72,11 @@ def test_smart_trading_switch(mock_coordinator, mock_config_entry):
     assert switch.is_on is None
 
     # Test when active (dict payload)
-    mock_coordinator.data = {
-        DATA_USER: MagicMock(smartTrading={"isActivated": True})
-    }
+    mock_coordinator.data = {DATA_USER: MagicMock(smartTrading={"isActivated": True})}
     assert switch.is_on is True
 
     # Test when inactive (dict payload)
-    mock_coordinator.data = {
-        DATA_USER: MagicMock(smartTrading={"isActivated": False})
-    }
+    mock_coordinator.data = {DATA_USER: MagicMock(smartTrading={"isActivated": False})}
     assert switch.is_on is False
 
 
@@ -97,9 +89,7 @@ def test_smart_feed_in_switch(mock_coordinator, mock_config_entry):
     assert switch.is_on is None
 
     # Test when active (dict payload)
-    mock_coordinator.data = {
-        DATA_USER_SMART_FEED_IN: {"isActivated": True}
-    }
+    mock_coordinator.data = {DATA_USER_SMART_FEED_IN: {"isActivated": True}}
     assert switch.is_on is True
 
     # Test when inactive (object payload)
@@ -112,7 +102,9 @@ def test_smart_feed_in_switch(mock_coordinator, mock_config_entry):
 def test_battery_trading_switch(mock_coordinator, mock_config_entry):
     """Test the battery self-consumption trading switch is_on property."""
     battery_id = "test_battery_id"
-    switch = FrankEnergieBatteryTradingSwitch(mock_coordinator, mock_config_entry, battery_id)
+    switch = FrankEnergieBatteryTradingSwitch(
+        mock_coordinator, mock_config_entry, battery_id
+    )
 
     # Test when details are missing
     mock_coordinator.data = {}
@@ -136,7 +128,7 @@ def test_battery_trading_switch(mock_coordinator, mock_config_entry):
 def test_pv_steering_switch(mock_coordinator, mock_config_entry):
     """Test the PV steering switch is_on property."""
     system_id = "pv_sys_1"
-    
+
     # Mock systems_obj for constructor
     mock_system = MagicMock(spec=SmartPvSystem)
     mock_system.id = system_id
@@ -144,19 +136,21 @@ def test_pv_steering_switch(mock_coordinator, mock_config_entry):
     mock_system.model = "SE3000"
     mock_system.display_name = "Tuin PV"
     mock_system.inverter_serial_numbers = ["SE123456"]
-    
+
     mock_systems = MagicMock(spec=SmartPvSystems)
     mock_systems.systems = [mock_system]
     mock_coordinator.data = {DATA_PV_SYSTEMS: mock_systems}
 
-    switch = FrankEnergiePvSteeringSwitch(mock_coordinator, mock_config_entry, system_id)
+    switch = FrankEnergiePvSteeringSwitch(
+        mock_coordinator, mock_config_entry, system_id
+    )
 
     # Test when summary says active
     mock_summary = MagicMock(spec=SmartPvSystemSummary)
     mock_summary.steering_status = "ACTIVE"
     mock_coordinator.data = {
         DATA_PV_SYSTEMS: mock_systems,
-        DATA_PV_SUMMARY: {system_id: mock_summary}
+        DATA_PV_SUMMARY: {system_id: mock_summary},
     }
     assert switch.is_on is True
 

@@ -1,4 +1,5 @@
 """Datetime platform for Frank Energie integration."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -26,7 +27,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie datetime entities."""
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
+        "coordinator"
+    ]
     entities: list[DateTimeEntity] = []
 
     if coordinator.api.is_authenticated:
@@ -34,14 +37,18 @@ async def async_setup_entry(
         if enode_vehicles and enode_vehicles.vehicles:
             for vehicle in enode_vehicles.vehicles:
                 entities.append(
-                    FrankEnergieVehicleDeadlineEntity(coordinator, config_entry, vehicle.id)
+                    FrankEnergieVehicleDeadlineEntity(
+                        coordinator, config_entry, vehicle.id
+                    )
                 )
 
     if entities:
         async_add_entities(entities)
 
 
-class FrankEnergieVehicleDeadlineEntity(CoordinatorEntity[FrankEnergieCoordinator], DateTimeEntity):
+class FrankEnergieVehicleDeadlineEntity(
+    CoordinatorEntity[FrankEnergieCoordinator], DateTimeEntity
+):
     """Representation of an editable EV charging deadline/departure time."""
 
     _attr_has_entity_name = True
@@ -65,11 +72,23 @@ class FrankEnergieVehicleDeadlineEntity(CoordinatorEntity[FrankEnergieCoordinato
         enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
         vehicle = None
         if enode_vehicles and enode_vehicles.vehicles:
-            vehicle = next((v for v in enode_vehicles.vehicles if v.id == vehicle_id), None)
+            vehicle = next(
+                (v for v in enode_vehicles.vehicles if v.id == vehicle_id), None
+            )
 
-        brand = vehicle.information.brand if (vehicle and vehicle.information) else "Frank Energie"
-        model = vehicle.information.model if (vehicle and vehicle.information) else "Vehicle"
-        name = f"{brand} {model}".strip() if (brand or model) else f"Vehicle {vehicle_id}"
+        brand = (
+            vehicle.information.brand
+            if (vehicle and vehicle.information)
+            else "Frank Energie"
+        )
+        model = (
+            vehicle.information.model
+            if (vehicle and vehicle.information)
+            else "Vehicle"
+        )
+        name = (
+            f"{brand} {model}".strip() if (brand or model) else f"Vehicle {vehicle_id}"
+        )
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, vehicle_id)},
@@ -84,7 +103,9 @@ class FrankEnergieVehicleDeadlineEntity(CoordinatorEntity[FrankEnergieCoordinato
         enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
         if not enode_vehicles or not enode_vehicles.vehicles:
             return None
-        vehicle = next((v for v in enode_vehicles.vehicles if v.id == self._vehicle_id), None)
+        vehicle = next(
+            (v for v in enode_vehicles.vehicles if v.id == self._vehicle_id), None
+        )
         if not vehicle or not vehicle.charge_settings:
             return None
         return vehicle.charge_settings.deadline

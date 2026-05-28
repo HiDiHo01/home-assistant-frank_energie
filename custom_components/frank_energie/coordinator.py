@@ -11,7 +11,7 @@ import secrets
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Awaitable, Callable, Final, TypedDict
+from typing import Any, Awaitable, Callable, Final, TypedDict
 
 from aiohttp import ClientError, ClientSession  # type: ignore
 from homeassistant.config_entries import ConfigEntry
@@ -726,7 +726,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
             return None
 
-    async def _fetch_smart_pv_summary(self, device_id: str) -> SmartPvSystemSummary | None:
+    async def _fetch_smart_pv_summary(
+        self, device_id: str
+    ) -> SmartPvSystemSummary | None:
         """Fetch Smart PV system summary from the API."""
         if not self.api.is_authenticated:
             return None
@@ -737,7 +739,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except asyncio.CancelledError:
             raise
         except Exception as err:
-            _LOGGER.debug("Failed to fetch smart PV system summary for %s: %s", device_id, err)
+            _LOGGER.debug(
+                "Failed to fetch smart PV system summary for %s: %s", device_id, err
+            )
             return None
 
     async def _fetch_user_smart_feed_in(self) -> UserSmartFeedInStatus | None:
@@ -1011,13 +1015,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             data_pv_summary = {}
             if data_pv_systems and data_pv_systems.systems:
+                systems = [s for s in data_pv_systems.systems if s]
                 pv_tasks = [
-                    self._fetch_smart_pv_summary(system.id)
-                    for system in data_pv_systems.systems
-                    if system
+                    self._fetch_smart_pv_summary(system.id) for system in systems
                 ]
                 pv_summaries = await asyncio.gather(*pv_tasks)
-                for system, summary in zip(data_pv_systems.systems, pv_summaries):
+                for system, summary in zip(systems, pv_summaries):
                     if summary:
                         data_pv_summary[system.id] = summary
 
@@ -1161,6 +1164,35 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if isinstance(smart_trading, dict):
             return smart_trading.get("isActivated", False) is True
         return getattr(smart_trading, "isActivated", False) is True
+
+    def get_pv_system_metadata(self, system_id: str) -> dict[str, Any]:
+        """Get PV system metadata (brand, model, display_name, serial_number)."""
+        systems_obj = self.data.get(DATA_PV_SYSTEMS)
+        pv_system = None
+        if systems_obj and systems_obj.systems:
+            pv_system = next(
+                (s for s in systems_obj.systems if s.id == system_id), None
+            )
+
+        brand = pv_system.brand if (pv_system and pv_system.brand) else "Frank Energie"
+        model = pv_system.model if (pv_system and pv_system.model) else "Smart PV"
+        display_name = (
+            pv_system.display_name
+            if (pv_system and pv_system.display_name)
+            else f"Smart PV {system_id}"
+        )
+        serial_number = (
+            pv_system.inverter_serial_numbers[0]
+            if pv_system and pv_system.inverter_serial_numbers
+            else None
+        )
+
+        return {
+            "brand": brand,
+            "model": model,
+            "display_name": display_name,
+            "serial_number": serial_number,
+        }
 
     async def _fetch_public_prices_for_range(
         self, start_date: date, end_date: date, country_code: str

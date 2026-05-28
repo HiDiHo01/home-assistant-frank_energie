@@ -607,27 +607,15 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         self._system_id = system_id
         self._sensor_type = sensor_type
 
-        # Find the PV system in the coordinator data to get metadata (brand, model, name)
-        systems_obj = coordinator.data.get(DATA_PV_SYSTEMS)
-        pv_system = None
-        if systems_obj and systems_obj.systems:
-            pv_system = next((s for s in systems_obj.systems if s.id == system_id), None)
-
-        brand = pv_system.brand if (pv_system and pv_system.brand) else "Frank Energie"
-        model = pv_system.model if (pv_system and pv_system.model) else "Smart PV"
-        display_name = pv_system.display_name if (pv_system and pv_system.display_name) else f"Smart PV {system_id}"
-        serial_number = (
-            pv_system.inverter_serial_numbers[0]
-            if pv_system and pv_system.inverter_serial_numbers
-            else None
-        )
+        # Get PV system metadata (brand, model, name, serial_number)
+        metadata = coordinator.get_pv_system_metadata(system_id)
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, system_id)},
-            manufacturer=brand,
-            model=model,
-            name=display_name,
-            serial_number=serial_number,
+            manufacturer=metadata["brand"],
+            model=metadata["model"],
+            name=metadata["display_name"],
+            serial_number=metadata["serial_number"],
         )
 
         self._attr_unique_id = f"{DOMAIN}_{system_id}_{sensor_type}"
@@ -666,7 +654,9 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
                 return summary.steering_status
             systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
             if systems_obj and systems_obj.systems:
-                pv_system = next((s for s in systems_obj.systems if s.id == self._system_id), None)
+                pv_system = next(
+                    (s for s in systems_obj.systems if s.id == self._system_id), None
+                )
                 if pv_system:
                     return pv_system.steering_status
             return None
@@ -5508,14 +5498,20 @@ async def async_setup_entry(
 
     pv_systems = coordinator.data.get(DATA_PV_SYSTEMS)
     if pv_systems and pv_systems.systems:
-        _LOGGER.debug("Setting up smart PV sensors for %d systems", len(pv_systems.systems))
+        _LOGGER.debug(
+            "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
+        )
         for system in pv_systems.systems:
             if system:
-                entities.extend([
-                    FrankEnergiePvSensor(coordinator, system.id, "total_bonus"),
-                    FrankEnergiePvSensor(coordinator, system.id, "operational_status"),
-                    FrankEnergiePvSensor(coordinator, system.id, "steering_status"),
-                ])
+                entities.extend(
+                    [
+                        FrankEnergiePvSensor(coordinator, system.id, "total_bonus"),
+                        FrankEnergiePvSensor(
+                            coordinator, system.id, "operational_status"
+                        ),
+                        FrankEnergiePvSensor(coordinator, system.id, "steering_status"),
+                    ]
+                )
 
     try:
         async_add_entities(entities, update_before_add=True)

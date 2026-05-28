@@ -1,4 +1,5 @@
 """Switch platform for Frank Energie integration."""
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +32,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie switches."""
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
+        "coordinator"
+    ]
     entities: list[SwitchEntity] = []
 
     # If the user is authenticated, set up user-level smart charging & trading switches
@@ -45,7 +48,9 @@ async def async_setup_entry(
         if batteries and batteries.batteries:
             for battery in batteries.batteries:
                 entities.append(
-                    FrankEnergieBatteryTradingSwitch(coordinator, config_entry, battery.id)
+                    FrankEnergieBatteryTradingSwitch(
+                        coordinator, config_entry, battery.id
+                    )
                 )
 
         # Check for PV systems
@@ -60,7 +65,9 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class FrankEnergieSmartChargingSwitch(CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity):
+class FrankEnergieSmartChargingSwitch(
+    CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity
+):
     """Switch to toggle smart charging on/off."""
 
     _attr_has_entity_name = True
@@ -97,14 +104,20 @@ class FrankEnergieSmartChargingSwitch(CoordinatorEntity[FrankEnergieCoordinator]
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.warning("Turning on Smart Charging is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning on Smart Charging is currently unverified. Captured GraphQL mutations are required."
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.warning("Turning off Smart Charging is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning off Smart Charging is currently unverified. Captured GraphQL mutations are required."
+        )
 
 
-class FrankEnergieSmartTradingSwitch(CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity):
+class FrankEnergieSmartTradingSwitch(
+    CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity
+):
     """Switch to toggle smart trading on/off."""
 
     _attr_has_entity_name = True
@@ -141,14 +154,20 @@ class FrankEnergieSmartTradingSwitch(CoordinatorEntity[FrankEnergieCoordinator],
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.warning("Turning on Smart Trading is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning on Smart Trading is currently unverified. Captured GraphQL mutations are required."
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.warning("Turning off Smart Trading is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning off Smart Trading is currently unverified. Captured GraphQL mutations are required."
+        )
 
 
-class FrankEnergieSmartFeedInSwitch(CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity):
+class FrankEnergieSmartFeedInSwitch(
+    CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity
+):
     """Switch to toggle smart feed-in on/off."""
 
     _attr_has_entity_name = True
@@ -184,14 +203,20 @@ class FrankEnergieSmartFeedInSwitch(CoordinatorEntity[FrankEnergieCoordinator], 
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.warning("Turning on Smart Feed-in is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning on Smart Feed-in is currently unverified. Captured GraphQL mutations are required."
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.warning("Turning off Smart Feed-in is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning off Smart Feed-in is currently unverified. Captured GraphQL mutations are required."
+        )
 
 
-class FrankEnergieBatteryTradingSwitch(CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity):
+class FrankEnergieBatteryTradingSwitch(
+    CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity
+):
     """Switch to toggle self consumption battery trading on/off."""
 
     _attr_has_entity_name = True
@@ -224,7 +249,11 @@ class FrankEnergieBatteryTradingSwitch(CoordinatorEntity[FrankEnergieCoordinator
         if not details_list:
             return None
         for detail in details_list:
-            if detail and getattr(detail, "smart_battery", None) and getattr(detail.smart_battery, "id", None) == self._battery_id:
+            if (
+                detail
+                and getattr(detail, "smart_battery", None)
+                and getattr(detail.smart_battery, "id", None) == self._battery_id
+            ):
                 settings = getattr(detail.smart_battery, "settings", None)
                 if settings:
                     return getattr(settings, "self_consumption_trading_allowed", None)
@@ -232,14 +261,20 @@ class FrankEnergieBatteryTradingSwitch(CoordinatorEntity[FrankEnergieCoordinator
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.warning("Turning on Battery Self Consumption Trading is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning on Battery Self Consumption Trading is currently unverified. Captured GraphQL mutations are required."
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.warning("Turning off Battery Self Consumption Trading is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning off Battery Self Consumption Trading is currently unverified. Captured GraphQL mutations are required."
+        )
 
 
-class FrankEnergiePvSteeringSwitch(CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity):
+class FrankEnergiePvSteeringSwitch(
+    CoordinatorEntity[FrankEnergieCoordinator], SwitchEntity
+):
     """Switch to toggle PV export steering on/off."""
 
     _attr_has_entity_name = True
@@ -259,27 +294,15 @@ class FrankEnergiePvSteeringSwitch(CoordinatorEntity[FrankEnergieCoordinator], S
         self._attr_translation_key = "pv_steering_enabled"
         self._attr_unique_id = f"{DOMAIN}_{system_id}_steering_enabled"
 
-        # Find the PV system in the coordinator data to get metadata (brand, model, name)
-        systems_obj = coordinator.data.get(DATA_PV_SYSTEMS)
-        pv_system = None
-        if systems_obj and systems_obj.systems:
-            pv_system = next((s for s in systems_obj.systems if s.id == system_id), None)
-
-        brand = pv_system.brand if (pv_system and pv_system.brand) else "Frank Energie"
-        model = pv_system.model if (pv_system and pv_system.model) else "Smart PV"
-        display_name = pv_system.display_name if (pv_system and pv_system.display_name) else f"Smart PV {system_id}"
-        serial_number = (
-            pv_system.inverter_serial_numbers[0]
-            if pv_system and pv_system.inverter_serial_numbers
-            else None
-        )
+        # Get PV system metadata (brand, model, name, serial_number)
+        metadata = coordinator.get_pv_system_metadata(system_id)
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, system_id)},
-            manufacturer=brand,
-            model=model,
-            name=display_name,
-            serial_number=serial_number,
+            manufacturer=metadata["brand"],
+            model=metadata["model"],
+            name=metadata["display_name"],
+            serial_number=metadata["serial_number"],
         )
 
     @property
@@ -295,7 +318,9 @@ class FrankEnergiePvSteeringSwitch(CoordinatorEntity[FrankEnergieCoordinator], S
         if status is None:
             systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
             if systems_obj and systems_obj.systems:
-                pv_system = next((s for s in systems_obj.systems if s.id == self._system_id), None)
+                pv_system = next(
+                    (s for s in systems_obj.systems if s.id == self._system_id), None
+                )
                 if pv_system:
                     status = getattr(pv_system, "steering_status", None)
 
@@ -307,8 +332,12 @@ class FrankEnergiePvSteeringSwitch(CoordinatorEntity[FrankEnergieCoordinator], S
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        _LOGGER.warning("Turning on PV Steering is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning on PV Steering is currently unverified. Captured GraphQL mutations are required."
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        _LOGGER.warning("Turning off PV Steering is currently unverified. Captured GraphQL mutations are required.")
+        _LOGGER.warning(
+            "Turning off PV Steering is currently unverified. Captured GraphQL mutations are required."
+        )
