@@ -515,6 +515,7 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
             serial_number=info.get("vin", None),
             name=vehicle_name,
             hw_version=str(info.get("year")),
+            via_device=(DOMAIN, f"{coordinator.config_entry.entry_id}_{SERVICE_NAME_ENODE_VEHICLES}"),
         )
 
     @property
