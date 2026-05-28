@@ -988,7 +988,9 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
             else None
         ),
         attr_fn=lambda data: {
-            "interventions": list(data) if isinstance(data, list) else []
+            "interventions": list(data.get("interventions", []))
+            if isinstance(data.get("interventions"), list)
+            else []
         },
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -5428,6 +5430,7 @@ async def async_setup_entry(
         async_add_entities(entities, update_before_add=True)
     except Exception:
         _LOGGER.exception("Failed to add entities for entry %s", config_entry.entry_id)
+        raise
 
     _LOGGER.debug("All sensors added for entry: %s", config_entry.entry_id)
 
