@@ -1,6 +1,4 @@
-import pytest
 from unittest.mock import MagicMock
-from homeassistant.config_entries import ConfigEntry
 
 from custom_components.frank_energie.const import (
     DATA_USER,
@@ -14,20 +12,6 @@ from custom_components.frank_energie.binary_sensor import (
     _build_dynamic_smart_batteries_descriptions,
     FrankEnergieBinarySensor,
 )
-
-
-@pytest.fixture
-def mock_coordinator():
-    coordinator = MagicMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    entry = MagicMock(spec=ConfigEntry)
-    entry.entry_id = "test_entry_id"
-    return entry
 
 
 def test_smart_charging_binary_sensor(mock_coordinator, mock_config_entry):

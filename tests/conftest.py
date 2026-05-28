@@ -131,3 +131,24 @@ def aioclient_responses(aioclient_mock, socket_enabled):
     )
 
     return responses
+
+
+@pytest.fixture
+def mock_coordinator():
+    from unittest.mock import AsyncMock, MagicMock
+
+    coordinator = MagicMock()
+    coordinator.data = {}
+    coordinator.api = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    return coordinator
+
+
+@pytest.fixture
+def mock_config_entry():
+    from unittest.mock import MagicMock
+    from homeassistant.config_entries import ConfigEntry
+
+    entry = MagicMock(spec=ConfigEntry)
+    entry.entry_id = "test_entry_id"
+    return entry

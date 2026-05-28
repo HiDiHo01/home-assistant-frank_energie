@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from homeassistant.config_entries import ConfigEntry
+from unittest.mock import MagicMock
 
 from custom_components.frank_energie.const import (
     DATA_ENODE_CHARGERS,
@@ -11,22 +10,6 @@ from custom_components.frank_energie.datetime import (
     FrankEnergieVehicleDeadlineEntity,
     FrankEnergieChargerDeadlineEntity,
 )
-
-
-@pytest.fixture
-def mock_coordinator():
-    coordinator = MagicMock()
-    coordinator.data = {}
-    coordinator.api = AsyncMock()
-    coordinator.async_request_refresh = AsyncMock()
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    entry = MagicMock(spec=ConfigEntry)
-    entry.entry_id = "test_entry_id"
-    return entry
 
 
 def test_vehicle_deadline_properties(mock_coordinator, mock_config_entry):
