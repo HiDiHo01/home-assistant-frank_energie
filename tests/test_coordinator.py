@@ -309,7 +309,9 @@ async def test_fetch_today_data_dynamic_auth_failure(coordinator, mock_frank_ene
     mock_frank_energie.user.return_value = mock_user
 
     # Mock one of the dynamic calls to raise AuthRequiredException
-    mock_frank_energie.smart_batteries.side_effect = AuthRequiredException("auth_required")
+    mock_frank_energie.smart_batteries.side_effect = AuthRequiredException(
+        "auth_required"
+    )
     coordinator._try_renew_token = AsyncMock()
 
     today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
@@ -342,7 +344,6 @@ async def test_fetch_month_summary_exceptions_return_none(
     assert result is None
 
 
-
 @pytest.mark.asyncio
 async def test_fetch_month_summary_auth_exception(coordinator, mock_frank_energie):
     """Test that _fetch_month_summary handles authentication exceptions by returning None."""
@@ -352,4 +353,3 @@ async def test_fetch_month_summary_auth_exception(coordinator, mock_frank_energi
     mock_frank_energie.month_summary.side_effect = AuthException("auth error")
     result = await coordinator._fetch_month_summary()
     assert result is None
-

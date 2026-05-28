@@ -48,8 +48,11 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    TIMEZONE_AMSTERDAM,
     API_CONF_URL,
     ATTR_FROM_TIME,
+    ATTR_LAST_UPDATE,
+    ATTR_START_DATE,
     ATTR_TILL_TIME,
     ATTRIBUTION,
     COMPONENT_TITLE,
@@ -91,6 +94,44 @@ from .coordinator import (
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
+
+
+def _format_battery_date(date_val) -> datetime | None:
+    """Parse a battery session date value (str or date) into a timezone-aware datetime.
+
+    Accepts either a raw ISO date string (e.g. "2024-01-15") or a date/datetime
+    object that already has a .replace() method.  Returns None when date_val is
+    falsy so callers can use a simple ``if data`` guard.
+
+    Returns a datetime (not a str) so that SensorDeviceClass.TIMESTAMP sensors
+    receive a value with a .tzinfo attribute as required by Home Assistant.
+    """
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+    if not date_val:
+        return None
+    if isinstance(date_val, str):
+        return datetime.strptime(date_val, "%Y-%m-%d").replace(tzinfo=tz)
+    if isinstance(date_val, datetime):
+        return (
+            date_val.astimezone(tz)
+            if date_val.tzinfo is not None
+            else date_val.replace(tzinfo=tz)
+        )
+    return datetime.combine(date_val, datetime.min.time(), tz)
+
+
+def _parse_site_date(date_str: str | None) -> str | None:
+    """Parse a delivery-site date string into FORMAT_DATE, or return None.
+
+    Uses ``dt_util.parse_date`` to accept any ISO-8601 date string and formats
+    the result as ``dd-mm-yyyy``.  Returns None when date_str is falsy or when
+    parsing fails (parse_date returns None).
+    """
+    if not date_str:
+        return None
+    parsed = dt_util.parse_date(date_str)
+    return parsed.strftime(FORMAT_DATE) if parsed is not None else None
+
 
 # Battery session data type
 BatterySessionData = SmartBatterySessions | None
@@ -279,7 +320,6 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         super().__init__(
             key=key,
             name=name,
-            # device_class=SensorDeviceClass(device_class) if device_class else None,
             device_class=device_class,
             state_class=state_class,
             native_unit_of_measurement=native_unit_of_measurement,
@@ -333,16 +373,16 @@ class ChargerSensorDescription:
         """Get the state value."""
         try:
             return self.value_fn(data)
-        except Exception as e:
-            _LOGGER.error("Failed to evaluate state for '%s': %s", self.key, e)
+        except Exception:
+            _LOGGER.exception("Failed to evaluate state for '%s'", self.key)
             return STATE_UNAVAILABLE
 
     def get_attributes(self, data: dict) -> dict[str, Union[StateType, list]]:
         """Get the additional attributes."""
         try:
             return self.attr_fn(data)
-        except Exception as e:
-            _LOGGER.error("Failed to evaluate attributes for '%s': %s", self.key, e)
+        except Exception:
+            _LOGGER.exception("Failed to evaluate attributes for '%s'", self.key)
             return {}
 
     @property
@@ -405,9 +445,9 @@ class FrankEnergieBatterySessionSensor(
             return {}
         try:
             return self.entity_description.attr_fn(self.coordinator.data) or {}
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to get attributes for %s: %s", self.entity_description.key, err
+        except Exception:
+            _LOGGER.exception(
+                "Failed to get attributes for %s", self.entity_description.key
             )
             return {}
 
@@ -509,8 +549,8 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
             ):
                 return self.entity_description.attr_fn(latest_vehicle_data) or {}
             return {}
-        except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.error("Could not get attributes for %s: %s", self.entity_id, err)
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Could not get attributes for %s", self.entity_id)
             return {}
 
     @property
@@ -565,8 +605,8 @@ def format_user_name(data: dict) -> str | None:
         first = person.get("firstName")
         last = person.get("lastName")
         return f"{first} {last}".strip() if first or last else None
-    except KeyError as e:
-        _LOGGER.error("Missing data key: %s", e)
+    except KeyError:
+        _LOGGER.exception("Missing data key")
     return None
 
 
@@ -797,10 +837,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            state
-            if isinstance(
-                state := data.get("chargeState", {}).get("powerDeliveryState"), str
-            )
+            data.get("chargeState", {}).get("powerDeliveryState")
+            if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -813,10 +851,9 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
         value_fn=lambda data: (
-            value
+            data.get("chargeSettings", {}).get("isSmartChargingEnabled")
             if isinstance(
-                value := data.get("chargeSettings", {}).get("isSmartChargingEnabled"),
-                bool,
+                data.get("chargeSettings", {}).get("isSmartChargingEnabled"), bool
             )
             else None
         ),
@@ -829,10 +866,9 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            value
+            data.get("chargeSettings", {}).get("isSolarChargingEnabled")
             if isinstance(
-                value := data.get("chargeSettings", {}).get("isSolarChargingEnabled"),
-                bool,
+                data.get("chargeSettings", {}).get("isSolarChargingEnabled"), bool
             )
             else None
         ),
@@ -844,11 +880,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         device_class=SensorDeviceClass.TIMESTAMP,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if isinstance(value := data.get("lastSeen"), str) and value
-            else None
-        ),
+        value_fn=lambda data: _parse_iso_datetime(data.get("lastSeen")),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     EnodeVehicleEntityDescription(
@@ -858,13 +890,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         device_class=SensorDeviceClass.TIMESTAMP,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if isinstance(
-                value := data.get("chargeSettings", {}).get("calculatedDeadline"), str
-            )
-            and value
-            else None
+        value_fn=lambda data: _parse_iso_datetime(
+            data.get("chargeSettings", {}).get("calculatedDeadline")
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -898,9 +925,10 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            val
-            if (val := data.get("chargeSettings", {}).get("maxChargeLimit")) is None
-            or isinstance(val, (int, float))
+            data.get("chargeSettings", {}).get("maxChargeLimit")
+            if isinstance(
+                data.get("chargeSettings", {}).get("maxChargeLimit"), (int, float)
+            )
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -913,9 +941,10 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            val
-            if (val := data.get("chargeSettings", {}).get("minChargeLimit")) is None
-            or isinstance(val, (int, float))
+            data.get("chargeSettings", {}).get("minChargeLimit")
+            if isinstance(
+                data.get("chargeSettings", {}).get("minChargeLimit"), (int, float)
+            )
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -927,9 +956,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            vin
-            if (vin := data.get("information", {}).get("vin")) is None
-            or isinstance(vin, str)
+            data.get("information", {}).get("vin")
+            if isinstance(data.get("information", {}).get("vin"), str)
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -960,7 +988,9 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
             else None
         ),
         attr_fn=lambda data: {
-            "interventions": [item for item in data] if isinstance(data, list) else []
+            "interventions": list(data.get("interventions", []))
+            if isinstance(data.get("interventions"), list)
+            else []
         },
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -987,10 +1017,13 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data, d=day: (
-            _next_weekday_datetime(WEEKDAYS.index(d), minutes // 60, minutes % 60)
+            _next_weekday_datetime(
+                WEEKDAYS.index(d),
+                data.get("chargeSettings", {}).get(f"hour{d.capitalize()}") // 60,
+                data.get("chargeSettings", {}).get(f"hour{d.capitalize()}") % 60,
+            )
             if isinstance(
-                minutes := data.get("chargeSettings", {}).get(f"hour{d.capitalize()}"),
-                int,
+                data.get("chargeSettings", {}).get(f"hour{d.capitalize()}"), int
             )
             else None
         ),
@@ -1031,18 +1064,8 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.TIMESTAMP,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            (
-                str(
-                    datetime.strptime(
-                        str(getattr(data, "period_start_date", None)), "%Y-%m-%d"
-                    ).replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
-                )
-                if isinstance(getattr(data, "period_start_date", None), str)
-                else getattr(data, "period_start_date").replace(
-                    tzinfo=ZoneInfo("Europe/Amsterdam")
-                )
-            )
-            if data and getattr(data, "period_start_date", None)
+            _format_battery_date(getattr(data, "period_start_date", None))
+            if data
             else None
         ),
     ),
@@ -1056,17 +1079,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.TIMESTAMP,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            (
-                str(
-                    datetime.strptime(data.period_end_date, "%Y-%m-%d").replace(
-                        tzinfo=ZoneInfo("Europe/Amsterdam")
-                    )
-                )
-                if isinstance(data.period_end_date, str)
-                else data.period_end_date.replace(tzinfo=ZoneInfo("Europe/Amsterdam"))
-            )
-            if data and data.period_end_date
-            else None
+            _format_battery_date(data.period_end_date) if data else None
         ),
     ),
     FrankEnergieEntityDescription(
@@ -1267,7 +1280,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: {
             "prices": data[DATA_ELECTRICITY].asdict(
-                "total", timezone="Europe/Amsterdam"
+                "total", timezone=TIMEZONE_AMSTERDAM
             )
         },
     ),
@@ -1286,7 +1299,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: {
             "prices": data[DATA_ELECTRICITY].asdict(
-                "market_price", timezone="Europe/Amsterdam"
+                "market_price", timezone=TIMEZONE_AMSTERDAM
             )
         },
     ),
@@ -1305,7 +1318,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: {
             "prices": data[DATA_ELECTRICITY].asdict(
-                "market_price_with_tax", timezone="Europe/Amsterdam"
+                "market_price_with_tax", timezone=TIMEZONE_AMSTERDAM
             )
         },
     ),
@@ -1324,7 +1337,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: {
             "prices": data[DATA_ELECTRICITY].asdict(
-                "market_price_tax", timezone="Europe/Amsterdam"
+                "market_price_tax", timezone=TIMEZONE_AMSTERDAM
             )
         },
         entity_registry_enabled_default=True,
@@ -1449,7 +1462,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "prices": data[DATA_GAS].asdict(
-                    "market_price_with_tax", timezone="Europe/Amsterdam"
+                    "market_price_with_tax", timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].current_hour
@@ -1600,7 +1613,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: data[DATA_ELECTRICITY].today_avg,
         attr_fn=lambda data: {
             "prices": data[DATA_ELECTRICITY].asdict(
-                "total", today_only=True, timezone="Europe/Amsterdam"
+                "total", today_only=True, timezone=TIMEZONE_AMSTERDAM
             )
         },
     ),
@@ -1863,7 +1876,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: {
             "tomorrow_prices": data[DATA_ELECTRICITY].asdict(
-                "total", tomorrow_only=True, timezone="Europe/Amsterdam"
+                "total", tomorrow_only=True, timezone=TIMEZONE_AMSTERDAM
             )
         },
     ),
@@ -1913,7 +1926,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "upcoming_prices": data[DATA_ELECTRICITY].asdict(
-                    "market_price", upcoming_only=True, timezone="Europe/Amsterdam"
+                    "market_price", upcoming_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_ELECTRICITY].upcoming_avg
@@ -1935,7 +1948,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: {
             "upcoming_prices": data[DATA_ELECTRICITY].asdict(
-                "total", upcoming_only=True, timezone="Europe/Amsterdam"
+                "total", upcoming_only=True, timezone=TIMEZONE_AMSTERDAM
             )
         },
     ),
@@ -1955,7 +1968,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "all_prices": data[DATA_ELECTRICITY].asdict(
-                    "total", timezone="Europe/Amsterdam"
+                    "total", timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_ELECTRICITY].all_avg
@@ -1979,7 +1992,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "prices": data[DATA_ELECTRICITY].asdict(
-                    "market_price_including_tax_and_markup", timezone="Europe/Amsterdam"
+                    "market_price_including_tax_and_markup", timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data.get(DATA_ELECTRICITY) and data[DATA_ELECTRICITY].current_hour
@@ -2004,7 +2017,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "tomorrow_prices": data[DATA_GAS].asdict(
-                    "total", tomorrow_only=True, timezone="Europe/Amsterdam"
+                    "total", tomorrow_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS]
@@ -2028,7 +2041,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "prices": data[DATA_GAS].asdict(
-                    "market_price_including_tax_and_markup", timezone="Europe/Amsterdam"
+                    "market_price_including_tax_and_markup", timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].current_hour
@@ -2175,7 +2188,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "tomorrow_prices": data[DATA_GAS].asdict(
-                    "market_price", tomorrow_only=True, timezone="Europe/Amsterdam"
+                    "market_price", tomorrow_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market
@@ -2199,7 +2212,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "tomorrow_prices": data[DATA_GAS].asdict(
-                    "market_price_tax", tomorrow_only=True, timezone="Europe/Amsterdam"
+                    "market_price_tax", tomorrow_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax
@@ -2225,7 +2238,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                 "tomorrow_prices": data[DATA_GAS].asdict(
                     "market_price_including_tax_and_markup",
                     tomorrow_only=True,
-                    timezone="Europe/Amsterdam",
+                    timezone=TIMEZONE_AMSTERDAM,
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax_markup
@@ -2249,7 +2262,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "today_prices": data[DATA_GAS].asdict(
-                    "total", today_only=True, timezone="Europe/Amsterdam"
+                    "total", today_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].today_prices_total
@@ -2273,7 +2286,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "tomorrow_prices": data[DATA_GAS].asdict(
-                    "total", tomorrow_only=True, timezone="Europe/Amsterdam"
+                    "total", tomorrow_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
             }
             if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_total
@@ -2345,7 +2358,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         attr_fn=lambda data: (
             {
                 "prices": data[DATA_GAS].asdict(
-                    "market_price", upcoming_only=True, timezone="Europe/Amsterdam"
+                    "market_price", upcoming_only=True, timezone=TIMEZONE_AMSTERDAM
                 )
                 if data[DATA_GAS]
                 else {}
@@ -2413,11 +2426,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (
-            (
-                data[DATA_ELECTRICITY].upcoming_avg.total
-                if data[DATA_ELECTRICITY].upcoming_avg
-                else None
-            )
+            data[DATA_ELECTRICITY].upcoming_avg.total
             if data[DATA_ELECTRICITY]
             and data[DATA_ELECTRICITY].upcoming_avg
             and data[DATA_ELECTRICITY].upcoming_avg.total
@@ -2445,7 +2454,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                     data[DATA_ELECTRICITY].upcoming_avg.market_price
                 ),
                 "upcoming_prices": data[DATA_ELECTRICITY].asdict(
-                    "total", upcoming_only=True, timezone="Europe/Amsterdam"
+                    "total", upcoming_only=True, timezone=TIMEZONE_AMSTERDAM
                 ),
             }
             if data[DATA_ELECTRICITY] and data[DATA_ELECTRICITY].upcoming_avg
@@ -2643,7 +2652,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
+            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
             if data[DATA_MONTH_SUMMARY]
             and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
             else {}
@@ -2666,7 +2675,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
+            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
             if data[DATA_MONTH_SUMMARY]
             and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
             else {}
@@ -2689,7 +2698,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
+            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
             if data[DATA_MONTH_SUMMARY]
             and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
             else {}
@@ -2712,7 +2721,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
+            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
             if data[DATA_MONTH_SUMMARY]
             and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
             else {}
@@ -2761,27 +2770,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            (
-                (result := {})
-                or (
-                    result.update({"Last update": month_summary.lastMeterReadingDate})
-                    if (month_summary := data.get(DATA_MONTH_SUMMARY))
-                    else None
-                )
-                or (
-                    result.update(
-                        {
-                            "Description": invoices.current_period_invoice.PeriodDescription
-                        }
-                    )
-                    if (
-                        (invoices := data.get(DATA_INVOICES))
-                        and invoices.current_period_invoice
-                    )
-                    else None
-                )
-                or result
-            )
+            {
+                ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
+                "Description": data[
+                    DATA_INVOICES
+                ].current_period_invoice.PeriodDescription,
+            }
             if data[DATA_MONTH_SUMMARY]
             and data[DATA_INVOICES]
             and data[DATA_INVOICES].current_period_invoice
@@ -2805,7 +2799,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: (
             {
-                "Last update": data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
+                ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
                 "Description": data[
                     DATA_INVOICES
                 ].current_period_invoice.PeriodDescription,
@@ -2837,7 +2831,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: (
             {
-                "Start date": data[DATA_INVOICES].previous_period_invoice.StartDate,
+                ATTR_START_DATE: data[DATA_INVOICES].previous_period_invoice.StartDate,
                 "Description": data[
                     DATA_INVOICES
                 ].previous_period_invoice.PeriodDescription,
@@ -2869,7 +2863,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: (
             {
-                "Start date": data[DATA_INVOICES].current_period_invoice.StartDate,
+                ATTR_START_DATE: data[DATA_INVOICES].current_period_invoice.StartDate,
                 "Description": data[
                     DATA_INVOICES
                 ].current_period_invoice.PeriodDescription,
@@ -2900,7 +2894,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
         attr_fn=lambda data: (
             {
-                "Start date": data[DATA_INVOICES].upcoming_period_invoice.StartDate,
+                ATTR_START_DATE: data[DATA_INVOICES].upcoming_period_invoice.StartDate,
                 "Description": data[
                     DATA_INVOICES
                 ].upcoming_period_invoice.PeriodDescription,
@@ -3438,18 +3432,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            (
-                {
-                    "Ondertekend op": getattr(
-                        data[DATA_USER].activePaymentAuthorization, "signedAt", "-"
-                    ),
-                    "Status": getattr(
-                        data[DATA_USER].activePaymentAuthorization, "status", "-"
-                    ),
-                }
-                if data[DATA_USER] and data[DATA_USER].activePaymentAuthorization
-                else {}
-            )
+            {
+                "Ondertekend op": getattr(
+                    data[DATA_USER].activePaymentAuthorization, "signedAt", "-"
+                ),
+                "Status": getattr(
+                    data[DATA_USER].activePaymentAuthorization, "status", "-"
+                ),
+            }
             if data[DATA_USER] and data[DATA_USER].activePaymentAuthorization
             else {}
         ),
@@ -3477,12 +3467,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            (
-                f"{data[DATA_USER].externalDetails.person.firstName} {data[DATA_USER].externalDetails.person.lastName}"
-                if data[DATA_USER].externalDetails
-                and data[DATA_USER].externalDetails.person
-                else None
-            )
+            f"{data[DATA_USER].externalDetails.person.firstName} {data[DATA_USER].externalDetails.person.lastName}"
             if data[DATA_USER]
             and data[DATA_USER].externalDetails
             and data[DATA_USER].externalDetails.person
@@ -3497,12 +3482,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            (
-                data[DATA_USER].externalDetails.contact.phoneNumber
-                if data[DATA_USER].externalDetails
-                and data[DATA_USER].externalDetails.contact
-                else None
-            )
+            data[DATA_USER].externalDetails.contact.phoneNumber
             if data[DATA_USER]
             and data[DATA_USER].externalDetails
             and data[DATA_USER].externalDetails.contact
@@ -3518,8 +3498,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             ", ".join(data[DATA_USER_SITES].segments)
-            if data[DATA_USER_SITES].segments
-            else None
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].segments
             else None
         ),
@@ -3673,17 +3651,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            (
-                parsed_date.strftime(FORMAT_DATE)
-                if (
-                    parsed_date := dt_util.parse_date(
-                        data[DATA_USER_SITES].deliveryStartDate
-                    )
-                )
-                is not None
-                else None
-            )
-            if data[DATA_USER_SITES] and data[DATA_USER_SITES].deliveryStartDate
+            _parse_site_date(data[DATA_USER_SITES].deliveryStartDate)
+            if data[DATA_USER_SITES]
             else None
         ),
     ),
@@ -3696,17 +3665,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_USER,
         entity_registry_enabled_default=False,
         value_fn=lambda data: (
-            (
-                parsed_date.strftime(FORMAT_DATE)
-                if (
-                    parsed_date := dt_util.parse_date(
-                        data[DATA_USER_SITES].deliveryEndDate
-                    )
-                )
-                is not None
-                else None
-            )
-            if data[DATA_USER_SITES] and data[DATA_USER_SITES].deliveryEndDate
+            _parse_site_date(data[DATA_USER_SITES].deliveryEndDate)
+            if data[DATA_USER_SITES]
             else None
         ),
     ),
@@ -3718,17 +3678,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            (
-                parsed_date.strftime(FORMAT_DATE)
-                if (
-                    parsed_date := dt_util.parse_date(
-                        data[DATA_USER_SITES].firstMeterReadingDate
-                    )
-                )
-                is not None
-                else None
-            )
-            if data[DATA_USER_SITES] and data[DATA_USER_SITES].firstMeterReadingDate
+            _parse_site_date(data[DATA_USER_SITES].firstMeterReadingDate)
+            if data[DATA_USER_SITES]
             else None
         ),
     ),
@@ -3740,17 +3691,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            (
-                parsed_date.strftime(FORMAT_DATE)
-                if (
-                    parsed_date := dt_util.parse_date(
-                        data[DATA_USER_SITES].lastMeterReadingDate
-                    )
-                )
-                is not None
-                else None
-            )
-            if data[DATA_USER_SITES] and data[DATA_USER_SITES].lastMeterReadingDate
+            _parse_site_date(data[DATA_USER_SITES].lastMeterReadingDate)
+            if data[DATA_USER_SITES]
             else None
         ),
     ),
@@ -4062,10 +4004,6 @@ class FrankEnergieSensor(
         )
 
         # Set defaults or exceptions for non default sensors.
-        # self._attr_device_class = description.device_class or self._attr_device_class
-        # self._attr_state_class = description.state_class or self._attr_state_class
-        # self._attr_suggested_display_precision = description.suggested_display_precision
-        # or self._attr_suggested_display_precision
         self._attr_icon = description.icon or self._attr_icon
 
         self._update_job = HassJob(self._handle_scheduled_update)
@@ -4102,12 +4040,9 @@ class FrankEnergieSensor(
         except (TypeError, IndexError, ValueError, AttributeError):
             # No data available
             self._attr_native_value = None
-        except ZeroDivisionError as e:
-            _LOGGER.error("Division by zero error in FrankEnergieSensor: %s", e)
+        except ZeroDivisionError:
+            _LOGGER.exception("Division by zero error in FrankEnergieSensor")
             self._attr_native_value = None
-        #        except Exception as e:
-        #            _LOGGER.error("Error updating FrankEnergieSensor: %s", e)
-        #            self._attr_native_value = None
 
         # Cancel the currently scheduled event if there is any
         if self._unsub_update:
@@ -4176,7 +4111,6 @@ class FrankEnergieSensor(
         return super().available and self.native_value is not None
 
 
-# class FrankEnergieBinarySensor(BinarySensorEntity):
 class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Binary sensor for Frank Energie integration."""
 
@@ -4189,7 +4123,6 @@ class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
         config_entry,
     ) -> None:
         super().__init__(coordinator)
-        # self.coordinator = coordinator
         self.entity_description = description
         self._attr_name = description.name
         self._attr_icon = description.icon
@@ -4225,7 +4158,7 @@ class EnodeChargersData:
 
 
 def _build_dynamic_enode_sensor_descriptions(
-    enode_data: EnodeChargersData, index: int
+    enode_data: EnodeChargersData,
 ) -> list[FrankEnergieEntityDescription]:
     """Build dynamic Enode charger sensor descriptions."""
 
@@ -5344,36 +5277,25 @@ async def async_setup_entry(
                 and coordinator.api.is_authenticated
                 and "GAS" not in user_segments
             )
-            # and (not description.is_battery or batteries is not None)
-            # and (not description.is_charger or chargers is not None)
-            # and (not description.is_battery_session or session_coordinator is not None)
         )
     ]
 
     if coordinator.api.is_authenticated and "GAS" not in user_segments:
         await _disable_gas_price_sensors(hass, config_entry)
 
-    # _LOGGER.debug("coordinator.enode_chargers: %d", coordinator.data.get('enode_chargers'))
-    # _LOGGER.debug("coordinator.enode_chargers chargers: %d", coordinator.data['enode_chargers'].chargers)
-    # _LOGGER.debug("coordinator.enode_chargers chargers: %d", coordinator.data.get('enode_chargers').get('chargers'))
-
     if (enode := coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
-        static_sensor_descriptions = list(STATIC_ENODE_SENSOR_TYPES)
+        sensor_descriptions = list(
+            STATIC_ENODE_SENSOR_TYPES
+        ) + _build_dynamic_enode_sensor_descriptions(enode)
 
-        for i, charger in enumerate(enode.chargers):
-            sensor_descriptions = (
-                static_sensor_descriptions
-                + _build_dynamic_enode_sensor_descriptions(enode, i)
-            )
-
-            for description in sensor_descriptions:
-                if not description.authenticated or coordinator.api.is_authenticated:
-                    entities.append(
-                        FrankEnergieSensor(coordinator, description, config_entry)
-                    )
+        for description in sensor_descriptions:
+            if not description.authenticated or coordinator.api.is_authenticated:
+                entities.append(
+                    FrankEnergieSensor(coordinator, description, config_entry)
+                )
     # Add Enode charger sensors if available
     #    entities.extend(
     #        FrankEnergieSensor(coordinator, description, config_entry)
@@ -5480,32 +5402,29 @@ async def async_setup_entry(
                 )
                 # entities.append(sensor)
 
-            enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
-            num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
-            _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
+    enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+    num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
+    _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
 
-            if enode_vehicles and enode_vehicles.vehicles:
-                enode_vehicle_sensors = []
+    if enode_vehicles and enode_vehicles.vehicles:
+        enode_vehicle_sensors = []
 
-                for i, vehicle in enumerate(enode_vehicles.vehicles):
-                    for description in ENODE_VEHICLE_SENSOR_TYPES:
-                        enode_vehicle_sensors.append(
-                            EnodeVehicleSensor(
-                                hass, coordinator, description, vehicle, i
-                            )
-                        )
+        for veh_idx, vehicle in enumerate(enode_vehicles.vehicles):
+            for description in ENODE_VEHICLE_SENSOR_TYPES:
+                enode_vehicle_sensors.append(
+                    EnodeVehicleSensor(hass, coordinator, description, vehicle, veh_idx)
+                )
 
-                for entity in enode_vehicle_sensors:
-                    _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
+        for entity in enode_vehicle_sensors:
+            _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
 
-                entities.extend(enode_vehicle_sensors)
+        entities.extend(enode_vehicle_sensors)
 
     try:
         async_add_entities(entities, update_before_add=True)
-    except Exception as e:
-        _LOGGER.error(
-            "Failed to add entities for entry %s: %s", config_entry.entry_id, str(e)
-        )
+    except Exception:
+        _LOGGER.exception("Failed to add entities for entry %s", config_entry.entry_id)
+        raise
 
     _LOGGER.debug("All sensors added for entry: %s", config_entry.entry_id)
 
