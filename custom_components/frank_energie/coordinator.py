@@ -722,7 +722,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
             return None
 
@@ -738,7 +738,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
                 "Failed to fetch smart PV system summary for %s: %s", device_id, err
             )
@@ -754,7 +754,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Failed to fetch user smart feed-in status: %s", err)
             return None
 
