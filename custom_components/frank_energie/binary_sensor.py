@@ -99,7 +99,8 @@ class FrankEnergieBinarySensor(
         )
 
         if description.child_device_id:
-            # Per-item device (e.g. individual battery) as a child of the service device
+            # Per-item device (e.g. individual battery) as a child of the service device.
+            # No entry_type here — batteries are physical hardware, not services.
             parent_id = (
                 f"{config_entry.entry_id}_{description.service_name}"
                 if description.service_name
@@ -111,7 +112,6 @@ class FrankEnergieBinarySensor(
                 manufacturer=description.child_device_manufacturer or COMPONENT_TITLE,
                 model=description.service_name,
                 configuration_url=API_CONF_URL,
-                entry_type=DeviceEntryType.SERVICE,
                 via_device=(DOMAIN, parent_id),
             )
         else:
