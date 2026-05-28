@@ -41,3 +41,7 @@ custom_components/frank_energie/.claude/
 custom_components/frank_energie/skills/
 custom_components/frank_energie/AGENTS.md
 custom_components/frank_energie/CLAUDE.md
+
+# Local dev environment
+dev_env/
+

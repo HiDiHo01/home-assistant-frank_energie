@@ -21,6 +21,9 @@ from python_frank_energie.models import (
     SmartBatterySessions,
     User,
     UserSites,
+    SmartPvSystems,
+    SmartPvSystemSummary,
+    UserSmartFeedInStatus,
 )
 
 # --- Logger Setup ---
@@ -79,6 +82,9 @@ DATA_BATTERY_DETAILS: Final[str] = "smart_battery_details"
 DATA_BATTERY_SESSIONS: Final[str] = "smart_battery_sessions"
 DATA_ENODE_CHARGERS: Final[str] = "enode_chargers"
 DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
+DATA_PV_SYSTEMS: Final[str] = "smart_pv_systems"
+DATA_PV_SUMMARY: Final[str] = "smart_pv_summary"
+DATA_USER_SMART_FEED_IN: Final[str] = "user_smart_feed_in"
 
 # --- Attribute Constants ---
 ATTR_FROM_TIME: Final[str] = "from_time"
@@ -113,6 +119,8 @@ SERVICE_NAME_MONTH_SUMMARY: Final[str] = "Month Summary"
 SERVICE_NAME_USER_SITES: Final[str] = "User Sites"
 SERVICE_NAME_ENODE_CHARGERS: Final[str] = "Chargers"
 SERVICE_NAME_ENODE_VEHICLES: Final[str] = "Vehicles"
+SERVICE_NAME_PV_SYSTEMS: Final[str] = "Solar Systems"
+SERVICE_NAME_PV_SUMMARY: Final[str] = "Solar Summary"
 
 # --- Device Response Data Class ---
 
@@ -156,6 +164,15 @@ class DeviceResponseEntry:
 
     # Vehicles details (if available)
     vehicles: EnodeVehicles | None = None  # Placeholder for vehicle data, if any
+
+    # Smart PV systems (if available)
+    smart_pv_systems: SmartPvSystems | None = None
+
+    # Smart PV system summary (if available)
+    smart_pv_summary: dict[str, SmartPvSystemSummary] | None = None
+
+    # User smart feed-in status (if available)
+    user_smart_feed_in: UserSmartFeedInStatus | None = None
 
     # Contract price resolution state (if available)
     contract_price_resolution_state: ContractPriceResolutionState | None = None

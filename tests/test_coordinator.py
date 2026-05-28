@@ -121,6 +121,9 @@ async def test_fetch_today_data(coordinator, mock_frank_energie):
         data_smart_battery_details,
         data_smart_battery_sessions,
         data_enode_vehicles,
+        data_pv_systems,
+        data_pv_summary,
+        data_user_smart_feed_in,
         data_contract_price_resolution_state,
     ) = data
 
@@ -166,6 +169,9 @@ async def test_aggregate_data(coordinator):
         data_month_summary,
         data_invoices,
         data_user,
+        None,
+        None,
+        None,
         None,
         None,
         None,

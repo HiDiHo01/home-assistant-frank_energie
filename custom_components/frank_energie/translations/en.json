@@ -26,6 +26,48 @@
                 },
                 "title": "Do you want to sign in to Frank Energie?",
                 "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account."
+            },
+            "site": {
+                "title": "Select delivery location",
+                "description": "Choose the delivery location you want to add.",
+                "data": {
+                    "site_reference": "Delivery location"
+                }
+            }
+        }
+    },
+    "entity": {
+        "sensor": {
+            "pv_total_bonus": {
+                "name": "Total bonus"
+            },
+            "pv_operational_status": {
+                "name": "Operational status"
+            },
+            "pv_steering_status": {
+                "name": "Steering status"
+            }
+        },
+        "switch": {
+            "smart_charging": {
+                "name": "Smart charging"
+            },
+            "smart_trading": {
+                "name": "Smart trading"
+            },
+            "smart_feed_in": {
+                "name": "Smart feed-in"
+            },
+            "self_consumption_trading_allowed": {
+                "name": "Self consumption trading allowed"
+            },
+            "pv_steering_enabled": {
+                "name": "Steering enabled"
+            }
+        },
+        "datetime": {
+            "charging_deadline": {
+                "name": "Charging deadline"
             }
         }
     }
