@@ -10,6 +10,11 @@ tests:
       - any-glob-to-any-file:
           - "custom_components/frank_energie/tests/**"
 
+translation:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/translations/**"
+          - "custom_components/frank_energie/strings.json"
+
 blueprint:
   - changed-files:
       - any-glob-to-any-file:
