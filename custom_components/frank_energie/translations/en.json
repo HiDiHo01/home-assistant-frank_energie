@@ -14,18 +14,31 @@
         },
         "step": {
             "login": {
+                "title": "Enter your Frank Energie account credentials",
+                "description": "Enter your Frank Energie account credentials.",
                 "data": {
-                    "password": "Password",
-                    "username": "Username / e-mail"
-                },
-                "title": "Enter your Frank Energie account credentials"
+                    "username": "Username / e-mail",
+                    "password": "Password"
+                }
             },
             "user": {
+                "title": "Do you want to sign in to Frank Energie?",
+                "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
                 "data": {
                     "authentication": "Use Frank Energie account credentials"
-                },
-                "title": "Do you want to sign in to Frank Energie?",
-                "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account."
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigure account",
+                "description": "Enter your Frank Energie credentials to reconfigure your account.",
+                "data": {
+                    "username": "Username / e-mail",
+                    "password": "Password"
+                }
+            },
+            "reauth": {
+                "title": "Re-authentication required",
+                "description": "Re-authentication is required for Frank Energie."
             },
             "site": {
                 "title": "Select delivery location",
@@ -37,6 +50,31 @@
         }
     },
     "entity": {
+        "binary_sensor": {
+            "smart_charging": {
+                "name": "Smart charging"
+            },
+            "smart_trading": {
+                "name": "Smart trading"
+            },
+            "smart_feed_in": {
+                "name": "Smart feed-in"
+            },
+            "smart_hvac": {
+                "name": "Smart HVAC"
+            }
+        },
+        "button": {
+            "disable_smart_trading": {
+                "name": "Disable smart trading"
+            },
+            "disable_smart_feed_in": {
+                "name": "Disable smart feed-in"
+            },
+            "disable_smart_hvac": {
+                "name": "Disable smart HVAC"
+            }
+        },
         "sensor": {
             "pv_total_bonus": {
                 "name": "Total bonus"
@@ -49,20 +87,8 @@
             }
         },
         "switch": {
-            "smart_charging": {
+            "enode_smart_charging": {
                 "name": "Smart charging"
-            },
-            "smart_trading": {
-                "name": "Smart trading"
-            },
-            "smart_feed_in": {
-                "name": "Smart feed-in"
-            },
-            "self_consumption_trading_allowed": {
-                "name": "Self consumption trading allowed"
-            },
-            "pv_steering_enabled": {
-                "name": "Steering enabled"
             }
         },
         "datetime": {

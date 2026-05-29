@@ -3,23 +3,26 @@
     "step": {
       "user": {
         "title": "Frank Energie configureren",
-        "description": "[%key:common::config_flow::description::confirm_setup%]"
-      },
-      "confirm": {
         "description": "[%key:common::config_flow::description::confirm_setup%]",
-        "title": "Frank Energie configureren"
+        "data": {
+          "authentication": "Gebruik Frank Energie-accountgegevens"
+        }
       },
-      "options": {
-        "title": "Opties configureren",
-        "description": "Configureer de opties voor Frank Energie."
+      "login": {
+        "title": "Inloggen bij Frank Energie",
+        "description": "Voer je Frank Energie inloggegevens in.",
+        "data": {
+          "username": "E-mailadres",
+          "password": "Wachtwoord"
+        }
       },
-      "import": {
-        "title": "Importeer configuratie",
-        "description": "Importeer een bestaande configuratie voor Frank Energie."
-      },
-      "reauth_confirm": {
-        "title": "Her-authenticatie vereist",
-        "description": "Her-authenticatie is vereist voor Frank Energie."
+      "reconfigure": {
+        "title": "Inloggen bij Frank Energie",
+        "description": "Voer de inloggegevens voor Frank Energie in om je account opnieuw te configureren.",
+        "data": {
+          "username": "E-mailadres",
+          "password": "Wachtwoord"
+        }
       },
       "reauth": {
         "title": "Her-authenticatie vereist",
