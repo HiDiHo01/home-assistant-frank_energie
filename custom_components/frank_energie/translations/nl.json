@@ -17,6 +17,7 @@
         "step": {
             "login": {
                 "title": "Inloggen bij Frank Energie",
+                "description": "Voer je Frank Energie inloggegevens in.",
                 "data": {
                     "username": "Email",
                     "password": "Wachtwoord"
@@ -34,22 +35,23 @@
                     "authentication": "Gebruik Frank Energie-accountgegevens"
                 }
             },
+            "reconfigure": {
+                "title": "Inloggen bij Frank Energie",
+                "description": "Voer de inloggegevens voor Frank Energie in om je account opnieuw te configureren.",
+                "data": {
+                    "username": "Email",
+                    "password": "Wachtwoord"
+                }
+            },
+            "reauth": {
+                "title": "Her-authenticatie vereist",
+                "description": "Her-authenticatie is vereist voor Frank Energie."
+            },
             "site": {
                 "title": "Kies leveringslocatie",
                 "description": "Selecteer de leveringslocatie die je toe wilt voegen",
                 "data": {
-                    "site_reference": "Leveringslocaties:"
-                }
-            },
-            "confirm": {
-                "title": "Frank Energie",
-                "description": "Wil je deze integratie toevoegen?"
-            },
-            "reconfigure": {
-                "title": "Inloggen bij Frank Energie",
-                "data": {
-                    "username": "Email",
-                    "password": "Wachtwoord"
+                    "site_reference": "Leveringslocatie"
                 }
             }
         }
@@ -116,6 +118,31 @@
         }
     },
     "entity": {
+        "binary_sensor": {
+            "smart_charging": {
+                "name": "Slim laden"
+            },
+            "smart_trading": {
+                "name": "Slim handelen"
+            },
+            "smart_feed_in": {
+                "name": "Slim terugleveren"
+            },
+            "smart_hvac": {
+                "name": "Slimme HVAC"
+            }
+        },
+        "button": {
+            "disable_smart_trading": {
+                "name": "Slim handelen uitschakelen"
+            },
+            "disable_smart_feed_in": {
+                "name": "Slim terugleveren uitschakelen"
+            },
+            "disable_smart_hvac": {
+                "name": "Slimme HVAC uitschakelen"
+            }
+        },
         "sensor": {
             "current_electricity_price": {
                 "name": "Huidige elektriciteitsprijs (All-in)",
@@ -586,20 +613,8 @@
             }
         },
         "switch": {
-            "smart_charging": {
+            "enode_smart_charging": {
                 "name": "Slim laden"
-            },
-            "smart_trading": {
-                "name": "Slim handelen"
-            },
-            "smart_feed_in": {
-                "name": "Slim terugleveren"
-            },
-            "self_consumption_trading_allowed": {
-                "name": "Handelen op eigen verbruik toegestaan"
-            },
-            "pv_steering_enabled": {
-                "name": "Sturing ingeschakeld"
             }
         },
         "datetime": {

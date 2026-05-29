@@ -2,45 +2,50 @@
   "config": {
     "step": {
       "user": {
-        "title": "Frank Energie configureren",
-        "description": "[%key:common::config_flow::description::confirm_setup%]"
+        "title": "Configure Frank Energie",
+        "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
+        "data": {
+          "authentication": "Use Frank Energie account credentials"
+        }
       },
-      "confirm": {
-        "description": "[%key:common::config_flow::description::confirm_setup%]",
-        "title": "Frank Energie configureren"
+      "login": {
+        "title": "Enter your Frank Energie account credentials",
+        "description": "Enter your Frank Energie account credentials.",
+        "data": {
+          "username": "Username / e-mail",
+          "password": "Password"
+        }
       },
-      "options": {
-        "title": "Opties configureren",
-        "description": "Configureer de opties voor Frank Energie."
-      },
-      "import": {
-        "title": "Importeer configuratie",
-        "description": "Importeer een bestaande configuratie voor Frank Energie."
-      },
-      "reauth_confirm": {
-        "title": "Her-authenticatie vereist",
-        "description": "Her-authenticatie is vereist voor Frank Energie."
+      "reconfigure": {
+        "title": "Reconfigure account",
+        "description": "Enter your Frank Energie credentials to reconfigure your account.",
+        "data": {
+          "username": "Username / e-mail",
+          "password": "Password"
+        }
       },
       "reauth": {
-        "title": "Her-authenticatie vereist",
-        "description": "Her-authenticatie is vereist voor Frank Energie."
+        "title": "Re-authentication required",
+        "description": "Re-authentication is required for Frank Energie."
       },
       "site": {
-        "title": "Selecteer leveringslocatie",
-        "description": "Kies de leveringslocatie die je toe wilt voegen.",
+        "title": "Select delivery location",
+        "description": "Choose the delivery location you want to add.",
         "data": {
-          "site_reference": "Leveringslocatie"
+          "site_reference": "Delivery location"
         }
       }
     },
     "error": {
-      "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord.",
-      "connection_error": "Verbindingsfout met Frank Energie API.",
-      "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
-      "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
-      "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw."
+      "invalid_auth": "Credentials rejected, please check your username and password.",
+      "connection_error": "Connection error with Frank Energie API.",
+      "no_delivery_sites": "No delivery sites found for this account.",
+      "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
+      "site_retrieval_failed": "Error retrieving delivery sites. Please try again later."
     },
     "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     }
   },
