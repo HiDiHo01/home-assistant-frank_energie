@@ -4105,17 +4105,18 @@ class FrankEnergieSensor(
 
         super().__init__(coordinator)
 
-    async def async_update(self):
+    async def async_update(self) -> None:
         """Get the latest data and updates the states."""
+        data = self.coordinator.data
         try:
-            data = self.coordinator.data
-            if data is None:
-                self._attr_native_value = None
-                return
             self._attr_native_value = self.entity_description.value_fn(data)
-        except (TypeError, IndexError, ValueError, AttributeError):
-            # No data available
+        except (IndexError, ValueError):
             self._attr_native_value = None
+        except (AttributeError, TypeError, KeyError):
+            _LOGGER.debug(
+                "Sensor %s: upstream data unavailable, retaining last value",
+                self.entity_description.key,
+            )
         except ZeroDivisionError:
             _LOGGER.exception("Division by zero error in FrankEnergieSensor")
             self._attr_native_value = None
