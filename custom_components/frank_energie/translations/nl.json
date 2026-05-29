@@ -51,7 +51,7 @@
                 "title": "Kies leveringslocatie",
                 "description": "Selecteer de leveringslocatie die je toe wilt voegen",
                 "data": {
-                    "site_reference": "Leveringslocaties:"
+                    "site_reference": "Leveringslocatie"
                 }
             }
         }
