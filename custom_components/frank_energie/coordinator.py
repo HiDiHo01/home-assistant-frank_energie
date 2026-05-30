@@ -173,7 +173,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def __init__(
         self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
     ) -> None:
-        """Initialize the data object."""
+        """
+        Initialize the Frank Energie coordinator and set up internal state, caches, and default update behavior.
+        
+        This constructor prepares the coordinator's data structures, feature flags, cached price slots, resolution state, mutation queue, and timing controls used to fetch and aggregate market, user, device, and billing data.
+        
+        Parameters:
+            hass (HomeAssistant): Home Assistant core instance.
+            config_entry (ConfigEntry): Configuration entry for this integration.
+            api (FrankEnergie): Authenticated Frank Energie API client.
+        """
         super().__init__(
             hass,
             _LOGGER,
@@ -1455,22 +1464,52 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_lowest_price_event = today
 
     def _should_fire_lowest_4h_event(self, today: date) -> bool:
+        """
+        Determine whether the lowest 4-hour price event should be fired for the given date.
+        
+        Parameters:
+            today (date): Date to check for whether the event has already been fired.
+        
+        Returns:
+            true if the lowest 4-hour event has not been fired for `today`, `false` otherwise.
+        """
         return self._last_lowest_4h_event != today
 
     def _mark_lowest_4p_event_fired(self, today: date) -> None:
-        """Mark the lowest-4p event as fired for today."""
+        """
+        Record that the lowest 4-period price event has been fired for the given date.
+        
+        Parameters:
+            today (date): The date to mark as having had the lowest 4-period event fired.
+        """
         self._last_lowest_4p_event = today
 
     def _should_fire_lowest_16p_event(self, today: date) -> bool:
-        """Return True if the lowest-16p event has not yet fired today."""
+        """
+        Determine whether the lowest-16p event has not yet been fired for the given day.
+        
+        Returns:
+            True if the lowest-16p event has not been fired for `today`, False otherwise.
+        """
         return self._last_lowest_16p_event != today
 
     def _mark_lowest_16p_event_fired(self, today: date) -> None:
-        """Mark the lowest-16p event as fired for today."""
+        """
+        Record that the 16-point lowest-price event has been fired for the given day.
+        
+        This stores the provided date in the coordinator's internal marker so the same event is not emitted again for that day.
+        
+        Parameters:
+            today (date): The date for which the 16-point lowest-price event has been fired.
+        """
         self._last_lowest_16p_event = today
 
     def _reconcile_resolution(self) -> None:
-        """Ensure config and API state are consistent after refresh."""
+        """
+        Log a warning when the API's contract price resolution differs from the configured resolution.
+        
+        Does nothing if the coordinator lacks an API resolution state or a config entry. This function only records the discrepancy; it does not modify configuration or state.
+        """
 
         if not self._api_resolution_state:
             return
@@ -1490,9 +1529,26 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
 
     async def async_set_resolution(self, value: str) -> None:
-        """Update resolution safely via mutation queue."""
+        """
+        Request a contract price resolution change and apply it to the config entry when accepted.
+        
+        Enqueues a mutation that asks the API to change the contract price resolution for the current connection, updates the config entry options with the requested `value` when the request is accepted, and triggers a coordinator refresh. If the connection id is missing or the API response indicates failure, the mutation raises UpdateFailed.
+        
+        Parameters:
+            value (str): Desired resolution identifier (e.g. "PT60M").
+        """
 
         async def _mutation() -> None:
+            """
+            Request a contract price resolution change for the current connection and update the config entry options on success.
+            
+            Raises:
+                UpdateFailed: If the coordinator has no connection id or if the API request fails or returns an unsuccessful response.
+            
+            Details:
+                - Calls the API to request a resolution change for `self._connection_id`.
+                - On success, logs the effective date (if available) and updates the config entry's `options["resolution"]` to `value`.
+            """
             if not self._connection_id:
                 raise UpdateFailed("Missing connection id")
 
@@ -1525,7 +1581,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     @property
     def api_resolution(self) -> str | None:
-        """Resolution reported by API (read-only)."""
+        """
+        Return the active resolution option reported by the API.
+        
+        Returns:
+            The API's active resolution option string (for example, "PT60M") if available, `None` otherwise.
+        """
         return (
             self._api_resolution_state.activeOption
             if self._api_resolution_state
@@ -1555,6 +1616,15 @@ from .const import (
 )
     
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
+        """
+        Builds an EnodeVehicles container from a list of vehicle dictionaries.
+        
+        Parameters:
+            data (list[dict]): List of mappings with vehicle fields suitable for constructing `EnodeVehicle` objects.
+        
+        Returns:
+            EnodeVehicles: Container object whose `vehicles` list contains `EnodeVehicle` instances parsed from `data`.
+        """
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
 
