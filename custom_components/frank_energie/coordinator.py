@@ -174,22 +174,36 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
     ) -> None:
         """Initialize the data object."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="Frank Energie coordinator",
+            # update_interval=timedelta(seconds=DEFAULT_REFRESH_INTERVAL),
+            update_interval=None,
+            config_entry=config_entry,
+        )
+        from .mutation_queue import MutationQueue
+        self._mutation_queue = MutationQueue()
+        self.api = api
+        self.site_reference: str | None = config_entry.data.get("site_reference")
         self.hass = hass
         self.config_entry = config_entry
         self.api = api
         self._today_prices_logged: bool = False
         self._cache: dict = {}  # <--- hier cache je prijzen
         self.site_reference = config_entry.data.get("site_reference", None)
-        self.country_code: str | None = (
-            self.hass.config.country
-        )  # replaced by hass_country_code
-        self._country_code: str | None = self.hass.config.country
+        self._country_code: str | None = hass.config.country
+        self._user_country: str | None = hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
         self._connection_id: str | None = (
             None  # cache voor contractPriceResolutionState
         )
-        self._resolution_state: ContractPriceResolutionState | None = None
+        self._last_lowest_price_event: date | None = None
+        self._last_lowest_4p_event: date | None = None
+        self._last_lowest_16p_event: date | None = None
+        resolution = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        self._api_resolution_state: ContractPriceResolutionState | None = None
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
             DATA_ELECTRICITY: None,
