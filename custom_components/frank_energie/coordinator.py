@@ -1781,10 +1781,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             if self.config_entry is None:
                 return
 
-            if self.config_entry.options.get("resolution") != result.activeOption:
+            if self.config_entry.options.get("resolution") != value:
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
-                    options={**self.config_entry.options, "resolution": result.activeOption},
+                    options={**self.config_entry.options, "resolution": value},
                 )
 
         await self._mutation_queue.add(_mutation)
