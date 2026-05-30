@@ -1752,7 +1752,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self._connection_id:
             _LOGGER.warning("Cannot set resolution via API: connection_id not available")
             return
-            raise UpdateFailed("Missing connection id")
 
         if (
             self._api_resolution_state is not None
