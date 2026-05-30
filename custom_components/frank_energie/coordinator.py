@@ -263,8 +263,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         ) = None
         self.last_fetch_tomorrow: datetime | None = None
         self._last_lowest_price_event: date | None = None
-        self._last_lowest_4h_event: date | None = None
-
+        self._last_lowest_4p_event: date | None = None
+        self._last_lowest_16p_event: date | None = None
+    
     def _is_not_in_delivery_site(
         self, data_month_summary, data_invoices, user_sites
     ) -> bool:
@@ -457,82 +458,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             data_contract_price_resolution_state,
         )
 
-        lowest_elec_price = (
-            prices_today.electricity.today_min
-            if prices_today and prices_today.electricity
-            else None
-        )
-
-        if lowest_elec_price and self._should_fire_lowest_price_event(today):
-            start = lowest_elec_price.date_from
-            end = lowest_elec_price.date_till
-            self._price_resolution_minutes = int((end - start).total_seconds() / 60)
-
-            # We gaan ervan uit dat de API altijd UTC-tijden teruggeeft, maar we controleren het voor de zekerheid
-            if start.tzinfo is None:
-                start = start.replace(tzinfo=timezone.utc)
-            if end.tzinfo is None:
-                end = end.replace(tzinfo=timezone.utc)
-
-            if start <= now_utc < end:
-                self.hass.bus.async_fire(
-                    EVENT_FRANK_ENERGIE,
-                    {
-                        "entry_id": self.config_entry.entry_id,
-                        "action": "lowest_price",
-                        "resolution": self._price_resolution_minutes,
-                        "price": lowest_elec_price.total,
-                        "unit": "€/kWh",
-                        "start": start.isoformat(),
-                        "end": end.isoformat(),
-                    },
-                )
-                _LOGGER.debug(
-                    "Firing frank_energie_event (lowest price): %s → %s : %s",
-                    lowest_elec_price.date_from,
-                    lowest_elec_price.date_till,
-                    lowest_elec_price.total,
-                )
-                self._mark_lowest_price_event_fired(today)
-
-        prices = (
-            prices_today.electricity.today
-            if prices_today and prices_today.electricity
-            else None
-        )
-
-        if prices:
-            result = self._find_lowest_consecutive_hours(prices, window=4)
-
-            if result and self._should_fire_lowest_4h_event(today):
-                average_price, start_price, end_price = result
-
-                # Correcte price resolution: verschil tussen eerste 2 entries in prices
-                if len(prices) >= 2:
-                    first_interval = prices[0].date_from
-                    second_interval = prices[1].date_from
-                    self._price_resolution_minutes = int(
-                        (second_interval - first_interval).total_seconds() / 60
-                    )
-                else:
-                    self._price_resolution_minutes = 60  # fallback
-
-                if start_price.date_from <= now_utc < end_price.date_till:
-                    self.hass.bus.async_fire(
-                        EVENT_FRANK_ENERGIE,
-                        {
-                            "entry_id": self.config_entry.entry_id,
-                            "action": "lowest_4p_price",
-                            "periods": 4,
-                            "resolution": self._price_resolution_minutes,
-                            "average_price": round(average_price, 3),
-                            "unit": "€/kWh",
-                            "start": start_price.date_from,
-                            "end": end_price.date_till,
-                        },
-                    )
-
-                    self._mark_lowest_4h_event_fired(today)
+        # ---------------------------------------------------
+        # EVENTS
+        # ---------------------------------------------------
+        self._maybe_fire_lowest_price_event(c.prices_today, today, now_utc)
+        self._maybe_fire_lowest_4p_event(c.prices_today, today, now_utc)
+        self._maybe_fire_lowest_16p_event(c.prices_today, today, now_utc)
 
         return self.cached_prices
 
@@ -957,6 +888,154 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         return details_list, sessions_list
 
+    def _maybe_fire_lowest_price_event(
+        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
+    ) -> None:
+        """Fire the lowest-price event if within the cheapest price slot."""
+        if not self._should_fire_lowest_price_event(today):
+            return
+
+        lowest = (
+            prices_today.electricity.today_min
+            if prices_today and prices_today.electricity
+            else None
+        )
+        if lowest is None:
+            return
+
+        start = self._ensure_utc(lowest.date_from)
+        end = self._ensure_utc(lowest.date_till)
+
+        if not (start <= now_utc < end):
+            return
+
+        self.hass.bus.async_fire(
+            EVENT_FRANK_ENERGIE,
+            {
+                "entry_id": self.config_entry.entry_id,
+                "action": "lowest_price",
+                "resolution": int((end - start).total_seconds() / 60),
+                "price": lowest.total,
+                "unit": "€/kWh",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        )
+        _LOGGER.debug(
+            "Fired frank_energie_event (lowest_price): %s → %s @ %s",
+            start, end, lowest.total,
+        )
+        self._mark_lowest_price_event_fired(today)
+
+    def _maybe_fire_lowest_4p_event(
+        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
+    ) -> None:
+        """Fire the lowest-4h-window event if within the cheapest consecutive block."""
+        if not self._should_fire_lowest_4p_event(today):
+            return
+
+        prices = (
+            prices_today.electricity.today
+            if prices_today and prices_today.electricity
+            else None
+        )
+        if not prices:
+            return
+
+        result = self._find_lowest_consecutive_hours(prices, window=4)
+        if result is None:
+            return
+
+        average_price, start_price, end_price = result
+
+        resolution = (
+            int((prices[1].date_from - prices[0].date_from).total_seconds() / 60)
+            if len(prices) >= 2
+            else 60
+        )
+
+        start = self._ensure_utc(start_price.date_from)
+        end = self._ensure_utc(end_price.date_till)
+
+        if not (start <= now_utc < end):
+            return
+
+        self.hass.bus.async_fire(
+            EVENT_FRANK_ENERGIE,
+            {
+                "entry_id": self.config_entry.entry_id,
+                "action": "lowest_4p_price",
+                "periods": 4,
+                "resolution": resolution,
+                "average_price": round(average_price, 3),
+                "unit": "€/kWh",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        )
+        _LOGGER.debug(
+            "Fired frank_energie_event (lowest_4p_price): %s → %s @ avg %s",
+            start, end, round(average_price, 3),
+        )
+        self._mark_lowest_4p_event_fired(today)
+
+    def _maybe_fire_lowest_16p_event(
+        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
+    ) -> None:
+        """Fire the lowest-16p-window event if within the cheapest consecutive block."""
+        if not self._should_fire_lowest_16p_event(today):
+            return
+
+        prices = (
+            prices_today.electricity.today
+            if prices_today and prices_today.electricity
+            else None
+        )
+        if not prices:
+            return
+
+        result = self._find_lowest_consecutive_hours(prices, window=16)
+        if result is None:
+            return
+
+        average_price, start_price, end_price = result
+
+        # calculate the resolution by looking at the first two price points. Default to 60 if 2 points are not available
+        resolution = (
+            int((prices[1].date_from - prices[0].date_from).total_seconds() / 60)
+            if len(prices) >= 2
+            else 60
+        )
+
+        # Only fire if the resolution is 15 minutes, else it would fire for 16 hour period.
+        if not resolution == 15:
+            return
+
+        start = self._ensure_utc(start_price.date_from)
+        end = self._ensure_utc(end_price.date_till)
+
+        if not (start <= now_utc < end):
+            return
+
+        self.hass.bus.async_fire(
+            EVENT_FRANK_ENERGIE,
+            {
+                "entry_id": self.config_entry.entry_id,
+                "action": "lowest_16p_price",
+                "periods": 16,
+                "resolution": resolution,
+                "average_price": round(average_price, 3),
+                "unit": "€/kWh",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        )
+        _LOGGER.debug(
+            "Fired frank_energie_event (lowest_16p_price): %s → %s @ avg %s",
+            start, end, round(average_price, 3),
+        )
+        self._mark_lowest_16p_event_fired(today)
+    
     async def _fetch_today_data(
         self, today: date, tomorrow: date
     ) -> tuple[
