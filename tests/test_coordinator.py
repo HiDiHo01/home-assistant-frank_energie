@@ -412,10 +412,28 @@ class TestInitNewAttributes:
         )
         assert coord.site_reference == "ref-xyz"
 
-    def test_site_reference_none_when_not_in_data(self, coordinator):
+    def test_site_reference_none_when_not_in_data(self, mock_frank_energie):
         """site_reference must be None when not present in config_entry.data."""
-        # mock_config_entry fixture uses data without 'site_reference' key
-        assert coordinator.site_reference is None
+        # Create config entry without 'site_reference' key
+        entry_data_without_site_ref = {k: v for k, v in mock_entry_data.items() if k != "site_reference"}
+        entry = MockConfigEntry(
+            version=1,
+            domain="frank_energie",
+            title="Frank Energie",
+            data=entry_data_without_site_ref,
+            options={},
+            source="user",
+            entry_id="no-site-ref",
+            state="loaded",
+            minor_version=1,
+            unique_id="uid-no-site-ref",
+        )
+        coord = FrankEnergieCoordinator(
+            hass=MagicMock(),
+            config_entry=entry,
+            api=mock_frank_energie,
+        )
+        assert coord.site_reference is None
 
 
 class TestMarkLowest4pEventFired:
