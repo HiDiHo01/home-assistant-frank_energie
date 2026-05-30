@@ -1532,12 +1532,27 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             else None
         )
 
-    @property
-    def resolution(self) -> str:
-        """Effective price resolution used for API queries."""
-        if self.config_entry is None:
-            return DEFAULT_RESOLUTION
-        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+from .const import (
+    DATA_BATTERIES,
+    DATA_BATTERY_DETAILS,
+    DATA_BATTERY_SESSIONS,
+    DATA_CONTRACT_PRICE_RESOLUTION_STATE,
+    DATA_ELECTRICITY,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
+    DATA_GAS,
+    DATA_INVOICES,
+    DATA_MONTH_SUMMARY,
+    DATA_USAGE,
+    DATA_USER,
+    DATA_USER_SITES,
+    DATA_PV_SYSTEMS,
+    DATA_PV_SUMMARY,
+    DATA_USER_SMART_FEED_IN,
+    DEFAULT_REFRESH_INTERVAL,
+    DEFAULT_RESOLUTION,
+    EVENT_FRANK_ENERGIE,
+)
     
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
