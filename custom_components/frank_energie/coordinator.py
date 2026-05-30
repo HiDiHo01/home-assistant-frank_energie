@@ -68,6 +68,7 @@ from .const import (
     DATA_PV_SYSTEMS,
     DATA_PV_SUMMARY,
     DATA_USER_SMART_FEED_IN,
+    DEFAULT_RESOLUTION,
     DEFAULT_REFRESH_INTERVAL,
     EVENT_FRANK_ENERGIE,
 )
@@ -1370,12 +1371,92 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Mark the lowest-price event as fired for today."""
         self._last_lowest_price_event = today
 
-    def _should_fire_lowest_4h_event(self, today: date) -> bool:
-        return self._last_lowest_4h_event != today
+    def _should_fire_lowest_4p_event(self, today: date) -> bool:
+        """Return True if the lowest-4p event has not yet fired today."""
+        return self._last_lowest_4p_event != today
 
-    def _mark_lowest_4h_event_fired(self, today: date) -> None:
-        self._last_lowest_4h_event = today
+    def _mark_lowest_4p_event_fired(self, today: date) -> None:
+        """Mark the lowest-4p event as fired for today."""
+        self._last_lowest_4p_event = today
 
+    def _should_fire_lowest_16p_event(self, today: date) -> bool:
+        """Return True if the lowest-16p event has not yet fired today."""
+        return self._last_lowest_16p_event != today
+
+    def _mark_lowest_16p_event_fired(self, today: date) -> None:
+        """Mark the lowest-16p event as fired for today."""
+        self._last_lowest_16p_event = today
+
+    def _reconcile_resolution(self) -> None:
+        """Ensure config and API state are consistent after refresh."""
+
+        if not self._api_resolution_state:
+            return
+
+        if self.config_entry is None:
+            return
+
+        api_value = self._api_resolution_state.activeOption
+        config_value = self.config_entry.options.get("resolution")
+
+        # Only log drift — do NOT overwrite config automatically
+        if api_value and config_value and api_value != config_value:
+            _LOGGER.warning(
+                "Resolution drift detected (config=%s api=%s)",
+                config_value,
+                api_value,
+            )
+
+    async def async_set_resolution(self, value: str) -> None:
+        """Update resolution safely via mutation queue."""
+
+        async def _mutation() -> None:
+            if not self._connection_id:
+                raise UpdateFailed("Missing connection id")
+
+            result = await self.api.contract_price_resolution_request_change(
+                self._connection_id,
+                value,
+            )
+
+            if result is None or not result.success:
+                raise UpdateFailed(
+                    "Resolution change request failed: %s"
+                    % (result.reason if result else "no response")
+                )
+
+            _LOGGER.info(
+                "Resolution change accepted (effective: %s)",
+                result.data.effectiveDate if result.data else "unknown",
+            )
+
+            if self.config_entry is None:
+                return
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                options={**self.config_entry.options, "resolution": value},
+            )
+
+        await self._mutation_queue.add(_mutation)
+        await self.async_request_refresh()
+
+    @property
+    def resolution(self) -> str:
+        """Effective price resolution used for API queries."""
+        if self.config_entry is None:
+            return DEFAULT_RESOLUTION
+        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+
+    @property
+    def api_resolution(self) -> str | None:
+        """Resolution reported by API (read-only)."""
+        return (
+            self._api_resolution_state.activeOption
+            if self._api_resolution_state
+            else None
+        )
+    
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
