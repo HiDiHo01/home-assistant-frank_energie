@@ -2,7 +2,7 @@
 Fetching the latest data from Frank Energie and updating the states."""
 
 # coordinator.py
-# version 2026.05.30
+# version 2026.05.31
 from __future__ import annotations
 
 import asyncio
@@ -72,6 +72,7 @@ from .const import (
     DEFAULT_RESOLUTION,
     EVENT_FRANK_ENERGIE,
 )
+from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
@@ -174,44 +175,30 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def __init__(
         self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
     ) -> None:
-        """
-        Initialize the Frank Energie coordinator and set up internal state, caches, and default update behavior.
-        
-        This constructor prepares the coordinator's data structures, feature flags, cached price slots, resolution state, mutation queue, and timing controls used to fetch and aggregate market, user, device, and billing data.
-        
-        Parameters:
-            hass (HomeAssistant): Home Assistant core instance.
-            config_entry (ConfigEntry): Configuration entry for this integration.
-            api (FrankEnergie): Authenticated Frank Energie API client.
-        """
+        """Initialize the data object."""
         super().__init__(
             hass,
             _LOGGER,
             name="Frank Energie coordinator",
-            # update_interval=timedelta(seconds=DEFAULT_REFRESH_INTERVAL),
-            update_interval=None,
+            update_interval=self._update_interval,
             config_entry=config_entry,
         )
-        from .mutation_queue import MutationQueue
         self._mutation_queue = MutationQueue()
-        self.api = api
-        self.site_reference: str | None = config_entry.data.get("site_reference")
         self.hass = hass
         self.config_entry = config_entry
         self.api = api
         self._today_prices_logged: bool = False
         self._cache: dict = {}  # <--- hier cache je prijzen
         self.site_reference = config_entry.data.get("site_reference", None)
-        self._country_code: str | None = hass.config.country
-        self._user_country: str | None = hass.config.country
+        self.country_code: str | None = (
+            self.hass.config.country
+        )  # replaced by hass_country_code
+        self._country_code: str | None = self.hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
         self._connection_id: str | None = (
             None  # cache voor contractPriceResolutionState
         )
-        self._last_lowest_price_event: date | None = None
-        self._last_lowest_4p_event: date | None = None
-        self._last_lowest_16p_event: date | None = None
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
@@ -239,14 +226,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         _LOGGER.debug(
             "Initializing Frank Energie coordinator with country_code: %s",
             self.country_code,
-        )
-
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="Frank Energie coordinator",
-            update_interval=self._update_interval,
-            config_entry=config_entry,
         )
 
         self.cached_prices: FrankEnergieData | None = None
@@ -345,61 +324,72 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # ---------------------------------------------------
         # TODAY DATA
         # ---------------------------------------------------
-        try:
-            self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
-            self.last_fetch_today = now_utc
-        except AuthRequiredException as err:
-            raise ConfigEntryAuthFailed from err
-        except AuthException as err:
-            await self._try_renew_token()
-            raise UpdateFailed("Authentication temporarily failed") from err
-        except (RequestException, FrankEnergieException, ClientError) as err:
-            err_msg = str(err)
-            if "Not authorized" in err_msg or "Unauthorized" in err_msg:
-                _LOGGER.warning(
-                    "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err
-                )
-                await self._try_renew_token()
-                raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
-            _LOGGER.warning("Temporary network error while fetching Frank Energie data: %s", err)
-            raise UpdateFailed from err
+        await self._refresh_today_cache(today, tomorrow, now_utc)
+#         try:
+#             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
+#             self.last_fetch_today = now_utc
+#         except AuthRequiredException as err:
+#             raise ConfigEntryAuthFailed from err
+#         except AuthException as err:
+#             await self._try_renew_token()
+#             raise UpdateFailed("Authentication temporarily failed") from err
+#         except (RequestException, FrankEnergieException, ClientError) as err:
+#             err_msg = str(err)
+#            if "Not authorized" in err_msg or "Unauthorized" in err_msg:
+#                 _LOGGER.warning(
+#                     "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err
+#                 )
+#                 await self._try_renew_token()
+#                 raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
+#             _LOGGER.warning("Temporary network error while fetching Frank Energie data: %s", err)
+#             raise UpdateFailed from err
 
         if self.cached_prices_today is None:
             raise UpdateFailed("No data available and no cached data to fall back to.")
 
-        c = self.cached_prices_today
-
-        if (
-            c.prices_today is not None
-            and c.prices_today.electricity is not None
-            and not self._today_prices_logged
-        ):
-            _LOGGER.info("Frank Energie electricity prices available for %s", today)
-            self._today_prices_logged = True
-
         # ---------------------------------------------------
         # TOMORROW PRICES
         # ---------------------------------------------------
-        if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC:
-            if (
-                self.cached_prices_tomorrow is None
-                or self.last_fetch_tomorrow is None
-                or self.last_fetch_tomorrow.date() != today
-            ):
-                prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
-                if prices_tomorrow is not None:
-                    _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
-                    self.cached_prices_tomorrow = prices_tomorrow
-                    self.last_fetch_tomorrow = now_utc
-            else:
-                prices_tomorrow = self.cached_prices_tomorrow
-        else:
-            _LOGGER.debug(
-                "Not fetching tomorrow's prices yet (%02d:00 UTC, threshold: %02d:00 UTC).",
-                now_utc.hour,
-                self.FETCH_TOMORROW_HOUR_UTC,
-            )
-            prices_tomorrow = None
+        prices_tomorrow = await self._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+#         if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC:
+#             if (
+#                 self.cached_prices_tomorrow is None
+#                 or self.last_fetch_tomorrow is None
+#                 or self.last_fetch_tomorrow.date() != today
+#             ):
+#                 prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
+#                 if prices_tomorrow is not None:
+#                     _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
+#                     self.cached_prices_tomorrow = prices_tomorrow
+#                     self.last_fetch_tomorrow = now_utc
+#                     if self.config_entry is not None:
+#                         self.hass.bus.async_fire(
+#                             EVENT_FRANK_ENERGIE,
+#                             {
+#                                 "entry_id": self.config_entry.entry_id,
+#                                 "action": "tomorrow_prices_available",
+#                                 "date": tomorrow.isoformat(),
+#                                 "resolution": self.resolution,
+#                             },
+#                         )
+#                 elif self.cached_prices_tomorrow is not None:
+#                     _LOGGER.warning(
+#                         "Failed to fetch new tomorrow prices for %s, but cached data is available. Retaining cached data.",
+#                         tomorrow,
+#                     )
+#                     prices_tomorrow = self.cached_prices_tomorrow
+#             else:
+#                 # API returned nothing but we have cached data — keep it
+#                 _LOGGER.debug("No new tomorrow prices, retaining cached data for %s", tomorrow)
+#                 prices_tomorrow = self.cached_prices_tomorrow
+#         else:
+#             _LOGGER.debug(
+#                 "Not fetching tomorrow's prices yet (%02d:00 UTC, threshold: %02d:00 UTC).",
+#                 now_utc.hour,
+#                 self.FETCH_TOMORROW_HOUR_UTC,
+#             )
+#             prices_tomorrow = None
 
         # ---------------------------------------------------
         # AGGREGATION
@@ -430,6 +420,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
             self.last_fetch_today = now_utc
+
+            c = self.cached_prices_today
+
+            if (
+                c.prices_today is not None
+                and c.prices_today.electricity is not None
+                and not self._today_prices_logged
+            ):
+                _LOGGER.info("Frank Energie electricity prices available for %s", today)
+                self._today_prices_logged = True
         except AuthRequiredException as err:
             raise ConfigEntryAuthFailed from err
         except AuthException as err:
@@ -841,7 +841,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
             return None
 
-    async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
+    async def old_fetch_smart_pv_systems(self) -> SmartPvSystems | None:
         """Fetch Smart PV systems from the API."""
         if not self.api.is_authenticated:
             return None
@@ -854,6 +854,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
             return None
+
+    async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
+        """Fetch Smart PV systems from the API."""
+        if not self.api.is_authenticated:
+            return None
+        return await self.api.smart_pv_systems()
 
     async def _fetch_smart_pv_summary(
         self, device_id: str
@@ -989,7 +995,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 data_period_usage,
                 data_user,
             ) = await asyncio.gather(
-                self._fetch_prices_with_fallback(today, tomorrow),
+                self._fetch_prices_with_fallback(today, tomorrow, use_fallback=True),
                 self._fetch_user_sites(),
                 self._fetch_month_summary(),
                 self._fetch_invoices(),
@@ -1063,154 +1069,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         return details_list, sessions_list
 
-    def _maybe_fire_lowest_price_event(
-        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
-    ) -> None:
-        """Fire the lowest-price event if within the cheapest price slot."""
-        if not self._should_fire_lowest_price_event(today):
-            return
-
-        lowest = (
-            prices_today.electricity.today_min
-            if prices_today and prices_today.electricity
-            else None
-        )
-        if lowest is None:
-            return
-
-        start = self._ensure_utc(lowest.date_from)
-        end = self._ensure_utc(lowest.date_till)
-
-        if not (start <= now_utc < end):
-            return
-
-        self.hass.bus.async_fire(
-            EVENT_FRANK_ENERGIE,
-            {
-                "entry_id": self.config_entry.entry_id,
-                "action": "lowest_price",
-                "resolution": int((end - start).total_seconds() / 60),
-                "price": lowest.total,
-                "unit": "€/kWh",
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-            },
-        )
-        _LOGGER.debug(
-            "Fired frank_energie_event (lowest_price): %s → %s @ %s",
-            start, end, lowest.total,
-        )
-        self._mark_lowest_price_event_fired(today)
-
-    def _maybe_fire_lowest_4p_event(
-        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
-    ) -> None:
-        """Fire the lowest-4h-window event if within the cheapest consecutive block."""
-        if not self._should_fire_lowest_4p_event(today):
-            return
-
-        prices = (
-            prices_today.electricity.today
-            if prices_today and prices_today.electricity
-            else None
-        )
-        if not prices:
-            return
-
-        result = self._find_lowest_consecutive_hours(prices, window=4)
-        if result is None:
-            return
-
-        average_price, start_price, end_price = result
-
-        resolution = (
-            int((prices[1].date_from - prices[0].date_from).total_seconds() / 60)
-            if len(prices) >= 2
-            else 60
-        )
-
-        start = self._ensure_utc(start_price.date_from)
-        end = self._ensure_utc(end_price.date_till)
-
-        if not (start <= now_utc < end):
-            return
-
-        self.hass.bus.async_fire(
-            EVENT_FRANK_ENERGIE,
-            {
-                "entry_id": self.config_entry.entry_id,
-                "action": "lowest_4p_price",
-                "periods": 4,
-                "resolution": resolution,
-                "average_price": round(average_price, 3),
-                "unit": "€/kWh",
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-            },
-        )
-        _LOGGER.debug(
-            "Fired frank_energie_event (lowest_4p_price): %s → %s @ avg %s",
-            start, end, round(average_price, 3),
-        )
-        self._mark_lowest_4p_event_fired(today)
-
-    def _maybe_fire_lowest_16p_event(
-        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
-    ) -> None:
-        """Fire the lowest-16p-window event if within the cheapest consecutive block."""
-        if not self._should_fire_lowest_16p_event(today):
-            return
-
-        prices = (
-            prices_today.electricity.today
-            if prices_today and prices_today.electricity
-            else None
-        )
-        if not prices:
-            return
-
-        result = self._find_lowest_consecutive_hours(prices, window=16)
-        if result is None:
-            return
-
-        average_price, start_price, end_price = result
-
-        # calculate the resolution by looking at the first two price points. Default to 60 if 2 points are not available
-        resolution = (
-            int((prices[1].date_from - prices[0].date_from).total_seconds() / 60)
-            if len(prices) >= 2
-            else 60
-        )
-
-        # Only fire if the resolution is 15 minutes, else it would fire for 16 hour period.
-        if not resolution == 15:
-            return
-
-        start = self._ensure_utc(start_price.date_from)
-        end = self._ensure_utc(end_price.date_till)
-
-        if not (start <= now_utc < end):
-            return
-
-        self.hass.bus.async_fire(
-            EVENT_FRANK_ENERGIE,
-            {
-                "entry_id": self.config_entry.entry_id,
-                "action": "lowest_16p_price",
-                "periods": 16,
-                "resolution": resolution,
-                "average_price": round(average_price, 3),
-                "unit": "€/kWh",
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-            },
-        )
-        _LOGGER.debug(
-            "Fired frank_energie_event (lowest_16p_price): %s → %s @ avg %s",
-            start, end, round(average_price, 3),
-        )
-        self._mark_lowest_16p_event_fired(today)
-    
     async def _fetch_today_data(
         self, today: date, tomorrow: date
     ) -> PricesTodayCache:
@@ -1340,7 +1198,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             _LOGGER.debug("Fetching Frank Energie data for tomorrow")
             return await self._fetch_prices_with_fallback(
-                tomorrow, tomorrow + timedelta(days=1)
+                tomorrow, tomorrow + timedelta(days=1), use_fallback=False
             )
         except UpdateFailed as err:
             _LOGGER.debug("Error fetching Frank Energie data for tomorrow (%s)", err)
@@ -1482,7 +1340,83 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
     async def _fetch_prices_with_fallback(
-        self, start_date: date, end_date: date
+        self, start_date: date, end_date: date, use_fallback: bool = True
+    ) -> MarketPrices:
+        """Fetch prices with fallback to public prices and cached data.
+
+        When use_fallback=False (e.g. tomorrow's prices), empty user prices are
+        returned as-is without substituting public prices.
+        This method attempts to fetch user-specific prices first, and if they are not available,
+        it falls back to public prices.
+        """
+        country_code = (
+            self.hass.config.country if self.hass and self.hass.config else "NL"
+        )
+
+        _LOGGER.debug("Fetching prices concurrently (use_fallback=%s)", use_fallback)
+        public_prices, user_prices = await asyncio.gather(
+            self._fetch_public_prices_for_range(start_date, end_date, country_code),
+            self._fetch_user_prices_for_range(start_date, end_date, country_code),
+        )
+
+        if public_prices is None:
+            public_prices = getattr(
+                self,
+                "_cached_prices",
+                MarketPrices(
+                    electricity=PriceData([], "electricity"),
+                    gas=PriceData([], "gas"),
+                    energy_country=country_code or "NL",
+                ),
+            )
+
+        if not self.api.is_authenticated:
+            return public_prices
+
+        if user_prices is None:
+            if not use_fallback:
+                _LOGGER.debug("No user prices for tomorrow, skipping fallback")
+                return public_prices
+            _LOGGER.warning("Failed to fetch user prices, falling back to public prices")
+            return public_prices
+
+        # Use user prices if both gas and electricity have data
+        has_electricity = user_prices.electricity is not None and getattr(user_prices.electricity, "all", None)
+        has_gas = user_prices.gas is not None and getattr(user_prices.gas, "all", None)
+
+        if has_electricity and has_gas:
+            self._cached_prices = user_prices
+            return user_prices
+
+        # No fallback for tomorrow — return what we have
+        if not use_fallback:
+            _LOGGER.debug(
+                "No complete user prices for tomorrow (electricity=%s gas=%s), skipping fallback",
+                bool(has_electricity),
+                bool(has_gas),
+            )
+            return user_prices
+
+        # Fallback logic for today
+        if not has_gas:
+            _LOGGER.info("No gas prices for user, falling back to public prices")
+            user_prices.gas = (
+                public_prices.gas if self.user_gas_enabled else PriceData([], "gas")
+            )
+
+        if not has_electricity:
+            _LOGGER.info("No electricity prices for user, falling back to public prices")
+            user_prices.electricity = (
+                public_prices.electricity
+                if self.user_electricity_enabled
+                else PriceData([], "electricity")
+            )
+
+        self._cached_prices = user_prices
+        return user_prices
+
+    async def old_fetch_prices_with_fallback(
+        self, start_date: date, end_date: date, use_fallback: bool = True
     ) -> MarketPrices:
         """Fetch prices with fallback to public prices and cached data.
         This method attempts to fetch user-specific prices first, and if they are not available,
@@ -1680,15 +1614,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Mark the lowest-price event as fired for today."""
         self._last_lowest_price_event = today
 
-    def _mark_lowest_4p_event_fired(self, today: date) -> None:
-        """
-        Record that the lowest 4-period price event has been fired for the given date.
-        
-        Parameters:
-            today (date): The date to mark as having had the lowest 4-period event fired.
-        """
-        self._last_lowest_4p_event = today
-
     def _should_fire_lowest_4p_event(self, today: date) -> bool:
         """Return True if the lowest-4p event has not yet fired today."""
         return self._last_lowest_4p_event != today
@@ -1698,23 +1623,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_lowest_4p_event = today
 
     def _should_fire_lowest_16p_event(self, today: date) -> bool:
-        """
-        Determine whether the lowest-16p event has not yet been fired for the given day.
-        
-        Returns:
-            True if the lowest-16p event has not been fired for `today`, False otherwise.
-        """
+        """Return True if the lowest-16p event has not yet fired today."""
         return self._last_lowest_16p_event != today
 
     def _mark_lowest_16p_event_fired(self, today: date) -> None:
-        """
-        Record that the 16-point lowest-price event has been fired for the given day.
-        
-        This stores the provided date in the coordinator's internal marker so the same event is not emitted again for that day.
-        
-        Parameters:
-            today (date): The date for which the 16-point lowest-price event has been fired.
-        """
+        """Mark the lowest-16p event as fired for today."""
         self._last_lowest_16p_event = today
 
     def _reconcile_resolution(self) -> None:
@@ -1797,20 +1710,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
     @property
-    def resolution(self) -> str:
-        """Effective price resolution used for API queries."""
-        if self.config_entry is None:
-            return DEFAULT_RESOLUTION
-        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
-
-    @property
     def api_resolution(self) -> str | None:
-        """
-        Return the active resolution option reported by the API.
-        
-        Returns:
-            The API's active resolution option string (for example, "PT60M") if available, `None` otherwise.
-        """
+        """Resolution reported by API (read-only)."""
         return (
             self._api_resolution_state.activeOption
             if self._api_resolution_state
@@ -1818,15 +1719,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
-        """
-        Builds an EnodeVehicles container from a list of vehicle dictionaries.
-        
-        Parameters:
-            data (list[dict]): List of mappings with vehicle fields suitable for constructing `EnodeVehicle` objects.
-        
-        Returns:
-            EnodeVehicles: Container object whose `vehicles` list contains `EnodeVehicle` instances parsed from `data`.
-        """
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
 
