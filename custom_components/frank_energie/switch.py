@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_COORDINATOR,
     DOMAIN,
     DATA_ENODE_VEHICLES,
 )
@@ -29,7 +30,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie switches."""
     coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        "coordinator"
+        CONF_COORDINATOR
     ]
     entities: list[SwitchEntity] = []
 
