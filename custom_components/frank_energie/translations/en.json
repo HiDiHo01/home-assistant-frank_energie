@@ -14,19 +14,18 @@
         },
         "step": {
             "login": {
-                "title": "Enter your Frank Energie account credentials",
-                "description": "Enter your Frank Energie account credentials.",
                 "data": {
-                    "username": "Username / e-mail",
-                    "password": "Password"
-                }
+                    "password": "Password",
+                    "username": "Username / e-mail"
+                },
+                "title": "Enter your Frank Energie account credentials"
             },
             "user": {
-                "title": "Do you want to sign in to Frank Energie?",
-                "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
                 "data": {
                     "authentication": "Use Frank Energie account credentials"
-                }
+                },
+                "title": "Do you want to sign in to Frank Energie?",
+                "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account."
             },
             "reconfigure": {
                 "title": "Reconfigure account",
@@ -50,21 +49,25 @@
         }
     },
     "entity": {
-        "binary_sensor": {
-            "smart_charging": {
-                "name": "Smart charging"
-            },
-            "smart_trading": {
-                "name": "Smart trading"
-            },
-            "smart_feed_in": {
-                "name": "Smart feed-in"
-            },
-            "smart_hvac": {
-                "name": "Smart HVAC"
+        "select": {
+            "electericity_active_resolution": {
+                "name": "Electricity price resolution",
+                "options": {
+                    "PT15M": "Every 15 minutes",
+                    "PT60M": "Every hour"
+                }
             }
         },
         "button": {
+            "refresh_prices": {
+                "name": "Refresh Prices"
+            },
+            "refresh_battery_sessions": {
+                "name": "Refresh Battery Sessions"
+            },
+            "refresh_chargers": {
+                "name": "Refresh Chargers"
+            },
             "disable_smart_trading": {
                 "name": "Disable smart trading"
             },
@@ -84,6 +87,20 @@
             },
             "pv_steering_status": {
                 "name": "Steering status"
+            }
+        },
+        "binary_sensor": {
+            "smart_charging": {
+                "name": "Smart charging"
+            },
+            "smart_trading": {
+                "name": "Smart trading"
+            },
+            "smart_feed_in": {
+                "name": "Smart feed-in"
+            },
+            "smart_hvac": {
+                "name": "Smart HVAC"
             }
         },
         "switch": {
