@@ -1,5 +1,7 @@
 """Binary sensors for the Frank Energie integration."""
 
+# binary_sensor.py
+# version 2026.05.31
 from __future__ import annotations
 
 import logging
