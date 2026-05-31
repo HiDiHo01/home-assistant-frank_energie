@@ -7,10 +7,14 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Generic, TypeVar
 
 from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -19,9 +23,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
-    DOMAIN,
+    DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DOMAIN,
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_USER,
 )
@@ -30,6 +35,8 @@ from .sensor import SmartBatteriesData
 
 _LOGGER = logging.getLogger(__name__)
 _DataT = TypeVar("_DataT")
+
+VERSION = "2026.5.31"
 
 
 @dataclass(slots=True, frozen=True)
@@ -182,6 +189,7 @@ class FrankEnergieSmartFeatureBinarySensor(
         self._attr_icon = icon
         self._attr_translation_key = translation_key
         self._attr_unique_id = f"{config_entry.entry_id}_{key}"
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{config_entry.entry_id}_{SERVICE_NAME_USER}")},
             name=f"{COMPONENT_TITLE} - {SERVICE_NAME_USER}",
@@ -217,6 +225,7 @@ class FrankEnergieSmartChargingBinarySensor(FrankEnergieSmartFeatureBinarySensor
             icon="mdi:car-electric",
             translation_key="smart_charging",
         )
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
 
     def _get_is_on(self) -> bool | None:
         user_data = self.coordinator.data.get(DATA_USER)
@@ -244,6 +253,7 @@ class FrankEnergieSmartTradingBinarySensor(FrankEnergieSmartFeatureBinarySensor)
             icon="mdi:battery-sync",
             translation_key="smart_trading",
         )
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
 
     def _get_is_on(self) -> bool | None:
         user_data = self.coordinator.data.get(DATA_USER)
@@ -271,11 +281,13 @@ class FrankEnergieSmartFeedInBinarySensor(FrankEnergieSmartFeatureBinarySensor):
             icon="mdi:solar-power-variant",
             translation_key="smart_feed_in",
         )
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
 
-    def _get_is_on(self) -> bool | None:
-        feed_in_status = self.coordinator.data.get(DATA_USER_SMART_FEED_IN)
-        if not feed_in_status:
-            return None
+    def _get_is_on(self) -> bool | str | None:
+        feed_in_status = self.coordinator.data.get(DATA_USER_SMART_FEED_IN, None)
+        if feed_in_status is None:
+            self._attr_available = False
+            return STATE_UNAVAILABLE
         if isinstance(feed_in_status, dict):
             return feed_in_status.get("isActivated", False)
         return getattr(feed_in_status, "is_activated", False)
@@ -297,18 +309,97 @@ class FrankEnergieSmartHvacBinarySensor(FrankEnergieSmartFeatureBinarySensor):
             icon="mdi:heat-pump",
             translation_key="smart_hvac",
         )
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
 
-    def _get_is_on(self) -> bool | None:
+    @property
+    def available(self) -> bool:
+        """Return True if smart PV systems are present."""
         user_data = self.coordinator.data.get(DATA_USER)
         if not user_data:
-            return None
+            return False
         smart_hvac = getattr(user_data, "smartHvac", None)
         if smart_hvac is None:
-            return None
+            self._attr_available = False
+            return False
+        return True
+
+    def _get_is_on(self) -> bool | str | None:
+        user_data = self.coordinator.data.get(DATA_USER, None)
+        if user_data is None:
+            return STATE_UNAVAILABLE
+        smart_hvac = getattr(user_data, "smartHvac", None)
+        if smart_hvac is None:
+            self._attr_available = False
+            return STATE_UNAVAILABLE
         if isinstance(smart_hvac, dict):
             return smart_hvac.get("isActivated", False)
         return getattr(smart_hvac, "isActivated", False)
 
+
+class FrankEnergieSmartPvSystemsSensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor indicating whether smart PV systems are present."""
+
+    _attr_name = "Frank Energie Smart PV Systems"
+    _attr_icon = "mdi:solar-panel"
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            config_entry
+        )
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_smart_pv_systems"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{config_entry.entry_id}_{SERVICE_NAME_USER}")},
+            name=f"{COMPONENT_TITLE}",
+            manufacturer=COMPONENT_TITLE,
+            configuration_url=API_CONF_URL,
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if smart PV systems are present."""
+        pv = self.coordinator.data.get(DATA_PV_SYSTEMS, None)
+        if pv is None:
+            self._attr_available = False
+            return False
+        return bool(pv)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if smart PV systems are present."""
+        pv = self.coordinator.data.get(DATA_PV_SYSTEMS)
+        return bool(pv)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        pv = self.coordinator.data.get(DATA_PV_SYSTEMS)
+        if not pv:
+            return {"system_count": 0}
+        return {
+            "system_count": len(pv.systems),
+            "systems": [
+                {
+                    "id": s.id,
+                    "display_name": s.display_name,
+                    "brand": s.brand,
+                    "model": s.model,
+                    "status": s.onboardingStatus,
+                }
+                for s in pv.systems
+            ],
+        }
+
+    @property
+    def device_info(self):
+        return {"identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)}}
 
 # ---------------------------------------------------------------------------
 # Battery self-consumption binary sensor (existing, kept from old approach)
@@ -380,6 +471,7 @@ async def async_setup_entry(
         entities.append(FrankEnergieSmartTradingBinarySensor(coordinator, config_entry))
         entities.append(FrankEnergieSmartFeedInBinarySensor(coordinator, config_entry))
         entities.append(FrankEnergieSmartHvacBinarySensor(coordinator, config_entry))
+        entities.append(FrankEnergieSmartPvSystemsSensor(coordinator, config_entry))
 
     # --- Battery self-consumption trading (per battery, from SmartBatteryDetails) ---
     batteries_data: SmartBatteriesData | None = coordinator.data.get("smart_batteries")
