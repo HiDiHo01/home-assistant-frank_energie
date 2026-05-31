@@ -359,3 +359,454 @@ async def test_fetch_month_summary_auth_exception(coordinator, mock_frank_energi
     mock_frank_energie.month_summary.side_effect = AuthException("auth error")
     result = await coordinator._fetch_month_summary()
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Tests for code changed/added in this PR
+# ---------------------------------------------------------------------------
+
+
+class TestInitNewAttributes:
+    """Tests for new attributes introduced in __init__ by this PR."""
+
+    def test_last_lowest_4p_event_initialized_to_none(self, coordinator):
+        """_last_lowest_4p_event must start as None."""
+        assert coordinator._last_lowest_4p_event is None
+
+    def test_last_lowest_16p_event_initialized_to_none(self, coordinator):
+        """_last_lowest_16p_event must start as None."""
+        assert coordinator._last_lowest_16p_event is None
+
+    def test_api_resolution_state_initialized_to_none(self, coordinator):
+        """_api_resolution_state must start as None."""
+        assert coordinator._api_resolution_state is None
+
+    def test_mutation_queue_created(self, coordinator):
+        """A MutationQueue instance must be created during init."""
+        from custom_components.frank_energie.mutation_queue import MutationQueue
+
+        assert isinstance(coordinator._mutation_queue, MutationQueue)
+
+    def test_api_set_from_argument(self, coordinator, mock_frank_energie):
+        """The api attribute must equal the api argument passed to __init__."""
+        assert coordinator.api is mock_frank_energie
+
+    def test_site_reference_from_config_entry(self, mock_frank_energie):
+        """site_reference must be read from config_entry.data."""
+        entry = MockConfigEntry(
+            version=1,
+            domain="frank_energie",
+            title="Frank Energie",
+            data={"site_reference": "ref-xyz", "access_token": "tok"},
+            options={},
+            source="user",
+            entry_id="abc",
+            state="loaded",
+            minor_version=1,
+            unique_id="uid-xyz",
+        )
+        coord = FrankEnergieCoordinator(
+            hass=MagicMock(),
+            config_entry=entry,
+            api=mock_frank_energie,
+        )
+        assert coord.site_reference == "ref-xyz"
+
+    def test_site_reference_none_when_not_in_data(self, mock_frank_energie):
+        """site_reference must be None when not present in config_entry.data."""
+        # Create config entry without 'site_reference' key
+        entry_data_without_site_ref = {k: v for k, v in mock_entry_data.items() if k != "site_reference"}
+        entry = MockConfigEntry(
+            version=1,
+            domain="frank_energie",
+            title="Frank Energie",
+            data=entry_data_without_site_ref,
+            options={},
+            source="user",
+            entry_id="no-site-ref",
+            state="loaded",
+            minor_version=1,
+            unique_id="uid-no-site-ref",
+        )
+        coord = FrankEnergieCoordinator(
+            hass=MagicMock(),
+            config_entry=entry,
+            api=mock_frank_energie,
+        )
+        assert coord.site_reference is None
+
+
+class TestMarkLowest4pEventFired:
+    """Tests for the renamed _mark_lowest_4p_event_fired method."""
+
+    def test_sets_last_lowest_4p_event(self, coordinator):
+        """After calling _mark_lowest_4p_event_fired, _last_lowest_4p_event equals today."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        coordinator._mark_lowest_4p_event_fired(today)
+        assert coordinator._last_lowest_4p_event == today
+
+    def test_overwrites_previous_date(self, coordinator):
+        """Calling _mark_lowest_4p_event_fired twice updates to the latest date."""
+        from datetime import date
+
+        old_date = date(2026, 5, 29)
+        new_date = date(2026, 5, 30)
+        coordinator._mark_lowest_4p_event_fired(old_date)
+        coordinator._mark_lowest_4p_event_fired(new_date)
+        assert coordinator._last_lowest_4p_event == new_date
+
+    def test_does_not_affect_other_event_flags(self, coordinator):
+        """_mark_lowest_4p_event_fired must not modify other event tracking attributes."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        coordinator._mark_lowest_4p_event_fired(today)
+        assert coordinator._last_lowest_price_event is None
+        assert coordinator._last_lowest_16p_event is None
+
+
+class TestShouldFireLowest16pEvent:
+    """Tests for the new _should_fire_lowest_16p_event method."""
+
+    def test_returns_true_when_never_fired(self, coordinator):
+        """Should return True when _last_lowest_16p_event is None."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        assert coordinator._should_fire_lowest_16p_event(today) is True
+
+    def test_returns_true_when_fired_on_different_day(self, coordinator):
+        """Should return True when last event was fired on a different day."""
+        from datetime import date
+
+        yesterday = date(2026, 5, 29)
+        today = date(2026, 5, 30)
+        coordinator._last_lowest_16p_event = yesterday
+        assert coordinator._should_fire_lowest_16p_event(today) is True
+
+    def test_returns_false_when_already_fired_today(self, coordinator):
+        """Should return False when event was already fired today."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        coordinator._last_lowest_16p_event = today
+        assert coordinator._should_fire_lowest_16p_event(today) is False
+
+
+class TestMarkLowest16pEventFired:
+    """Tests for the new _mark_lowest_16p_event_fired method."""
+
+    def test_sets_last_lowest_16p_event(self, coordinator):
+        """After calling _mark_lowest_16p_event_fired, _last_lowest_16p_event equals today."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        coordinator._mark_lowest_16p_event_fired(today)
+        assert coordinator._last_lowest_16p_event == today
+
+    def test_subsequent_should_fire_returns_false(self, coordinator):
+        """After marking fired, _should_fire_lowest_16p_event must return False."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        coordinator._mark_lowest_16p_event_fired(today)
+        assert coordinator._should_fire_lowest_16p_event(today) is False
+
+    def test_does_not_affect_4p_event_flag(self, coordinator):
+        """_mark_lowest_16p_event_fired must not modify _last_lowest_4p_event."""
+        from datetime import date
+
+        today = date(2026, 5, 30)
+        coordinator._mark_lowest_16p_event_fired(today)
+        assert coordinator._last_lowest_4p_event is None
+
+
+class TestReconcileResolution:
+    """Tests for the new _reconcile_resolution method."""
+
+    def test_returns_early_when_no_api_resolution_state(self, coordinator):
+        """Must return without error when _api_resolution_state is None."""
+        coordinator._api_resolution_state = None
+        # Should not raise
+        coordinator._reconcile_resolution()
+
+    def test_returns_early_when_config_entry_is_none(self, coordinator):
+        """Must return without error when config_entry is None."""
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT15M"
+        coordinator._api_resolution_state = mock_state
+        coordinator.config_entry = None
+        # Should not raise
+        coordinator._reconcile_resolution()
+
+    def test_no_warning_when_values_match(self, coordinator):
+        """Must not log a warning when API and config values are identical."""
+        from unittest.mock import patch
+
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT15M"
+        coordinator._api_resolution_state = mock_state
+        mock_config_entry = MagicMock()
+        mock_config_entry.options = {"resolution": "PT15M"}
+        coordinator.config_entry = mock_config_entry
+
+        with patch(
+            "custom_components.frank_energie.coordinator._LOGGER"
+        ) as mock_logger:
+            coordinator._reconcile_resolution()
+            mock_logger.warning.assert_not_called()
+
+    def test_logs_warning_when_drift_detected(self, coordinator):
+        """Must log a warning when config and API resolution values differ."""
+        from unittest.mock import patch
+
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT60M"
+        coordinator._api_resolution_state = mock_state
+        mock_config_entry = MagicMock()
+        mock_config_entry.options = {"resolution": "PT15M"}
+        coordinator.config_entry = mock_config_entry
+
+        with patch(
+            "custom_components.frank_energie.coordinator._LOGGER"
+        ) as mock_logger:
+            coordinator._reconcile_resolution()
+            mock_logger.warning.assert_called_once()
+            warning_args = mock_logger.warning.call_args[0]
+            assert "drift" in warning_args[0].lower() or "resolution" in warning_args[0].lower()
+
+    def test_no_warning_when_api_value_is_none(self, coordinator):
+        """Must not log a warning when api_value is None."""
+        from unittest.mock import patch
+
+        mock_state = MagicMock()
+        mock_state.activeOption = None
+        coordinator._api_resolution_state = mock_state
+        mock_config_entry = MagicMock()
+        mock_config_entry.options = {"resolution": "PT15M"}
+        coordinator.config_entry = mock_config_entry
+
+        with patch(
+            "custom_components.frank_energie.coordinator._LOGGER"
+        ) as mock_logger:
+            coordinator._reconcile_resolution()
+            mock_logger.warning.assert_not_called()
+
+    def test_no_warning_when_config_value_is_none(self, coordinator):
+        """Must not log a warning when config_value is None (not set)."""
+        from unittest.mock import patch
+
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT15M"
+        coordinator._api_resolution_state = mock_state
+        mock_config_entry = MagicMock()
+        # options dict without 'resolution' key -> get returns None
+        mock_config_entry.options = {}
+        coordinator.config_entry = mock_config_entry
+
+        with patch(
+            "custom_components.frank_energie.coordinator._LOGGER"
+        ) as mock_logger:
+            coordinator._reconcile_resolution()
+            mock_logger.warning.assert_not_called()
+
+
+class TestApiResolutionProperty:
+    """Tests for the new api_resolution property."""
+
+    def test_returns_none_when_no_api_resolution_state(self, coordinator):
+        """api_resolution must return None when _api_resolution_state is None."""
+        coordinator._api_resolution_state = None
+        assert coordinator.api_resolution is None
+
+    def test_returns_active_option_when_state_set(self, coordinator):
+        """api_resolution must return activeOption from _api_resolution_state."""
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT15M"
+        coordinator._api_resolution_state = mock_state
+        assert coordinator.api_resolution == "PT15M"
+
+    def test_returns_none_active_option_when_state_has_none(self, coordinator):
+        """api_resolution must propagate None activeOption from _api_resolution_state."""
+        mock_state = MagicMock()
+        mock_state.activeOption = None
+        coordinator._api_resolution_state = mock_state
+        assert coordinator.api_resolution is None
+
+    def test_property_is_read_only(self, coordinator):
+        """api_resolution must be a read-only property."""
+        import pytest
+
+        with pytest.raises(AttributeError):
+            coordinator.api_resolution = "PT60M"
+
+
+class TestAsyncSetResolution:
+    """Tests for the new async_set_resolution method."""
+
+    @pytest.mark.asyncio
+    async def test_raises_update_failed_when_no_connection_id(self, coordinator):
+        """Must raise UpdateFailed when _connection_id is None."""
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator._connection_id = None
+        coordinator.async_request_refresh = AsyncMock()
+
+        with pytest.raises(UpdateFailed, match="Missing connection id"):
+            await coordinator.async_set_resolution("PT15M")
+
+    @pytest.mark.asyncio
+    async def test_raises_update_failed_when_api_returns_none(self, coordinator, mock_frank_energie):
+        """Must raise UpdateFailed when API returns None result."""
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator._connection_id = "conn-123"
+        coordinator.async_request_refresh = AsyncMock()
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=None
+        )
+
+        with pytest.raises(UpdateFailed):
+            await coordinator.async_set_resolution("PT15M")
+
+    @pytest.mark.asyncio
+    async def test_raises_update_failed_when_result_not_success(
+        self, coordinator, mock_frank_energie
+    ):
+        """Must raise UpdateFailed when result.success is False."""
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator._connection_id = "conn-123"
+        coordinator.async_request_refresh = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.reason = "server_error"
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=mock_result
+        )
+
+        with pytest.raises(UpdateFailed, match="server_error"):
+            await coordinator.async_set_resolution("PT15M")
+
+    @pytest.mark.asyncio
+    async def test_success_updates_config_entry_and_requests_refresh(
+        self, coordinator, mock_frank_energie
+    ):
+        """On success, config entry must be updated and refresh must be requested."""
+        coordinator._connection_id = "conn-123"
+        coordinator.async_request_refresh = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = MagicMock()
+        mock_result.data.effectiveDate = "2026-06-01"
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=mock_result
+        )
+
+        await coordinator.async_set_resolution("PT60M")
+
+        coordinator.hass.config_entries.async_update_entry.assert_called_once_with(
+            coordinator.config_entry,
+            options={**coordinator.config_entry.options, "resolution": "PT60M"},
+        )
+        coordinator.async_request_refresh.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_api_called_with_connection_id_and_value(
+        self, coordinator, mock_frank_energie
+    ):
+        """The API must be called with correct connection_id and resolution value."""
+        coordinator._connection_id = "conn-abc"
+        coordinator.async_request_refresh = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = MagicMock()
+        mock_result.data.effectiveDate = "2026-06-01"
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=mock_result
+        )
+
+        await coordinator.async_set_resolution("PT15M")
+
+        mock_frank_energie.contract_price_resolution_request_change.assert_called_once_with(
+            "conn-abc", "PT15M"
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_config_update_when_config_entry_is_none(
+        self, coordinator, mock_frank_energie
+    ):
+        """If config_entry becomes None inside mutation, update must be skipped without error."""
+        coordinator._connection_id = "conn-123"
+        coordinator.async_request_refresh = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = MagicMock()
+        mock_result.data.effectiveDate = "2026-06-01"
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=mock_result
+        )
+
+        # Set config_entry to None after coordinator is created
+        coordinator.config_entry = None
+
+        # Should not raise
+        await coordinator.async_set_resolution("PT60M")
+        coordinator.async_request_refresh.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_called_even_after_mutation_success(
+        self, coordinator, mock_frank_energie
+    ):
+        """async_request_refresh must always be called after a successful mutation."""
+        coordinator._connection_id = "conn-999"
+        coordinator.async_request_refresh = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.data = None  # effectiveDate path: result.data is None
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=mock_result
+        )
+
+        await coordinator.async_set_resolution("PT15M")
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_not_called_when_mutation_raises(self, coordinator):
+        """async_request_refresh must NOT be called when the mutation raises UpdateFailed."""
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator._connection_id = None  # triggers UpdateFailed inside mutation
+        coordinator.async_request_refresh = AsyncMock()
+
+        with pytest.raises(UpdateFailed):
+            await coordinator.async_set_resolution("PT15M")
+
+        coordinator.async_request_refresh.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_error_message_contains_reason_when_result_fails(
+        self, coordinator, mock_frank_energie
+    ):
+        """UpdateFailed message must include the reason from the API response."""
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator._connection_id = "conn-123"
+        coordinator.async_request_refresh = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.reason = "contract_locked"
+        mock_frank_energie.contract_price_resolution_request_change = AsyncMock(
+            return_value=mock_result
+        )
+
+        with pytest.raises(UpdateFailed, match="contract_locked"):
+            await coordinator.async_set_resolution("PT15M")

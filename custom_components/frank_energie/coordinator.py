@@ -174,24 +174,44 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def __init__(
         self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
     ) -> None:
-        """Initialize the data object."""
+        """
+        Initialize the Frank Energie coordinator and set up internal state, caches, and default update behavior.
+        
+        This constructor prepares the coordinator's data structures, feature flags, cached price slots, resolution state, mutation queue, and timing controls used to fetch and aggregate market, user, device, and billing data.
+        
+        Parameters:
+            hass (HomeAssistant): Home Assistant core instance.
+            config_entry (ConfigEntry): Configuration entry for this integration.
+            api (FrankEnergie): Authenticated Frank Energie API client.
+        """
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="Frank Energie coordinator",
+            # update_interval=timedelta(seconds=DEFAULT_REFRESH_INTERVAL),
+            update_interval=None,
+            config_entry=config_entry,
+        )
         from .mutation_queue import MutationQueue
         self._mutation_queue = MutationQueue()
+        self.api = api
+        self.site_reference: str | None = config_entry.data.get("site_reference")
         self.hass = hass
         self.config_entry = config_entry
         self.api = api
         self._today_prices_logged: bool = False
         self._cache: dict = {}  # <--- hier cache je prijzen
         self.site_reference = config_entry.data.get("site_reference", None)
-        self.country_code: str | None = (
-            self.hass.config.country
-        )  # replaced by hass_country_code
-        self._country_code: str | None = self.hass.config.country
+        self._country_code: str | None = hass.config.country
+        self._user_country: str | None = hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
         self._connection_id: str | None = (
             None  # cache voor contractPriceResolutionState
         )
+        self._last_lowest_price_event: date | None = None
+        self._last_lowest_4p_event: date | None = None
+        self._last_lowest_16p_event: date | None = None
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
@@ -1043,6 +1063,154 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         return details_list, sessions_list
 
+    def _maybe_fire_lowest_price_event(
+        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
+    ) -> None:
+        """Fire the lowest-price event if within the cheapest price slot."""
+        if not self._should_fire_lowest_price_event(today):
+            return
+
+        lowest = (
+            prices_today.electricity.today_min
+            if prices_today and prices_today.electricity
+            else None
+        )
+        if lowest is None:
+            return
+
+        start = self._ensure_utc(lowest.date_from)
+        end = self._ensure_utc(lowest.date_till)
+
+        if not (start <= now_utc < end):
+            return
+
+        self.hass.bus.async_fire(
+            EVENT_FRANK_ENERGIE,
+            {
+                "entry_id": self.config_entry.entry_id,
+                "action": "lowest_price",
+                "resolution": int((end - start).total_seconds() / 60),
+                "price": lowest.total,
+                "unit": "€/kWh",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        )
+        _LOGGER.debug(
+            "Fired frank_energie_event (lowest_price): %s → %s @ %s",
+            start, end, lowest.total,
+        )
+        self._mark_lowest_price_event_fired(today)
+
+    def _maybe_fire_lowest_4p_event(
+        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
+    ) -> None:
+        """Fire the lowest-4h-window event if within the cheapest consecutive block."""
+        if not self._should_fire_lowest_4p_event(today):
+            return
+
+        prices = (
+            prices_today.electricity.today
+            if prices_today and prices_today.electricity
+            else None
+        )
+        if not prices:
+            return
+
+        result = self._find_lowest_consecutive_hours(prices, window=4)
+        if result is None:
+            return
+
+        average_price, start_price, end_price = result
+
+        resolution = (
+            int((prices[1].date_from - prices[0].date_from).total_seconds() / 60)
+            if len(prices) >= 2
+            else 60
+        )
+
+        start = self._ensure_utc(start_price.date_from)
+        end = self._ensure_utc(end_price.date_till)
+
+        if not (start <= now_utc < end):
+            return
+
+        self.hass.bus.async_fire(
+            EVENT_FRANK_ENERGIE,
+            {
+                "entry_id": self.config_entry.entry_id,
+                "action": "lowest_4p_price",
+                "periods": 4,
+                "resolution": resolution,
+                "average_price": round(average_price, 3),
+                "unit": "€/kWh",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        )
+        _LOGGER.debug(
+            "Fired frank_energie_event (lowest_4p_price): %s → %s @ avg %s",
+            start, end, round(average_price, 3),
+        )
+        self._mark_lowest_4p_event_fired(today)
+
+    def _maybe_fire_lowest_16p_event(
+        self, prices_today: MarketPrices | None, today: date, now_utc: datetime
+    ) -> None:
+        """Fire the lowest-16p-window event if within the cheapest consecutive block."""
+        if not self._should_fire_lowest_16p_event(today):
+            return
+
+        prices = (
+            prices_today.electricity.today
+            if prices_today and prices_today.electricity
+            else None
+        )
+        if not prices:
+            return
+
+        result = self._find_lowest_consecutive_hours(prices, window=16)
+        if result is None:
+            return
+
+        average_price, start_price, end_price = result
+
+        # calculate the resolution by looking at the first two price points. Default to 60 if 2 points are not available
+        resolution = (
+            int((prices[1].date_from - prices[0].date_from).total_seconds() / 60)
+            if len(prices) >= 2
+            else 60
+        )
+
+        # Only fire if the resolution is 15 minutes, else it would fire for 16 hour period.
+        if not resolution == 15:
+            return
+
+        start = self._ensure_utc(start_price.date_from)
+        end = self._ensure_utc(end_price.date_till)
+
+        if not (start <= now_utc < end):
+            return
+
+        self.hass.bus.async_fire(
+            EVENT_FRANK_ENERGIE,
+            {
+                "entry_id": self.config_entry.entry_id,
+                "action": "lowest_16p_price",
+                "periods": 16,
+                "resolution": resolution,
+                "average_price": round(average_price, 3),
+                "unit": "€/kWh",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+        )
+        _LOGGER.debug(
+            "Fired frank_energie_event (lowest_16p_price): %s → %s @ avg %s",
+            start, end, round(average_price, 3),
+        )
+        self._mark_lowest_16p_event_fired(today)
+    
     async def _fetch_today_data(
         self, today: date, tomorrow: date
     ) -> PricesTodayCache:
@@ -1512,6 +1680,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Mark the lowest-price event as fired for today."""
         self._last_lowest_price_event = today
 
+    def _mark_lowest_4p_event_fired(self, today: date) -> None:
+        """
+        Record that the lowest 4-period price event has been fired for the given date.
+        
+        Parameters:
+            today (date): The date to mark as having had the lowest 4-period event fired.
+        """
+        self._last_lowest_4p_event = today
+
     def _should_fire_lowest_4p_event(self, today: date) -> bool:
         """Return True if the lowest-4p event has not yet fired today."""
         return self._last_lowest_4p_event != today
@@ -1521,11 +1698,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_lowest_4p_event = today
 
     def _should_fire_lowest_16p_event(self, today: date) -> bool:
-        """Return True if the lowest-16p event has not yet fired today."""
+        """
+        Determine whether the lowest-16p event has not yet been fired for the given day.
+        
+        Returns:
+            True if the lowest-16p event has not been fired for `today`, False otherwise.
+        """
         return self._last_lowest_16p_event != today
 
     def _mark_lowest_16p_event_fired(self, today: date) -> None:
-        """Mark the lowest-16p event as fired for today."""
+        """
+        Record that the 16-point lowest-price event has been fired for the given day.
+        
+        This stores the provided date in the coordinator's internal marker so the same event is not emitted again for that day.
+        
+        Parameters:
+            today (date): The date for which the 16-point lowest-price event has been fired.
+        """
         self._last_lowest_16p_event = today
 
     def _reconcile_resolution(self) -> None:
@@ -1563,7 +1752,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self._connection_id:
             _LOGGER.warning("Cannot set resolution via API: connection_id not available")
             return
-            raise UpdateFailed("Missing connection id")
 
         if (
             self._api_resolution_state is not None
@@ -1592,10 +1780,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             if self.config_entry is None:
                 return
 
-            if self.config_entry.options.get("resolution") != result.activeOption:
+            if self.config_entry.options.get("resolution") != value:
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
-                    options={**self.config_entry.options, "resolution": result.activeOption},
+                    options={**self.config_entry.options, "resolution": value},
                 )
 
         await self._mutation_queue.add(_mutation)
@@ -1609,8 +1797,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
     @property
+    def resolution(self) -> str:
+        """Effective price resolution used for API queries."""
+        if self.config_entry is None:
+            return DEFAULT_RESOLUTION
+        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+
+    @property
     def api_resolution(self) -> str | None:
-        """Resolution reported by API (read-only)."""
+        """
+        Return the active resolution option reported by the API.
+        
+        Returns:
+            The API's active resolution option string (for example, "PT60M") if available, `None` otherwise.
+        """
         return (
             self._api_resolution_state.activeOption
             if self._api_resolution_state
@@ -1618,6 +1818,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
+        """
+        Builds an EnodeVehicles container from a list of vehicle dictionaries.
+        
+        Parameters:
+            data (list[dict]): List of mappings with vehicle fields suitable for constructing `EnodeVehicle` objects.
+        
+        Returns:
+            EnodeVehicles: Container object whose `vehicles` list contains `EnodeVehicle` instances parsed from `data`.
+        """
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
 
