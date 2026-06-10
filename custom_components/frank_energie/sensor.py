@@ -4013,6 +4013,12 @@ class FrankEnergieSensor(
             "quarter_hour_prices",
             "market_prices",
             "market_prices_upcoming",
+            "today_prices",
+            "tomorrow_prices",
+            "upcoming_prices",
+            "upcoming_market_prices",
+            "upcoming_market_tax_prices",
+            "upcoming_market_tax_markup_prices",
             # metadata / nested
             "connections",
             "contracts",
@@ -4029,8 +4035,7 @@ class FrankEnergieSensor(
         }
     )
 
-    # 🔑 THIS is what Recorder uses
-    _unrecorded_attributes: ClassVar[set[str]] = set(_no_record_keys)
+    _unrecorded_attributes: ClassVar[frozenset[str]] = _no_record_keys
 
     def __init__(
         self,
@@ -4172,16 +4177,9 @@ class FrankEnergieSensor(
             return {}
 
         try:
-            attributes = self.entity_description.attr_fn(self.coordinator.data) or {}
+            return self.entity_description.attr_fn(self.coordinator.data) or {}
         except Exception:
             return {}
-
-        # Automatically prevent Recorder bloat
-        for key, value in attributes.items():
-            if isinstance(value, (list, dict)):
-                self._unrecorded_attributes.add(key)
-
-        return attributes
 
     @property
     def available(self) -> bool:

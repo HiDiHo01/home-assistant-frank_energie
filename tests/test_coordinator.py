@@ -9,7 +9,7 @@ from custom_components.frank_energie.const import (
     DATA_USER,
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
-from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
+from custom_components.frank_energie.coordinator import FrankEnergieCoordinator, PricesTodayCache
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
@@ -109,28 +109,10 @@ async def test_fetch_today_data(coordinator, mock_frank_energie):
 
     # Assertions
     assert data is not None
-    (
-        prices_today,
-        data_month_summary,
-        data_invoices,
-        data_user,
-        user_sites,
-        data_period_usage,
-        data_enode_chargers,
-        data_smart_batteries,
-        data_smart_battery_details,
-        data_smart_battery_sessions,
-        data_enode_vehicles,
-        data_pv_systems,
-        data_pv_summary,
-        data_user_smart_feed_in,
-        data_contract_price_resolution_state,
-    ) = data
-
-    assert prices_today == mock_prices
-    assert isinstance(data_month_summary, MagicMock)
-    assert isinstance(data_invoices, MagicMock)
-    assert isinstance(data_user, MagicMock)
+    assert data.prices_today == mock_prices
+    assert isinstance(data.data_month_summary, MagicMock)
+    assert isinstance(data.data_invoices, MagicMock)
+    assert isinstance(data.data_user, MagicMock)
 
 
 @pytest.mark.asyncio
@@ -163,23 +145,27 @@ async def test_aggregate_data(coordinator):
     data_invoices = MagicMock(spec=Invoices)
     data_user = MagicMock(spec=User)
 
+    cache = PricesTodayCache(
+        prices_today=prices_today,
+        data_month_summary=data_month_summary,
+        data_invoices=data_invoices,
+        data_user=data_user,
+        user_sites=None,
+        data_period_usage=None,
+        data_enode_chargers=None,
+        data_smart_batteries=None,
+        data_smart_battery_details=[],
+        data_smart_battery_sessions=[],
+        data_enode_vehicles=None,
+        data_pv_systems=None,
+        data_pv_summary=None,
+        data_user_smart_feed_in=None,
+        data_contract_price_resolution_state=None,
+    )
+
     aggregated_data = coordinator._aggregate_data(
-        prices_today,
+        cache,
         prices_tomorrow,
-        data_month_summary,
-        data_invoices,
-        data_user,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
     )
 
     # Assertions
@@ -196,8 +182,8 @@ async def test_adjust_update_interval_inside_window(coordinator):
     from datetime import datetime, timezone
     from unittest.mock import patch
 
-    # Price release window is between 13:00 and 15:00 UTC
-    now_utc = datetime(2026, 5, 27, 14, 0, 0, tzinfo=timezone.utc)
+    # Price release window is between 11:00 and 13:00 UTC
+    now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
 
     with patch("secrets.randbelow", return_value=10) as mock_randbelow:
         coordinator._adjust_update_interval(now_utc)
@@ -648,14 +634,12 @@ class TestAsyncSetResolution:
 
     @pytest.mark.asyncio
     async def test_raises_update_failed_when_no_connection_id(self, coordinator):
-        """Must raise UpdateFailed when _connection_id is None."""
-        from homeassistant.helpers.update_coordinator import UpdateFailed
-
+        """Must return early without raising when _connection_id is None."""
         coordinator._connection_id = None
         coordinator.async_request_refresh = AsyncMock()
 
-        with pytest.raises(UpdateFailed, match="Missing connection id"):
-            await coordinator.async_set_resolution("PT15M")
+        await coordinator.async_set_resolution("PT15M")
+        coordinator.async_request_refresh.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_raises_update_failed_when_api_returns_none(self, coordinator, mock_frank_energie):
@@ -779,16 +763,12 @@ class TestAsyncSetResolution:
         coordinator.async_request_refresh.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_refresh_not_called_when_mutation_raises(self, coordinator):
-        """async_request_refresh must NOT be called when the mutation raises UpdateFailed."""
-        from homeassistant.helpers.update_coordinator import UpdateFailed
-
-        coordinator._connection_id = None  # triggers UpdateFailed inside mutation
+    async def test_refresh_not_called_when_connection_id_is_none(self, coordinator):
+        """async_request_refresh must NOT be called when _connection_id is None."""
+        coordinator._connection_id = None
         coordinator.async_request_refresh = AsyncMock()
 
-        with pytest.raises(UpdateFailed):
-            await coordinator.async_set_resolution("PT15M")
-
+        await coordinator.async_set_resolution("PT15M")
         coordinator.async_request_refresh.assert_not_called()
 
     @pytest.mark.asyncio
@@ -810,3 +790,61 @@ class TestAsyncSetResolution:
 
         with pytest.raises(UpdateFailed, match="contract_locked"):
             await coordinator.async_set_resolution("PT15M")
+
+
+@pytest.mark.asyncio
+async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_energie):
+    """Test that _fetch_today_data retries on AuthException after renewing token."""
+    from python_frank_energie.exceptions import AuthException
+
+    # Mock static data fetch: raise AuthException on first call, return valid tuple on second
+    mock_prices = MagicMock()
+    mock_prices.electricity.all = [MagicMock()]
+    mock_prices.gas.all = [MagicMock()]
+    mock_prices.electricity.today_min = MagicMock()
+
+    mock_user = MagicMock()
+    mock_user.connections = []
+
+    static_data_result = (
+        mock_prices,
+        MagicMock(), # user_sites
+        MagicMock(), # data_month_summary
+        MagicMock(), # data_invoices
+        MagicMock(), # data_period_usage
+        mock_user,   # data_user
+        None,        # data_contract_price_resolution_state
+    )
+
+    call_count = 0
+    async def mock_get_static_data(today, tomorrow, start_date):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise AuthException("Token expired")
+        return static_data_result
+
+    coordinator._get_static_data = mock_get_static_data
+    coordinator._try_renew_token = AsyncMock()
+    coordinator._clear_static_cache = MagicMock()
+
+    # Mock dynamic data fetches
+    coordinator._fetch_enode_chargers = AsyncMock(return_value={})
+    coordinator._fetch_smart_batteries = AsyncMock(return_value=None)
+    coordinator._fetch_enode_vehicles = AsyncMock(return_value=None)
+    coordinator._fetch_smart_pv_systems = AsyncMock(return_value=None)
+    coordinator._fetch_user_smart_feed_in = AsyncMock(return_value=None)
+    coordinator._get_battery_details_and_sessions = AsyncMock(return_value=([], []))
+
+    # Perform the fetch
+    data = await coordinator._fetch_today_data(
+        datetime.now(timezone.utc).date(),
+        datetime.now(timezone.utc).date() + timedelta(days=1),
+    )
+
+    assert data is not None
+    assert call_count == 2
+    coordinator._try_renew_token.assert_called_once()
+    coordinator._clear_static_cache.assert_called_once()
+    assert data.prices_today == mock_prices
+

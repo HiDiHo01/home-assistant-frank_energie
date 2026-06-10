@@ -180,7 +180,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             hass,
             _LOGGER,
             name="Frank Energie coordinator",
-            update_interval=self._update_interval,
+            update_interval=timedelta(seconds=DEFAULT_REFRESH_INTERVAL),
             config_entry=config_entry,
         )
         self._mutation_queue = MutationQueue()
@@ -394,6 +394,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # ---------------------------------------------------
         # AGGREGATION
         # ---------------------------------------------------
+        c = self.cached_prices_today
         result = self._aggregate_data(c, prices_tomorrow)
         self.cached_prices = result
 
@@ -1087,111 +1088,133 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         yesterday = today - timedelta(days=1)
         start_date = yesterday
 
-        try:
-            _LOGGER.debug(
-                "Fetching Frank Energie data for today %s", self.config_entry.entry_id
-            )
-
-            (
-                prices_today,
-                user_sites,
-                data_month_summary,
-                data_invoices,
-                data_period_usage,
-                data_user,
-                data_contract_price_resolution_state,
-            ) = await self._get_static_data(today, tomorrow, start_date)
-
-            # Initialize feature flags
-            is_smart_charging = False
-            is_smart_trading = False
-            if data_user:
-                # Check if smart charging and trading are activated
-                is_smart_charging = self._is_smart_charging_enabled(data_user)
-                is_smart_trading = self._is_smart_trading_enabled(data_user)
-
-            _LOGGER.debug("Fetching dynamic interval data concurrently")
-            (
-                data_enode_chargers,
-                data_smart_batteries,
-                data_enode_vehicles,
-                data_pv_systems,
-                data_user_smart_feed_in,
-            ) = await asyncio.gather(
-                self._fetch_enode_chargers(start_date, is_smart_charging),
-                self._fetch_smart_batteries(is_smart_trading),
-                self._fetch_enode_vehicles(is_smart_charging),
-                self._fetch_smart_pv_systems(),
-                self._fetch_user_smart_feed_in(),
-            )
-
-            (
-                data_smart_battery_details,
-                data_smart_battery_sessions,
-            ) = await self._get_battery_details_and_sessions(
-                data_smart_batteries, start_date, tomorrow
-            )
-
-            data_pv_summary = {}
-            if data_pv_systems and data_pv_systems.systems:
-                systems = [s for s in data_pv_systems.systems if s]
-                pv_tasks = [
-                    self._fetch_smart_pv_summary(system.id) for system in systems
-                ]
-                pv_summaries = await asyncio.gather(*pv_tasks)
-                for system, summary in zip(systems, pv_summaries):
-                    if summary:
-                        data_pv_summary[system.id] = summary
-
-            # Detect and log IN_DELIVERY status for clean user experience
-            if self.api.is_authenticated:
-                is_not_in_delivery = self._is_not_in_delivery_site(
-                    data_month_summary, data_invoices, user_sites
+        for attempt in (1, 2):
+            try:
+                _LOGGER.debug(
+                    "Fetching Frank Energie data for today %s (attempt %d)", self.config_entry.entry_id, attempt
                 )
-                self._log_not_in_delivery_status(is_not_in_delivery)
 
-            return PricesTodayCache(
-                prices_today=prices_today,
-                data_month_summary=data_month_summary,
-                data_invoices=data_invoices,
-                data_user=data_user,
-                user_sites=user_sites,
-                data_period_usage=data_period_usage,
-                data_enode_chargers=data_enode_chargers,
-                data_smart_batteries=data_smart_batteries,
-                data_smart_battery_details=data_smart_battery_details,
-                data_smart_battery_sessions=data_smart_battery_sessions,
-                data_enode_vehicles=data_enode_vehicles,
-                data_pv_systems=data_pv_systems,
-                data_pv_summary=data_pv_summary,
-                data_user_smart_feed_in=data_user_smart_feed_in,
-                data_contract_price_resolution_state=data_contract_price_resolution_state,
-            )
+                (
+                    prices_today,
+                    user_sites,
+                    data_month_summary,
+                    data_invoices,
+                    data_period_usage,
+                    data_user,
+                    data_contract_price_resolution_state,
+                ) = await self._get_static_data(today, tomorrow, start_date)
 
-        except UpdateFailed as err:
-            if self.cached_prices_today:
-                _LOGGER.warning(
-                    "Update failed, but prices are cached: %s",
-                    err,
+                # Initialize feature flags
+                is_smart_charging = False
+                is_smart_trading = False
+                if data_user:
+                    # Check if smart charging and trading are activated
+                    is_smart_charging = self._is_smart_charging_enabled(data_user)
+                    is_smart_trading = self._is_smart_trading_enabled(data_user)
+
+                _LOGGER.debug("Fetching dynamic interval data concurrently")
+                (
+                    data_enode_chargers,
+                    data_smart_batteries,
+                    data_enode_vehicles,
+                    data_pv_systems,
+                    data_user_smart_feed_in,
+                ) = await asyncio.gather(
+                    self._fetch_enode_chargers(start_date, is_smart_charging),
+                    self._fetch_smart_batteries(is_smart_trading),
+                    self._fetch_enode_vehicles(is_smart_charging),
+                    self._fetch_smart_pv_systems(),
+                    self._fetch_user_smart_feed_in(),
                 )
-                return self.cached_prices_today
 
-            raise
+                (
+                    data_smart_battery_details,
+                    data_smart_battery_sessions,
+                ) = await self._get_battery_details_and_sessions(
+                    data_smart_batteries, start_date, tomorrow
+                )
 
-        except RequestException as ex:
-            if str(ex).startswith("user-error:"):
-                raise ConfigEntryAuthFailed from ex
-            raise UpdateFailed(ex) from ex
+                data_pv_summary = {}
+                if data_pv_systems and data_pv_systems.systems:
+                    systems = [s for s in data_pv_systems.systems if s]
+                    pv_tasks = [
+                        self._fetch_smart_pv_summary(system.id) for system in systems
+                    ]
+                    pv_summaries = await asyncio.gather(*pv_tasks)
+                    for system, summary in zip(systems, pv_summaries):
+                        if summary:
+                            data_pv_summary[system.id] = summary
 
-        except AuthRequiredException as err:
-            _LOGGER.warning("Authentication failed: %s", err)
-            await self._try_renew_token()
-            raise ConfigEntryAuthFailed("Authentication is required.") from err
+                # Detect and log IN_DELIVERY status for clean user experience
+                if self.api.is_authenticated:
+                    is_not_in_delivery = self._is_not_in_delivery_site(
+                        data_month_summary, data_invoices, user_sites
+                    )
+                    self._log_not_in_delivery_status(is_not_in_delivery)
 
-        except AuthException as ex:
-            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
-            await self._try_renew_token()
-            raise UpdateFailed(ex) from ex
+                return PricesTodayCache(
+                    prices_today=prices_today,
+                    data_month_summary=data_month_summary,
+                    data_invoices=data_invoices,
+                    data_user=data_user,
+                    user_sites=user_sites,
+                    data_period_usage=data_period_usage,
+                    data_enode_chargers=data_enode_chargers,
+                    data_smart_batteries=data_smart_batteries,
+                    data_smart_battery_details=data_smart_battery_details,
+                    data_smart_battery_sessions=data_smart_battery_sessions,
+                    data_enode_vehicles=data_enode_vehicles,
+                    data_pv_systems=data_pv_systems,
+                    data_pv_summary=data_pv_summary,
+                    data_user_smart_feed_in=data_user_smart_feed_in,
+                    data_contract_price_resolution_state=data_contract_price_resolution_state,
+                )
+
+            except UpdateFailed as err:
+                if self.cached_prices_today:
+                    _LOGGER.warning(
+                        "Update failed, but prices are cached: %s",
+                        err,
+                    )
+                    return self.cached_prices_today
+                raise
+
+            except (AuthRequiredException, AuthException) as err:
+                if attempt == 1:
+                    _LOGGER.warning("Authentication failed (attempt 1), trying to renew token: %s", err)
+                    try:
+                        await self._try_renew_token()
+                    except ConfigEntryAuthFailed:
+                        raise
+                    self._clear_static_cache()
+                    continue
+                _LOGGER.error("Authentication failed after renewal (attempt 2): %s", err)
+                if isinstance(err, AuthRequiredException):
+                    raise ConfigEntryAuthFailed("Authentication is required.") from err
+                raise UpdateFailed(err) from err
+
+            except FrankEnergieException as err:
+                err_msg = str(err).casefold()
+                if "not authorized" in err_msg or "unauthorized" in err_msg:
+                    if attempt == 1:
+                        _LOGGER.warning(
+                            "Auth error wrapped as FrankEnergieException (attempt 1): %s. Attempting token renewal.",
+                            err,
+                        )
+                        try:
+                            await self._try_renew_token()
+                        except ConfigEntryAuthFailed:
+                            raise
+                        self._clear_static_cache()
+                        continue
+                    _LOGGER.error("Auth error wrapped as FrankEnergieException after renewal (attempt 2): %s", err)
+                    raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
+                raise UpdateFailed(err) from err
+
+            except RequestException as ex:
+                if str(ex).startswith("user-error:"):
+                    raise ConfigEntryAuthFailed from ex
+                raise UpdateFailed(ex) from ex
 
     async def _fetch_tomorrow_data(self, tomorrow: date):
         """Fetch tomorrow's data after 13:00 UTC."""
@@ -1203,7 +1226,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except UpdateFailed as err:
             _LOGGER.debug("Error fetching Frank Energie data for tomorrow (%s)", err)
             return None
-        except AuthException as ex:
+        except (AuthException, AuthRequiredException) as ex:
             _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
@@ -1524,6 +1547,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # Consider setting the coordinator to an error state or handling the error appropriately
             raise ConfigEntryAuthFailed from ex
 
+    def _clear_static_cache(self) -> None:
+        """Clear cached static data to force a fresh fetch."""
+        self._static_prices_today = None
+        self._static_month_summary = None
+        self._static_invoices = None
+        self._static_user = None
+        self._static_user_sites = None
+        self._static_period_usage = None
+        self._static_contract_price_resolution_state = None
+        self._cached_prices = None
+
+
     # async def _fetch_authenticated(self, method: Callable, *args) -> Any:
     async def _fetch_authenticated(
         self, method: Callable[..., Awaitable[object]], *args: object
@@ -1797,7 +1832,12 @@ class FrankEnergieBatterySessionCoordinator(
             _LOGGER.debug(
                 "Authentication tokens expired, attempting token renewal: %s", ex
             )
-            await self.api.renew_token()
+            updated_tokens = await self.api.renew_token()
+            data = {
+                CONF_ACCESS_TOKEN: updated_tokens.authToken,
+                CONF_TOKEN: updated_tokens.refreshToken,
+            }
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
             raise UpdateFailed(
                 "Authentication failed and token was renewed. Retry update."
             ) from ex

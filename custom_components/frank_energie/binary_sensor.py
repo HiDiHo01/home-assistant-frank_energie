@@ -285,11 +285,11 @@ class FrankEnergieSmartFeedInBinarySensor(FrankEnergieSmartFeatureBinarySensor):
         )
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
 
-    def _get_is_on(self) -> bool | str | None:
+    def _get_is_on(self) -> bool | None:
         feed_in_status = self.coordinator.data.get(DATA_USER_SMART_FEED_IN, None)
         if feed_in_status is None:
             self._attr_available = False
-            return STATE_UNAVAILABLE
+            return None
         if isinstance(feed_in_status, dict):
             return feed_in_status.get("isActivated", False)
         return getattr(feed_in_status, "is_activated", False)
@@ -325,14 +325,14 @@ class FrankEnergieSmartHvacBinarySensor(FrankEnergieSmartFeatureBinarySensor):
             return False
         return True
 
-    def _get_is_on(self) -> bool | str | None:
+    def _get_is_on(self) -> bool | None:
         user_data = self.coordinator.data.get(DATA_USER, None)
         if user_data is None:
-            return STATE_UNAVAILABLE
+            return None
         smart_hvac = getattr(user_data, "smartHvac", None)
         if smart_hvac is None:
             self._attr_available = False
-            return STATE_UNAVAILABLE
+            return None
         if isinstance(smart_hvac, dict):
             return smart_hvac.get("isActivated", False)
         return getattr(smart_hvac, "isActivated", False)
