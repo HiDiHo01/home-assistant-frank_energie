@@ -151,6 +151,7 @@ def mock_config_entry():
 
     entry = MagicMock(spec=ConfigEntry)
     entry.entry_id = "test_entry_id"
+    entry.unique_id = "test_unique_id"
     return entry
 
 

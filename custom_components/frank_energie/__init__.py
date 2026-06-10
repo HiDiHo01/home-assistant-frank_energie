@@ -37,6 +37,7 @@ _DEPENDENT_PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.DATETIME,
+    Platform.NUMBER,
     Platform.SELECT,
     Platform.SWITCH,
 ]
@@ -83,7 +84,10 @@ async def async_setup_platform(
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
     _LOGGER.debug("Unloading entry: %s", entry.entry_id)
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unload_ok
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods

@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
+    DATA_BATTERY_DETAILS,
     DOMAIN,
     SERVICE_NAME_SETTINGS,
 )
@@ -43,12 +44,24 @@ async def async_setup_entry(
     """Set up Frank Energie select entities."""
     coordinator: FrankEnergieCoordinator = entry.runtime_data.coordinator
 
-    # no need to add select if not authenticated, as it won't be available until after authentication
-    # this disables the select, remove these two lines if you want the select to always be present
-    # if not coordinator.api.is_authenticated:
-    #     return
+    entities: list[SelectEntity] = [FrankEnergieResolutionSelect(coordinator)]
 
-    async_add_entities([FrankEnergieResolutionSelect(coordinator)])
+    if coordinator.api.is_authenticated:
+        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS)
+        if battery_details:
+            for battery in battery_details:
+                entities.append(
+                    FrankEnergieBatteryModeSelect(
+                        coordinator, entry, battery.smart_battery.id
+                    )
+                )
+                entities.append(
+                    FrankEnergieBatteryStrategySelect(
+                        coordinator, entry, battery.smart_battery.id
+                    )
+                )
+
+    async_add_entities(entities)
 
 
 class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
@@ -148,3 +161,177 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
             return
 
         _LOGGER.debug("Resolution updated: %s -> %s", option, value)
+
+
+class FrankEnergieBatteryModeSelect(
+    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
+):
+    """Select entity for controlling smart battery mode."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:battery-sync"
+    _attr_options = [
+        # "self_consumption",
+        "self_consumption_mix",
+        # "imbalance_trading",
+        "trading",
+    ]
+    _attr_translation_key = "battery_mode"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry,
+        battery_id: str,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator)
+        self._entry = entry
+        self._battery_id = battery_id
+        self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
+
+        # Device Info registration
+        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
+        battery = next(
+            (b for b in battery_details if b.smart_battery.id == battery_id), None
+        )
+        sb = battery.smart_battery if battery else None
+
+        brand = sb.brand if sb else "Frank Energie"
+        model = "Smart Battery"
+        name = f"{brand} {model}".strip()
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, battery_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    def _get_battery(self):
+        battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
+        return next(
+            (b for b in battery_details if b.smart_battery.id == self._battery_id),
+            None,
+        )
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current battery mode."""
+        battery = self._get_battery()
+        if not battery or not battery.smart_battery.settings:
+            return None
+        mode = battery.smart_battery.settings.battery_mode
+        if mode:
+            mode_lower = mode.lower()
+            if mode_lower not in self._attr_options:
+                # Dynamically append option if API returns a new one to prevent crash
+                self._attr_options = self._attr_options + [mode_lower]
+            return mode_lower
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Update battery mode via mutation."""
+        _LOGGER.debug("Setting smart battery %s mode to %s", self._battery_id, option)
+        success = await self.coordinator.api.smart_battery_update_settings(
+            self._battery_id, {"batteryMode": option.upper()}
+        )
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error(
+                "Failed to set battery %s mode to %s", self._battery_id, option
+            )
+
+
+class FrankEnergieBatteryStrategySelect(
+    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
+):
+    """Select entity for controlling smart battery trading strategy."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:shield-sync"
+    _attr_options = [
+        "balanced",
+        # "conservative",
+        "aggressive",
+        # "imbalance_only",
+    ]
+    _attr_translation_key = "battery_strategy"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry,
+        battery_id: str,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator)
+        self._entry = entry
+        self._battery_id = battery_id
+        self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_strategy"
+
+        # Device Info registration
+        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
+        battery = next(
+            (b for b in battery_details if b.smart_battery.id == battery_id), None
+        )
+        sb = battery.smart_battery if battery else None
+
+        brand = sb.brand if sb else "Frank Energie"
+        model = "Smart Battery"
+        name = f"{brand} {model}".strip()
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, battery_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    def _get_battery(self):
+        battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
+        return next(
+            (b for b in battery_details if b.smart_battery.id == self._battery_id),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if strategy selection is available."""
+        if not super().available:
+            return False
+        battery = self._get_battery()
+        if not battery or not battery.smart_battery.settings:
+            return False
+        return battery.smart_battery.settings.battery_mode == "TRADING"
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current battery strategy."""
+        battery = self._get_battery()
+        if not battery or not battery.smart_battery.settings:
+            return None
+        strategy = battery.smart_battery.settings.imbalance_trading_strategy
+        if strategy:
+            strategy_lower = strategy.lower()
+            if strategy_lower not in self._attr_options:
+                # Dynamically append option if API returns a new one to prevent crash
+                self._attr_options = self._attr_options + [strategy_lower]
+            return strategy_lower
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Update battery trading strategy via mutation."""
+        _LOGGER.debug(
+            "Setting smart battery %s strategy to %s", self._battery_id, option
+        )
+        success = await self.coordinator.api.smart_battery_update_settings(
+            self._battery_id, {"imbalanceTradingStrategy": option.upper()}
+        )
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            _LOGGER.error(
+                "Failed to set battery %s strategy to %s", self._battery_id, option
+            )
