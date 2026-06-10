@@ -28,13 +28,12 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class FrankEnergieButtonEntityDescription(ButtonEntityDescription):
     """Describes a Frank Energie button entity."""
+
     service_name: str = SERVICE_NAME_PRICES
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up refresh buttons for Frank Energie coordinators."""
     entry_data = hass.data[DOMAIN][entry.entry_id]

@@ -41,7 +41,10 @@ class SmartFeatureBinarySensor(BinarySensorEntity):
     @property
     def name(self) -> str:
         """Return entity name."""
-        return self.entity_description.name or f"Feature {self.entity_description.feature_id}"
+        return (
+            self.entity_description.name
+            or f"Feature {self.entity_description.feature_id}"
+        )
 
     @property
     def is_on(self) -> bool:

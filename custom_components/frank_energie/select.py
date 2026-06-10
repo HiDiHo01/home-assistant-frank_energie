@@ -1,4 +1,4 @@
-"""Select entity controlling resolution via coordinator state. """
+"""Select entity controlling resolution via coordinator state."""
 
 # select.py
 # version 2026.05.31
@@ -42,7 +42,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie select entities."""
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id][CONF_COORDINATOR]
+    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id][
+        CONF_COORDINATOR
+    ]
 
     # no need to add select if not authenticated, as it won't be available until after authentication
     # this disables the select, remove these two lines if you want the select to always be present
@@ -74,7 +76,12 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.coordinator.config_entry.entry_id}_{self.service_name}")},
+            identifiers={
+                (
+                    DOMAIN,
+                    f"{self.coordinator.config_entry.entry_id}_{self.service_name}",
+                )
+            },
             name=f"{COMPONENT_TITLE} - {self.service_name}",
             translation_key=f"{COMPONENT_TITLE} - {self.service_name}",
             manufacturer=COMPONENT_TITLE,
@@ -109,12 +116,24 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
         return {
             "api_resolution": VALUE_TO_DISPLAY.get(api) if api else None,
-            "active_option": VALUE_TO_DISPLAY.get(state.activeOption) if state and state.activeOption else None,
-            "available_options": [VALUE_TO_DISPLAY.get(v) for v in state.availableOptions] if state else None,
+            "active_option": VALUE_TO_DISPLAY.get(state.activeOption)
+            if state and state.activeOption
+            else None,
+            "available_options": [
+                VALUE_TO_DISPLAY.get(v) for v in state.availableOptions
+            ]
+            if state
+            else None,
             "change_possible": state.isChangeRequestPossible if state else None,
-            "effective_date": str(state.changeRequestEffectiveDate) if state and state.changeRequestEffectiveDate else None,
-            "upcoming_change": str(state.upcomingChange) if state and state.upcomingChange else None,
-            "upcoming_change_effective_date": str(state.upcomingChangeEffectiveDate) if state and state.upcomingChangeEffectiveDate else None,
+            "effective_date": str(state.changeRequestEffectiveDate)
+            if state and state.changeRequestEffectiveDate
+            else None,
+            "upcoming_change": str(state.upcomingChange)
+            if state and state.upcomingChange
+            else None,
+            "upcoming_change_effective_date": str(state.upcomingChangeEffectiveDate)
+            if state and state.upcomingChangeEffectiveDate
+            else None,
         }
 
     async def async_select_option(self, option: str) -> None:

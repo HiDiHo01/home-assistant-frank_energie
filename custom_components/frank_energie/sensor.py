@@ -2878,7 +2878,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: (
             data[DATA_MONTH_SUMMARY].costs_per_day_till_now
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
+            if data[DATA_MONTH_SUMMARY]
+            and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
             else None
         ),
         attr_fn=lambda data: (
@@ -3928,8 +3929,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:identifier",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: data[DATA_USER_SITES].reference
-            if data.get(DATA_USER_SITES) else None,
+        value_fn=lambda data: (
+            data[DATA_USER_SITES].reference if data.get(DATA_USER_SITES) else None
+        ),
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_4p",
@@ -3940,13 +3942,16 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         is_electricity=True,
-        value_fn=lambda data: result[0]
-            if (result := lowest_window(data, 4)) else None,
-        attr_fn=lambda data: {
-            ATTR_FROM_TIME: result[1].date_from,
-            ATTR_TILL_TIME: result[2].date_till,
-            "average_price": result[0],
-        } if (result := lowest_window(data, 4)) else {},
+        value_fn=lambda data: result[0] if (result := lowest_window(data, 4)) else None,
+        attr_fn=lambda data: (
+            {
+                ATTR_FROM_TIME: result[1].date_from,
+                ATTR_TILL_TIME: result[2].date_till,
+                "average_price": result[0],
+            }
+            if (result := lowest_window(data, 4))
+            else {}
+        ),
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_16p",
@@ -3957,13 +3962,18 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         is_electricity=True,
-        value_fn=lambda data: result[0]
-            if (result := lowest_window(data, 16)) else None,
-        attr_fn=lambda data: {
-            ATTR_FROM_TIME: result[1].date_from,
-            ATTR_TILL_TIME: result[2].date_till,
-            "average_price": result[0],
-        } if (result := lowest_window(data, 16)) else {},
+        value_fn=lambda data: (
+            result[0] if (result := lowest_window(data, 16)) else None
+        ),
+        attr_fn=lambda data: (
+            {
+                ATTR_FROM_TIME: result[1].date_from,
+                ATTR_TILL_TIME: result[2].date_till,
+                "average_price": result[0],
+            }
+            if (result := lowest_window(data, 16))
+            else {}
+        ),
     ),
 )
 
@@ -4704,7 +4714,7 @@ def _build_dynamic_enode_sensor_descriptions(
                 service_name=SERVICE_NAME_ENODE_CHARGERS,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.ENERGY,
-                value_fn=lambda _, : total_charge_capacity,
+                value_fn=lambda _,: total_charge_capacity,
                 attr_fn=lambda data: {
                     "chargers capacity": {
                         charger.id: charger.charge_settings.capacity
@@ -4725,7 +4735,7 @@ def _build_dynamic_enode_sensor_descriptions(
                 service_name=SERVICE_NAME_ENODE_CHARGERS,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.POWER,
-                value_fn=lambda _, : total_charge_rate,
+                value_fn=lambda _,: total_charge_rate,
                 attr_fn=lambda data: {
                     "chargers charge rate": {
                         charger.id: charger.charge_state.charge_rate

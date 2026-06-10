@@ -270,10 +270,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> bool:
         """Return True when API calls should be skipped."""
 
-        return (
-            now_utc.hour == 0
-            and 0 <= now_utc.minute < 60
-        )
+        return now_utc.hour == 0 and 0 <= now_utc.minute < 60
 
     def _is_not_in_delivery_site(
         self, data_month_summary, data_invoices, user_sites
@@ -404,15 +401,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # ---------------------------------------------------
         # EVENTS
         # ---------------------------------------------------
-        self._maybe_fire_lowest_price_event(self.cached_prices_today.prices_today, today, now_utc)
-        self._maybe_fire_lowest_4p_event(self.cached_prices_today.prices_today, today, now_utc)
-        self._maybe_fire_lowest_16p_event(self.cached_prices_today.prices_today, today, now_utc)
+        self._maybe_fire_lowest_price_event(
+            self.cached_prices_today.prices_today, today, now_utc
+        )
+        self._maybe_fire_lowest_4p_event(
+            self.cached_prices_today.prices_today, today, now_utc
+        )
+        self._maybe_fire_lowest_16p_event(
+            self.cached_prices_today.prices_today, today, now_utc
+        )
 
         _LOGGER.debug(
             "Returning coordinator data with %s electricity periods",
-            len(result[DATA_ELECTRICITY].all)
-            if result[DATA_ELECTRICITY]
-            else 0,
+            len(result[DATA_ELECTRICITY].all) if result[DATA_ELECTRICITY] else 0,
         )
         return result
 
@@ -524,11 +525,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 and prices_tomorrow.electricity
                 and prices_tomorrow.electricity.all
             ),
-            bool(
-                prices_tomorrow
-                and prices_tomorrow.gas
-                and prices_tomorrow.gas.all
-            ),
+            bool(prices_tomorrow and prices_tomorrow.gas and prices_tomorrow.gas.all),
         )
 
         # Notify sensors immediately with updated aggregated data
@@ -862,7 +859,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
 
                 self._api_resolution_state = resolution_state
-                self._resolution_change_pending = False  # change has been processed by API, reset pending flag
+                self._resolution_change_pending = (
+                    False  # change has been processed by API, reset pending flag
+                )
 
                 # resolution_state is already a ContractPriceResolutionState dataclass
                 if (
@@ -971,7 +970,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not device_id:
-            _LOGGER.warning("Device ID is missing, cannot fetch smart PV system summary.")
+            _LOGGER.warning(
+                "Device ID is missing, cannot fetch smart PV system summary."
+            )
             return None
         try:
             return await self.api.smart_pv_system_summary(device_id)
@@ -1007,7 +1008,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch battery details.")
             return None
         if not battery or not battery.id:
-            _LOGGER.warning("Battery or battery ID is missing, cannot fetch battery details.")
+            _LOGGER.warning(
+                "Battery or battery ID is missing, cannot fetch battery details."
+            )
             return None
         try:
             details = await self.api.smart_battery_details(battery.id)
@@ -1046,7 +1049,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch battery sessions.")
             return None
         if not battery or not battery.id:
-            _LOGGER.warning("Battery or battery ID is missing, cannot fetch battery sessions.")
+            _LOGGER.warning(
+                "Battery or battery ID is missing, cannot fetch battery sessions."
+            )
             return None
 
         try:
@@ -1729,9 +1734,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             new_interval = timedelta(seconds=300)
         else:
             # 15 minutes TODO:set to 60 for PT60M resolution, but keep 15 for now to ensure timely updates for PT15M users until we can remove support for PT15M resolution
-            new_interval = timedelta(
-                seconds=DEFAULT_REFRESH_INTERVAL
-            )
+            new_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
 
         if self.update_interval != new_interval:
             _LOGGER.debug("Update interval changed to %s", new_interval)
@@ -1838,14 +1841,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return
 
         if not self._connection_id:
-            _LOGGER.warning("Cannot set resolution via API: connection_id not available")
+            _LOGGER.warning(
+                "Cannot set resolution via API: connection_id not available"
+            )
             return
 
         if (
             self._api_resolution_state is not None
             and not self._api_resolution_state.isChangeRequestPossible
         ):
-            _LOGGER.warning("Cannot set resolution via API: isChangeRequestPossible=False")
+            _LOGGER.warning(
+                "Cannot set resolution via API: isChangeRequestPossible=False"
+            )
             return
 
         async def _mutation() -> None:
@@ -1883,7 +1890,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Resolution change accepted (effective: %s)",
                 result.data.effectiveDate if result.data else "unknown",
             )
-            self._resolution_change_pending = True  # disable select until change is effective
+            self._resolution_change_pending = (
+                True  # disable select until change is effective
+            )
 
             if self.config_entry is None:
                 return
