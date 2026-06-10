@@ -1,5 +1,4 @@
 """Config flow for Frank Energie integration."""
-
 # config_flow.py
 import asyncio
 import logging
@@ -28,7 +27,28 @@ from python_frank_energie.exceptions import AuthException, ConnectionException
 from .const import CONF_SITE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "2026.3.22"
+INT_VERSION = "2026.3.22"
+
+VERSION = 2
+MINOR_VERSION = 1
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old config entry format."""
+
+    if entry.version < 2:
+        new_options = dict(entry.options)
+
+        if "resolution" not in new_options:
+            new_options["resolution"] = "PT15M"
+
+        hass.config_entries.async_update_entry(
+            entry,
+            options=new_options,
+            version=2,
+        )
+
+    return True
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -39,25 +59,17 @@ async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> 
     """
     try:
         current_entry = next(
-            (
-                e
-                for e in hass.config_entries.async_entries(entry.domain)
-                if e.entry_id == entry.entry_id
-            ),
-            None,
+            (e for e in hass.config_entries.async_entries(entry.domain) if e.entry_id == entry.entry_id),
+            None
         )
         if not current_entry:
-            _LOGGER.warning(
-                "Config entry %s not found for reauthentication", entry.entry_id
-            )
+            _LOGGER.warning("Config entry %s not found for reauthentication", entry.entry_id)
             return
 
-        _LOGGER.info(
-            "Authentication failure detected, triggering reauth for %s", entry.title
-        )
+        _LOGGER.info("Authentication failure detected, triggering reauth for %s", entry.title)
         await hass.config_entries.async_start_reauth(entry.entry_id)
-    except Exception:
-        _LOGGER.exception("Failed to initiate reauthentication for %s", entry.entry_id)
+    except Exception as err:
+        _LOGGER.error("Failed to initiate reauthentication for %s: %s", entry.entry_id, err)
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -74,7 +86,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     async def async_step_login(
         self,
         user_input: Optional[dict[str, Any]] = None,
-        errors: Optional[dict[str, str]] = None,
+        errors: Optional[dict[str, str]] = None
     ) -> ConfigFlowResult:
         """Handle the login step with credentials and show friendly errors."""
         if not user_input:
@@ -94,109 +106,24 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         except AuthException:
             # Wrong username/password
-            return await self._handle_authentication_failure(reason="invalid_auth")
+            return await self._handle_authentication_failure(
+                reason="invalid_auth"
+            )
         except ConnectionException:
             # Network/API issues
-            return await self._handle_authentication_failure(reason="connection_error")
+            return await self._handle_authentication_failure(
+                reason="connection_error"
+            )
         except Exception as ex:
             # Catch-all for unexpected errors
-            _LOGGER.exception(
-                "Unexpected error during login for user %s: %s",
-                user_input.get(CONF_USERNAME, "UNKNOWN"),
-                ex,
-            )
+            _LOGGER.exception("Unexpected error during login for user %s: %s",
+                              user_input.get(CONF_USERNAME, "UNKNOWN"), ex)
             return await self._handle_authentication_failure(reason="unknown_error")
-
-    def _find_sites_by_status(
-        self, all_delivery_sites: list, statuses: list[str]
-    ) -> list:
-        """Return the first non-empty set of sites matching any of the given statuses."""
-        for status in statuses:
-            sites = [site for site in all_delivery_sites if site.status == status]
-            if sites:
-                _LOGGER.info(
-                    "No IN_DELIVERY sites found, using sites with status %s: %d",
-                    status,
-                    len(sites),
-                )
-                return sites
-        return []
-
-    def _get_suitable_sites(self, user_sites) -> list:
-        """Filter and return the most suitable delivery sites from user_sites."""
-        # Log all available sites with their statuses for debugging
-        _LOGGER.debug(
-            "Available delivery sites count: %d", len(user_sites.deliverySites)
-        )
-        for i, site in enumerate(user_sites.deliverySites):
-            status = getattr(site, "status", "NO_STATUS")
-            _LOGGER.debug("Site %d: status=%s, site=%s", i, status, site)
-
-        # Get all sites that have a status attribute
-        all_delivery_sites = [
-            site for site in user_sites.deliverySites if hasattr(site, "status")
-        ]
-
-        # First try to filter for sites with status "IN_DELIVERY"
-        in_delivery_sites = [
-            site for site in all_delivery_sites if site.status == "IN_DELIVERY"
-        ]
-        _LOGGER.debug("Sites with status IN_DELIVERY: %d", len(in_delivery_sites))
-
-        # If no "IN_DELIVERY" sites, try other possible active statuses
-        suitable_sites = in_delivery_sites or self._find_sites_by_status(
-            all_delivery_sites, ["ACTIVE", "CONNECTED", "ENABLED", "OPERATIONAL"]
-        )
-
-        # If still no suitable sites found, use any sites that have an address
-        if not suitable_sites:
-            sites_with_address = [
-                site
-                for site in all_delivery_sites
-                if hasattr(site, "address") and site.address
-            ]
-            if sites_with_address:
-                _LOGGER.info(
-                    "Found %d site(s) ready for setup (IN_DELIVERY or similar status)",
-                    len(sites_with_address),
-                )
-                suitable_sites = sites_with_address
-
-        # Last resort: use any sites that have the required attributes to create a title
-        if not suitable_sites:
-            sites_with_required_attrs = []
-            for site in user_sites.deliverySites:
-                try:
-                    self.create_title(site)
-                    sites_with_required_attrs.append(site)
-                except Exception as e:
-                    _LOGGER.debug(
-                        "Site cannot be used (missing required attributes): %s",
-                        e,
-                    )
-
-            if sites_with_required_attrs:
-                _LOGGER.warning(
-                    "Using all available sites with required attributes: %d",
-                    len(sites_with_required_attrs),
-                )
-                suitable_sites = sites_with_required_attrs
-
-        if not suitable_sites:
-            available_statuses = [
-                getattr(site, "status", "NO_STATUS")
-                for site in user_sites.deliverySites
-            ]
-            error_msg = f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, Statuses: {set(available_statuses)}"
-            _LOGGER.warning(error_msg)
-            raise NoSitesFoundError(error_msg)
-
-        return suitable_sites
 
     async def async_step_site(
         self,
         user_input: Optional[dict[str, Any]] = None,
-        errors: Optional[dict[str, str]] = None,
+        errors: Optional[dict[str, str]] = None
     ) -> ConfigFlowResult:
         """Handle possible multi site accounts."""
         if user_input and user_input.get(CONF_SITE) is not None:
@@ -207,7 +134,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             {
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
-                vol.Optional("timeout", default=5): int,
+                vol.Optional("timeout", default=5): int
             }
         )
 
@@ -222,17 +149,73 @@ class ConfigFlow(config_entries.ConfigFlow):
                 # Check if the user has any delivery sites
                 if not user_sites or not user_sites.deliverySites:
                     _LOGGER.warning("No delivery sites found for this account")
-                    raise NoDeliverySitesError(
-                        "No delivery sites found for this account"
-                    )
+                    raise NoDeliverySitesError("No delivery sites found for this account")
 
-                suitable_sites = self._get_suitable_sites(user_sites)
+                # Log all available sites with their statuses for debugging
+                _LOGGER.debug("Available delivery sites count: %d", len(user_sites.deliverySites))
+                for i, site in enumerate(user_sites.deliverySites):
+                    status = getattr(site, "status", "NO_STATUS")
+                    _LOGGER.debug("Site %d: status=%s, site=%s", i, status, site)
+
+                # Get all sites that have a status attribute
+                all_delivery_sites = [
+                    site for site in user_sites.deliverySites if hasattr(site, "status")
+                ]
+
+                # First try to filter for sites with status "IN_DELIVERY"
+                in_delivery_sites = [site for site in all_delivery_sites if site.status == "IN_DELIVERY"]
+                _LOGGER.debug("Sites with status IN_DELIVERY: %d", len(in_delivery_sites))
+
+                # If no "IN_DELIVERY" sites found, try other possible active statuses
+                suitable_sites = in_delivery_sites
+                if not suitable_sites:
+                    # Try other potentially valid statuses
+                    other_valid_statuses = ["ACTIVE", "CONNECTED", "ENABLED", "OPERATIONAL"]
+                    for status in other_valid_statuses:
+                        sites_with_status = [site for site in all_delivery_sites if site.status == status]
+                        if sites_with_status:
+                            _LOGGER.info("No IN_DELIVERY sites found, using sites with status %s: %d",
+                                         status, len(sites_with_status))
+                            suitable_sites = sites_with_status
+                            break
+
+                # If still no suitable sites found, use any sites that have an address (likely to be valid)
+                if not suitable_sites:
+                    sites_with_address = [site for site in all_delivery_sites if hasattr(
+                        site, "address") and site.address]
+                    if sites_with_address:
+                        _LOGGER.info("Found %d site(s) ready for setup (IN_DELIVERY or similar status)",
+                                     len(sites_with_address))
+                        suitable_sites = sites_with_address
+
+                # Last resort: use all available sites if they have the required attributes for creating a title
+                if not suitable_sites:
+                    sites_with_required_attrs = []
+                    for site in user_sites.deliverySites:
+                        try:
+                            # Test if we can create a title (this will fail if required attributes are missing)
+                            self.create_title(site)
+                            sites_with_required_attrs.append(site)
+                        except Exception as e:
+                            _LOGGER.debug("Site cannot be used (missing required attributes): %s", e)
+                            continue
+
+                    if sites_with_required_attrs:
+                        _LOGGER.warning("Using all available sites with required attributes: %d",
+                                        len(sites_with_required_attrs))
+                        suitable_sites = sites_with_required_attrs
+
+                if not suitable_sites:
+                    # Provide detailed error message
+                    available_statuses = [getattr(site, "status", "NO_STATUS") for site in user_sites.deliverySites]
+                    error_msg = f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, Statuses: {set(available_statuses)}"
+                    _LOGGER.error(error_msg)
+                    raise NoSitesFoundError(error_msg)
+
                 number_of_sites = len(suitable_sites)
                 _LOGGER.info("Found %d suitable sites for selection", number_of_sites)
 
-                first_site = suitable_sites[
-                    0
-                ]  # We know suitable_sites is not empty at this point
+                first_site = suitable_sites[0]  # We know suitable_sites is not empty at this point
 
                 if number_of_sites == 1:
                     # for backward compatibility (do nothing)
@@ -244,11 +227,16 @@ class ConfigFlow(config_entries.ConfigFlow):
 
                     # Create entry with unique_id as user_sites.deliverySites[0].reference
                     self.sign_in_data[CONF_SITE] = first_site.reference
+                    # self.sign_in_data[CONF_USERNAME] = self.create_title(first_site)
                     self.sign_in_data["site_title"] = self.create_title(first_site)
+                    # return await self._async_create_entry(self.sign_in_data)
 
                 # Prepare site options for selection
                 site_options = [
-                    {"value": site.reference, "label": self.create_title(site)}
+                    {
+                        "value": site.reference,
+                        "label": self.create_title(site)
+                    }
                     for site in suitable_sites
                 ]
 
@@ -268,21 +256,21 @@ class ConfigFlow(config_entries.ConfigFlow):
                 )
 
         except AuthException:
-            _LOGGER.warning("Authentication failed during site fetch")
+            _LOGGER.error("Authentication failed during site fetch")
             return self.async_show_form(
                 step_id="login",
                 data_schema=data_schema,
                 errors={"base": "invalid_auth"},
             )
         except ConnectionException:
-            _LOGGER.warning("Connection error during site fetch")
+            _LOGGER.error("Connection error during site fetch")
             return self.async_show_form(
                 step_id="login",
                 data_schema=data_schema,
                 errors={"base": "connection_error"},
             )
         except NoDeliverySitesError as err:
-            _LOGGER.warning("No delivery sites found: %s", err)
+            _LOGGER.error("No delivery sites found: %s", err)
             errors = {"base": "no_delivery_sites"}
             return self.async_show_form(
                 step_id="site",
@@ -290,7 +278,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 errors=errors,
             )
         except NoSitesFoundError as err:
-            _LOGGER.warning("No suitable sites found: %s", err)
+            _LOGGER.error("No suitable sites found: %s", err)
             errors = {"base": "no_suitable_sites"}
             return self.async_show_form(
                 step_id="site",
@@ -317,7 +305,8 @@ class ConfigFlow(config_entries.ConfigFlow):
         )
 
     async def async_step_user(
-        self, user_input: Optional[dict[str, Any]] = None
+        self,
+        user_input: Optional[dict[str, Any]] = None
     ) -> ConfigFlowResult:
         """Handle a flow initiated by the user."""
         if not user_input:
@@ -336,7 +325,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     async def async_step_reconfigure(
         self,
         user_input: Optional[dict[str, Any]] = None,
-        errors: Optional[dict[str, str]] = None,
+        errors: Optional[dict[str, str]] = None
     ) -> ConfigFlowResult:
         """Handle the reconfiguration step."""
         if self._reauth_entry is None:
@@ -347,10 +336,10 @@ class ConfigFlow(config_entries.ConfigFlow):
         if not user_input:
             return self._show_login_form()
 
-        validation_errors = self._validate_login_input(user_input)
+        errors = self._validate_login_input(user_input)
 
-        if validation_errors:
-            return self._show_login_form(errors=validation_errors)
+        if errors:
+            return self._show_login_form(errors=errors)
 
         try:
             auth = await self._authenticate(user_input)
@@ -392,7 +381,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             ]
 
         except NoDeliverySitesError as err:
-            _LOGGER.warning(
+            _LOGGER.error(
                 "No delivery sites found for user %s: %s",
                 username,
                 err,
@@ -400,7 +389,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             return []
 
         except NoSitesFoundError as err:
-            _LOGGER.warning(
+            _LOGGER.error(
                 "No suitable sites found for user %s: %s",
                 username,
                 err,
@@ -421,6 +410,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN),
             refresh_token=self.sign_in_data.get(CONF_TOKEN),
         ) as api:
+
             last_err: Exception | None = None
 
             for attempt in range(2):
@@ -454,9 +444,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 return sites
 
         # fallback: sites with address
-        sites_with_address = [
-            s for s in all_sites if hasattr(s, "address") and s.address
-        ]
+        sites_with_address = [s for s in all_sites if hasattr(s, "address") and s.address]
         if sites_with_address:
             return sites_with_address
 
@@ -470,19 +458,15 @@ class ConfigFlow(config_entries.ConfigFlow):
                 continue
         return valid_sites
 
-    async def async_step_reauth(
-        self, entry_data: Mapping[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle configuration by re-auth."""
         self._reauth_entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
         if self._reauth_entry is None:
-            _LOGGER.warning(
-                "Reauthentication entry with ID %s not found, aborting reauth flow.",
-                self.context["entry_id"],
-            )
-            return self.async_abort(reason="reauth_entry_not_found")
+            _LOGGER.warning("Reauthentication entry with ID %s not found, aborting reauth flow.",
+                            self.context["entry_id"])
+            raise ValueError("Reauthentication entry not found. Cannot continue reauthentication flow.")
         return await self.async_step_login()
 
     async def _async_create_entry(self, data: dict[str, Any]) -> ConfigFlowResult:
@@ -495,12 +479,20 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data=updated_data,
             )
 
+        # unique_id = data.get(CONF_USERNAME, "frank_energie")
+        # if data.get(CONF_SITE, None):
+        #     _LOGGER.debug("CONF_SITE: %s", CONF_SITE)
+        #     _LOGGER.debug("data CONF_SITE: %s", data[CONF_SITE])
+        #     _LOGGER.debug("CONF_USERNAME: %s", CONF_USERNAME)
+        #     _LOGGER.debug("data CONF_USERNAME: %s", data[CONF_USERNAME])
+        #     unique_id = f"{data[CONF_SITE] or data.get(CONF_USERNAME, 'frank_energie')}"
         unique_id = str(data.get(CONF_SITE) or data.get(CONF_USERNAME) or DOMAIN)
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
         return self.async_create_entry(
-            title=data.get(CONF_USERNAME, "Frank Energie"), data=data
+            title=data.get(CONF_USERNAME, "Frank Energie"),
+            data=data
         )
 
     @staticmethod
@@ -519,28 +511,23 @@ class ConfigFlow(config_entries.ConfigFlow):
                 title += f" {addition}"
 
             return title
-        except AttributeError:
-            _LOGGER.exception("Invalid site structure")
+        except AttributeError as err:
+            _LOGGER.error("Invalid site structure: %s", err)
             return "Onbekend adres"
-        except Exception:
-            _LOGGER.exception("Unexpected error creating title")
+        except Exception as err:
+            _LOGGER.exception("Unexpected error creating title: %s", err)
             return "Onbekend adres"
 
     def _login_schema(self, user_input: Optional[dict[str, Any]] = None) -> vol.Schema:
-        return vol.Schema(
-            {
-                vol.Required(
-                    CONF_USERNAME,
-                    default=user_input.get(CONF_USERNAME, "") if user_input else "",
-                ): str,
-                vol.Required(CONF_PASSWORD): str,
-            }
-        )
+        return vol.Schema({
+            vol.Required(CONF_USERNAME, default=user_input.get(CONF_USERNAME, "") if user_input else ""): str,
+            vol.Required(CONF_PASSWORD): str,
+        })
 
     def _show_login_form(
         self,
         errors: Optional[dict[str, str]] = None,
-        user_input: Optional[dict[str, Any]] = None,
+        user_input: Optional[dict[str, Any]] = None
     ) -> ConfigFlowResult:
         """Show the login form with optional errors and pre-filled username."""
         # Try to pre-fill username from reauth entry or last user input
@@ -572,34 +559,28 @@ class ConfigFlow(config_entries.ConfigFlow):
         """
         async with FrankEnergie() as api:
             try:
-                return await api.login(
-                    user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
-                )
+                return await api.login(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
             except AuthException:
-                _LOGGER.warning(
-                    "Authentication failed for user %s", user_input[CONF_USERNAME]
-                )
+                _LOGGER.warning("Authentication failed for user %s", user_input[CONF_USERNAME])
                 # Trigger login flow with friendly error
                 raise AuthException("invalid_auth")
             except ConnectionException:
-                _LOGGER.warning(
-                    "Connection error for user %s", user_input[CONF_USERNAME]
-                )
+                _LOGGER.error("Connection error for user %s", user_input[CONF_USERNAME])
                 raise ConnectionException("connection_error")
             except Exception as ex:
-                _LOGGER.exception(
-                    "Unexpected error for user %s", user_input[CONF_USERNAME]
-                )
+                _LOGGER.exception("Unexpected error for user %s: %s", user_input[CONF_USERNAME], ex)
                 raise RuntimeError("unknown_error") from ex
 
     async def _handle_authentication_success(
-        self, user_input: dict[str, Any], auth: Authentication
+        self,
+        user_input: dict[str, Any],
+        auth: Authentication
     ) -> ConfigFlowResult:
         """Handle successful authentication."""
         self.sign_in_data = {
             CONF_USERNAME: user_input[CONF_USERNAME],
             CONF_ACCESS_TOKEN: auth.authToken,
-            CONF_TOKEN: auth.refreshToken,
+            CONF_TOKEN: auth.refreshToken
         }
         if self._reauth_entry:
             # Preserve existing entry data (e.g. site_reference) and only overwrite tokens
@@ -610,7 +591,8 @@ class ConfigFlow(config_entries.ConfigFlow):
                 CONF_TOKEN: self.sign_in_data[CONF_TOKEN],
             }
             self.hass.config_entries.async_update_entry(
-                self._reauth_entry, data=updated_data
+                self._reauth_entry,
+                data=updated_data
             )
             self.hass.async_create_task(
                 self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
@@ -619,25 +601,20 @@ class ConfigFlow(config_entries.ConfigFlow):
         return await self.async_step_site(self.sign_in_data)
 
     async def _handle_authentication_failure(
-        self, reason: str = "invalid_auth"
+        self,
+        reason: str = "invalid_auth"
     ) -> ConfigFlowResult:
         """Handle authentication failure with a nice message."""
         return await self.async_step_login(errors={"base": reason})
 
     @staticmethod
     @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> Optional[config_entries.OptionsFlow]:
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> Optional[config_entries.OptionsFlow]:
         """Get options flow handler only if a site is selected."""
         _LOGGER.debug("config_entry for %s", config_entry)
         entry_data = config_entry.data
         if CONF_SITE in entry_data:
-            _LOGGER.debug(
-                "Site %s is selected, providing options flow: %s",
-                entry_data[CONF_SITE],
-                entry_data,
-            )
+            _LOGGER.debug("Site %s is selected, providing options flow: %s", entry_data[CONF_SITE], entry_data)
             return FrankEnergieOptionsFlowHandler(entry_data)
 
         _LOGGER.debug("No site selected, no options flow available.")
@@ -675,20 +652,16 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, entry_data: dict[str, Any]) -> None:
         """Initialize Frank Energie options flow."""
         self.entry_data = entry_data
-        self.options = dict(
-            entry_data
-        )  # Gebruik entry_data in plaats van config_entry.options
+        self.options = dict(entry_data)  # Gebruik entry_data in plaats van config_entry.options
 
-    async def async_step_init(
-        self, user_input: Optional[dict[str, Any]] = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: Optional[dict[str, Any]] = None) -> ConfigFlowResult:
         """Manage the options."""
         return await self.async_step_user()
 
     async def async_step_user(
         self,
         user_input: Optional[dict[str, Any]] = None,
-        errors: Optional[dict[str, str]] = None,
+        errors: Optional[dict[str, str]] = None
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
         if user_input is not None:
@@ -697,21 +670,22 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
         username = self.entry_data.get("username", "")
 
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_USERNAME, default=username): str,
-                vol.Required(CONF_PASSWORD): str,
-            }
-        )
+        data_schema = vol.Schema({
+            vol.Required(CONF_USERNAME, default=username): str,
+            vol.Required(CONF_PASSWORD): str
+        })
 
         return self.async_show_form(
-            step_id="user", data_schema=data_schema, errors=errors
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors
         )
 
     async def _update_options(self) -> ConfigFlowResult:
         """Update config entry options."""
         return self.async_create_entry(
-            title=self.entry_data.get(CONF_USERNAME, "Frank Energie"), data=self.options
+            title=self.entry_data.get(CONF_USERNAME, "Frank Energie"),
+            data=self.options
         )
 
 

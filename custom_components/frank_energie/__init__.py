@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
+from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
 from python_frank_energie.models import UserSites
 
@@ -94,9 +95,10 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     async def _maybe_refresh_tomorrow(
         self, coordinator: FrankEnergieCoordinator, minute: int
     ) -> None:
-        """Trigger a refresh during the price release window (13:00-14:00 UTC)."""
-        now_utc = datetime.now(timezone.utc)
-        if now_utc.hour != 11:
+        """Trigger a refresh during the price release window (11:00-12:59 UTC)."""
+        # now_utc = datetime.now(timezone.utc)
+        now_utc = dt_util.utcnow()
+        if now_utc.hour != 11 and now_utc.hour != 12:
             return
 
         if coordinator.cached_prices_tomorrow is not None:
@@ -110,6 +112,51 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         await coordinator.async_request_refresh()
 
     async def _schedule_aligned_updates(
+        self,
+        coordinator: FrankEnergieCoordinator,
+    ) -> None:
+        """Schedule coordinator refreshes."""
+
+        async def _async_refresh(
+            _: datetime,
+        ) -> None:
+            await coordinator.async_request_refresh()
+
+        if coordinator.resolution == "PT15M":
+            unsub = async_track_utc_time_change(
+                self.hass,
+                _async_refresh,
+                minute=[0, 15, 30, 45],
+                second=0,
+            )
+        else:
+            unsub = async_track_utc_time_change(
+                self.hass,
+                _async_refresh,
+                minute=0,
+                second=0,
+            )
+
+        self.entry.async_on_unload(unsub)
+
+        async def _async_tomorrow_refresh(
+            now: datetime,
+        ) -> None:
+            await self._maybe_refresh_tomorrow(
+                coordinator,
+                now.minute,
+            )
+
+        self.entry.async_on_unload(
+            async_track_utc_time_change(
+                self.hass,
+                _async_tomorrow_refresh,
+                minute=list(range(0, 60, 5)),
+                second=0,
+            )
+        )
+
+    async def old_schedule_aligned_updates(
         self, coordinator: FrankEnergieCoordinator
     ) -> None:
         """Schedule coordinator refreshes at exact price slot boundaries."""
@@ -135,7 +182,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 )
             )
 
-        # Extra 5-minute updates during price release window (13:00-14:00 UTC)
+        # Extra 5-minute updates during price release window (11:00-12:00 UTC)
         for minute in range(0, 60, 5):
             self.entry.async_on_unload(
                 async_track_utc_time_change(
@@ -165,6 +212,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         # Awaiting the coroutine method call
         await self._select_site_reference(coordinator)
+
+        # Load cached data before the first refresh to ensure we have data to work with immediately
+        # await coordinator.async_load_cached_data() # not in use yet, but could be implemented in the future if needed
 
         # Perform the initial refresh for the coordinator
         _LOGGER.debug("Performing initial refresh for coordinator")

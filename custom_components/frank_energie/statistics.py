@@ -1,5 +1,7 @@
 """Statistical price calculations for Frank Energie integration."""
 
+# statistics.py
+# version 2026.05.31
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -27,7 +29,9 @@ def _lowest_window(
     if len(prices) < window:
         return None
 
-    current_sum = sum(price.total for price in prices[:window])
+    current_sum = sum(
+        price.total for price in prices[:window]
+    )
 
     lowest_sum = current_sum
     lowest_index = 0
@@ -79,7 +83,7 @@ def lowest_window(
     lowest_end: Price | None = None
 
     for start_index in range(len(prices) - window + 1):
-        window_prices = prices[start_index : start_index + window]
+        window_prices = prices[start_index: start_index + window]
 
         average_price = sum(p.total for p in window_prices) / window
 

@@ -19,10 +19,10 @@ from python_frank_energie.models import (
     SmartBatteries,
     SmartBatteryDetails,
     SmartBatterySessions,
-    User,
-    UserSites,
     SmartPvSystems,
     SmartPvSystemSummary,
+    User,
+    UserSites,
     UserSmartFeedInStatus,
 )
 
@@ -40,13 +40,13 @@ TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"
 # DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
 DATA_URL: Final[str] = "https://graphql.frankenergie.nl/"
 API_CONF_URL: Final[str] = "https://www.frankenergie.nl/goedkoop"
-SITE_NL = "https://www.frankenergie.nl/nl"
-SITE_BE = "https://www.frankenergie.be/nl"
-CUSTOMER_SERVICE_NL = "klantenservice@frankenergie.nl"
-CUSTOMER_SERVICE_BE = "klantenservice@frankenergie.be"
-CONTACT_NL_URL = "https://klantenservice.frankenergie.nl/hc/nl-nl"
-PHONE_NL = "+31207900114"
-WHATSAPP_NL = "+31649163884"
+SITE_NL: Final[str] = "https://www.frankenergie.nl/nl"
+SITE_BE: Final[str] = "https://www.frankenergie.be/nl"
+CUSTOMER_SERVICE_NL: Final[str] = "klantenservice@frankenergie.nl"
+CUSTOMER_SERVICE_BE: Final[str] = "klantenservice@frankenergie.be"
+CONTACT_NL_URL: Final[str] = "https://klantenservice.frankenergie.nl/hc/nl-nl"
+PHONE_NL: Final[str] = "+31207900114"
+WHATSAPP_NL: Final[str] = "+31649163884"
 
 # --- Component Metadata ---
 ICON: Final[str] = "mdi:currency-eur"
@@ -107,6 +107,7 @@ SERVICE_NAME_ELEC_PRICES: Final[str] = "Electricityprices"
 SERVICE_NAME_COSTS: Final[str] = "Costs"
 SERVICE_NAME_USAGE: Final[str] = "Usage"
 SERVICE_NAME_USER: Final[str] = "User"
+SERVICE_NAME_SETTINGS: Final[str] = "Settings"
 SERVICE_NAME_ACTIVE_DELIVERY_SITE: Final[str] = "Active_Delivery_Site"
 SERVICE_NAME_ELEC_CONN: Final[str] = "Electricity connection"
 SERVICE_NAME_GAS_CONN: Final[str] = "Gas connection"

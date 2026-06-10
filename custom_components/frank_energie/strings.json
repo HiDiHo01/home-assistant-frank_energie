@@ -1,12 +1,29 @@
 {
+  "title": "Frank Energie",
   "config": {
     "step": {
       "user": {
-        "title": "Configure Frank Energie",
-        "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
+        "title": "Frank Energie configureren",
+        "description": "[%key:common::config_flow::description::confirm_setup%]",
         "data": {
           "authentication": "Use Frank Energie account credentials"
         }
+      },
+      "confirm": {
+        "description": "[%key:common::config_flow::description::confirm_setup%]",
+        "title": "Frank Energie configureren"
+      },
+      "options": {
+        "title": "Opties configureren",
+        "description": "Configureer de opties voor Frank Energie."
+      },
+      "import": {
+        "title": "Importeer configuratie",
+        "description": "Importeer een bestaande configuratie voor Frank Energie."
+      },
+      "reauth_confirm": {
+        "title": "Her-authenticatie vereist",
+        "description": "Her-authenticatie is vereist voor Frank Energie."
       },
       "login": {
         "title": "Enter your Frank Energie account credentials",
@@ -25,28 +42,28 @@
         }
       },
       "reauth": {
-        "title": "Re-authentication required",
-        "description": "Re-authentication is required for Frank Energie."
+        "title": "Her-authenticatie vereist",
+        "description": "Her-authenticatie is vereist voor Frank Energie."
       },
       "site": {
-        "title": "Select delivery location",
-        "description": "Choose the delivery location you want to add.",
+        "title": "Selecteer leveringslocatie",
+        "description": "Kies de leveringslocatie die je toe wilt voegen.",
         "data": {
           "site_reference": "Delivery location"
         }
       }
     },
     "error": {
-      "invalid_auth": "Credentials rejected, please check your username and password.",
-      "connection_error": "Connection error with Frank Energie API.",
-      "no_delivery_sites": "No delivery sites found for this account.",
-      "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
-      "site_retrieval_failed": "Error retrieving delivery sites. Please try again later."
+      "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord.",
+      "connection_error": "Verbindingsfout met Frank Energie API.",
+      "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
+      "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
+      "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw."
     },
     "abort": {
+      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]",
       "already_configured": "[%key:common::config_flow::abort::already_configured%]",
-      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
-      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
     }
   },
   "entity": {
@@ -89,6 +106,16 @@
     "switch": {
       "enode_smart_charging": {
         "name": "Smart Charging"
+      }
+    },
+    "select": {
+      "resolution": {
+        "name": "Resolution",
+            "state": {
+              "15 minutes": "15 minutes",
+              "60 minutes": "60 minutes",
+              "unavailable": "unavailable"
+          }
       }
     },
     "datetime": {

@@ -335,10 +335,10 @@
                 "name": "Hoogste gasprijs komende uren (All-in)"
             },
             "elec_hourcount": {
-                "name": "Aantal uren elektriciteitprijzen geladen"
+                "name": "Aantal elektriciteitprijzen geladen"
             },
             "gas_hourcount": {
-                "name": "Aantal uren gasprijzen geladen"
+                "name": "Aantal gasprijzen geladen"
             },
             "average_costs_per_year": {
                 "name": "Gemiddelde kosten per jaar"
@@ -597,25 +597,33 @@
             }
         },
         "binary_sensor": {
-            "smart_charging": {
+            "smartcharging_isactivated": {
                 "name": "Slim laden"
             },
-            "smart_trading": {
+            "smarttrading_isactivated": {
                 "name": "Slim handelen"
             },
             "smart_feed_in": {
                 "name": "Slim terugleveren"
             },
+            "smart_pv_systems": {
+                "name": "Slimme zonnepanelen"
+            },
             "smart_hvac": {
                 "name": "Slimme HVAC"
+            },
+            "disabled_haptic_feedback": {
+                "name": "Haptische feedback uitgeschakeld"
             }
         },
         "select": {
-            "electericity_active_resolution": {
-                "name": "Elektriciteit prijs resolutie",
-                "options": {
-                    "PT15M": "Elke 15 minuten",
-                    "PT60M": "Elk uur"
+            "resolution": {
+                "name": "Prijs resolutie",
+                "description": "De prijsresolutie gebruikt voor elektriciteitsprijzen. (LET OP!: wijziging wordt toegepast op je contract en kan gevolgen hebben voor je factuur. Wijzig alleen als je weet wat je doet.)",
+                "state": {
+                    "15 minutes": "15 minuten",
+                    "60 minutes": "60 minuten",
+                    "unavailable": "Niet beschikbaar"
                 }
             }
         },

@@ -3855,6 +3855,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:ev-station",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
+        entity_registry_enabled_default=False,
         value_fn=lambda data: (
             data[DATA_USER].smartCharging.get("isActivated")
             if data[DATA_USER] and data[DATA_USER].smartCharging
@@ -3891,6 +3892,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:ev-station",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
+        entity_registry_enabled_default=False,
         value_fn=lambda data: (
             data[DATA_USER].smartTrading.get("isActivated")
             if data[DATA_USER] and data[DATA_USER].smartTrading
@@ -4083,7 +4085,8 @@ class FrankEnergieSensor(
     )
 
     # 🔑 THIS is what Recorder uses
-    _unrecorded_attributes: ClassVar[set[str]] = set(_no_record_keys)
+    # _unrecorded_attributes: ClassVar[set[str]] = set(_no_record_keys)
+    _unrecorded_attributes: ClassVar[frozenset[str]] = frozenset(_no_record_keys)
 
     def __init__(
         self,

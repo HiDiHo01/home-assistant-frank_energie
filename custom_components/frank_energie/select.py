@@ -1,4 +1,7 @@
 """Select entity controlling resolution via coordinator state. """
+
+# select.py
+# version 2026.05.31
 from __future__ import annotations
 
 import logging
@@ -6,10 +9,17 @@ import logging
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import (
+    API_CONF_URL,
+    COMPONENT_TITLE,
+    CONF_COORDINATOR,
+    DOMAIN,
+    SERVICE_NAME_SETTINGS,
+)
 from .coordinator import FrankEnergieCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,8 +42,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie select entities."""
-    # coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id]
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id][CONF_COORDINATOR]
+
+    # no need to add select if not authenticated, as it won't be available until after authentication
+    # this disables the select, remove these two lines if you want the select to always be present
+    # if not coordinator.api.is_authenticated:
+    #     return
 
     async_add_entities(
         [
@@ -45,9 +59,11 @@ async def async_setup_entry(
 class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
     """Select entity controlling resolution via coordinator state."""
 
-    _attr_name = "Frank Energie Resolution"
+    _attr_has_entity_name = True
     _attr_icon = "mdi:clock-time-four-outline"
     _attr_options = list(DISPLAY_TO_VALUE.keys())
+    _attr_translation_key = "resolution"
+    service_name = SERVICE_NAME_SETTINGS
 
     def __init__(self, coordinator: FrankEnergieCoordinator) -> None:
         """Initialize select entity."""
@@ -56,22 +72,54 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> str:
-        """Return current resolution from coordinator state."""
         value = self.coordinator.resolution
-
-        if value is None:
-            return DEFAULT_DISPLAY
-
         return VALUE_TO_DISPLAY.get(value, DEFAULT_DISPLAY)
 
     @property
-    def device_info(self):
-        return {"identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)}}
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"{self.coordinator.config_entry.entry_id}_{self.service_name}")},
+            name=f"{COMPONENT_TITLE} - {self.service_name}",
+            translation_key=f"{COMPONENT_TITLE} - {self.service_name}",
+            manufacturer=COMPONENT_TITLE,
+            model=self.service_name,
+            configuration_url=API_CONF_URL,
+            entry_type=DeviceEntryType.SERVICE,
+        )
+        # {"identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)}}
+
+    @property
+    def available(self) -> bool:
+        """Return False when a resolution change is not currently possible."""
+        if not self.coordinator.api.is_authenticated:
+            return True
+        if self.coordinator._resolution_change_pending:
+            return False
+        state = self.coordinator._api_resolution_state
+        if state is None:
+            return True  # unknown, allow optimistically
+        return state.isChangeRequestPossible
 
     @property
     def extra_state_attributes(self) -> dict:
         api = self.coordinator.api_resolution
-        return {"api_resolution": VALUE_TO_DISPLAY.get(api) if api else None}
+        state = self.coordinator._api_resolution_state
+
+        if not self.coordinator.api.is_authenticated:
+            return {
+                "is_authenticated": False,
+                "resolution": VALUE_TO_DISPLAY.get(self.coordinator.resolution),
+            }
+
+        return {
+            "api_resolution": VALUE_TO_DISPLAY.get(api) if api else None,
+            "active_option": VALUE_TO_DISPLAY.get(state.activeOption) if state and state.activeOption else None,
+            "available_options": [VALUE_TO_DISPLAY.get(v) for v in state.availableOptions] if state else None,
+            "change_possible": state.isChangeRequestPossible if state else None,
+            "effective_date": str(state.changeRequestEffectiveDate) if state and state.changeRequestEffectiveDate else None,
+            "upcoming_change": str(state.upcomingChange) if state and state.upcomingChange else None,
+            "upcoming_change_effective_date": str(state.upcomingChangeEffectiveDate) if state and state.upcomingChangeEffectiveDate else None,
+        }
 
     async def async_select_option(self, option: str) -> None:
         """Update resolution via coordinator."""
