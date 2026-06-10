@@ -3,7 +3,7 @@ Sensor platform for Frank Energie integration."""
 
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2025.12.29"
+# VERSION = "2026.6.10"
 from __future__ import annotations
 
 import logging
@@ -35,7 +35,7 @@ from homeassistant.const import (
     UnitOfTime,
     UnitOfVolume,
 )
-from homeassistant.core import HassJob, HomeAssistant
+from homeassistant.core import HassJob, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import event
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -48,7 +48,6 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    TIMEZONE_AMSTERDAM,
     API_CONF_URL,
     ATTR_FROM_TIME,
     ATTR_LAST_UPDATE,
@@ -63,11 +62,11 @@ from .const import (
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
-    DATA_PV_SYSTEMS,
-    DATA_PV_SUMMARY,
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
+    DATA_PV_SUMMARY,
+    DATA_PV_SYSTEMS,
     DATA_USAGE,
     DATA_USER,
     DATA_USER_SITES,
@@ -82,6 +81,7 @@ from .const import (
     SERVICE_NAME_PRICES,
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
+    TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS,
     VERSION,
@@ -92,6 +92,7 @@ from .coordinator import (
     FrankEnergieData,
     SmartBatterySessions,
 )
+from .statistics import lowest_window
 
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
@@ -160,6 +161,14 @@ class FrankEnergieBaseSensor(
         """Initialize sensor."""
         super().__init__(coordinator)
         self._entity_description = description
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        _LOGGER.debug(
+            "%s received coordinator update",
+            self.entity_id,
+        )
+        super()._handle_coordinator_update()
 
     @property
     def entity_description(self) -> SensorEntityDescription:  # type: ignore[override]
@@ -297,9 +306,8 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         self,
         key: str,
         name: str,
-        # device_class: Union[str, SensorDeviceClass] | None = None,
-        device_class: SensorDeviceClass | None = None,
-        state_class: str | None = None,
+        device_class: SensorDeviceClass | BinarySensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = None,
         native_unit_of_measurement: str | None = None,
         suggested_display_precision: int | None = None,
         authenticated: bool | None = False,
@@ -2869,8 +2877,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].CostsPerDayTillNow
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].CostsPerDayTillNow
+            data[DATA_MONTH_SUMMARY].costs_per_day_till_now
+            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
             else None
         ),
         attr_fn=lambda data: (
@@ -3910,6 +3918,51 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else []
         ),
     ),
+    FrankEnergieEntityDescription(
+        key="site_reference",
+        name="Site Reference",
+        translation_key="site_reference",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:identifier",
+        authenticated=True,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: data[DATA_USER_SITES].reference
+            if data.get(DATA_USER_SITES) else None,
+    ),
+    FrankEnergieEntityDescription(
+        key="elec_lowest_4p",
+        name="Lowest average electricity price (4 periods)",
+        translation_key="elec_lowest_4p",
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=4,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        is_electricity=True,
+        value_fn=lambda data: result[0]
+            if (result := lowest_window(data, 4)) else None,
+        attr_fn=lambda data: {
+            ATTR_FROM_TIME: result[1].date_from,
+            ATTR_TILL_TIME: result[2].date_till,
+            "average_price": result[0],
+        } if (result := lowest_window(data, 4)) else {},
+    ),
+    FrankEnergieEntityDescription(
+        key="elec_lowest_16p",
+        name="Lowest average electricity price (16 periods)",
+        translation_key="elec_lowest_16p",
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=4,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        is_electricity=True,
+        value_fn=lambda data: result[0]
+            if (result := lowest_window(data, 16)) else None,
+        attr_fn=lambda data: {
+            ATTR_FROM_TIME: result[1].date_from,
+            ATTR_TILL_TIME: result[2].date_till,
+            "average_price": result[0],
+        } if (result := lowest_window(data, 16)) else {},
+    ),
 )
 
 
@@ -4156,15 +4209,6 @@ class FrankEnergieSensor(
             return
 
         self.async_schedule_update_ha_state(True)
-
-    @property
-    def old_extra_state_attributes(self) -> dict[str, object]:
-        if not self.coordinator.data:
-            return {}
-        try:
-            return self.entity_description.attr_fn(self.coordinator.data) or {}
-        except Exception:
-            return {}
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
@@ -4660,7 +4704,7 @@ def _build_dynamic_enode_sensor_descriptions(
                 service_name=SERVICE_NAME_ENODE_CHARGERS,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.ENERGY,
-                value_fn=lambda _,: total_charge_capacity,
+                value_fn=lambda _, : total_charge_capacity,
                 attr_fn=lambda data: {
                     "chargers capacity": {
                         charger.id: charger.charge_settings.capacity
@@ -4681,7 +4725,7 @@ def _build_dynamic_enode_sensor_descriptions(
                 service_name=SERVICE_NAME_ENODE_CHARGERS,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.POWER,
-                value_fn=lambda _,: total_charge_rate,
+                value_fn=lambda _, : total_charge_rate,
                 attr_fn=lambda data: {
                     "chargers charge rate": {
                         charger.id: charger.charge_state.charge_rate
@@ -5291,12 +5335,14 @@ async def async_setup_entry(
 
     user_data = None
     if coordinator.api.is_authenticated:
-        user_data = coordinator.data.get(DATA_USER, {})
-        connections = user_data.connections
-        first_connection = connections[0]
-        estimated_feed_in = first_connection.get("estimatedFeedIn")
-        _LOGGER.debug("estimated_feed_in1: %s", estimated_feed_in)
-    _LOGGER.debug("user_data: %s", user_data)
+        if DATA_USER in coordinator.data:
+            user_data = coordinator.data.get(DATA_USER, {})
+            _LOGGER.debug("user_data: %s", user_data)
+        if isinstance(user_data, object) and hasattr(user_data, "connections"):
+            connections = user_data.connections
+            first_connection = connections[0]
+            estimated_feed_in = first_connection.get("estimatedFeedIn")
+            _LOGGER.debug("estimated_feed_in1: %s", estimated_feed_in)
 
     # Safely access user data (defaulting to an empty dictionary if None)
     connections: list[dict] = []
