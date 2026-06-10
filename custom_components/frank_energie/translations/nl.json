@@ -614,8 +614,8 @@
             "electericity_active_resolution": {
                 "name": "Elektriciteit prijs resolutie",
                 "state": {
-                    "PT15M": "Elke 15 minuten",
-                    "PT60M": "Elk uur"
+                    "pt15m": "Elke 15 minuten",
+                    "pt60m": "Elk uur"
                 }
             }
         },
