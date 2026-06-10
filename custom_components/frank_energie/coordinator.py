@@ -378,6 +378,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     "No cached data available during maintenance window."
                 )
 
+            raise UpdateFailed(
+                "No cached Frank Energie data available after attempting update."
+            )
+
         # ---------------------------------------------------
         # TOMORROW PRICES
         # ---------------------------------------------------
@@ -390,19 +394,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 now_utc,
             )
 
+        assert self.cached_prices_today is not None
+
         # ---------------------------------------------------
         # AGGREGATION
         # ---------------------------------------------------
-        c = self.cached_prices_today
-        result = self._aggregate_data(c, prices_tomorrow)
+        result = self._aggregate_data(self.cached_prices_today, prices_tomorrow)
         self.cached_prices = result
 
         # ---------------------------------------------------
         # EVENTS
         # ---------------------------------------------------
-        self._maybe_fire_lowest_price_event(c.prices_today, today, now_utc)
-        self._maybe_fire_lowest_4p_event(c.prices_today, today, now_utc)
-        self._maybe_fire_lowest_16p_event(c.prices_today, today, now_utc)
+        self._maybe_fire_lowest_price_event(self.cached_prices_today.prices_today, today, now_utc)
+        self._maybe_fire_lowest_4p_event(self.cached_prices_today.prices_today, today, now_utc)
+        self._maybe_fire_lowest_16p_event(self.cached_prices_today.prices_today, today, now_utc)
 
         _LOGGER.debug(
             "Returning coordinator data with %s electricity periods",
@@ -427,11 +432,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
             self.last_fetch_today = now_utc
 
-            c = self.cached_prices_today
-
             if (
-                c.prices_today is not None
-                and c.prices_today.electricity is not None
+                self.cached_prices_today.prices_today is not None
+                and self.cached_prices_today.prices_today.electricity is not None
                 and not self._today_prices_logged
             ):
                 _LOGGER.info("Frank Energie electricity prices available for %s", today)
