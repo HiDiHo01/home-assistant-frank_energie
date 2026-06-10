@@ -1,0 +1,111 @@
+language: "en-US"
+
+early_access: false
+
+reviews:
+profile: chill
+
+request_changes_workflow: false
+
+high_level_summary: true
+review_status: true
+collapse_walkthrough: true
+poem: false
+
+auto_review:
+enabled: true
+drafts: false
+
+path_filters:
+- "!*.md"
+- "!*.txt"
+- "!*.rst"
+- "!LICENSE"
+- "!translations/*.json"
+- "!*.svg"
+
+path_instructions:
+- path: "custom_components/**"
+instructions: |
+Review for:
+- Functional bugs
+- Runtime errors
+- Async safety
+- Race conditions
+- Memory leaks
+- DataUpdateCoordinator issues
+- Entity lifecycle issues
+- Config flow issues
+- Authentication issues
+- Error handling
+- Home Assistant architecture compliance
+- Breaking changes
+- Security concerns
+- Performance regressions
+
+```
+    Assume:
+    - Python 3.14+
+    - Ruff linting
+    - Ruff formatter
+    - Home Assistant development guidelines
+
+    Ignore:
+    - Whitespace
+    - Blank lines
+    - Line wrapping
+    - Trailing commas
+    - Import ordering
+    - Formatting preferences
+    - Subjective naming suggestions
+    - Cosmetic refactors
+    - Docstring wording
+    - Type-hint style preferences unless incorrect
+
+- path: "tests/**"
+  instructions: |
+    Focus on:
+    - Missing test coverage
+    - Incorrect assertions
+    - Untested edge cases
+    - Async test issues
+    - Fixture problems
+    - Mocking mistakes
+
+    Ignore:
+    - Formatting
+    - Naming preferences
+    - Test organization preferences
+```
+
+chat:
+auto_reply: true
+
+tone_instructions: |
+Prioritize correctness over style.
+
+Do not generate review comments for:
+
+* Formatting
+* Ruff formatter output
+* Import sorting
+* Blank lines
+* Trailing commas
+* Line length handled by formatter
+* Cosmetic refactors
+* Personal coding style preferences
+
+Only comment when there is:
+
+* A functional bug
+* A likely runtime exception
+* A Home Assistant best-practice violation
+* An async or concurrency issue
+* Data loss or corruption risk
+* A security issue
+* A significant performance issue
+* Missing validation
+* Incorrect typing that may cause failures
+* A maintainability issue with measurable impact
+
+Avoid nitpicks and low-value comments.
