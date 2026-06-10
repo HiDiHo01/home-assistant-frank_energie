@@ -64,7 +64,7 @@ def test_battery_threshold_number_availability(mock_coordinator, mock_config_ent
     mock_battery.smart_battery.id = battery_id
     mock_battery.smart_battery.settings = MagicMock()
     mock_battery.smart_battery.settings.self_consumption_trading_threshold_price = 0.25
-    
+
     entity = FrankEnergieBatteryThresholdNumber(
         mock_coordinator, mock_config_entry, battery_id
     )
