@@ -109,13 +109,12 @@
       }
     },
     "select": {
-      "resolution": {
-        "name": "Resolution",
-            "state": {
-              "15 minutes": "15 minutes",
-              "60 minutes": "60 minutes",
-              "unavailable": "unavailable"
-          }
+      "electericity_active_resolution": {
+        "name": "Electricity price resolution",
+        "state": {
+          "pt15m": "Every 15 minutes",
+          "pt60m": "Every hour"
+        }
       }
     },
     "datetime": {
