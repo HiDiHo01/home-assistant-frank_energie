@@ -1209,9 +1209,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 _LOGGER.error(
                     "Authentication failed after renewal (attempt 2): %s", err
                 )
-                if isinstance(err, AuthRequiredException):
-                    raise ConfigEntryAuthFailed("Authentication is required.") from err
-                raise UpdateFailed(err) from err
+                raise ConfigEntryAuthFailed("Authentication is required.") from err
 
             except FrankEnergieException as err:
                 err_msg = str(err).casefold()
@@ -1231,8 +1229,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         "Auth error wrapped as FrankEnergieException after renewal (attempt 2): %s",
                         err,
                     )
-                    raise UpdateFailed(
-                        "Authentication temporarily failed, token renewal attempted"
+                    raise ConfigEntryAuthFailed(
+                        "Authentication failed, token renewal attempted."
                     ) from err
                 raise UpdateFailed(err) from err
 
