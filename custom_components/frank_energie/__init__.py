@@ -3,6 +3,7 @@
 
 import logging
 import warnings
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,6 +22,14 @@ from .coordinator import FrankEnergieCoordinator
 from .exceptions import NoSuitableSitesFoundError
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class FrankEnergieEntryData:
+    """Runtime data stored on a ConfigEntry for the Frank Energie integration."""
+
+    coordinator: FrankEnergieCoordinator
+    battery_session_coordinators: dict = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -74,9 +83,7 @@ async def async_setup_platform(
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
     _LOGGER.debug("Unloading entry: %s", entry.entry_id)
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
@@ -358,17 +365,12 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     async def _save_coordinator_to_hass_data(
         self, coordinator: FrankEnergieCoordinator
     ) -> None:
-        """Save the coordinator to the Home Assistant data."""
-        _LOGGER.debug("Saving coordinator to Home Assistant data")
+        """Store coordinator as entry.runtime_data (modern HA pattern)."""
+        _LOGGER.debug("Saving coordinator to entry.runtime_data")
+        # Also keep hass.data for backward compat with platforms pending migration.
         hass_data = self.hass.data.setdefault(DOMAIN, {})
         hass_data[self.entry.entry_id] = {CONF_COORDINATOR: coordinator}
-
-    def _remove_entry_from_hass_data(self) -> None:
-        """Remove the entry from the Home Assistant data."""
-        _LOGGER.debug("Removing entry from Home Assistant data")
-        self.hass.data[DOMAIN].pop(
-            self.entry.entry_id, None
-        )  # Ensure no KeyError if entry_id does not exist
+        self.entry.runtime_data = FrankEnergieEntryData(coordinator=coordinator)
 
 
 class FrankEnergieDiagnosticSensor(Entity):

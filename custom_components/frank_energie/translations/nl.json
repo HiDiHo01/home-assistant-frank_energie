@@ -617,13 +617,11 @@
             }
         },
         "select": {
-            "resolution": {
-                "name": "Prijs resolutie",
-                "description": "De prijsresolutie gebruikt voor elektriciteitsprijzen. (LET OP!: wijziging wordt toegepast op je contract en kan gevolgen hebben voor je factuur. Wijzig alleen als je weet wat je doet.)",
+            "electericity_active_resolution": {
+                "name": "Elektriciteit prijs resolutie",
                 "state": {
-                    "15 minutes": "15 minuten",
-                    "60 minutes": "60 minuten",
-                    "unavailable": "Niet beschikbaar"
+                    "pt15m": "Elke 15 minuten",
+                    "pt60m": "Elk uur"
                 }
             }
         },

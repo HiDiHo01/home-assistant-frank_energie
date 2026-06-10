@@ -4090,9 +4090,7 @@ class FrankEnergieSensor(
         }
     )
 
-    # 🔑 THIS is what Recorder uses
-    # _unrecorded_attributes: ClassVar[set[str]] = set(_no_record_keys)
-    _unrecorded_attributes: ClassVar[frozenset[str]] = frozenset(_no_record_keys)
+    _unrecorded_attributes: ClassVar[frozenset[str]] = _no_record_keys
 
     def __init__(
         self,

@@ -1692,11 +1692,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._static_contract_price_resolution_state = None
         self._cached_prices = None
 
-    async def _fetch_authenticated[T](
-        self,
-        method: Callable[..., Awaitable[T]],
-        *args: object,
-    ) -> T | None:
+    async def _fetch_authenticated(
+        self, method: Callable[..., Awaitable[object]], *args: object
+    ) -> object | None:
         """Execute an authenticated API call with proper logging and error handling."""
         if not self.api.is_authenticated:
             _LOGGER.warning(
@@ -1722,18 +1720,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 err,
             )
             return None
-
-    def old_adjust_update_interval(self, now_utc: datetime) -> None:
-        """Adjust coordinator update interval around price release windows with jitter to prevent thundering herd."""
-        # No jitter needed, we are not updating from API data
-        if self.PRICE_RELEASE_START_UTC <= now_utc.time() <= self.PRICE_RELEASE_END_UTC:
-            new_interval = timedelta(minutes=5)
-        else:
-            new_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
-
-        if self.update_interval != new_interval:
-            _LOGGER.debug("Update interval changed to %s", new_interval)
-            self.update_interval = new_interval
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval around price release windows."""
@@ -1898,69 +1884,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 result.data.effectiveDate if result.data else "unknown",
             )
             self._resolution_change_pending = True  # disable select until change is effective
-
-            if self.config_entry is None:
-                return
-
-            if self.config_entry.options.get("resolution") != value:
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "resolution": value},
-                )
-
-        await self._mutation_queue.add(_mutation)
-        await self.async_request_refresh()
-
-    async def old_async_set_resolution(self, value: str) -> None:
-        """Update resolution safely via mutation queue."""
-        if not self.api.is_authenticated:
-            # Not authenticated — save to options only, no API call
-            if self.config_entry is not None:
-                _LOGGER.warning(  # use warning so it's visible in logs
-                    "Resolution saved to options (not authenticated): %s -> options=%s",
-                    value,
-                    self.config_entry.options,
-                )
-            if self.config_entry is not None:
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "resolution": value},
-                )
-                await self.async_request_refresh()
-                _LOGGER.debug("Resolution saved to options (not authenticated): %s", value)
-            return
-
-        if not self._connection_id:
-            _LOGGER.warning(
-                "Cannot set resolution via API: connection_id not available"
-            )
-            return
-
-        if (
-            self._api_resolution_state is not None
-            and not self._api_resolution_state.isChangeRequestPossible
-        ):
-            _LOGGER.warning(
-                "Cannot set resolution via API: isChangeRequestPossible=False"
-            )
-            return
-
-        async def _mutation() -> None:
-            result = await self.api.contract_price_resolution_request_change(
-                self._connection_id,
-                value,
-            )
-
-            if result is None or not result.success:
-                raise UpdateFailed(
-                    "Resolution change request failed: %s"
-                    % (result.reason if result else "no response")
-                )
-
-            _LOGGER.info(
-                "Resolution change accepted (effective: %s)",
-                result.data.effectiveDate if result.data else "unknown",
-            )
 
             if self.config_entry is None:
                 return
