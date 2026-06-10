@@ -9,7 +9,10 @@ from custom_components.frank_energie.const import (
     DATA_USER,
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
-from custom_components.frank_energie.coordinator import FrankEnergieCoordinator, PricesTodayCache
+from custom_components.frank_energie.coordinator import (
+    FrankEnergieCoordinator,
+    PricesTodayCache,
+)
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
@@ -401,7 +404,9 @@ class TestInitNewAttributes:
     def test_site_reference_none_when_not_in_data(self, mock_frank_energie):
         """site_reference must be None when not present in config_entry.data."""
         # Create config entry without 'site_reference' key
-        entry_data_without_site_ref = {k: v for k, v in mock_entry_data.items() if k != "site_reference"}
+        entry_data_without_site_ref = {
+            k: v for k, v in mock_entry_data.items() if k != "site_reference"
+        }
         entry = MockConfigEntry(
             version=1,
             domain="frank_energie",
@@ -561,7 +566,10 @@ class TestReconcileResolution:
             coordinator._reconcile_resolution()
             mock_logger.warning.assert_called_once()
             warning_args = mock_logger.warning.call_args[0]
-            assert "drift" in warning_args[0].lower() or "resolution" in warning_args[0].lower()
+            assert (
+                "drift" in warning_args[0].lower()
+                or "resolution" in warning_args[0].lower()
+            )
 
     def test_no_warning_when_api_value_is_none(self, coordinator):
         """Must not log a warning when api_value is None."""
@@ -642,7 +650,9 @@ class TestAsyncSetResolution:
         coordinator.async_request_refresh.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_raises_update_failed_when_api_returns_none(self, coordinator, mock_frank_energie):
+    async def test_raises_update_failed_when_api_returns_none(
+        self, coordinator, mock_frank_energie
+    ):
         """Must raise UpdateFailed when API returns None result."""
         from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -808,15 +818,16 @@ async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_en
 
     static_data_result = (
         mock_prices,
-        MagicMock(), # user_sites
-        MagicMock(), # data_month_summary
-        MagicMock(), # data_invoices
-        MagicMock(), # data_period_usage
-        mock_user,   # data_user
-        None,        # data_contract_price_resolution_state
+        MagicMock(),  # user_sites
+        MagicMock(),  # data_month_summary
+        MagicMock(),  # data_invoices
+        MagicMock(),  # data_period_usage
+        mock_user,  # data_user
+        None,  # data_contract_price_resolution_state
     )
 
     call_count = 0
+
     async def mock_get_static_data(today, tomorrow, start_date):
         nonlocal call_count
         call_count += 1
@@ -847,4 +858,3 @@ async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_en
     coordinator._try_renew_token.assert_called_once()
     coordinator._clear_static_cache.assert_called_once()
     assert data.prices_today == mock_prices
-

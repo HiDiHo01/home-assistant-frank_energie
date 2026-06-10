@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from custom_components.frank_energie.const import (
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_PV_SYSTEMS,
 )
 from custom_components.frank_energie.binary_sensor import (
     FrankEnergieSmartChargingBinarySensor,
@@ -11,6 +12,7 @@ from custom_components.frank_energie.binary_sensor import (
     FrankEnergieSmartHvacBinarySensor,
     _build_dynamic_smart_batteries_descriptions,
     FrankEnergieBinarySensor,
+    FrankEnergieSmartPvSystemsSensor,
 )
 
 
@@ -141,3 +143,32 @@ def test_battery_self_consumption_trading_binary_sensor(
     # Test value_fn evaluation
     mock_coordinator.data = {}
     assert sensor.is_on is True
+
+
+def test_smart_pv_systems_binary_sensor(mock_coordinator, mock_config_entry):
+    """Test the smart PV systems binary sensor."""
+    sensor = FrankEnergieSmartPvSystemsSensor(mock_coordinator, mock_config_entry)
+
+    # Test when data is missing
+    mock_coordinator.data = {}
+    assert sensor.available is False
+    assert sensor.is_on is False
+
+    # Test when PV systems are present
+    mock_pv_system = MagicMock()
+    mock_pv_system.id = "pv_123"
+    mock_pv_system.display_name = "My Solar Panels"
+    mock_pv_system.brand = "Solis"
+    mock_pv_system.model = "S5"
+    mock_pv_system.onboarding_status = "CONNECTED"
+
+    mock_pv = MagicMock()
+    mock_pv.systems = [mock_pv_system]
+    mock_coordinator.data = {DATA_PV_SYSTEMS: mock_pv}
+
+    assert sensor.available is True
+    assert sensor.is_on is True
+    attrs = sensor.extra_state_attributes
+    assert attrs["system_count"] == 1
+    assert attrs["systems"][0]["id"] == "pv_123"
+    assert attrs["systems"][0]["status"] == "CONNECTED"

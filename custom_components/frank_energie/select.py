@@ -1,4 +1,5 @@
-"""Select entity controlling resolution via coordinator state. """
+"""Select entity controlling resolution via coordinator state."""
+
 from __future__ import annotations
 
 import logging
@@ -33,13 +34,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie select entities."""
     # coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id]
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id][
+        "coordinator"
+    ]
 
-    async_add_entities(
-        [
-            FrankEnergieResolutionSelect(coordinator)
-        ]
-    )
+    async_add_entities([FrankEnergieResolutionSelect(coordinator)])
 
 
 class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):

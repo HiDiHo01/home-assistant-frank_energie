@@ -325,24 +325,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # TODAY DATA
         # ---------------------------------------------------
         await self._refresh_today_cache(today, tomorrow, now_utc)
-#         try:
-#             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
-#             self.last_fetch_today = now_utc
-#         except AuthRequiredException as err:
-#             raise ConfigEntryAuthFailed from err
-#         except AuthException as err:
-#             await self._try_renew_token()
-#             raise UpdateFailed("Authentication temporarily failed") from err
-#         except (RequestException, FrankEnergieException, ClientError) as err:
-#             err_msg = str(err)
-#            if "Not authorized" in err_msg or "Unauthorized" in err_msg:
-#                 _LOGGER.warning(
-#                     "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err
-#                 )
-#                 await self._try_renew_token()
-#                 raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
-#             _LOGGER.warning("Temporary network error while fetching Frank Energie data: %s", err)
-#             raise UpdateFailed from err
+        #         try:
+        #             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
+        #             self.last_fetch_today = now_utc
+        #         except AuthRequiredException as err:
+        #             raise ConfigEntryAuthFailed from err
+        #         except AuthException as err:
+        #             await self._try_renew_token()
+        #             raise UpdateFailed("Authentication temporarily failed") from err
+        #         except (RequestException, FrankEnergieException, ClientError) as err:
+        #             err_msg = str(err)
+        #            if "Not authorized" in err_msg or "Unauthorized" in err_msg:
+        #                 _LOGGER.warning(
+        #                     "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err
+        #                 )
+        #                 await self._try_renew_token()
+        #                 raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
+        #             _LOGGER.warning("Temporary network error while fetching Frank Energie data: %s", err)
+        #             raise UpdateFailed from err
 
         if self.cached_prices_today is None:
             raise UpdateFailed("No data available and no cached data to fall back to.")
@@ -352,44 +352,44 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # ---------------------------------------------------
         prices_tomorrow = await self._refresh_tomorrow_cache(today, tomorrow, now_utc)
 
-#         if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC:
-#             if (
-#                 self.cached_prices_tomorrow is None
-#                 or self.last_fetch_tomorrow is None
-#                 or self.last_fetch_tomorrow.date() != today
-#             ):
-#                 prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
-#                 if prices_tomorrow is not None:
-#                     _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
-#                     self.cached_prices_tomorrow = prices_tomorrow
-#                     self.last_fetch_tomorrow = now_utc
-#                     if self.config_entry is not None:
-#                         self.hass.bus.async_fire(
-#                             EVENT_FRANK_ENERGIE,
-#                             {
-#                                 "entry_id": self.config_entry.entry_id,
-#                                 "action": "tomorrow_prices_available",
-#                                 "date": tomorrow.isoformat(),
-#                                 "resolution": self.resolution,
-#                             },
-#                         )
-#                 elif self.cached_prices_tomorrow is not None:
-#                     _LOGGER.warning(
-#                         "Failed to fetch new tomorrow prices for %s, but cached data is available. Retaining cached data.",
-#                         tomorrow,
-#                     )
-#                     prices_tomorrow = self.cached_prices_tomorrow
-#             else:
-#                 # API returned nothing but we have cached data — keep it
-#                 _LOGGER.debug("No new tomorrow prices, retaining cached data for %s", tomorrow)
-#                 prices_tomorrow = self.cached_prices_tomorrow
-#         else:
-#             _LOGGER.debug(
-#                 "Not fetching tomorrow's prices yet (%02d:00 UTC, threshold: %02d:00 UTC).",
-#                 now_utc.hour,
-#                 self.FETCH_TOMORROW_HOUR_UTC,
-#             )
-#             prices_tomorrow = None
+        #         if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC:
+        #             if (
+        #                 self.cached_prices_tomorrow is None
+        #                 or self.last_fetch_tomorrow is None
+        #                 or self.last_fetch_tomorrow.date() != today
+        #             ):
+        #                 prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
+        #                 if prices_tomorrow is not None:
+        #                     _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
+        #                     self.cached_prices_tomorrow = prices_tomorrow
+        #                     self.last_fetch_tomorrow = now_utc
+        #                     if self.config_entry is not None:
+        #                         self.hass.bus.async_fire(
+        #                             EVENT_FRANK_ENERGIE,
+        #                             {
+        #                                 "entry_id": self.config_entry.entry_id,
+        #                                 "action": "tomorrow_prices_available",
+        #                                 "date": tomorrow.isoformat(),
+        #                                 "resolution": self.resolution,
+        #                             },
+        #                         )
+        #                 elif self.cached_prices_tomorrow is not None:
+        #                     _LOGGER.warning(
+        #                         "Failed to fetch new tomorrow prices for %s, but cached data is available. Retaining cached data.",
+        #                         tomorrow,
+        #                     )
+        #                     prices_tomorrow = self.cached_prices_tomorrow
+        #             else:
+        #                 # API returned nothing but we have cached data — keep it
+        #                 _LOGGER.debug("No new tomorrow prices, retaining cached data for %s", tomorrow)
+        #                 prices_tomorrow = self.cached_prices_tomorrow
+        #         else:
+        #             _LOGGER.debug(
+        #                 "Not fetching tomorrow's prices yet (%02d:00 UTC, threshold: %02d:00 UTC).",
+        #                 now_utc.hour,
+        #                 self.FETCH_TOMORROW_HOUR_UTC,
+        #             )
+        #             prices_tomorrow = None
 
         # ---------------------------------------------------
         # AGGREGATION
@@ -442,9 +442,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             err_msg = str(err).casefold()
             if "not authorized" in err_msg or "unauthorized" in err_msg:
                 _LOGGER.warning(
-                    "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err)
+                    "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.",
+                    err,
+                )
                 await self._try_renew_token()
-                raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
+                raise UpdateFailed(
+                    "Authentication temporarily failed, token renewal attempted"
+                ) from err
             _LOGGER.warning(
                 "Temporary network error while fetching Frank Energie data: %s",
                 err,
@@ -532,7 +536,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
         _LOGGER.debug(
             "Fired frank_energie_event (lowest_price): %s → %s @ %s",
-            start, end, lowest.total,
+            start,
+            end,
+            lowest.total,
         )
         self._mark_lowest_price_event_fired(today)
 
@@ -584,7 +590,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
         _LOGGER.debug(
             "Fired frank_energie_event (lowest_4p_price): %s → %s @ avg %s",
-            start, end, round(average_price, 3),
+            start,
+            end,
+            round(average_price, 3),
         )
         self._mark_lowest_4p_event_fired(today)
 
@@ -641,7 +649,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
         _LOGGER.debug(
             "Fired frank_energie_event (lowest_16p_price): %s → %s @ avg %s",
-            start, end, round(average_price, 3),
+            start,
+            end,
+            round(average_price, 3),
         )
         self._mark_lowest_16p_event_fired(today)
 
@@ -774,10 +784,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 self._api_resolution_state = resolution_state
 
                 # resolution_state is already a ContractPriceResolutionState dataclass
-                if self.config_entry.options.get("resolution") != resolution_state.activeOption:
+                if (
+                    self.config_entry.options.get("resolution")
+                    != resolution_state.activeOption
+                ):
                     options = dict(self.config_entry.options)
                     options["resolution"] = resolution_state.activeOption
-                    self.hass.config_entries.async_update_entry(self.config_entry, options=options)
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, options=options
+                    )
 
                 _LOGGER.debug(
                     "Good ContractPriceResolutionState: %s",
@@ -1070,9 +1085,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         return details_list, sessions_list
 
-    async def _fetch_today_data(
-        self, today: date, tomorrow: date
-    ) -> PricesTodayCache:
+    async def _fetch_today_data(self, today: date, tomorrow: date) -> PricesTodayCache:
         """
         Fetches all relevant Frank Energie data for the current day, including prices, user sites, monthly summaries, invoices, usage, user info, Enode chargers, smart batteries, battery details, battery sessions, and smart PV systems.
 
@@ -1091,7 +1104,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         for attempt in (1, 2):
             try:
                 _LOGGER.debug(
-                    "Fetching Frank Energie data for today %s (attempt %d)", self.config_entry.entry_id, attempt
+                    "Fetching Frank Energie data for today %s (attempt %d)",
+                    self.config_entry.entry_id,
+                    attempt,
                 )
 
                 (
@@ -1181,14 +1196,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             except (AuthRequiredException, AuthException) as err:
                 if attempt == 1:
-                    _LOGGER.warning("Authentication failed (attempt 1), trying to renew token: %s", err)
+                    _LOGGER.warning(
+                        "Authentication failed (attempt 1), trying to renew token: %s",
+                        err,
+                    )
                     try:
                         await self._try_renew_token()
                     except ConfigEntryAuthFailed:
                         raise
                     self._clear_static_cache()
                     continue
-                _LOGGER.error("Authentication failed after renewal (attempt 2): %s", err)
+                _LOGGER.error(
+                    "Authentication failed after renewal (attempt 2): %s", err
+                )
                 if isinstance(err, AuthRequiredException):
                     raise ConfigEntryAuthFailed("Authentication is required.") from err
                 raise UpdateFailed(err) from err
@@ -1207,8 +1227,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             raise
                         self._clear_static_cache()
                         continue
-                    _LOGGER.error("Auth error wrapped as FrankEnergieException after renewal (attempt 2): %s", err)
-                    raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
+                    _LOGGER.error(
+                        "Auth error wrapped as FrankEnergieException after renewal (attempt 2): %s",
+                        err,
+                    )
+                    raise UpdateFailed(
+                        "Authentication temporarily failed, token renewal attempted"
+                    ) from err
                 raise UpdateFailed(err) from err
 
             except RequestException as ex:
@@ -1400,11 +1425,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             if not use_fallback:
                 _LOGGER.debug("No user prices for tomorrow, skipping fallback")
                 return public_prices
-            _LOGGER.warning("Failed to fetch user prices, falling back to public prices")
+            _LOGGER.warning(
+                "Failed to fetch user prices, falling back to public prices"
+            )
             return public_prices
 
         # Use user prices if both gas and electricity have data
-        has_electricity = user_prices.electricity is not None and getattr(user_prices.electricity, "all", None)
+        has_electricity = user_prices.electricity is not None and getattr(
+            user_prices.electricity, "all", None
+        )
         has_gas = user_prices.gas is not None and getattr(user_prices.gas, "all", None)
 
         if has_electricity and has_gas:
@@ -1428,7 +1457,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
 
         if not has_electricity:
-            _LOGGER.info("No electricity prices for user, falling back to public prices")
+            _LOGGER.info(
+                "No electricity prices for user, falling back to public prices"
+            )
             user_prices.electricity = (
                 public_prices.electricity
                 if self.user_electricity_enabled
@@ -1558,7 +1589,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._static_contract_price_resolution_state = None
         self._cached_prices = None
 
-
     # async def _fetch_authenticated(self, method: Callable, *args) -> Any:
     async def _fetch_authenticated(
         self, method: Callable[..., Awaitable[object]], *args: object
@@ -1627,7 +1657,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index: index + window]
+            window_prices = prices[index : index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
@@ -1694,18 +1724,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     self.config_entry,
                     options={**self.config_entry.options, "resolution": value},
                 )
-                _LOGGER.debug("Resolution saved to options (not authenticated): %s", value)
+                _LOGGER.debug(
+                    "Resolution saved to options (not authenticated): %s", value
+                )
             return
 
         if not self._connection_id:
-            _LOGGER.warning("Cannot set resolution via API: connection_id not available")
+            _LOGGER.warning(
+                "Cannot set resolution via API: connection_id not available"
+            )
             return
 
         if (
             self._api_resolution_state is not None
             and not self._api_resolution_state.isChangeRequestPossible
         ):
-            _LOGGER.warning("Cannot set resolution via API: isChangeRequestPossible=False")
+            _LOGGER.warning(
+                "Cannot set resolution via API: isChangeRequestPossible=False"
+            )
             return
 
         async def _mutation() -> None:

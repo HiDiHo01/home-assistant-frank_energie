@@ -35,23 +35,18 @@ PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the Frank Energie component from a config entry."""
-    _LOGGER.debug(
-        "Setting up Frank Energie component for entry: %s", entry.entry_id)
+    _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
     _LOGGER.debug("Setting up Frank Energie entry: %s", entry)
     _LOGGER.debug("Setting up Frank Energie entry data: %s", entry.data)
     _LOGGER.debug("Setting up Frank Energie entry domain: %s", entry.domain)
-    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s",
-                  entry.unique_id)
+    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s", entry.unique_id)
     _LOGGER.debug("Setting up Frank Energie entry options: %s", entry.options)
     component = FrankEnergieComponent(hass, entry)
     return await component.setup()
 
 
 async def async_setup_platform(
-    hass: HomeAssistant,
-    config: dict[str, Any],
-    async_add_entities,
-    discovery_info=None
+    hass: HomeAssistant, config: dict[str, Any], async_add_entities, discovery_info=None
 ) -> bool:
     """Set up the Frank Energie sensor platform.
     Deprecated for new development because Home Assistant encourages the use of
@@ -59,7 +54,7 @@ async def async_setup_platform(
     """
     warnings.warn(
         "async_setup_platform is deprecated; use config entries instead.",
-        DeprecationWarning
+        DeprecationWarning,
     )
     _LOGGER.debug("Setting up Frank Energie sensor platform")
     timezone = hass.config.time_zone  # Get the configured time zone
@@ -105,7 +100,8 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         _LOGGER.debug(
             "Price release window: triggering refresh at %02d:%02d UTC",
-            now_utc.hour, minute,
+            now_utc.hour,
+            minute,
         )
         await coordinator.async_request_refresh()
 
@@ -159,7 +155,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         api = FrankEnergie(
             clientsession=clientsession,
             auth_token=self.entry.data.get(CONF_ACCESS_TOKEN),
-            refresh_token=self.entry.data.get(CONF_TOKEN)
+            refresh_token=self.entry.data.get(CONF_TOKEN),
         )
         coordinator = self._create_frank_energie_coordinator(api)
 
@@ -185,15 +181,16 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
     def _update_unique_id(self) -> None:
         """Update the unique ID of the config entry."""
-        if (self.entry.unique_id is None
+        if (
+            self.entry.unique_id is None
             or self.entry.unique_id == "frank_energie_component"
-            ):
+        ):
             self.hass.config_entries.async_update_entry(
-                self.entry, unique_id="frank_energie")
+                self.entry, unique_id="frank_energie"
+            )
 
     async def _select_site_reference(
-        self,
-        coordinator: FrankEnergieCoordinator
+        self, coordinator: FrankEnergieCoordinator
     ) -> None:
         """Get access token from entry data or options and select site reference of not already set"""
         """Ensure a site reference is selected and stored in entry data."""
@@ -203,23 +200,27 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         entry.options: bevat de gegevens die via een options flow zijn aangepast/nageleverd."""
         _LOGGER.debug("Selecting site reference for coordinator")
 
-        access_token = (
-            self.entry.options.get(CONF_ACCESS_TOKEN)
-            or self.entry.data.get(CONF_ACCESS_TOKEN)
+        access_token = self.entry.options.get(CONF_ACCESS_TOKEN) or self.entry.data.get(
+            CONF_ACCESS_TOKEN
         )
 
         if self.entry.data.get("site_reference") is not None or not access_token:
             return
 
         if self.entry.data.get("site_reference") is None and access_token:
-            site_reference, title = await self._get_site_reference_and_title(coordinator)
+            site_reference, title = await self._get_site_reference_and_title(
+                coordinator
+            )
             if not site_reference:
-                raise NoSuitableSitesFoundError("No suitable sites found for this account")
+                raise NoSuitableSitesFoundError(
+                    "No suitable sites found for this account"
+                )
 
             # Controleer of de titel correct is gegenereerd
             if not isinstance(title, str):
                 _LOGGER.warning(
-                    "Failed to generate title for the site reference: %s", site_reference
+                    "Failed to generate title for the site reference: %s",
+                    site_reference,
                 )
                 return
 
@@ -228,12 +229,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             self.hass.config_entries.async_update_entry(
                 self.entry,
                 data={**self.entry.data, "site_reference": site_reference},
-                title=title
+                title=title,
             )
 
     async def _get_site_reference_and_title(
-        self,
-        coordinator: FrankEnergieCoordinator
+        self, coordinator: FrankEnergieCoordinator
     ) -> tuple[str, str]:
         """Fetch site reference and human-readable title."""
         _LOGGER.debug("Getting site reference and title for coordinator")
@@ -265,9 +265,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         address = getattr(selected_site, "address", None)
         street = getattr(address, "street", "")
         number = getattr(address, "houseNumber", "")
-        addition = (
-            getattr(address, "houseNumberAddition", "") or ""
-        )
+        addition = getattr(address, "houseNumberAddition", "") or ""
 
         title = " ".join(p for p in [street, f"{number}{addition}"] if p)
 
@@ -277,8 +275,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         return reference, title
 
     def _create_frank_energie_coordinator(
-        self,
-        api: FrankEnergie
+        self, api: FrankEnergie
     ) -> FrankEnergieCoordinator:
         """Create the Frank Energie Coordinator instance."""
         _LOGGER.debug("Creating Frank Energie Coordinator instance")
@@ -297,8 +294,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         try:
             # 1. Register all sensor (parent) devices first.
             await self.hass.config_entries.async_forward_entry_setups(
-                self.entry,
-                [Platform.SENSOR]
+                self.entry, [Platform.SENSOR]
             )
             # 2. Now set up all remaining platforms concurrently.
             await self.hass.config_entries.async_forward_entry_setups(
@@ -310,8 +306,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             raise
 
     async def _save_coordinator_to_hass_data(
-        self,
-        coordinator: FrankEnergieCoordinator
+        self, coordinator: FrankEnergieCoordinator
     ) -> None:
         """Save the coordinator to the Home Assistant data."""
         _LOGGER.debug("Saving coordinator to Home Assistant data")
@@ -363,4 +358,5 @@ class FrankEnergieDiagnosticSensor(Entity):
             _LOGGER.exception("Failed to update diagnostic sensor: %s", str(err))
             self._state = "error"
             raise ValueError(
-                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}") from err
+                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}"
+            ) from err

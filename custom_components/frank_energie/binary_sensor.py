@@ -14,9 +14,6 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    STATE_UNAVAILABLE,
-)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -351,10 +348,7 @@ class FrankEnergieSmartPvSystemsSensor(CoordinatorEntity, BinarySensorEntity):
         coordinator: FrankEnergieCoordinator,
         config_entry: ConfigEntry,
     ) -> None:
-        super().__init__(
-            coordinator,
-            config_entry
-        )
+        super().__init__(coordinator, config_entry)
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_smart_pv_systems"
         self._attr_device_info = DeviceInfo(
@@ -393,7 +387,7 @@ class FrankEnergieSmartPvSystemsSensor(CoordinatorEntity, BinarySensorEntity):
                     "display_name": s.display_name,
                     "brand": s.brand,
                     "model": s.model,
-                    "status": s.onboardingStatus,
+                    "status": s.onboarding_status,
                 }
                 for s in pv.systems
             ],
@@ -402,6 +396,7 @@ class FrankEnergieSmartPvSystemsSensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def device_info(self):
         return {"identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)}}
+
 
 # ---------------------------------------------------------------------------
 # Battery self-consumption binary sensor (existing, kept from old approach)
