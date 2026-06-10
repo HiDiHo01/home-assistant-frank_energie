@@ -52,7 +52,7 @@
         "select": {
             "electericity_active_resolution": {
                 "name": "Electricity price resolution",
-                "options": {
+                "state": {
                     "PT15M": "Every 15 minutes",
                     "PT60M": "Every hour"
                 }
