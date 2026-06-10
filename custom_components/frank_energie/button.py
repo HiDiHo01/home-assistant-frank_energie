@@ -11,10 +11,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
-    CONF_COORDINATOR,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
-    SERVICE_NAME_ENODE_CHARGERS,
     SERVICE_NAME_PRICES,
     VERSION,
 )
@@ -28,57 +26,43 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class FrankEnergieButtonEntityDescription(ButtonEntityDescription):
     """Describes a Frank Energie button entity."""
+
     service_name: str = SERVICE_NAME_PRICES
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up refresh buttons for Frank Energie coordinators."""
-    entry_data = hass.data[DOMAIN][entry.entry_id]
+    runtime_data = entry.runtime_data
 
     entities: list[ButtonEntity] = []
 
-    # Main prices coordinator
-    if CONF_COORDINATOR in entry_data:
-        entities.append(
-            FrankEnergieRefreshButton(
-                coordinator=entry_data[CONF_COORDINATOR],
-                description=FrankEnergieButtonEntityDescription(
-                    key="refresh_prices",
-                    name="Refresh Frank Energie Prices",
-                    service_name=SERVICE_NAME_PRICES,
-                ),
-                entry=entry,
-            )
+    # Main prices coordinator — always present
+    entities.append(
+        FrankEnergieRefreshButton(
+            coordinator=runtime_data.coordinator,
+            description=FrankEnergieButtonEntityDescription(
+                key="refresh_prices",
+                name="Refresh Frank Energie Prices",
+                service_name=SERVICE_NAME_PRICES,
+            ),
+            entry=entry,
         )
+    )
 
-    # Battery sessions
-    if "battery_session_coordinator" in entry_data:
+    # Battery sessions — one button covering all battery session coordinators
+    if runtime_data.battery_session_coordinators:
+        first_session_coordinator = next(
+            iter(runtime_data.battery_session_coordinators.values())
+        )
         entities.append(
             FrankEnergieRefreshButton(
-                coordinator=entry_data["battery_session_coordinator"],
+                coordinator=first_session_coordinator,
                 description=FrankEnergieButtonEntityDescription(
                     key="refresh_battery_sessions",
                     name="Refresh Battery Sessions",
                     service_name=SERVICE_NAME_BATTERY_SESSIONS,
-                ),
-                entry=entry,
-            )
-        )
-
-    # Chargers
-    if "charger_coordinator" in entry_data:
-        entities.append(
-            FrankEnergieRefreshButton(
-                coordinator=entry_data["charger_coordinator"],
-                description=FrankEnergieButtonEntityDescription(
-                    key="refresh_chargers",
-                    name="Refresh Chargers",
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    translation_key="refresh_chargers",
                 ),
                 entry=entry,
             )

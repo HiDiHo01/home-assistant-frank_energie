@@ -46,20 +46,29 @@ class FrankEnergieBinarySensorDescription(
     service_name: str | None = None
     authenticated: bool = False
 
-    value_fn: Callable[
-        [FrankEnergieData],
-        bool | None,
-    ] | None = None
+    value_fn: (
+        Callable[
+            [FrankEnergieData],
+            bool | None,
+        ]
+        | None
+    ) = None
 
-    attr_fn: Callable[
-        [FrankEnergieData],
-        dict[str, object],
-    ] | None = None
+    attr_fn: (
+        Callable[
+            [FrankEnergieData],
+            dict[str, object],
+        ]
+        | None
+    ) = None
 
-    available_fn: Callable[
-        [FrankEnergieData],
-        bool,
-    ] | None = None
+    available_fn: (
+        Callable[
+            [FrankEnergieData],
+            bool,
+        ]
+        | None
+    ) = None
 
     child_device_id: str | None = None
     child_device_name: str | None = None
@@ -144,15 +153,9 @@ def _user_feature_attributes(
                 key: value
                 for key, value in {
                     "provider": feature.get("provider"),
-                    "available_in_country": feature.get(
-                        "isAvailableInCountry"
-                    ),
-                    "user_created_at": feature.get(
-                        "userCreatedAt"
-                    ),
-                    "needs_subscription": feature.get(
-                        "needsSubscription"
-                    ),
+                    "available_in_country": feature.get("isAvailableInCountry"),
+                    "user_created_at": feature.get("userCreatedAt"),
+                    "needs_subscription": feature.get("needsSubscription"),
                 }.items()
                 if value is not None
             }
@@ -235,7 +238,7 @@ def _pv_systems_attributes(
                 "display_name": system.display_name,
                 "brand": system.brand,
                 "model": system.model,
-                "status": system.onboardingStatus,
+                "status": system.onboarding_status,
             }
             for system in pv.systems
         ],
@@ -256,33 +259,19 @@ def _battery_self_consumption_allowed(
             return None
 
         battery = next(
-            (
-                item
-                for item in battery_details
-                if item.id == battery_id
-            ),
+            (item for item in battery_details if item.smart_battery.id == battery_id),
             None,
         )
 
         if battery is None:
             return None
 
-        settings = getattr(
-            battery,
-            "settings",
-            None,
-        )
+        settings = battery.smart_battery.settings
 
         if settings is None:
             return None
 
-        return bool(
-            getattr(
-                settings,
-                "selfConsumptionTradingAllowed",
-                False,
-            )
-        )
+        return bool(settings.self_consumption_trading_allowed)
 
     return value_fn
 
@@ -301,44 +290,29 @@ def _battery_attributes(
             return {}
 
         battery = next(
-            (
-                item
-                for item in battery_details
-                if item.id == battery_id
-            ),
+            (item for item in battery_details if item.smart_battery.id == battery_id),
             None,
         )
 
         if battery is None:
             return {}
 
-        settings = getattr(
-            battery,
-            "settings",
-            None,
-        )
+        sb = battery.smart_battery
+        settings = sb.settings
 
         return {
-            "battery_id": battery.id,
-            "brand": battery.brand,
-            "provider": battery.provider,
-            "capacity_kwh": battery.capacity,
-            "max_charge_power_kw": battery.maxChargePower,
-            "max_discharge_power_kw": battery.maxDischargePower,
-            "onboarding_status": battery.onboardingStatus,
-            "battery_mode": getattr(
-                settings,
-                "batteryMode",
-                None,
-            ),
-            "imbalance_trading_strategy": getattr(
-                settings,
-                "imbalanceTradingStrategy",
-                None,
-            ),
+            "battery_id": sb.id,
+            "brand": sb.brand,
+            "capacity_kwh": sb.capacity,
+            "max_charge_power_kw": sb.max_charge_power,
+            "max_discharge_power_kw": sb.max_discharge_power,
+            "battery_mode": settings.battery_mode if settings else None,
+            "imbalance_trading_strategy": settings.imbalance_trading_strategy
+            if settings
+            else None,
             "self_consumption_trading_threshold_price": getattr(
                 settings,
-                "selfConsumptionTradingThresholdPrice",
+                "self_consumption_trading_threshold_price",
                 None,
             ),
         }
@@ -367,9 +341,7 @@ class FrankEnergieBinarySensor(
 
         self.entity_description = description
 
-        self._attr_unique_id = (
-            f"{config_entry.unique_id}_{description.key}"
-        )
+        self._attr_unique_id = f"{config_entry.unique_id}_{description.key}"
 
         if description.child_device_id:
             self._attr_device_info = DeviceInfo(
@@ -380,7 +352,6 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=description.child_device_name,
-                translation_key=f"{COMPONENT_TITLE} - {SERVICE_NAME_USER}",
                 manufacturer=description.child_device_manufacturer,
                 model=SERVICE_NAME_BATTERIES,
                 configuration_url=API_CONF_URL,
@@ -394,7 +365,6 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=f"{COMPONENT_TITLE} - {description.service_name}",
-                translation_key=f"{COMPONENT_TITLE} - {SERVICE_NAME_USER}",
                 manufacturer=COMPONENT_TITLE,
                 entry_type=DeviceEntryType.SERVICE,
                 model=description.service_name,
@@ -539,31 +509,25 @@ def _build_battery_descriptions(
     if not battery_details:
         return []
 
-    descriptions: list[
-        FrankEnergieBinarySensorDescription
-    ] = []
+    descriptions: list[FrankEnergieBinarySensorDescription] = []
 
     for battery in battery_details:
+        sb = battery.smart_battery
         descriptions.append(
             FrankEnergieBinarySensorDescription(
-                key=(
-                    f"battery_{battery.id}_"
-                    "self_consumption_trading_allowed"
-                ),
-                translation_key=(
-                    "battery_self_consumption_trading_allowed"
-                ),
+                key=(f"battery_{sb.id}_self_consumption_trading_allowed"),
+                translation_key=("battery_self_consumption_trading_allowed"),
                 icon="mdi:home-battery",
                 device_class=BinarySensorDeviceClass.RUNNING,
                 service_name=SERVICE_NAME_BATTERIES,
-                child_device_id=battery.id,
-                child_device_name=f"{battery.brand} Battery",
-                child_device_manufacturer=battery.brand,
+                child_device_id=sb.id,
+                child_device_name=f"{sb.brand} Battery",
+                child_device_manufacturer=sb.brand,
                 value_fn=_battery_self_consumption_allowed(
-                    battery.id,
+                    sb.id,
                 ),
                 attr_fn=_battery_attributes(
-                    battery.id,
+                    sb.id,
                 ),
             )
         )
@@ -578,18 +542,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie binary sensors."""
 
-    coordinator_wrapper: dict[
-        str,
-        FrankEnergieCoordinator,
-    ] = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data.coordinator
 
-    coordinator = coordinator_wrapper[
-        "coordinator"
-    ]
-
-    entities: list[
-        FrankEnergieBinarySensor
-    ] = []
+    entities: list[FrankEnergieBinarySensor] = []
 
     if coordinator.api.is_authenticated:
         entities.extend(

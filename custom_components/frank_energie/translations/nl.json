@@ -617,13 +617,29 @@
             }
         },
         "select": {
-            "resolution": {
-                "name": "Prijs resolutie",
-                "description": "De prijsresolutie gebruikt voor elektriciteitsprijzen. (LET OP!: wijziging wordt toegepast op je contract en kan gevolgen hebben voor je factuur. Wijzig alleen als je weet wat je doet.)",
+            "electericity_active_resolution": {
+                "name": "Elektriciteit prijs resolutie",
                 "state": {
-                    "15 minutes": "15 minuten",
-                    "60 minutes": "60 minuten",
-                    "unavailable": "Niet beschikbaar"
+                    "pt15m": "Elke 15 minuten",
+                    "pt60m": "Elk uur"
+                }
+            },
+            "battery_mode": {
+                "name": "Slimme batterij modus",
+                "state": {
+                    "self_consumption": "Zelfconsumptie",
+                    "self_consumption_mix": "Zelfconsumptie Plus",
+                    "imbalance_trading": "Onbalanshandel",
+                    "trading": "Handelen"
+                }
+            },
+            "battery_strategy": {
+                "name": "Slimme batterij strategie",
+                "state": {
+                    "balanced": "Standaard",
+                    "conservative": "Conservatief",
+                    "aggressive": "Agressief",
+                    "imbalance_only": "Alleen onbalans"
                 }
             }
         },
@@ -650,6 +666,16 @@
         "switch": {
             "enode_smart_charging": {
                 "name": "Slim laden"
+            }
+        },
+        "binary_sensor": {
+            "battery_self_consumption_trading_allowed": {
+                "name": "Eigen verbruik handel toegestaan"
+            }
+        },
+        "number": {
+            "consumption_threshold_price": {
+                "name": "Drempelprijs voor eigen verbruik"
             }
         },
         "datetime": {

@@ -52,9 +52,27 @@
         "select": {
             "electericity_active_resolution": {
                 "name": "Electricity price resolution",
-                "options": {
-                    "PT15M": "Every 15 minutes",
-                    "PT60M": "Every hour"
+                "state": {
+                    "pt15m": "Every 15 minutes",
+                    "pt60m": "Every hour"
+                }
+            },
+            "battery_mode": {
+                "name": "Smart battery mode",
+                "state": {
+                    "self_consumption": "Self-consumption",
+                    "self_consumption_mix": "Self-consumption Plus",
+                    "imbalance_trading": "Imbalance trading",
+                    "trading": "Trading"
+                }
+            },
+            "battery_strategy": {
+                "name": "Smart battery strategy",
+                "state": {
+                    "balanced": "Standard",
+                    "conservative": "Conservative",
+                    "aggressive": "Aggressive",
+                    "imbalance_only": "Imbalance only"
                 }
             }
         },
@@ -101,11 +119,19 @@
             },
             "smart_hvac": {
                 "name": "Smart HVAC"
+            },
+            "battery_self_consumption_trading_allowed": {
+                "name": "Self consumption trading allowed"
             }
         },
         "switch": {
             "enode_smart_charging": {
                 "name": "Smart charging"
+            }
+        },
+        "number": {
+            "consumption_threshold_price": {
+                "name": "Self consumption threshold price"
             }
         },
         "datetime": {

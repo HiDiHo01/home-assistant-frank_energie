@@ -55,7 +55,6 @@ from .const import (
     ATTR_TILL_TIME,
     ATTRIBUTION,
     COMPONENT_TITLE,
-    CONF_COORDINATOR,
     DATA_BATTERIES,
     DATA_BATTERY_SESSIONS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
@@ -2878,7 +2877,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_COSTS,
         value_fn=lambda data: (
             data[DATA_MONTH_SUMMARY].costs_per_day_till_now
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
+            if data[DATA_MONTH_SUMMARY]
+            and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
             else None
         ),
         attr_fn=lambda data: (
@@ -3928,8 +3928,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:identifier",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: data[DATA_USER_SITES].reference
-            if data.get(DATA_USER_SITES) else None,
+        value_fn=lambda data: (
+            data[DATA_USER_SITES].reference if data.get(DATA_USER_SITES) else None
+        ),
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_4p",
@@ -3940,13 +3941,16 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         is_electricity=True,
-        value_fn=lambda data: result[0]
-            if (result := lowest_window(data, 4)) else None,
-        attr_fn=lambda data: {
-            ATTR_FROM_TIME: result[1].date_from,
-            ATTR_TILL_TIME: result[2].date_till,
-            "average_price": result[0],
-        } if (result := lowest_window(data, 4)) else {},
+        value_fn=lambda data: result[0] if (result := lowest_window(data, 4)) else None,
+        attr_fn=lambda data: (
+            {
+                ATTR_FROM_TIME: result[1].date_from,
+                ATTR_TILL_TIME: result[2].date_till,
+                "average_price": result[0],
+            }
+            if (result := lowest_window(data, 4))
+            else {}
+        ),
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_16p",
@@ -3957,13 +3961,18 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         is_electricity=True,
-        value_fn=lambda data: result[0]
-            if (result := lowest_window(data, 16)) else None,
-        attr_fn=lambda data: {
-            ATTR_FROM_TIME: result[1].date_from,
-            ATTR_TILL_TIME: result[2].date_till,
-            "average_price": result[0],
-        } if (result := lowest_window(data, 16)) else {},
+        value_fn=lambda data: (
+            result[0] if (result := lowest_window(data, 16)) else None
+        ),
+        attr_fn=lambda data: (
+            {
+                ATTR_FROM_TIME: result[1].date_from,
+                ATTR_TILL_TIME: result[2].date_till,
+                "average_price": result[0],
+            }
+            if (result := lowest_window(data, 16))
+            else {}
+        ),
     ),
 )
 
@@ -4068,6 +4077,12 @@ class FrankEnergieSensor(
             "quarter_hour_prices",
             "market_prices",
             "market_prices_upcoming",
+            "today_prices",
+            "tomorrow_prices",
+            "upcoming_prices",
+            "upcoming_market_prices",
+            "upcoming_market_tax_prices",
+            "upcoming_market_tax_markup_prices",
             # metadata / nested
             "connections",
             "contracts",
@@ -4084,9 +4099,7 @@ class FrankEnergieSensor(
         }
     )
 
-    # 🔑 THIS is what Recorder uses
-    # _unrecorded_attributes: ClassVar[set[str]] = set(_no_record_keys)
-    _unrecorded_attributes: ClassVar[frozenset[str]] = frozenset(_no_record_keys)
+    _unrecorded_attributes: ClassVar[frozenset[str]] = _no_record_keys
 
     def __init__(
         self,
@@ -4219,16 +4232,9 @@ class FrankEnergieSensor(
             return {}
 
         try:
-            attributes = self.entity_description.attr_fn(self.coordinator.data) or {}
+            return self.entity_description.attr_fn(self.coordinator.data) or {}
         except Exception:
             return {}
-
-        # Automatically prevent Recorder bloat
-        for key, value in attributes.items():
-            if isinstance(value, (list, dict)):
-                self._unrecorded_attributes.add(key)
-
-        return attributes
 
     @property
     def available(self) -> bool:
@@ -4707,7 +4713,7 @@ def _build_dynamic_enode_sensor_descriptions(
                 service_name=SERVICE_NAME_ENODE_CHARGERS,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.ENERGY,
-                value_fn=lambda _, : total_charge_capacity,
+                value_fn=lambda _,: total_charge_capacity,
                 attr_fn=lambda data: {
                     "chargers capacity": {
                         charger.id: charger.charge_settings.capacity
@@ -4728,7 +4734,7 @@ def _build_dynamic_enode_sensor_descriptions(
                 service_name=SERVICE_NAME_ENODE_CHARGERS,
                 icon="mdi:flash",
                 device_class=SensorDeviceClass.POWER,
-                value_fn=lambda _, : total_charge_rate,
+                value_fn=lambda _,: total_charge_rate,
                 attr_fn=lambda data: {
                     "chargers charge rate": {
                         charger.id: charger.charge_state.charge_rate
@@ -5291,9 +5297,7 @@ async def async_setup_entry(
         "Setting up Frank Energie sensors for entry: %s", config_entry.entry_id
     )
 
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        CONF_COORDINATOR
-    ]
+    coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
     batteries = coordinator.data.get(DATA_BATTERIES, [])
 
     session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = {}
@@ -5321,9 +5325,7 @@ async def async_setup_entry(
 
             session_coordinators[device_id] = session_coordinator
 
-        hass.data[DOMAIN][config_entry.entry_id][DATA_BATTERY_SESSIONS] = (
-            session_coordinators
-        )
+        config_entry.runtime_data.battery_session_coordinators = session_coordinators
 
     # Add an entity for each sensor type, when authenticated is True,
     # only add the entity if the user is authenticated
