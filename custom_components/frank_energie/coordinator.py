@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import secrets
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -1618,17 +1617,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
-        """Adjust coordinator update interval around price release windows with jitter to prevent thundering herd."""
+        """Adjust coordinator update interval around price release windows."""
         if self.PRICE_RELEASE_START_UTC <= now_utc.time() <= self.PRICE_RELEASE_END_UTC:
-            # 5 minutes + 5 to 45 seconds jitter
-            new_interval = timedelta(seconds=300 + secrets.randbelow(41) + 5)
+            new_interval = timedelta(minutes=5)
         else:
-            # 15 minutes + 10 to 80 seconds jitter
-            # Positive jitter ensures sensor clock-aligned refreshes (exactly at 15m)
-            # do not trigger the coordinator API call early, keeping users desynchronized.
-            new_interval = timedelta(
-                seconds=DEFAULT_REFRESH_INTERVAL + secrets.randbelow(71) + 10
-            )
+            new_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
 
         if self.update_interval != new_interval:
             _LOGGER.debug("Update interval changed to %s", new_interval)

@@ -183,31 +183,25 @@ async def test_aggregate_data(coordinator):
 async def test_adjust_update_interval_inside_window(coordinator):
     """Test update interval adjustment inside the price release window."""
     from datetime import datetime, timezone
-    from unittest.mock import patch
 
     # Price release window is between 11:00 and 13:00 UTC
     now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
 
-    with patch("secrets.randbelow", return_value=10) as mock_randbelow:
-        coordinator._adjust_update_interval(now_utc)
-        # 300 + 10 + 5 = 315 seconds
-        assert coordinator.update_interval.total_seconds() == 315
-        mock_randbelow.assert_called_once_with(41)
+    coordinator._adjust_update_interval(now_utc)
+    # Exactly 300 seconds (5 minutes)
+    assert coordinator.update_interval.total_seconds() == 300
 
 
 @pytest.mark.asyncio
 async def test_adjust_update_interval_outside_window(coordinator):
     """Test update interval adjustment outside the price release window."""
     from datetime import datetime, timezone
-    from unittest.mock import patch
 
     now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
 
-    with patch("secrets.randbelow", return_value=20) as mock_randbelow:
-        coordinator._adjust_update_interval(now_utc)
-        # 900 + 20 + 10 = 930 seconds
-        assert coordinator.update_interval.total_seconds() == 930
-        mock_randbelow.assert_called_once_with(71)
+    coordinator._adjust_update_interval(now_utc)
+    # Exactly 900 seconds (15 minutes)
+    assert coordinator.update_interval.total_seconds() == 900
 
 
 @pytest.mark.asyncio
