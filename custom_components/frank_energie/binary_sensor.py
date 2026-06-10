@@ -303,11 +303,9 @@ def _battery_attributes(
         return {
             "battery_id": sb.id,
             "brand": sb.brand,
-            "provider": sb.provider,
             "capacity_kwh": sb.capacity,
             "max_charge_power_kw": sb.max_charge_power,
             "max_discharge_power_kw": sb.max_discharge_power,
-            "onboarding_status": sb.onboarding_status,
             "battery_mode": settings.battery_mode if settings else None,
             "imbalance_trading_strategy": settings.imbalance_trading_strategy
             if settings
@@ -354,7 +352,6 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=description.child_device_name,
-                translation_key=f"{COMPONENT_TITLE} - {SERVICE_NAME_USER}",
                 manufacturer=description.child_device_manufacturer,
                 model=SERVICE_NAME_BATTERIES,
                 configuration_url=API_CONF_URL,
@@ -368,7 +365,6 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=f"{COMPONENT_TITLE} - {description.service_name}",
-                translation_key=f"{COMPONENT_TITLE} - {SERVICE_NAME_USER}",
                 manufacturer=COMPONENT_TITLE,
                 entry_type=DeviceEntryType.SERVICE,
                 model=description.service_name,
