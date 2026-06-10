@@ -259,29 +259,19 @@ def _battery_self_consumption_allowed(
             return None
 
         battery = next(
-            (item for item in battery_details if item.id == battery_id),
+            (item for item in battery_details if item.smart_battery.id == battery_id),
             None,
         )
 
         if battery is None:
             return None
 
-        settings = getattr(
-            battery,
-            "settings",
-            None,
-        )
+        settings = battery.smart_battery.settings
 
         if settings is None:
             return None
 
-        return bool(
-            getattr(
-                settings,
-                "selfConsumptionTradingAllowed",
-                False,
-            )
-        )
+        return bool(settings.self_consumption_trading_allowed)
 
     return value_fn
 
@@ -300,40 +290,31 @@ def _battery_attributes(
             return {}
 
         battery = next(
-            (item for item in battery_details if item.id == battery_id),
+            (item for item in battery_details if item.smart_battery.id == battery_id),
             None,
         )
 
         if battery is None:
             return {}
 
-        settings = getattr(
-            battery,
-            "settings",
-            None,
-        )
+        sb = battery.smart_battery
+        settings = sb.settings
 
         return {
-            "battery_id": battery.id,
-            "brand": battery.brand,
-            "provider": battery.provider,
-            "capacity_kwh": battery.capacity,
-            "max_charge_power_kw": battery.maxChargePower,
-            "max_discharge_power_kw": battery.maxDischargePower,
-            "onboarding_status": battery.onboarding_status,
-            "battery_mode": getattr(
-                settings,
-                "batteryMode",
-                None,
-            ),
-            "imbalance_trading_strategy": getattr(
-                settings,
-                "imbalanceTradingStrategy",
-                None,
-            ),
+            "battery_id": sb.id,
+            "brand": sb.brand,
+            "provider": sb.provider,
+            "capacity_kwh": sb.capacity,
+            "max_charge_power_kw": sb.max_charge_power,
+            "max_discharge_power_kw": sb.max_discharge_power,
+            "onboarding_status": sb.onboarding_status,
+            "battery_mode": settings.battery_mode if settings else None,
+            "imbalance_trading_strategy": settings.imbalance_trading_strategy
+            if settings
+            else None,
             "self_consumption_trading_threshold_price": getattr(
                 settings,
-                "selfConsumptionTradingThresholdPrice",
+                "self_consumption_trading_threshold_price",
                 None,
             ),
         }
@@ -535,21 +516,22 @@ def _build_battery_descriptions(
     descriptions: list[FrankEnergieBinarySensorDescription] = []
 
     for battery in battery_details:
+        sb = battery.smart_battery
         descriptions.append(
             FrankEnergieBinarySensorDescription(
-                key=(f"battery_{battery.id}_self_consumption_trading_allowed"),
+                key=(f"battery_{sb.id}_self_consumption_trading_allowed"),
                 translation_key=("battery_self_consumption_trading_allowed"),
                 icon="mdi:home-battery",
                 device_class=BinarySensorDeviceClass.RUNNING,
                 service_name=SERVICE_NAME_BATTERIES,
-                child_device_id=battery.id,
-                child_device_name=f"{battery.brand} Battery",
-                child_device_manufacturer=battery.brand,
+                child_device_id=sb.id,
+                child_device_name=f"{sb.brand} Battery",
+                child_device_manufacturer=sb.brand,
                 value_fn=_battery_self_consumption_allowed(
-                    battery.id,
+                    sb.id,
                 ),
                 attr_fn=_battery_attributes(
-                    battery.id,
+                    sb.id,
                 ),
             )
         )
@@ -564,12 +546,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie binary sensors."""
 
-    coordinator_wrapper: dict[
-        str,
-        FrankEnergieCoordinator,
-    ] = hass.data[DOMAIN][config_entry.entry_id]
-
-    coordinator = coordinator_wrapper["coordinator"]
+    coordinator = config_entry.runtime_data.coordinator
 
     entities: list[FrankEnergieBinarySensor] = []
 

@@ -16,7 +16,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_COORDINATOR,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
     DOMAIN,
@@ -33,9 +32,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie datetime entities."""
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        CONF_COORDINATOR
-    ]
+    coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
     entities: list[DateTimeEntity] = []
 
     if coordinator.api.is_authenticated:

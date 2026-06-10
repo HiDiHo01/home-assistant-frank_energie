@@ -16,7 +16,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
-    CONF_COORDINATOR,
     DOMAIN,
     SERVICE_NAME_SETTINGS,
 )
@@ -42,9 +41,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie select entities."""
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][entry.entry_id][
-        CONF_COORDINATOR
-    ]
+    coordinator: FrankEnergieCoordinator = entry.runtime_data.coordinator
 
     # no need to add select if not authenticated, as it won't be available until after authentication
     # this disables the select, remove these two lines if you want the select to always be present

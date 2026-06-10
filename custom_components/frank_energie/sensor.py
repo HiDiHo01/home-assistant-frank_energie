@@ -55,7 +55,6 @@ from .const import (
     ATTR_TILL_TIME,
     ATTRIBUTION,
     COMPONENT_TITLE,
-    CONF_COORDINATOR,
     DATA_BATTERIES,
     DATA_BATTERY_SESSIONS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
@@ -5298,9 +5297,7 @@ async def async_setup_entry(
         "Setting up Frank Energie sensors for entry: %s", config_entry.entry_id
     )
 
-    coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        CONF_COORDINATOR
-    ]
+    coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
     batteries = coordinator.data.get(DATA_BATTERIES, [])
 
     session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = {}
@@ -5328,9 +5325,7 @@ async def async_setup_entry(
 
             session_coordinators[device_id] = session_coordinator
 
-        hass.data[DOMAIN][config_entry.entry_id][DATA_BATTERY_SESSIONS] = (
-            session_coordinators
-        )
+        config_entry.runtime_data.battery_session_coordinators = session_coordinators
 
     # Add an entity for each sensor type, when authenticated is True,
     # only add the entity if the user is authenticated
