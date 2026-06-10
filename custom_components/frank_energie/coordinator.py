@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Awaitable, Callable, Final, TypedDict
 
-from aiohttp import ClientError, ClientSession  # type: ignore
+from aiohttp import ClientError  # type: ignore
+from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
 from homeassistant.core import HomeAssistant
@@ -141,7 +142,6 @@ class FrankEnergieData(TypedDict):
 @dataclass(frozen=True)
 class PricesTodayCache:
     prices_today: MarketPrices | None
-    data_month_summary: MonthSummary | None
     data_invoices: Invoices | None
     data_user: User | None
     user_sites: UserSites | None
@@ -155,6 +155,30 @@ class PricesTodayCache:
     data_pv_summary: dict[str, SmartPvSystemSummary] | None
     data_user_smart_feed_in: UserSmartFeedInStatus | None
     data_contract_price_resolution_state: ContractPriceResolutionState | None
+    data_month_summary: MonthSummary | None = None
+
+
+def _empty_data() -> FrankEnergieData:
+    """Create an empty Frank Energie data structure."""
+
+    return {  # type: ignore[typeddict-unknown-key]
+        DATA_ELECTRICITY: None,
+        DATA_GAS: None,
+        DATA_MONTH_SUMMARY: None,
+        DATA_INVOICES: None,
+        DATA_USAGE: None,
+        DATA_USER: None,
+        DATA_USER_SITES: None,
+        DATA_ENODE_CHARGERS: None,
+        DATA_BATTERIES: None,
+        DATA_BATTERY_DETAILS: [],
+        DATA_BATTERY_SESSIONS: [],
+        DATA_ENODE_VEHICLES: None,
+        DATA_PV_SYSTEMS: None,
+        DATA_PV_SUMMARY: None,
+        DATA_USER_SMART_FEED_IN: None,
+        DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
+    }
 
 
 class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
@@ -179,7 +203,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             hass,
             _LOGGER,
             name="Frank Energie coordinator",
-            update_interval=timedelta(seconds=DEFAULT_REFRESH_INTERVAL),
+            update_interval=None,
             config_entry=config_entry,
         )
         self._mutation_queue = MutationQueue()
@@ -187,8 +211,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.config_entry = config_entry
         self.api = api
         self._today_prices_logged: bool = False
-        self._cache: dict = {}  # <--- hier cache je prijzen
-        self.site_reference = config_entry.data.get("site_reference", None)
+        self._cache: dict[str, object] = {}  # <--- hier cache je prijzen
+        # self.site_reference = config_entry.data.get("site_reference", None)
+        self._site_reference: str | None = config_entry.data.get("site_reference")
         self.country_code: str | None = (
             self.hass.config.country
         )  # replaced by hass_country_code
@@ -199,25 +224,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             None  # cache voor contractPriceResolutionState
         )
         self._api_resolution_state: ContractPriceResolutionState | None = None
+        self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
-        self.data: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
-            DATA_ELECTRICITY: None,
-            DATA_GAS: None,
-            DATA_MONTH_SUMMARY: None,
-            DATA_INVOICES: None,
-            DATA_USAGE: None,
-            DATA_USER: None,
-            DATA_USER_SITES: None,
-            DATA_ENODE_CHARGERS: None,
-            DATA_BATTERIES: None,
-            DATA_BATTERY_DETAILS: None,
-            DATA_BATTERY_SESSIONS: None,
-            DATA_ENODE_VEHICLES: None,
-            DATA_PV_SYSTEMS: None,
-            DATA_PV_SUMMARY: None,
-            DATA_USER_SMART_FEED_IN: None,
-            DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
-        }
+        self.data: FrankEnergieData = _empty_data()
         self._update_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
         self._last_update_success = False
         self.user_electricity_enabled = False
@@ -244,6 +253,27 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_lowest_price_event: date | None = None
         self._last_lowest_4p_event: date | None = None
         self._last_lowest_16p_event: date | None = None
+
+    @property
+    def old_site_reference(self) -> str | None:
+        """Return active site reference."""
+        return self.config_entry.options.get("site_reference")
+
+    @property
+    def site_reference(self) -> str | None:
+        """Return active site reference."""
+        return self._site_reference
+
+    def _should_skip_api_calls(
+        self,
+        now_utc: datetime,
+    ) -> bool:
+        """Return True when API calls should be skipped."""
+
+        return (
+            now_utc.hour == 0
+            and 0 <= now_utc.minute < 60
+        )
 
     def _is_not_in_delivery_site(
         self, data_month_summary, data_invoices, user_sites
@@ -307,6 +337,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         today = now_utc.date()
         tomorrow = today + timedelta(days=1)
 
+        skip_api_calls = self._should_skip_api_calls(now_utc)
+
         self._reconcile_resolution()
         self._adjust_update_interval(now_utc)
 
@@ -314,96 +346,74 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if self.last_fetch_today is None or self.last_fetch_today.date() != today:
             self._today_prices_logged = False
 
-        # Adjust refresh interval around price release
-        # if self.PRICE_RELEASE_START_UTC <= now_utc.time() <= self.PRICE_RELEASE_END_UTC:
-        #     self.update_interval = timedelta(minutes=5)
-        # else:
-        #     self.update_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
-
         # ---------------------------------------------------
         # TODAY DATA
         # ---------------------------------------------------
-        await self._refresh_today_cache(today, tomorrow, now_utc)
-        #         try:
-        #             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
-        #             self.last_fetch_today = now_utc
-        #         except AuthRequiredException as err:
-        #             raise ConfigEntryAuthFailed from err
-        #         except AuthException as err:
-        #             await self._try_renew_token()
-        #             raise UpdateFailed("Authentication temporarily failed") from err
-        #         except (RequestException, FrankEnergieException, ClientError) as err:
-        #             err_msg = str(err)
-        #            if "Not authorized" in err_msg or "Unauthorized" in err_msg:
-        #                 _LOGGER.warning(
-        #                     "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.", err
-        #                 )
-        #                 await self._try_renew_token()
-        #                 raise UpdateFailed("Authentication temporarily failed, token renewal attempted") from err
-        #             _LOGGER.warning("Temporary network error while fetching Frank Energie data: %s", err)
-        #             raise UpdateFailed from err
+        if skip_api_calls:
+            _LOGGER.debug(
+                "Skipping Frank Energie API calls between 00:00 and 01:00 UTC"
+            )
+
+            if self.cached_prices_today is None:
+                _LOGGER.info(
+                    "No cached Frank Energie data available during API maintenance window. Sensors will be unavailable until the first successful data fetch after 01:00 UTC."
+                )
+        else:
+            await self._refresh_today_cache(
+                today,
+                tomorrow,
+                now_utc,
+            )
 
         if self.cached_prices_today is None:
-            raise UpdateFailed("No data available and no cached data to fall back to.")
+            if skip_api_calls:
+                if self.cached_prices is not None:
+                    return self.cached_prices
+
+                if self.data is not None:
+                    return self.data
+
+                raise UpdateFailed(
+                    "No cached data available during maintenance window."
+                )
+
+            raise UpdateFailed(
+                "No cached Frank Energie data available after attempting update."
+            )
 
         # ---------------------------------------------------
         # TOMORROW PRICES
         # ---------------------------------------------------
-        prices_tomorrow = await self._refresh_tomorrow_cache(today, tomorrow, now_utc)
+        if skip_api_calls:
+            prices_tomorrow = self.cached_prices_tomorrow
+        else:
+            prices_tomorrow = await self._refresh_tomorrow_cache(
+                today,
+                tomorrow,
+                now_utc,
+            )
 
-        #         if now_utc.hour >= self.FETCH_TOMORROW_HOUR_UTC:
-        #             if (
-        #                 self.cached_prices_tomorrow is None
-        #                 or self.last_fetch_tomorrow is None
-        #                 or self.last_fetch_tomorrow.date() != today
-        #             ):
-        #                 prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
-        #                 if prices_tomorrow is not None:
-        #                     _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
-        #                     self.cached_prices_tomorrow = prices_tomorrow
-        #                     self.last_fetch_tomorrow = now_utc
-        #                     if self.config_entry is not None:
-        #                         self.hass.bus.async_fire(
-        #                             EVENT_FRANK_ENERGIE,
-        #                             {
-        #                                 "entry_id": self.config_entry.entry_id,
-        #                                 "action": "tomorrow_prices_available",
-        #                                 "date": tomorrow.isoformat(),
-        #                                 "resolution": self.resolution,
-        #                             },
-        #                         )
-        #                 elif self.cached_prices_tomorrow is not None:
-        #                     _LOGGER.warning(
-        #                         "Failed to fetch new tomorrow prices for %s, but cached data is available. Retaining cached data.",
-        #                         tomorrow,
-        #                     )
-        #                     prices_tomorrow = self.cached_prices_tomorrow
-        #             else:
-        #                 # API returned nothing but we have cached data — keep it
-        #                 _LOGGER.debug("No new tomorrow prices, retaining cached data for %s", tomorrow)
-        #                 prices_tomorrow = self.cached_prices_tomorrow
-        #         else:
-        #             _LOGGER.debug(
-        #                 "Not fetching tomorrow's prices yet (%02d:00 UTC, threshold: %02d:00 UTC).",
-        #                 now_utc.hour,
-        #                 self.FETCH_TOMORROW_HOUR_UTC,
-        #             )
-        #             prices_tomorrow = None
+        assert self.cached_prices_today is not None
 
         # ---------------------------------------------------
         # AGGREGATION
         # ---------------------------------------------------
-        c = self.cached_prices_today
-        result = self._aggregate_data(c, prices_tomorrow)
+        result = self._aggregate_data(self.cached_prices_today, prices_tomorrow)
         self.cached_prices = result
 
         # ---------------------------------------------------
         # EVENTS
         # ---------------------------------------------------
-        self._maybe_fire_lowest_price_event(c.prices_today, today, now_utc)
-        self._maybe_fire_lowest_4p_event(c.prices_today, today, now_utc)
-        self._maybe_fire_lowest_16p_event(c.prices_today, today, now_utc)
+        self._maybe_fire_lowest_price_event(self.cached_prices_today.prices_today, today, now_utc)
+        self._maybe_fire_lowest_4p_event(self.cached_prices_today.prices_today, today, now_utc)
+        self._maybe_fire_lowest_16p_event(self.cached_prices_today.prices_today, today, now_utc)
 
+        _LOGGER.debug(
+            "Returning coordinator data with %s electricity periods",
+            len(result[DATA_ELECTRICITY].all)
+            if result[DATA_ELECTRICITY]
+            else 0,
+        )
         return result
 
     async def _refresh_today_cache(
@@ -421,11 +431,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
             self.last_fetch_today = now_utc
 
-            c = self.cached_prices_today
-
             if (
-                c.prices_today is not None
-                and c.prices_today.electricity is not None
+                self.cached_prices_today.prices_today is not None
+                and self.cached_prices_today.prices_today.electricity is not None
                 and not self._today_prices_logged
             ):
                 _LOGGER.info("Frank Energie electricity prices available for %s", today)
@@ -480,6 +488,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         ):
             return self.cached_prices_tomorrow
 
+        _LOGGER.debug(
+            "Tomorrow cache status: cached=%s last_fetch=%s",
+            self.cached_prices_tomorrow is not None,
+            self.last_fetch_tomorrow,
+        )
+        _LOGGER.debug(
+            "Fetching tomorrow prices for %s",
+            tomorrow,
+        )
+
         prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
         if prices_tomorrow is not None:
             _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
@@ -492,11 +510,54 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     EVENT_FRANK_ENERGIE,
                     {
                         "entry_id": self.config_entry.entry_id,
+                        "entry_title": self.config_entry.title,
                         "action": "tomorrow_prices_available",
                         "date": tomorrow.isoformat(),
                         "resolution": self.resolution,
                     },
                 )
+
+        _LOGGER.debug(
+            "Tomorrow prices fetched: electricity=%s gas=%s",
+            bool(
+                prices_tomorrow
+                and prices_tomorrow.electricity
+                and prices_tomorrow.electricity.all
+            ),
+            bool(
+                prices_tomorrow
+                and prices_tomorrow.gas
+                and prices_tomorrow.gas.all
+            ),
+        )
+
+        # Notify sensors immediately with updated aggregated data
+        if self.cached_prices_today is not None:
+            _LOGGER.debug(
+                "[%s][%s] Tomorrow electricity periods: %s",
+                self.config_entry.title,
+                self.site_reference,
+                len(prices_tomorrow.electricity.all)
+                if prices_tomorrow and prices_tomorrow.electricity
+                else 0,
+            )
+            _LOGGER.debug(
+                "Listeners before update: %s",
+                len(self._listeners),
+            )
+            self.async_set_updated_data(
+                self._aggregate_data(self.cached_prices_today, prices_tomorrow)
+            )
+            _LOGGER.debug(
+                "Listeners after update: %s",
+                len(self._listeners),
+            )
+            _LOGGER.debug(
+                "Coordinator electricity periods: %s",
+                len(self.data[DATA_ELECTRICITY].all)
+                if self.data[DATA_ELECTRICITY]
+                else 0,
+            )
 
         return self.cached_prices_tomorrow
 
@@ -525,6 +586,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             EVENT_FRANK_ENERGIE,
             {
                 "entry_id": self.config_entry.entry_id,
+                "entry_title": self.config_entry.title,
                 "action": "lowest_price",
                 "resolution": int((end - start).total_seconds() / 60),
                 "price": lowest.total,
@@ -578,6 +640,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             EVENT_FRANK_ENERGIE,
             {
                 "entry_id": self.config_entry.entry_id,
+                "entry_title": self.config_entry.title,
                 "action": "lowest_4p_price",
                 "periods": 4,
                 "resolution": resolution,
@@ -637,6 +700,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             EVENT_FRANK_ENERGIE,
             {
                 "entry_id": self.config_entry.entry_id,
+                "entry_title": self.config_entry.title,
                 "action": "lowest_16p_price",
                 "periods": 16,
                 "resolution": resolution,
@@ -672,28 +736,39 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_month_summary(self) -> MonthSummary | None:
         """Fetch month summary from the API."""
         if not self.api.is_authenticated:
-            return None
-        try:
-            return await self.api.month_summary(self.site_reference)
-        except AuthException as ex:
-            _LOGGER.warning(
-                "Authentication failed while fetching month summary: %s", ex
+            _LOGGER.debug(
+                "Skipping month summary fetch because the client is not authenticated"
             )
             return None
+
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch month summary.")
+            return None
+
+        try:
+            return await self.api.month_summary(self.site_reference)
+
+        except AuthException as ex:
+            _LOGGER.debug(
+                "Authentication failed while fetching month summary: %s",
+                ex,
+            )
+            await self._try_renew_token()
+            return None
+
         except (RequestException, FrankEnergieException, ClientError) as ex:
-            error_msg = str(ex).lower()
-            if "no reading dates" in error_msg:
-                _LOGGER.debug(
-                    "No historical data available yet (typical for IN_DELIVERY sites): %s",
-                    ex,
-                )
-            else:
-                _LOGGER.warning("No month summary data available: %s", ex)
+            _LOGGER.debug(
+                "Failed to fetch month summary: %s",
+                ex,
+            )
             return None
 
     async def _fetch_invoices(self) -> Invoices | None:
         """Fetch invoices from the API."""
         if not self.api.is_authenticated:
+            return None
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch invoices.")
             return None
         try:
             return await self.api.invoices(self.site_reference)
@@ -704,12 +779,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             error_msg = str(ex).lower()
             if "no reading dates" in error_msg:
                 _LOGGER.debug(
-                    "No invoice data available yet (typical for IN_DELIVERY sites): %s",
+                    "No invoice data available yet (typical for none IN_DELIVERY sites): %s",
                     ex,
                 )
             else:
                 _LOGGER.debug(
-                    "No invoice data available (normal for IN_DELIVERY sites): %s",
+                    "No invoice data available (normal for noneIN_DELIVERY sites): %s",
                     ex,
                 )
             return None
@@ -717,6 +792,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_period_usage(self, start_date: date) -> PeriodUsageAndCosts | None:
         """Fetch period usage and costs from the API."""
         if not self.api.is_authenticated:
+            return None
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch period usage.")
             return None
         try:
             return await self.api.period_usage_and_costs(
@@ -729,12 +807,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             error_msg = str(ex).lower()
             if "no reading dates" in error_msg:
                 _LOGGER.debug(
-                    "No usage data available yet (typical for IN_DELIVERY sites): %s",
+                    "No usage data available yet (typical for none IN_DELIVERY sites): %s",
                     ex,
                 )
             else:
                 _LOGGER.debug(
-                    "No period usage data available (normal for IN_DELIVERY sites): %s",
+                    "No period usage data available (normal for none IN_DELIVERY sites): %s",
                     ex,
                 )
             return None
@@ -742,6 +820,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
         if not self.api.is_authenticated:
+            return None
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch user data.")
             return None
         try:
             user_data = await self.api.user(self.site_reference)
@@ -781,6 +862,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
 
                 self._api_resolution_state = resolution_state
+                self._resolution_change_pending = False  # change has been processed by API, reset pending flag
 
                 # resolution_state is already a ContractPriceResolutionState dataclass
                 if (
@@ -811,6 +893,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> dict[str, EnodeChargers] | None:
         """Fetch Enode chargers from the API."""
         if not (self.api.is_authenticated and is_smart_charging):
+            return None
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch Enode chargers.")
             return None
         try:
             return await self.api.enode_chargers(self.site_reference, start_date)
@@ -843,6 +928,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> EnodeVehicles | None:
         """Fetch Enode vehicles from the API."""
         if not self.api.is_authenticated:
+            return None
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
             return None
         try:
             vehicles = await self.api.enode_vehicles()
@@ -882,6 +970,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Fetch Smart PV system summary from the API."""
         if not self.api.is_authenticated:
             return None
+        if not device_id:
+            _LOGGER.warning("Device ID is missing, cannot fetch smart PV system summary.")
+            return None
         try:
             return await self.api.smart_pv_system_summary(device_id)
         except (AuthException, AuthRequiredException):
@@ -910,6 +1001,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     async def _fetch_battery_details(self, battery) -> SmartBatteryDetails | None:
         """Fetch details for a single smart battery."""
+        if not self.api.is_authenticated:
+            return None
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch battery details.")
+            return None
+        if not battery or not battery.id:
+            _LOGGER.warning("Battery or battery ID is missing, cannot fetch battery details.")
+            return None
         try:
             details = await self.api.smart_battery_details(battery.id)
             if details:
@@ -943,6 +1042,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self, battery, start_date: date, tomorrow: date
     ) -> SmartBatterySessions | None:
         """Fetch sessions for a single smart battery."""
+        if not self.site_reference:
+            _LOGGER.warning("Site reference is missing, cannot fetch battery sessions.")
+            return None
+        if not battery or not battery.id:
+            _LOGGER.warning("Battery or battery ID is missing, cannot fetch battery sessions.")
+            return None
+
         try:
             sessions = await self.api.smart_battery_sessions(
                 battery.id, start_date, tomorrow
@@ -1586,10 +1692,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._static_contract_price_resolution_state = None
         self._cached_prices = None
 
-    # async def _fetch_authenticated(self, method: Callable, *args) -> Any:
-    async def _fetch_authenticated(
-        self, method: Callable[..., Awaitable[object]], *args: object
-    ) -> object | None:
+    async def _fetch_authenticated[T](
+        self,
+        method: Callable[..., Awaitable[T]],
+        *args: object,
+    ) -> T | None:
         """Execute an authenticated API call with proper logging and error handling."""
         if not self.api.is_authenticated:
             _LOGGER.warning(
@@ -1616,12 +1723,29 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
 
-    def _adjust_update_interval(self, now_utc: datetime) -> None:
-        """Adjust coordinator update interval around price release windows."""
+    def old_adjust_update_interval(self, now_utc: datetime) -> None:
+        """Adjust coordinator update interval around price release windows with jitter to prevent thundering herd."""
+        # No jitter needed, we are not updating from API data
         if self.PRICE_RELEASE_START_UTC <= now_utc.time() <= self.PRICE_RELEASE_END_UTC:
             new_interval = timedelta(minutes=5)
         else:
             new_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
+
+        if self.update_interval != new_interval:
+            _LOGGER.debug("Update interval changed to %s", new_interval)
+            self.update_interval = new_interval
+
+    def _adjust_update_interval(self, now_utc: datetime) -> None:
+        """Adjust coordinator update interval around price release windows."""
+        # No jitter needed, we are not updating from API data
+        if self.PRICE_RELEASE_START_UTC <= now_utc.time() <= self.PRICE_RELEASE_END_UTC:
+            # 5 minutes
+            new_interval = timedelta(seconds=300)
+        else:
+            # 15 minutes TODO:set to 60 for PT60M resolution, but keep 15 for now to ensure timely updates for PT15M users until we can remove support for PT15M resolution
+            new_interval = timedelta(
+                seconds=DEFAULT_REFRESH_INTERVAL
+            )
 
         if self.update_interval != new_interval:
             _LOGGER.debug("Update interval changed to %s", new_interval)
@@ -1709,15 +1833,101 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
         if not self.api.is_authenticated:
-            # Not authenticated — save to options only, no API call
             if self.config_entry is not None:
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     options={**self.config_entry.options, "resolution": value},
                 )
                 _LOGGER.debug(
-                    "Resolution saved to options (not authenticated): %s", value
+                    "Resolution saved to options (not authenticated): %s -> options=%s",
+                    value,
+                    self.config_entry.options,
                 )
+                # Invalidate price cache so next refresh fetches with new resolution
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+                await self.async_request_refresh()
+            return
+
+        if not self._connection_id:
+            _LOGGER.warning("Cannot set resolution via API: connection_id not available")
+            return
+
+        if (
+            self._api_resolution_state is not None
+            and not self._api_resolution_state.isChangeRequestPossible
+        ):
+            _LOGGER.warning("Cannot set resolution via API: isChangeRequestPossible=False")
+            return
+
+        async def _mutation() -> None:
+            result = await self.api.contract_price_resolution_request_change(
+                self._connection_id,
+                value,
+            )
+
+            if result is None:
+                raise UpdateFailed("Resolution change request failed: no response")
+
+            if not result.success:
+                if result.reason == "CHANGE_NOT_POSSIBLE":
+                    _LOGGER.warning(
+                        "Resolution change not possible at this time "
+                        "(contract does not allow changes or cooling-off period active)"
+                    )
+                    async_create(
+                        self.hass,
+                        message=(
+                            "Resolution change is not possible at this time. "
+                            "Your contract may not allow changes or a cooling-off period is active. "
+                            f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
+                            f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
+                        ),
+                        title="Frank Energie - Resolution Change Failed",
+                        notification_id="frank_energie_resolution_change_failed",
+                    )
+                    return  # not an error, just not allowed right now
+                raise UpdateFailed(
+                    "Resolution change request failed: %s" % (result.reason)
+                )
+
+            _LOGGER.info(
+                "Resolution change accepted (effective: %s)",
+                result.data.effectiveDate if result.data else "unknown",
+            )
+            self._resolution_change_pending = True  # disable select until change is effective
+
+            if self.config_entry is None:
+                return
+
+            if self.config_entry.options.get("resolution") != value:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    options={**self.config_entry.options, "resolution": value},
+                )
+
+        await self._mutation_queue.add(_mutation)
+        await self.async_request_refresh()
+
+    async def old_async_set_resolution(self, value: str) -> None:
+        """Update resolution safely via mutation queue."""
+        if not self.api.is_authenticated:
+            # Not authenticated — save to options only, no API call
+            if self.config_entry is not None:
+                _LOGGER.warning(  # use warning so it's visible in logs
+                    "Resolution saved to options (not authenticated): %s -> options=%s",
+                    value,
+                    self.config_entry.options,
+                )
+            if self.config_entry is not None:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    options={**self.config_entry.options, "resolution": value},
+                )
+                await self.async_request_refresh()
+                _LOGGER.debug("Resolution saved to options (not authenticated): %s", value)
             return
 
         if not self._connection_id:
@@ -1854,7 +2064,7 @@ class FrankEnergieBatterySessionCoordinator(
             if self.data:
                 _LOGGER.warning(str(ex))
                 return self.data
-            raise ex
+            raise
         except AuthException as ex:
             _LOGGER.debug(
                 "Authentication tokens expired, attempting token renewal: %s", ex
@@ -1871,55 +2081,20 @@ class FrankEnergieBatterySessionCoordinator(
 
         except RequestException as ex:
             raise UpdateFailed(
-                "Failed to fetch battery session data from Frank Energie: %s" % ex
+                f"Failed to fetch battery session data from Frank Energie: {ex!s}"
             ) from ex
 
         except ConfigEntryAuthFailed as ex:
             _LOGGER.exception("Authentication failed")
             raise ex
+
         except asyncio.CancelledError:
             raise
+
         except Exception as ex:
             raise UpdateFailed(
-                "Unexpected error while fetching battery session data: %s" % ex
+                f"Unexpected error while fetching battery session data: {ex}"
             ) from ex
-
-
-async def run_hourly(
-    start_time: datetime, end_time: datetime, interval: timedelta, method: Callable
-) -> None:
-    """Run the specified method at regular intervals between start_time and end_time."""
-    while True:
-        now = datetime.now(timezone.utc)
-        if start_time <= now <= end_time:
-            await method()
-        await asyncio.sleep(interval.total_seconds())
-
-
-async def hourly_refresh(coordinator: FrankEnergieCoordinator) -> None:
-    """Perform hourly refresh of coordinator."""
-    await coordinator.async_refresh()
-
-
-async def start_coordinator(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-    """Start the coordinator."""
-    async with ClientSession() as session:
-        api = FrankEnergie(session, config_entry.data["access_token"])
-        coordinator = FrankEnergieCoordinator(
-            hass,
-            config_entry,
-            api,
-        )
-        await coordinator.async_refresh()
-
-        today = datetime.now(timezone.utc)
-        start_time = datetime.combine(today.date(), time(15, 0), tzinfo=timezone.utc)
-        end_time = datetime.combine(today.date(), time(16, 0), tzinfo=timezone.utc)
-        interval = timedelta(minutes=5)
-
-        await run_hourly(
-            start_time, end_time, interval, lambda: hourly_refresh(coordinator)
-        )
 
 
 def _parse_resolution(resolution: str) -> int:

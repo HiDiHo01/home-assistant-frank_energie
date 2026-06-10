@@ -1,5 +1,7 @@
 """Switch platform for Frank Energie integration."""
 
+# switch.py
+# version 2026.05.31
 from __future__ import annotations
 
 import logging
@@ -14,8 +16,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_COORDINATOR,
-    DOMAIN,
     DATA_ENODE_VEHICLES,
+    DOMAIN,
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import build_charge_settings_input

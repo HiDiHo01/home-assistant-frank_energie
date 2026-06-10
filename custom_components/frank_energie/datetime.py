@@ -1,9 +1,11 @@
 """Datetime platform for Frank Energie integration."""
 
+# datetime.py
+# version 2026.05.31
 from __future__ import annotations
 
-from datetime import datetime
 import logging
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.datetime import DateTimeEntity
@@ -14,9 +16,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    DOMAIN,
+    CONF_COORDINATOR,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
+    DOMAIN,
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import build_charge_settings_input
@@ -31,7 +34,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie datetime entities."""
     coordinator: FrankEnergieCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        "coordinator"
+        CONF_COORDINATOR
     ]
     entities: list[DateTimeEntity] = []
 
