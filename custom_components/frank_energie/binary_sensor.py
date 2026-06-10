@@ -235,7 +235,7 @@ def _pv_systems_attributes(
                 "display_name": system.display_name,
                 "brand": system.brand,
                 "model": system.model,
-                "status": system.onboardingStatus,
+                "status": system.onboarding_status,
             }
             for system in pv.systems
         ],
