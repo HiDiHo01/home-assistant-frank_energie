@@ -471,7 +471,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise UpdateFailed from err
 
     async def _refresh_tomorrow_cache(
-        self, today: date, tomorrow: date, now_utc: datetime
+        self,
+        today: date,
+        tomorrow: date,
+        now_utc: datetime,
     ) -> MarketPrices | None:
         """Fetch and cache tomorrow's prices if the release window has passed."""
         if now_utc.hour < self.FETCH_TOMORROW_HOUR_UTC:
@@ -500,12 +503,34 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
-        if prices_tomorrow is not None:
-            _LOGGER.info("Retrieved Frank Energie tomorrow prices for %s", tomorrow)
+
+        has_electricity = bool(
+            prices_tomorrow
+            and prices_tomorrow.electricity
+            and prices_tomorrow.electricity.all
+        )
+
+        has_gas = bool(
+            prices_tomorrow
+            and prices_tomorrow.gas
+            and prices_tomorrow.gas.all
+        )
+
+        _LOGGER.debug(
+            "Tomorrow prices fetched: electricity=%s gas=%s",
+            has_electricity,
+            has_gas,
+        )
+
+        if has_electricity or has_gas:
+            _LOGGER.info(
+                "Retrieved Frank Energie tomorrow prices for %s",
+                tomorrow,
+            )
+
             self.cached_prices_tomorrow = prices_tomorrow
             self.last_fetch_tomorrow = now_utc
 
-            # Fire event so automations can plan ahead immediately
             if self.config_entry is not None:
                 self.hass.bus.async_fire(
                     EVENT_FRANK_ENERGIE,
@@ -517,18 +542,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         "resolution": self.resolution,
                     },
                 )
+        else:
+            _LOGGER.debug(
+                "Tomorrow prices not yet available, retrying on next refresh"
+            )
 
-        _LOGGER.debug(
-            "Tomorrow prices fetched: electricity=%s gas=%s",
-            bool(
-                prices_tomorrow
-                and prices_tomorrow.electricity
-                and prices_tomorrow.electricity.all
-            ),
-            bool(prices_tomorrow and prices_tomorrow.gas and prices_tomorrow.gas.all),
-        )
-
-        # Notify sensors immediately with updated aggregated data
         if self.cached_prices_today is not None:
             _LOGGER.debug(
                 "[%s][%s] Tomorrow electricity periods: %s",
@@ -539,14 +557,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 else 0,
             )
             _LOGGER.debug(
-                "Listeners before update: %s",
-                len(self._listeners),
-            )
-            self.async_set_updated_data(
-                self._aggregate_data(self.cached_prices_today, prices_tomorrow)
-            )
-            _LOGGER.debug(
-                "Listeners after update: %s",
+                "Listeners: %s",
                 len(self._listeners),
             )
             _LOGGER.debug(
