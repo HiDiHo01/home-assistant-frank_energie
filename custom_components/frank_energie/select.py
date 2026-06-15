@@ -173,7 +173,7 @@ class FrankEnergieBatteryModeSelect(
     _attr_options = [
         "self_consumption",
         "self_consumption_mix",
-        "IMBALANCE_TRADING",
+        "imbalance_trading",
         "trading",
     ]
     _attr_translation_key = "battery_mode"
