@@ -19,9 +19,7 @@ from .coordinator import FrankEnergieCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = (
-    "SELF_CONSUMPTION_MIX"
-)
+BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = "SELF_CONSUMPTION_MIX"
 
 
 async def async_setup_entry(
@@ -78,8 +76,7 @@ class FrankEnergieBatteryThresholdNumber(
             (
                 item
                 for item in battery_details
-                if item.smart_battery
-                and item.smart_battery.id == battery_id
+                if item.smart_battery and item.smart_battery.id == battery_id
             ),
             None,
         )
@@ -150,7 +147,7 @@ class FrankEnergieBatteryThresholdNumber(
             self._battery_id,
             value,
         )
-        success = await self.coordinator.api.SmartBatteryUpdateSettings(
+        success = await self.coordinator.api.smart_battery_update_settings(
             self._battery_id, {"selfConsumptionTradingThresholdPrice": value}
         )
         if success:
@@ -195,7 +192,7 @@ class FrankEnergieBatteryThresholdNumber(
         )
 
         try:
-            success = await self.coordinator.api.SmartBatteryUpdateSettings(
+            success = await self.coordinator.api.smart_battery_update_settings(
                 self._battery_id,
                 {
                     "selfConsumptionTradingThresholdPrice": value,
@@ -210,7 +207,7 @@ class FrankEnergieBatteryThresholdNumber(
 
         if not success:
             message = (
-                "SmartBatteryUpdateSettings returned unsuccessful result "
+                "smart_battery_update_settings returned unsuccessful result "
                 "for smart battery %s"
             )
 
