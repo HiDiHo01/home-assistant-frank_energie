@@ -516,6 +516,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
 
+        # Invalidate stale cache from the previous day before re-fetching.
+        # If we skip this and the API returns empty (prices not yet published),
+        # cached_prices_tomorrow still holds yesterday's D+1 data, which
+        # _aggregate_data would concatenate with today's prices — doubling
+        # price periods on sensors between 11:00 and ~14:00 UTC every morning.
+        if (
+            self.cached_prices_tomorrow is not None
+            and self.last_fetch_tomorrow is not None
+            and self.last_fetch_tomorrow.date() != today
+        ):
+            _LOGGER.debug(
+                "Invalidating stale tomorrow-price cache (was fetched on %s)",
+                self.last_fetch_tomorrow.date(),
+            )
+            self.cached_prices_tomorrow = None
+            self.last_fetch_tomorrow = None
+
         if (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
@@ -1690,12 +1707,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval around price release windows."""
-        if self.resolution == "PT60M":
-            default_interval = timedelta(hours=1)
-            default_interval = None  # Disable default interval for PT60M resolution
-        else:
-            default_interval = timedelta(minutes=15)
-            default_interval = None  # Disable default interval for PT15M resolution
+        # default_interval is None outside the release window — polling is
+        # event-driven (e.g. HA restart, button press) outside 11:00–13:00 UTC.
+        default_interval = None
 
         new_interval = (
             timedelta(minutes=5)
