@@ -795,6 +795,7 @@ class TestAsyncSetResolution:
         with pytest.raises(UpdateFailed, match="contract_locked"):
             await coordinator.async_set_resolution("PT15M")
 
+
 @pytest.mark.asyncio
 async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_energie):
     """Test that _fetch_today_data retries on AuthException after renewing token."""

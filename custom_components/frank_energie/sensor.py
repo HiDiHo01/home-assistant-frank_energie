@@ -101,6 +101,7 @@ _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
+
 def _get_gas_unit(per_unit: str | None) -> str:
     """Return the Home Assistant gas unit for an API perUnit value."""
 
@@ -117,6 +118,7 @@ def _get_gas_unit(per_unit: str | None) -> str:
         return UNIT_GAS_NL
 
     return unit
+
 
 def _format_battery_date(date_val) -> datetime | None:
     """Parse a battery session date value (str or date) into a timezone-aware datetime.
@@ -4190,9 +4192,7 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
         )
         if not enode:
             return None
-        return next(
-            (c for c in enode.chargers if c.id == self._charger_id), None
-        )
+        return next((c for c in enode.chargers if c.id == self._charger_id), None)
 
     @property
     def native_value(self) -> StateType:
@@ -4209,7 +4209,11 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         """Return extra attributes."""
         charger = self._get_charger()
-        if charger is None or not hasattr(self.entity_description, "attr_fn") or self.entity_description.attr_fn is None:
+        if (
+            charger is None
+            or not hasattr(self.entity_description, "attr_fn")
+            or self.entity_description.attr_fn is None
+        ):
             return {}
         try:
             return self.entity_description.attr_fn(charger)
@@ -4483,7 +4487,6 @@ class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 self.coordinator.data, self.coordinator
             )
         return {}
-
 
 
 class SmartBatteriesData:
@@ -5158,7 +5161,6 @@ async def async_setup_entry(
                     entities.append(
                         EnodeChargerSensor(coordinator, description, charger)
                     )
-
 
     # coordinator.data.get(DATA_BATTERIES)) = <class 'python_frank_energie.models.SmartBatteries'>
     if (batteries := coordinator.data.get(DATA_BATTERIES)) and batteries.batteries:

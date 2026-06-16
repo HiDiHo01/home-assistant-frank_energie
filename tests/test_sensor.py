@@ -418,6 +418,8 @@ def test_frank_energie_sensor_native_value_handles_exceptions_and_returns_none()
 
     # native_value should swallow the ValueError and return None instead of raising
     assert sensor.native_value is None
+
+
 def test_frank_energie_sensor_dynamic_gas_unit():
     """Test that FrankEnergieSensor dynamically determines native_unit_of_measurement for gas sensors."""
     from unittest.mock import MagicMock
