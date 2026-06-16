@@ -101,6 +101,11 @@ UNIT_GAS: Final[str] = f"{CURRENCY_EURO}/{UnitOfVolume.CUBIC_METERS}"
 UNIT_GAS_NL: Final[str] = f"{CURRENCY_EURO}/{UnitOfVolume.CUBIC_METERS}"
 UNIT_GAS_BE: Final[str] = f"{CURRENCY_EURO}/{UnitOfEnergy.KILO_WATT_HOUR}"
 
+PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
+    "M3": UNIT_GAS,
+    "KWH": UNIT_GAS_BE,
+}
+
 # --- Service Names ---
 SERVICE_NAME_PRICES: Final[str] = "Prices"
 SERVICE_NAME_GAS_PRICES: Final[str] = "Gasprices"

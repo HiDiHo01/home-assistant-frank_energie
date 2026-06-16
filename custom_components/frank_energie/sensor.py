@@ -81,9 +81,9 @@ from .const import (
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
     TIMEZONE_AMSTERDAM,
+    PER_UNIT_TO_UNIT,
     UNIT_ELECTRICITY,
     UNIT_GAS,
-    UNIT_GAS_BE,
     UNIT_GAS_NL,
     VERSION,
 )
@@ -101,10 +101,6 @@ _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
-PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
-    "M3": UNIT_GAS_NL,
-    "KWH": UNIT_GAS_BE,
-}
 
 def _get_gas_unit(per_unit: str | None) -> str:
     """Return the Home Assistant gas unit for an API perUnit value."""
@@ -122,6 +118,7 @@ def _get_gas_unit(per_unit: str | None) -> str:
         return UNIT_GAS_NL
 
     return unit
+
 
 def _format_battery_date(date_val) -> datetime | None:
     """Parse a battery session date value (str or date) into a timezone-aware datetime.
@@ -4150,11 +4147,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
 
 
 class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
-    """Representation of an Enode charger sensor."""
+    """Representation of an Enode charger sensor, grouped under its own device."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_entity_registry_enabled_default = True
+    _attr_attribution = ATTRIBUTION
 
     def __init__(
         self,
@@ -4179,20 +4177,48 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
             model=model,
             name=charger_name,
         )
+        if coordinator.config_entry:
+            self._attr_device_info["via_device"] = (
+                DOMAIN,
+                f"{coordinator.config_entry.entry_id}_{SERVICE_NAME_ENODE_CHARGERS}",
+            )
+
+    def _get_charger(self) -> Any | None:
+        """Look up the current charger object from coordinator data by ID."""
+        enode = (
+            self.coordinator.data.get(DATA_ENODE_CHARGERS)
+            if self.coordinator.data
+            else None
+        )
+        if not enode:
+            return None
+        return next((c for c in enode.chargers if c.id == self._charger_id), None)
 
     @property
     def native_value(self) -> StateType:
         """Return the current value from the latest coordinator data."""
-        enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
-        if not enode_chargers or not enode_chargers.chargers:
+        charger = self._get_charger()
+        if charger is None:
+            return None
+        try:
+            return self.entity_description.value_fn(charger)
+        except (TypeError, AttributeError, KeyError):
             return None
 
-        latest_charger = next(
-            (c for c in enode_chargers.chargers if c.id == self._charger_id), None
-        )
-        if not latest_charger:
-            return None
-        return self.entity_description.value_fn(latest_charger)
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        charger = self._get_charger()
+        if (
+            charger is None
+            or not hasattr(self.entity_description, "attr_fn")
+            or self.entity_description.attr_fn is None
+        ):
+            return {}
+        try:
+            return self.entity_description.attr_fn(charger)
+        except (TypeError, AttributeError, KeyError):
+            return {}
 
 
 # class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
@@ -4220,6 +4246,20 @@ class FrankEnergieSensor(
             return self.entity_description.value_fn(self.coordinator.data)
         except (TypeError, IndexError, ValueError, AttributeError):
             return None
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the unit of measurement."""
+        if self._attr_unit_of_measurement == UNIT_GAS:
+            if (
+                self.coordinator.data
+                and (gas_data := self.coordinator.data.get(DATA_GAS))
+                and (per_unit := getattr(gas_data, "per_unit", None))
+            ):
+                return PER_UNIT_TO_UNIT.get(
+                    per_unit.upper(), self._attr_unit_of_measurement
+                )
+        return self._attr_unit_of_measurement
 
     _no_record_keys: ClassVar[frozenset[str]] = frozenset(
         {
@@ -5121,10 +5161,6 @@ async def async_setup_entry(
                     entities.append(
                         EnodeChargerSensor(coordinator, description, charger)
                     )
-
-    # _LOGGER.debug("coordinator.batteries: %d", coordinator.data.get('batteries'))
-    # _LOGGER.debug("coordinator.enode_chargers chargers: %d", coordinator.data['enode_chargers'].chargers)
-    # _LOGGER.debug("coordinator.enode_chargers chargers: %d", coordinator.data.get('enode_chargers').get('chargers'))
 
     # coordinator.data.get(DATA_BATTERIES)) = <class 'python_frank_energie.models.SmartBatteries'>
     if (batteries := coordinator.data.get(DATA_BATTERIES)) and batteries.batteries:

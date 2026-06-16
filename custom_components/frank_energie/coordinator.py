@@ -947,8 +947,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_enode_chargers(
         self, start_date: date, is_smart_charging: bool
     ) -> dict[str, EnodeChargers] | None:
-        """Fetch Enode chargers from the API."""
-        if not (self.api.is_authenticated and is_smart_charging):
+        """Fetch Enode chargers from the API.
+
+        Chargers are fetched for all authenticated users regardless of whether
+        smart charging is activated.  A user may have a physical charger
+        registered without having the smart-charging feature enabled — the
+        API will simply return the charger with `canSmartCharge=False` or
+        `isSmartChargingEnabled=False` in chargeSettings.
+
+        The ``is_smart_charging`` parameter is retained in the signature to
+        avoid changing the call site; it is intentionally not used as a gate.
+        """
+        if not self.api.is_authenticated:
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode chargers.")
@@ -967,7 +977,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self, is_smart_trading: bool
     ) -> SmartBatteries | None:
         """Fetch smart batteries from the API."""
-        if not (self.api.is_authenticated and is_smart_trading):
+        if not self.api.is_authenticated:
             return None
         try:
             return await self.api.smart_batteries()
@@ -982,12 +992,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_enode_vehicles(
         self, is_smart_charging: bool
     ) -> EnodeVehicles | None:
-        """Fetch Enode vehicles; skipped unless authenticated and smart charging enabled.
+        """Fetch Enode vehicles from the API.
 
-        Mirrors the guard used by ``_fetch_enode_chargers``.
-        Previously ``is_smart_charging`` was accepted but never checked.
+        Previously ``is_smart_charging`` was required but now chargers and vehicles
+        are always fetched when authenticated to ensure sensors are visible.
         """
-        if not (self.api.is_authenticated and is_smart_charging):
+        if not self.api.is_authenticated:
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")

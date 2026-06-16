@@ -420,6 +420,53 @@ def test_frank_energie_sensor_native_value_handles_exceptions_and_returns_none()
     assert sensor.native_value is None
 
 
+def test_frank_energie_sensor_dynamic_gas_unit():
+    """Test that FrankEnergieSensor dynamically determines native_unit_of_measurement for gas sensors."""
+    from unittest.mock import MagicMock
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieEntityDescription,
+        FrankEnergieSensor,
+    )
+    from custom_components.frank_energie.const import UNIT_GAS, UNIT_GAS_BE, DATA_GAS
+
+    # Setup mock PriceData with per_unit KWH
+    mock_gas_data = MagicMock()
+    mock_gas_data.per_unit = "KWH"
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.data = {DATA_GAS: mock_gas_data}
+
+    mock_entry = MagicMock()
+    mock_entry.unique_id = "test_unique_id"
+    mock_entry.entry_id = "test_entry_id"
+
+    # Description of a gas sensor
+    description = FrankEnergieEntityDescription(
+        key="gas_markup",
+        name="Current gas price (All-in)",
+        native_unit_of_measurement=UNIT_GAS,
+        value_fn=lambda data: 1.23,
+    )
+
+    sensor = FrankEnergieSensor(
+        coordinator=mock_coordinator, description=description, entry=mock_entry
+    )
+
+    # Unit should be dynamically resolved to UNIT_GAS_BE (EUR/kWh)
+    assert sensor.native_unit_of_measurement == UNIT_GAS_BE
+
+    # Test with M3 per_unit
+    mock_gas_data.per_unit = "M3"
+    assert sensor.native_unit_of_measurement == UNIT_GAS
+
+    # Test with None or unknown per_unit (should fall back to UNIT_GAS)
+    mock_gas_data.per_unit = None
+    assert sensor.native_unit_of_measurement == UNIT_GAS
+
+    mock_gas_data.per_unit = "UNKNOWN"
+    assert sensor.native_unit_of_measurement == UNIT_GAS
+
+
 def test_parse_contract_date():
     """Test the _parse_contract_date helper function."""
     from datetime import datetime, timezone
