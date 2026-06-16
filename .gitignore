@@ -45,3 +45,6 @@ custom_components/frank_energie/CLAUDE.md
 # Local dev environment
 dev_env/
 
+# VS Code settings
+.vscode/
+
