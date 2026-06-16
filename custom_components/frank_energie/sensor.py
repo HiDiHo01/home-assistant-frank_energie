@@ -3836,15 +3836,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    conn.get("contractStatus")
+                    conn.contractStatus
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
                         else []
                     )
-                    if (isinstance(conn, dict) or hasattr(conn, "get"))
-                    and conn.get("segment") == "ELECTRICITY"
-                    and conn.get("contractStatus")
+                    if getattr(conn, "segment", None) == "ELECTRICITY"
+                    and getattr(conn, "contractStatus", None)
                 ),
                 None,
             )
@@ -3862,15 +3861,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    conn.get("contractStatus")
+                    conn.contractStatus
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
                         else []
                     )
-                    if (isinstance(conn, dict) or hasattr(conn, "get"))
-                    and conn.get("segment") == "GAS"
-                    and conn.get("contractStatus")
+                    if getattr(conn, "segment", None) == "GAS"
+                    and getattr(conn, "contractStatus", None)
                 ),
                 None,
             )
@@ -5045,13 +5043,11 @@ async def async_setup_entry(
 
     if connections:
         first_connection = connections[0]
-        if isinstance(first_connection, dict) or hasattr(first_connection, "get"):
+        if isinstance(first_connection, dict):
             estimated_feed_in = first_connection.get("estimatedFeedIn")
         else:
-            _LOGGER.warning(
-                "Expected first connection to be a dict or support dict-like access, got %s",
-                type(first_connection).__name__,
-            )
+            # Connection dataclass — use attribute access (DictLikeMixin also supports .get())
+            estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
     else:
         _LOGGER.debug("No connections found in user_data")
 
