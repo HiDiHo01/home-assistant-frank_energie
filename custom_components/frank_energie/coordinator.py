@@ -261,6 +261,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_lowest_price_event: date | None = None
         self._last_lowest_4p_event: date | None = None
         self._last_lowest_16p_event: date | None = None
+        # None = not yet checked; True/False = confirmed this session.
+        # Reset to None daily so PV ownership is re-probed in case of new installation.
+        self._has_pv_systems: bool | None = None
 
     @property
     def old_site_reference(self) -> str | None:
@@ -351,6 +354,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # Reset daily log flag on new day
         if self.last_fetch_today is None or self.last_fetch_today.date() != today:
             self._today_prices_logged = False
+            self._has_pv_systems = None  # re-probe PV ownership once per day
 
         if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
             self._tomorrow_prices_logged = False
@@ -511,6 +515,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 self.FETCH_TOMORROW_HOUR_UTC,
             )
             return None
+
+        # Invalidate stale cache from the previous day before re-fetching.
+        # If we skip this and the API returns empty (prices not yet published),
+        # cached_prices_tomorrow still holds yesterday's D+1 data, which
+        # _aggregate_data would concatenate with today's prices — doubling
+        # price periods on sensors between 11:00 and ~14:00 UTC every morning.
+        if (
+            self.cached_prices_tomorrow is not None
+            and self.last_fetch_tomorrow is not None
+            and self.last_fetch_tomorrow.date() != today
+        ):
+            _LOGGER.debug(
+                "Invalidating stale tomorrow-price cache (was fetched on %s)",
+                self.last_fetch_tomorrow.date(),
+            )
+            self.cached_prices_tomorrow = None
+            self.last_fetch_tomorrow = None
 
         if (
             self.cached_prices_tomorrow is not None
@@ -961,8 +982,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_enode_vehicles(
         self, is_smart_charging: bool
     ) -> EnodeVehicles | None:
-        """Fetch Enode vehicles from the API."""
-        if not self.api.is_authenticated:
+        """Fetch Enode vehicles; skipped unless authenticated and smart charging enabled.
+
+        Mirrors the guard used by ``_fetch_enode_chargers``.
+        Previously ``is_smart_charging`` was accepted but never checked.
+        """
+        if not (self.api.is_authenticated and is_smart_charging):
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
@@ -994,10 +1019,29 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
     async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
-        """Fetch Smart PV systems from the API."""
+        """Fetch Smart PV systems; skips call when no systems were found this session.
+
+        No pre-flight feature flag exists for PV ownership, so we probe on
+        the first call and cache the result.  An empty response sets
+        ``_has_pv_systems = False`` to avoid repeated unnecessary calls;
+        the flag resets to ``None`` daily to re-probe in case of new installs.
+        Failures leave the flag unchanged so the next cycle retries.
+        """
         if not self.api.is_authenticated:
             return None
-        return await self.api.smart_pv_systems()
+        if self._has_pv_systems is False:
+            return None
+        try:
+            result = await self.api.smart_pv_systems()
+            self._has_pv_systems = bool(result and result.systems)
+            return result
+        except (AuthException, AuthRequiredException):
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
+            return None
 
     async def _fetch_smart_pv_summary(
         self, device_id: str
@@ -1663,12 +1707,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval around price release windows."""
-        if self.resolution == "PT60M":
-            default_interval = timedelta(hours=1)
-            default_interval = None  # Disable default interval for PT60M resolution
-        else:
-            default_interval = timedelta(minutes=15)
-            default_interval = None  # Disable default interval for PT15M resolution
+        # default_interval is None outside the release window — polling is
+        # event-driven (e.g. HA restart, button press) outside 11:00–13:00 UTC.
+        default_interval = None
 
         new_interval = (
             timedelta(minutes=5)
