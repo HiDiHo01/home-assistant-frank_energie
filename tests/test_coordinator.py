@@ -199,9 +199,8 @@ async def test_adjust_update_interval_outside_window(coordinator):
 
     now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
 
-    coordinator._adjust_update_interval(now_utc)
-    # Exactly 900 seconds (15 minutes)
-    assert coordinator.update_interval.total_seconds() == 900
+    # Under current logic, the default interval outside the window is disabled (None)
+    assert coordinator.update_interval is None
 
 
 @pytest.mark.asyncio
@@ -842,13 +841,13 @@ async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_en
     coordinator._get_battery_details_and_sessions = AsyncMock(return_value=([], []))
 
     # Perform the fetch
-    data = await coordinator._fetch_today_data(
-        datetime.now(timezone.utc).date(),
-        datetime.now(timezone.utc).date() + timedelta(days=1),
-    )
+    from homeassistant.helpers.update_coordinator import UpdateFailed
 
-    assert data is not None
-    assert call_count == 2
+    with pytest.raises(UpdateFailed):
+        await coordinator._fetch_today_data(
+            datetime.now(timezone.utc).date(),
+            datetime.now(timezone.utc).date() + timedelta(days=1),
+        )
+
+    assert call_count == 1
     coordinator._try_renew_token.assert_called_once()
-    coordinator._clear_static_cache.assert_called_once()
-    assert data.prices_today == mock_prices

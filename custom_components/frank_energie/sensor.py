@@ -135,6 +135,22 @@ def _parse_site_date(date_str: str | None) -> str | None:
     return parsed.strftime(FORMAT_DATE) if parsed is not None else None
 
 
+def _parse_contract_date(date_val: datetime | str | None) -> str | None:
+    """Parse a contract start date (str, datetime, or None) into FORMAT_DATE.
+
+    Supports both pre-parsed datetime objects and raw date/datetime strings.
+    """
+    if not date_val:
+        return None
+    if isinstance(date_val, datetime):
+        return dt_util.as_local(date_val).strftime(FORMAT_DATE)
+    try:
+        parsed = datetime.fromisoformat(str(date_val).replace("Z", "+00:00"))
+        return dt_util.as_local(parsed).strftime(FORMAT_DATE)
+    except (ValueError, TypeError):
+        return None
+
+
 # Battery session data type
 BatterySessionData = SmartBatterySessions | None
 BatterySessionCoordinator = DataUpdateCoordinator[BatterySessionData]
@@ -3657,13 +3673,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    dt_util.as_local(
-                        datetime.fromisoformat(
-                            connection["externalDetails"]["contract"][
-                                "startDate"
-                            ].replace("Z", "+00:00")
-                        )
-                    ).strftime(FORMAT_DATE)
+                    _parse_contract_date(
+                        connection.get("externalDetails", {})
+                        .get("contract", {})
+                        .get("startDate")
+                    )
                     for connection in getattr(data.get(DATA_USER), "connections", [])
                     if connection.get("externalDetails", {})
                     .get("contract", {})
@@ -3691,7 +3705,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                         if data.get(DATA_USER) is not None
                         else []
                     )
-                    if isinstance(conn, dict)
+                    if (isinstance(conn, dict) or hasattr(conn, "get"))
                     and conn.get("segment") == "ELECTRICITY"
                     and conn.get("contractStatus")
                 ),
@@ -3717,7 +3731,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                         if data.get(DATA_USER) is not None
                         else []
                     )
-                    if isinstance(conn, dict)
+                    if (isinstance(conn, dict) or hasattr(conn, "get"))
                     and conn.get("segment") == "GAS"
                     and conn.get("contractStatus")
                 ),
@@ -5370,11 +5384,11 @@ async def async_setup_entry(
 
     if connections:
         first_connection = connections[0]
-        if isinstance(first_connection, dict):
+        if isinstance(first_connection, dict) or hasattr(first_connection, "get"):
             estimated_feed_in = first_connection.get("estimatedFeedIn")
         else:
             _LOGGER.warning(
-                "Expected first connection to be a dict, got %s",
+                "Expected first connection to be a dict or support dict-like access, got %s",
                 type(first_connection).__name__,
             )
     else:

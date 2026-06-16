@@ -418,3 +418,78 @@ def test_frank_energie_sensor_native_value_handles_exceptions_and_returns_none()
 
     # native_value should swallow the ValueError and return None instead of raising
     assert sensor.native_value is None
+
+
+def test_parse_contract_date():
+    """Test the _parse_contract_date helper function."""
+    from datetime import datetime, timezone
+    from custom_components.frank_energie.sensor import _parse_contract_date
+    from homeassistant.util import dt as dt_util
+
+    # None cases
+    assert _parse_contract_date(None) is None
+    assert _parse_contract_date("") is None
+
+    # Datetime inputs (both naive and timezone aware)
+    tz_aware = datetime(2025, 10, 31, 23, 0, tzinfo=timezone.utc)
+    expected = dt_util.as_local(tz_aware).strftime("%d-%m-%Y")
+    assert _parse_contract_date(tz_aware) == expected
+
+    # String inputs
+    assert _parse_contract_date("2025-10-31T23:00:00.000Z") == expected
+    assert _parse_contract_date("invalid-date") is None
+
+
+def test_contract_sensors_with_connections():
+    """Test that contractStartDate and contractStatus sensors support Connection objects."""
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+    from python_frank_energie.models import Connection, ConnectionExternalDetails, Contract
+    from homeassistant.util import dt as dt_util
+
+    # Test contractStartDate with Connection object
+    contract_start_sensor = next(s for s in SENSOR_TYPES if s.key == "contractStartDate")
+    elec_status_sensor = next(s for s in SENSOR_TYPES if s.key == "EleccontractStatus")
+    gas_status_sensor = next(s for s in SENSOR_TYPES if s.key == "GascontractStatus")
+
+    # Mock python_frank_energie Connection object
+    tz_aware = datetime(2025, 10, 31, 23, 0, tzinfo=timezone.utc)
+    conn_obj = Connection(
+        id="c1",
+        segment="ELECTRICITY",
+        contractStatus="SWITCHED",
+        externalDetails=ConnectionExternalDetails(
+            contract=Contract(
+                startDate=tz_aware,
+                endDate=None,
+                contractType="dynamic",
+                productName="test-product",
+                tariffChartId=None,
+            )
+        )
+    )
+
+    mock_user = MagicMock()
+    mock_user.connections = [conn_obj]
+    data = {"user": mock_user}
+
+    # Evaluate contractStartDate value_fn
+    expected_date = dt_util.as_local(tz_aware).strftime("%d-%m-%Y")
+    assert contract_start_sensor.value_fn(data) == expected_date
+
+    # Evaluate EleccontractStatus value_fn
+    assert elec_status_sensor.value_fn(data) == "SWITCHED"
+
+    # Evaluate GascontractStatus value_fn (should be None since segment is ELECTRICITY)
+    assert gas_status_sensor.value_fn(data) is None
+
+    # Test with GAS segment connection
+    conn_obj_gas = Connection(
+        id="c2",
+        segment="GAS",
+        contractStatus="IN_DELIVERY",
+    )
+    mock_user.connections = [conn_obj_gas]
+    assert gas_status_sensor.value_fn(data) == "IN_DELIVERY"
+    assert elec_status_sensor.value_fn(data) is None
