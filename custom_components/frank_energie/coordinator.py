@@ -261,6 +261,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_lowest_price_event: date | None = None
         self._last_lowest_4p_event: date | None = None
         self._last_lowest_16p_event: date | None = None
+        # None = not yet checked; True/False = confirmed this session.
+        # Reset to None daily so PV ownership is re-probed in case of new installation.
+        self._has_pv_systems: bool | None = None
 
     @property
     def old_site_reference(self) -> str | None:
@@ -351,6 +354,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # Reset daily log flag on new day
         if self.last_fetch_today is None or self.last_fetch_today.date() != today:
             self._today_prices_logged = False
+            self._has_pv_systems = None  # re-probe PV ownership once per day
 
         if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
             self._tomorrow_prices_logged = False
@@ -961,17 +965,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_enode_vehicles(
         self, is_smart_charging: bool
     ) -> EnodeVehicles | None:
-        """Fetch Enode vehicles from the API.
+        """Fetch Enode vehicles; skipped unless authenticated and smart charging enabled.
 
-        The ``is_smart_charging`` flag mirrors the guard used by
-        ``_fetch_enode_chargers``.  We intentionally do NOT call the
-        vehicles endpoint for users without smart charging enabled —
-        there is no point making the round-trip and the API would return
-        an empty list anyway.
+        Mirrors the guard used by ``_fetch_enode_chargers``.
+        Previously ``is_smart_charging`` was accepted but never checked.
         """
-        # Guard matches _fetch_enode_chargers: both require smart charging.
-        # Previously only `is_authenticated` was checked here, leaving
-        # `is_smart_charging` accepted as a parameter but silently ignored.
         if not (self.api.is_authenticated and is_smart_charging):
             return None
         if not self.site_reference:
@@ -1004,20 +1002,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
     async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
-        """Fetch Smart PV systems from the API.
+        """Fetch Smart PV systems; skips call when no systems were found this session.
 
-        We do NOT add a feature-flag guard here (e.g. ``is_smart_pv``) because
-        there is no field in the user or connection data that reliably indicates
-        PV ownership before the first API call.  The ``smartPvSystems`` endpoint
-        returns an empty list for non-PV users, which ``SmartPvSystems.from_dict``
-        already handles gracefully (returns ``SmartPvSystems(systems=[])``).  A
-        guard would require a separate pre-flight request to detect PV ownership,
-        which would trade one cheap call for a more expensive one.
+        No pre-flight feature flag exists for PV ownership, so we probe on
+        the first call and cache the result.  An empty response sets
+        ``_has_pv_systems = False`` to avoid repeated unnecessary calls;
+        the flag resets to ``None`` daily to re-probe in case of new installs.
+        Failures leave the flag unchanged so the next cycle retries.
         """
         if not self.api.is_authenticated:
             return None
+        if self._has_pv_systems is False:
+            return None
         try:
-            return await self.api.smart_pv_systems()
+            result = await self.api.smart_pv_systems()
+            self._has_pv_systems = bool(result and result.systems)
+            return result
         except (AuthException, AuthRequiredException):
             raise
         except asyncio.CancelledError:
