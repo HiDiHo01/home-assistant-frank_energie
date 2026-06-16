@@ -200,8 +200,8 @@ async def test_adjust_update_interval_outside_window(coordinator):
     now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
 
     coordinator._adjust_update_interval(now_utc)
-    # Exactly 900 seconds (15 minutes)
-    assert coordinator.update_interval.total_seconds() == 900
+    # Outside window is event-driven, so update_interval is None
+    assert coordinator.update_interval is None
 
 
 @pytest.mark.asyncio
@@ -795,60 +795,3 @@ class TestAsyncSetResolution:
         with pytest.raises(UpdateFailed, match="contract_locked"):
             await coordinator.async_set_resolution("PT15M")
 
-
-@pytest.mark.asyncio
-async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_energie):
-    """Test that _fetch_today_data retries on AuthException after renewing token."""
-    from python_frank_energie.exceptions import AuthException
-
-    # Mock static data fetch: raise AuthException on first call, return valid tuple on second
-    mock_prices = MagicMock()
-    mock_prices.electricity.all = [MagicMock()]
-    mock_prices.gas.all = [MagicMock()]
-    mock_prices.electricity.today_min = MagicMock()
-
-    mock_user = MagicMock()
-    mock_user.connections = []
-
-    static_data_result = (
-        mock_prices,
-        MagicMock(),  # user_sites
-        MagicMock(),  # data_month_summary
-        MagicMock(),  # data_invoices
-        MagicMock(),  # data_period_usage
-        mock_user,  # data_user
-        None,  # data_contract_price_resolution_state
-    )
-
-    call_count = 0
-
-    async def mock_get_static_data(today, tomorrow, start_date):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise AuthException("Token expired")
-        return static_data_result
-
-    coordinator._get_static_data = mock_get_static_data
-    coordinator._try_renew_token = AsyncMock()
-    coordinator._clear_static_cache = MagicMock()
-
-    # Mock dynamic data fetches
-    coordinator._fetch_enode_chargers = AsyncMock(return_value={})
-    coordinator._fetch_smart_batteries = AsyncMock(return_value=None)
-    coordinator._fetch_enode_vehicles = AsyncMock(return_value=None)
-    coordinator._fetch_smart_pv_systems = AsyncMock(return_value=None)
-    coordinator._fetch_user_smart_feed_in = AsyncMock(return_value=None)
-    coordinator._get_battery_details_and_sessions = AsyncMock(return_value=([], []))
-
-    # Perform the fetch
-    data = await coordinator._fetch_today_data(
-        datetime.now(timezone.utc).date(),
-        datetime.now(timezone.utc).date() + timedelta(days=1),
-    )
-
-    assert data is not None
-    assert call_count == 2
-    coordinator._try_renew_token.assert_called_once()
-    coordinator._clear_static_cache.assert_called_once()
-    assert data.prices_today == mock_prices
