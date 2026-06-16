@@ -199,7 +199,8 @@ async def test_adjust_update_interval_outside_window(coordinator):
 
     now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
 
-    # Under current logic, the default interval outside the window is disabled (None)
+    coordinator._adjust_update_interval(now_utc)
+    # Update interval is disabled (None) outside window
     assert coordinator.update_interval is None
 
 
@@ -840,9 +841,9 @@ async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_en
     coordinator._fetch_user_smart_feed_in = AsyncMock(return_value=None)
     coordinator._get_battery_details_and_sessions = AsyncMock(return_value=([], []))
 
-    # Perform the fetch
     from homeassistant.helpers.update_coordinator import UpdateFailed
 
+    # Perform the fetch - expect UpdateFailed to be raised
     with pytest.raises(UpdateFailed):
         await coordinator._fetch_today_data(
             datetime.now(timezone.utc).date(),

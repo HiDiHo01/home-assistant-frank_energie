@@ -19,9 +19,7 @@ from .coordinator import FrankEnergieCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = (
-    "SELF_CONSUMPTION_MIX"
-)
+BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = "SELF_CONSUMPTION_MIX"
 
 
 async def async_setup_entry(
@@ -78,8 +76,7 @@ class FrankEnergieBatteryThresholdNumber(
             (
                 item
                 for item in battery_details
-                if item.smart_battery
-                and item.smart_battery.id == battery_id
+                if item.smart_battery and item.smart_battery.id == battery_id
             ),
             None,
         )

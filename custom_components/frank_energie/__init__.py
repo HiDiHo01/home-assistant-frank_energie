@@ -21,7 +21,6 @@ from python_frank_energie.models import UserSites
 from .const import CONF_COORDINATOR, DATA_ELECTRICITY, DATA_GAS, DOMAIN
 from .coordinator import (
     FrankEnergieCoordinator,
-    FrankEnergieData,
 )
 from .exceptions import NoSuitableSitesFoundError
 
@@ -34,9 +33,7 @@ class FrankEnergieEntryData:
     """Runtime data stored on a ConfigEntry."""
 
     coordinator: FrankEnergieCoordinator
-    battery_session_coordinators: dict[str, object] = field(
-        default_factory=dict
-    )
+    battery_session_coordinators: dict[str, object] = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -56,13 +53,11 @@ async def async_setup_entry(
     entry: ConfigEntry[FrankEnergieEntryData],
 ) -> bool:
     """Set up the Frank Energie component from a config entry."""
-    _LOGGER.debug(
-        "Setting up Frank Energie component for entry: %s", entry.entry_id)
+    _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
     _LOGGER.debug("Setting up Frank Energie entry: %s", entry)
     _LOGGER.debug("Setting up Frank Energie entry data: %s", entry.data)
     _LOGGER.debug("Setting up Frank Energie entry domain: %s", entry.domain)
-    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s",
-                  entry.unique_id)
+    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s", entry.unique_id)
     _LOGGER.debug("Setting up Frank Energie entry options: %s", entry.options)
     component = FrankEnergieComponent(hass, entry)
     return await component.setup()
@@ -79,7 +74,7 @@ async def async_setup_platform(
     """
     warnings.warn(
         "async_setup_platform is deprecated; use config entries instead.",
-        DeprecationWarning
+        DeprecationWarning,
     )
     _LOGGER.debug("Setting up Frank Energie sensor platform")
     timezone = hass.config.time_zone  # Get the configured time zone
@@ -117,7 +112,9 @@ async def async_unload_entry(
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry[FrankEnergieEntryData]) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry[FrankEnergieEntryData]
+    ) -> None:
         """Initialize the Frank Energie component."""
         self.hass = hass
         self.entry = entry
@@ -134,9 +131,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         source_data = coordinator.cached_prices or coordinator.data
         if source_data is None:
-            _LOGGER.warning(
-                "Cannot promote tomorrow prices: no cached data available"
-            )
+            _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
             return
 
         updated_data = source_data.copy()
@@ -150,9 +145,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         coordinator.async_update_listeners()
 
-        _LOGGER.debug(
-            "Promoted cached tomorrow prices to today's prices"
-        )
+        _LOGGER.debug("Promoted cached tomorrow prices to today's prices")
 
     async def _maybe_refresh_tomorrow(
         self,
@@ -169,16 +162,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         if now_utc.hour < PRICE_RELEASE_HOUR_UTC:
             return
 
-        if (
-            coordinator.cached_prices_tomorrow is None
-            or (
-                coordinator.cached_prices_tomorrow.electricity is None
-                and coordinator.cached_prices_tomorrow.gas is None
-            )
+        if coordinator.cached_prices_tomorrow is None or (
+            coordinator.cached_prices_tomorrow.electricity is None
+            and coordinator.cached_prices_tomorrow.gas is None
         ):
-            _LOGGER.debug(
-                "Tomorrow prices already available, skipping refresh"
-            )
+            _LOGGER.debug("Tomorrow prices already available, skipping refresh")
             return
 
         _LOGGER.debug(
@@ -211,9 +199,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             cached_prices[DATA_ELECTRICITY] = (
                 coordinator.cached_prices_tomorrow.electricity
             )
-            cached_prices[DATA_GAS] = (
-                coordinator.cached_prices_tomorrow.gas
-            )
+            cached_prices[DATA_GAS] = coordinator.cached_prices_tomorrow.gas
 
             coordinator.cached_prices_tomorrow = None
             coordinator.cached_prices = cached_prices
@@ -221,32 +207,28 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
             coordinator.async_update_listeners()
 
-            _LOGGER.debug(
-                "Promoted tomorrow prices to today prices at midnight"
-            )
+            _LOGGER.debug("Promoted tomorrow prices to today prices at midnight")
 
         if now_utc.hour == 1 and coordinator.cached_prices_tomorrow is not None:
             coordinator.cached_prices_tomorrow = None
             _LOGGER.debug("Cleared cached tomorrow's prices at midnight UTC")
 
-        if now_utc.hour < PRICE_RELEASE_HOUR_UTC and coordinator.cached_prices_tomorrow is not None:
+        if (
+            now_utc.hour < PRICE_RELEASE_HOUR_UTC
+            and coordinator.cached_prices_tomorrow is not None
+        ):
             _LOGGER.debug("Tomorrow's prices already cached, skipping extra refresh")
             return
 
-        if (
-            now_utc.hour in {11, 13}
-            and coordinator.cached_prices_tomorrow is None
-        ):
+        if now_utc.hour in {11, 13} and coordinator.cached_prices_tomorrow is None:
             _LOGGER.debug(
                 "Price release window: triggering refresh at %02d:%02d UTC",
-                now_utc.hour, minute,
+                now_utc.hour,
+                minute,
             )
             await coordinator.async_request_refresh()
 
-        if (
-            now_utc.hour > 13
-            and coordinator.cached_prices_tomorrow is None
-        ):
+        if now_utc.hour > 13 and coordinator.cached_prices_tomorrow is None:
             _LOGGER.debug(
                 "After price release window and no cached prices: triggering refresh"
             )
@@ -309,7 +291,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         api = FrankEnergie(
             clientsession=clientsession,
             auth_token=self.entry.data.get(CONF_ACCESS_TOKEN),
-            refresh_token=self.entry.data.get(CONF_TOKEN)
+            refresh_token=self.entry.data.get(CONF_TOKEN),
         )
         coordinator = self._create_frank_energie_coordinator(api)
 
@@ -338,15 +320,16 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
     def _update_unique_id(self) -> None:
         """Update the unique ID of the config entry."""
-        if (self.entry.unique_id is None
+        if (
+            self.entry.unique_id is None
             or self.entry.unique_id == "frank_energie_component"
-            ):
+        ):
             self.hass.config_entries.async_update_entry(
-                self.entry, unique_id="frank_energie")
+                self.entry, unique_id="frank_energie"
+            )
 
     async def _select_site_reference(
-        self,
-        coordinator: FrankEnergieCoordinator
+        self, coordinator: FrankEnergieCoordinator
     ) -> None:
         """Get access token from entry data or options and select site reference of not already set"""
         """Ensure a site reference is selected and stored in entry data."""
@@ -356,23 +339,27 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         entry.options: bevat de gegevens die via een options flow zijn aangepast/nageleverd."""
         _LOGGER.debug("Selecting site reference for coordinator")
 
-        access_token = (
-            self.entry.options.get(CONF_ACCESS_TOKEN)
-            or self.entry.data.get(CONF_ACCESS_TOKEN)
+        access_token = self.entry.options.get(CONF_ACCESS_TOKEN) or self.entry.data.get(
+            CONF_ACCESS_TOKEN
         )
 
         if self.entry.data.get("site_reference") is not None or not access_token:
             return
 
         if self.entry.data.get("site_reference") is None and access_token:
-            site_reference, title = await self._get_site_reference_and_title(coordinator)
+            site_reference, title = await self._get_site_reference_and_title(
+                coordinator
+            )
             if not site_reference:
-                raise NoSuitableSitesFoundError("No suitable sites found for this account")
+                raise NoSuitableSitesFoundError(
+                    "No suitable sites found for this account"
+                )
 
             # Controleer of de titel correct is gegenereerd
             if not isinstance(title, str):
                 _LOGGER.warning(
-                    "Failed to generate title for the site reference: %s", site_reference
+                    "Failed to generate title for the site reference: %s",
+                    site_reference,
                 )
                 return
 
@@ -381,12 +368,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             self.hass.config_entries.async_update_entry(
                 self.entry,
                 data={**self.entry.data, "site_reference": site_reference},
-                title=title
+                title=title,
             )
 
     async def _get_site_reference_and_title(
-        self,
-        coordinator: FrankEnergieCoordinator
+        self, coordinator: FrankEnergieCoordinator
     ) -> tuple[str, str]:
         """Fetch site reference and human-readable title."""
         _LOGGER.debug("Getting site reference and title for coordinator")
@@ -418,9 +404,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         address = getattr(selected_site, "address", None)
         street = getattr(address, "street", "")
         number = getattr(address, "houseNumber", "")
-        addition = (
-            getattr(address, "houseNumberAddition", "") or ""
-        )
+        addition = getattr(address, "houseNumberAddition", "") or ""
 
         title = " ".join(p for p in [street, f"{number}{addition}"] if p)
 
@@ -430,8 +414,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         return reference, title
 
     def _create_frank_energie_coordinator(
-        self,
-        api: FrankEnergie
+        self, api: FrankEnergie
     ) -> FrankEnergieCoordinator:
         """Create the Frank Energie Coordinator instance."""
         _LOGGER.debug("Creating Frank Energie Coordinator instance")
@@ -450,8 +433,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         try:
             # 1. Register all sensor (parent) devices first.
             await self.hass.config_entries.async_forward_entry_setups(
-                self.entry,
-                [Platform.SENSOR]
+                self.entry, [Platform.SENSOR]
             )
             # 2. Now set up all remaining platforms concurrently.
             await self.hass.config_entries.async_forward_entry_setups(
@@ -522,4 +504,5 @@ class FrankEnergieDiagnosticSensor(Entity):
             _LOGGER.exception("Failed to update diagnostic sensor: %s", str(err))
             self._state = "error"
             raise ValueError(
-                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}") from err
+                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}"
+            ) from err

@@ -85,6 +85,8 @@ from .const import (
     UNIT_GAS,
     VERSION,
 )
+from python_frank_energie.models import EnodeCharger
+
 from .coordinator import (
     FrankEnergieBatterySessionCoordinator,
     FrankEnergieCoordinator,
@@ -372,48 +374,12 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         )
 
 
-@dataclass
-class ChargerSensorDescription:
+@dataclass(frozen=True, kw_only=True)
+class ChargerSensorDescription(SensorEntityDescription):
     """Describes a charger sensor entity."""
 
-    key: str
-    name: str
-    device_class: Optional[str] = None
-    state_class: Optional[str] = None
-    native_unit_of_measurement: Optional[str] = None
+    value_fn: Callable[[EnodeCharger], StateType]
     authenticated: bool = False
-    service_name: str = SERVICE_NAME_ENODE_CHARGERS
-    icon: Optional[str] = None
-    value_fn: Callable[[dict], StateType] = field(
-        default_factory=lambda: lambda _: STATE_UNKNOWN
-    )
-    attr_fn: Callable[[dict], dict[str, Union[StateType, list, None]]] = field(
-        default_factory=lambda: lambda _: {}
-    )
-    entity_registry_enabled_default: bool = True
-    entity_registry_visible_default: bool = True
-    entity_category: Optional[Union[str, EntityCategory]] = None
-
-    def get_state(self, data: dict) -> StateType:
-        """Get the state value."""
-        try:
-            return self.value_fn(data)
-        except Exception:
-            _LOGGER.exception("Failed to evaluate state for '%s'", self.key)
-            return STATE_UNAVAILABLE
-
-    def get_attributes(self, data: dict) -> dict[str, Union[StateType, list]]:
-        """Get the additional attributes."""
-        try:
-            return self.attr_fn(data)
-        except Exception:
-            _LOGGER.exception("Failed to evaluate attributes for '%s'", self.key)
-            return {}
-
-    @property
-    def is_authenticated(self) -> bool:
-        """Check if the entity is authenticated."""
-        return self.authenticated
 
 
 class FrankEnergieBatterySessionSensor(
@@ -730,6 +696,177 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                 for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
             ]
         },
+    ),
+    FrankEnergieEntityDescription(
+        key="total_charge_capacity",
+        name="Total Charge Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_CHARGERS,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda data: (
+            sum(
+                charger.charge_settings.capacity
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_settings
+                and charger.charge_settings.capacity is not None
+            )
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else None
+        ),
+        attr_fn=lambda data: {
+            "chargers capacity": {
+                charger.id: charger.charge_settings.capacity
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_settings
+                and charger.charge_settings.capacity is not None
+            }
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else {}
+        },
+    ),
+    FrankEnergieEntityDescription(
+        key="total_charge_rate",
+        name="Total Charge Rate",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_CHARGERS,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.POWER,
+        value_fn=lambda data: (
+            sum(
+                charger.charge_state.charge_rate
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_state and charger.charge_state.charge_rate is not None
+            )
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else None
+        ),
+        attr_fn=lambda data: {
+            "chargers charge rate": {
+                charger.id: charger.charge_state.charge_rate
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_state and charger.charge_state.charge_rate is not None
+            }
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else {}
+        },
+    ),
+)
+
+
+ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
+    ChargerSensorDescription(
+        key="charger_brand",
+        name="Brand",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.information.get("brand") if charger.information else None
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    ChargerSensorDescription(
+        key="charger_model",
+        name="Model",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.information.get("model") if charger.information else None
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    ChargerSensorDescription(
+        key="can_smart_charge",
+        name="Can Smart Charge",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: charger.can_smart_charge,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    ChargerSensorDescription(
+        key="charge_capacity",
+        name="Charge Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.ENERGY,
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_settings.capacity if charger.charge_settings else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_plugged_in",
+        name="Is Plugged In",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.is_plugged_in if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="power_delivery_state",
+        name="Power Delivery State",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.power_delivery_state if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_reachable",
+        name="Is Reachable",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: charger.is_reachable,
+    ),
+    ChargerSensorDescription(
+        key="is_charging",
+        name="Is Charging",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.is_charging if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="charge_rate",
+        name="Charge Rate",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.POWER,
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.charge_rate if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_smart_charging_enabled",
+        name="Is Smart Charging Enabled",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_settings.is_smart_charging_enabled
+            if charger.charge_settings
+            else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_solar_charging_enabled",
+        name="Is Solar Charging Enabled",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_settings.is_solar_charging_enabled
+            if charger.charge_settings
+            else None
+        ),
     ),
 )
 
@@ -3992,52 +4129,49 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
 
 
 class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
+    """Representation of an Enode charger sensor."""
+
+    _attr_should_poll = False
     _attr_has_entity_name = True
-    _attr_attribution = ATTRIBUTION
-    _attr_icon = ICON
-    _unsub_update: Callable[[], None] | None = None
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         description: ChargerSensorDescription,
-        entry: ConfigEntry,
+        charger: EnodeCharger,
     ) -> None:
-        self.entity_description: FrankEnergieEntityDescription = description
-        self._attr_unique_id = f"{entry.unique_id}.{description.key}"
-        # self._charger = charger
-        self.entity_description = description
-        # self._attr_name = f"{charger.information['brand']} {description.name}"
-        # self._attr_unique_id = f"{charger.id}_{description.key}"
-        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
-        self._attr_native_value = description.value_fn(coordinator.data)
-        self._attr_device_class = description.device_class
-        self._attr_state_class = description.state_class
-        # self._attr_suggested_display_precision = description.suggested_display_precision
-        self._attr_icon = description.icon
-
-        device_info_identifiers: set[tuple[str, str]] = (
-            {(DOMAIN, f"{entry.entry_id}")}
-            if description.service_name == SERVICE_NAME_PRICES
-            else {(DOMAIN, f"{entry.entry_id}_{description.service_name}")}
-        )
-
-        self._attr_device_info = DeviceInfo(
-            identifiers=device_info_identifiers,
-            name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
-            manufacturer=COMPONENT_TITLE,
-            entry_type=DeviceEntryType.SERVICE,
-            configuration_url=API_CONF_URL,
-            model=description.service_name,
-            sw_version=VERSION,
-        )
-
+        """Initialize the Enode charger sensor."""
         super().__init__(coordinator)
+        self.entity_description = description
+        self._charger_id = charger.id
+
+        info = charger.information or {}
+        brand = info.get("brand", "Frank Energie")
+        model = info.get("model", "Charger")
+        charger_name = f"{brand} {model}".strip() or f"Charger {charger.id}"
+
+        self._attr_unique_id = f"{DOMAIN}_{self._charger_id}_{description.key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._charger_id)},
+            manufacturer=brand,
+            model=model,
+            name=charger_name,
+        )
 
     @property
     def native_value(self) -> StateType:
-        return self.entity_description.value_fn(self._charger)
+        """Return the current value from the latest coordinator data."""
+        enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+        if not enode_chargers or not enode_chargers.chargers:
+            return None
+
+        latest_charger = next(
+            (c for c in enode_chargers.chargers if c.id == self._charger_id), None
+        )
+        if not latest_charger:
+            return None
+        return self.entity_description.value_fn(latest_charger)
 
 
 # class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
@@ -4292,479 +4426,6 @@ class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 self.coordinator.data, self.coordinator
             )
         return {}
-
-
-class EnodeChargersData:
-    """Class to hold Enode charger data."""
-
-    def __init__(self, chargers: list[object]) -> None:
-        self.chargers = chargers
-
-
-def _build_dynamic_enode_sensor_descriptions(
-    enode_data: EnodeChargersData,
-) -> list[FrankEnergieEntityDescription]:
-    """Build dynamic Enode charger sensor descriptions."""
-
-    descriptions: list[FrankEnergieEntityDescription] = []
-    chargers = enode_data.chargers
-    if not isinstance(chargers, list) or not chargers:
-        return descriptions
-
-    total_charge_capacity = sum(
-        charger.charge_settings.capacity
-        for charger in chargers
-        if charger.charge_settings and charger.charge_settings.capacity is not None
-    )
-
-    total_charge_rate = sum(
-        charger.charge_state.charge_rate
-        for charger in chargers
-        if charger.charge_state and charger.charge_state.charge_rate is not None
-    )
-
-    for i, charger in enumerate(chargers):
-        descriptions.extend(
-            [
-                FrankEnergieEntityDescription(
-                    key=f"enode_charger_id_{i + 1}",
-                    name=f"Charger {i + 1} ID",
-                    native_unit_of_measurement=None,
-                    state_class=None,
-                    device_class=None,
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:ev-station",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].id
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charger": data[DATA_ENODE_CHARGERS].chargers[i]
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                    entity_registry_enabled_default=False,
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"enode_charger_brand_{i + 1}",
-                    name=f"Charger {i + 1} Brand",
-                    translation_key=f"enode_charger_brand_{i + 1}",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:ev-station",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].information.get("brand")
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "information": data[DATA_ENODE_CHARGERS].chargers[i].information
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"enode_charger_model_{i + 1}",
-                    name=f"Charger {i + 1} Model",
-                    translation_key=f"enode_charger_model_{i + 1}",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:ev-station",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].information.get("model")
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "information": data[DATA_ENODE_CHARGERS].chargers[i].information
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"can_smart_charge_{i + 1}",
-                    name=f"Charger {i + 1} Can Smart Charge",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].can_smart_charge
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "chargers": data[DATA_ENODE_CHARGERS].chargers[i]
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"charge_capacity_{i + 1}",
-                    name=f"Charger {i + 1} Charge Capacity",
-                    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    device_class=SensorDeviceClass.ENERGY,
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].charge_settings.capacity
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "settings": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"is_plugged_in_{i + 1}",
-                    name=f"Charger {i + 1} Is Plugged In",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].charge_state.is_plugged_in
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charge_state": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"power_delivery_state_{i + 1}",
-                    name=f"Charger {i + 1} Power Delivery State",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state.power_delivery_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charge_state": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"enode_is_reachable_{i + 1}",
-                    name=f"Charger {i + 1} Is Reachable",
-                    native_unit_of_measurement=None,
-                    state_class=None,
-                    device_class=None,
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:ev-station",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].is_reachable
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charger": asdict(data[DATA_ENODE_CHARGERS].chargers[i])
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"is_charging_{i + 1}",
-                    name=f"Charger {i + 1} Is Charging",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:ev-station",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].charge_state.is_charging
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charge_state": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"enode_charger_name_{i + 1}",
-                    name=f"Charger {i + 1} Name",
-                    translation_key=f"enode_charger_name_{i + 1}",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:ev-station",
-                    value_fn=lambda data, i=i: (
-                        None
-                        if DATA_ENODE_CHARGERS not in data
-                        or not data[DATA_ENODE_CHARGERS].chargers[i]
-                        else " ".join(
-                            filter(
-                                None,
-                                (
-                                    data[DATA_ENODE_CHARGERS]
-                                    .chargers[i]
-                                    .information.get("brand"),
-                                    data[DATA_ENODE_CHARGERS]
-                                    .chargers[i]
-                                    .information.get("model"),
-                                    data[DATA_ENODE_CHARGERS]
-                                    .chargers[i]
-                                    .information.get("year"),
-                                ),
-                            )
-                        )
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "information": data[DATA_ENODE_CHARGERS].chargers[i].information
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"charge_rate_{i + 1}",
-                    name=f"Charger {i + 1} Charge Rate",
-                    state_class=SensorStateClass.MEASUREMENT,
-                    native_unit_of_measurement=UnitOfPower.KILO_WATT,
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    device_class=SensorDeviceClass.POWER,
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].charge_state.charge_rate
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charge_state": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"is_smart_charging_enabled_{i + 1}",
-                    name=f"Charger {i + 1} Is Smart Charging Enabled",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings.is_smart_charging_enabled
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "settings": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"is_solar_charging_enabled_{i + 1}",
-                    name=f"Charger {i + 1} Is Solar Charging Enabled",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:flash",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings.is_solar_charging_enabled
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "settings": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"calculated_deadline_{i + 1}",
-                    name=f"Charger {i + 1} Calculated Deadline",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:clock",
-                    device_class=SensorDeviceClass.TIMESTAMP,
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings.calculated_deadline
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "settings": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"initial_charge_timestamp_{i + 1}",
-                    name=f"Charger {i + 1} Initial Charge Timestamp",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:clock",
-                    device_class=SensorDeviceClass.TIMESTAMP,
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings.initial_charge_timestamp
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "settings": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_settings
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"last_updated_{i + 1}",
-                    name=f"Charger {i + 1} Last Updated",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:clock",
-                    device_class=SensorDeviceClass.TIMESTAMP,
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].charge_state.last_updated
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charge_state": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-                FrankEnergieEntityDescription(
-                    key=f"battery_level_{i + 1}",
-                    name=f"Charger {i + 1} Battery Level",
-                    authenticated=True,
-                    service_name=SERVICE_NAME_ENODE_CHARGERS,
-                    icon="mdi:battery",
-                    value_fn=lambda data, i=i: (
-                        data[DATA_ENODE_CHARGERS].chargers[i].charge_state.battery_level
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else None
-                    ),
-                    attr_fn=lambda data, i=i: {
-                        "charge_state": data[DATA_ENODE_CHARGERS]
-                        .chargers[i]
-                        .charge_state
-                        if DATA_ENODE_CHARGERS in data
-                        and data[DATA_ENODE_CHARGERS].chargers[i]
-                        else {}
-                    },
-                ),
-            ]
-        )
-
-    descriptions.extend(
-        [
-            FrankEnergieEntityDescription(
-                key="total_charge_capacity",
-                name="Total Charge Capacity",
-                native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-                authenticated=True,
-                service_name=SERVICE_NAME_ENODE_CHARGERS,
-                icon="mdi:flash",
-                device_class=SensorDeviceClass.ENERGY,
-                value_fn=lambda _,: total_charge_capacity,
-                attr_fn=lambda data: {
-                    "chargers capacity": {
-                        charger.id: charger.charge_settings.capacity
-                        for charger in getattr(
-                            data.get(DATA_ENODE_CHARGERS), "chargers", []
-                        )
-                    }
-                    if DATA_ENODE_CHARGERS in data
-                    and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
-                    else {}
-                },
-            ),
-            FrankEnergieEntityDescription(
-                key="total_charge_rate",
-                name="Total Charge Rate",
-                native_unit_of_measurement=UnitOfPower.KILO_WATT,
-                authenticated=True,
-                service_name=SERVICE_NAME_ENODE_CHARGERS,
-                icon="mdi:flash",
-                device_class=SensorDeviceClass.POWER,
-                value_fn=lambda _,: total_charge_rate,
-                attr_fn=lambda data: {
-                    "chargers charge rate": {
-                        charger.id: charger.charge_state.charge_rate
-                        for charger in getattr(
-                            data.get(DATA_ENODE_CHARGERS), "chargers", []
-                        )
-                    }
-                    if DATA_ENODE_CHARGERS in data
-                    and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
-                    else {}
-                },
-            ),
-        ]
-    )
-
-    return descriptions
 
 
 class SmartBatteriesData:
@@ -5429,29 +5090,18 @@ async def async_setup_entry(
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
-        sensor_descriptions = list(
-            STATIC_ENODE_SENSOR_TYPES
-        ) + _build_dynamic_enode_sensor_descriptions(enode)
-
-        for description in sensor_descriptions:
+        for description in STATIC_ENODE_SENSOR_TYPES:
             if not description.authenticated or coordinator.api.is_authenticated:
                 entities.append(
                     FrankEnergieSensor(coordinator, description, config_entry)
                 )
-    # Add Enode charger sensors if available
-    #    entities.extend(
-    #        FrankEnergieSensor(coordinator, description, config_entry)
-    #        for description in ENODE_SENSOR_TYPES
-    #        if not description.authenticated or coordinator.api.is_authenticated
-    #    )
 
-    # if coordinator.data.get('enode_chargers') and coordinator.data.get('enode_chargers').get('chargers'):
-    #     _LOGGER.debug("coordinator.enode_chargers: %d", coordinator.data['enode_chargers'])
-    #     _LOGGER.debug("Setting up Enode charger sensors for %d chargers", len(coordinator.data['enode_chargers'].chargers))
-    #     for charger in coordinator.data['enode_chargers'].chargers:
-    #         for description in ENODE_SENSOR_TYPES:
-    #             if not description.authenticated or coordinator.api.is_authenticated:
-    #                 entities.append(EnodeChargerSensor(charger, description))
+        for charger in enode.chargers:
+            for description in ENODE_CHARGER_SENSOR_TYPES:
+                if not description.authenticated or coordinator.api.is_authenticated:
+                    entities.append(
+                        EnodeChargerSensor(coordinator, description, charger)
+                    )
 
     # _LOGGER.debug("coordinator.batteries: %d", coordinator.data.get('batteries'))
     # _LOGGER.debug("coordinator.enode_chargers chargers: %d", coordinator.data['enode_chargers'].chargers)
