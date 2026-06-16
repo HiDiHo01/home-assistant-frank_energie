@@ -21,7 +21,6 @@ from python_frank_energie.models import UserSites
 from .const import CONF_COORDINATOR, DATA_ELECTRICITY, DATA_GAS, DOMAIN
 from .coordinator import (
     FrankEnergieCoordinator,
-    FrankEnergieData,
 )
 from .exceptions import NoSuitableSitesFoundError
 
