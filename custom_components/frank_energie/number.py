@@ -207,7 +207,7 @@ class FrankEnergieBatteryThresholdNumber(
 
         if not success:
             message = (
-                "SmartBatteryUpdateSettings returned unsuccessful result "
+                "smart_battery_update_settings returned unsuccessful result "
                 "for smart battery %s"
             )
 

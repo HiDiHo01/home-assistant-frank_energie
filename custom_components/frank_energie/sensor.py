@@ -84,8 +84,11 @@ from .const import (
     PER_UNIT_TO_UNIT,
     UNIT_ELECTRICITY,
     UNIT_GAS,
+    UNIT_GAS_NL,
     VERSION,
 )
+from python_frank_energie.models import EnodeCharger
+
 from .coordinator import (
     FrankEnergieBatterySessionCoordinator,
     FrankEnergieCoordinator,
@@ -98,6 +101,22 @@ _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
+def _get_gas_unit(per_unit: str | None) -> str:
+    """Return the Home Assistant gas unit for an API perUnit value."""
+
+    if per_unit is None:
+        return UNIT_GAS_NL
+
+    unit = PER_UNIT_TO_UNIT.get(per_unit.upper())
+
+    if unit is None:
+        _LOGGER.warning(
+            "Unsupported gas perUnit value received from API: %s",
+            per_unit,
+        )
+        return UNIT_GAS_NL
+
+    return unit
 
 def _format_battery_date(date_val) -> datetime | None:
     """Parse a battery session date value (str or date) into a timezone-aware datetime.
@@ -134,6 +153,22 @@ def _parse_site_date(date_str: str | None) -> str | None:
         return None
     parsed = dt_util.parse_date(date_str)
     return parsed.strftime(FORMAT_DATE) if parsed is not None else None
+
+
+def _parse_contract_date(date_val: datetime | str | None) -> str | None:
+    """Parse a contract start date (str, datetime, or None) into FORMAT_DATE.
+
+    Supports both pre-parsed datetime objects and raw date/datetime strings.
+    """
+    if not date_val:
+        return None
+    if isinstance(date_val, datetime):
+        return dt_util.as_local(date_val).strftime(FORMAT_DATE)
+    try:
+        parsed = datetime.fromisoformat(str(date_val).replace("Z", "+00:00"))
+        return dt_util.as_local(parsed).strftime(FORMAT_DATE)
+    except (ValueError, TypeError):
+        return None
 
 
 # Battery session data type
@@ -357,48 +392,12 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         )
 
 
-@dataclass
-class ChargerSensorDescription:
+@dataclass(frozen=True, kw_only=True)
+class ChargerSensorDescription(SensorEntityDescription):
     """Describes a charger sensor entity."""
 
-    key: str
-    name: str
-    device_class: Optional[str] = None
-    state_class: Optional[str] = None
-    native_unit_of_measurement: Optional[str] = None
+    value_fn: Callable[[EnodeCharger], StateType]
     authenticated: bool = False
-    service_name: str = SERVICE_NAME_ENODE_CHARGERS
-    icon: Optional[str] = None
-    value_fn: Callable[[dict], StateType] = field(
-        default_factory=lambda: lambda _: STATE_UNKNOWN
-    )
-    attr_fn: Callable[[dict], dict[str, Union[StateType, list, None]]] = field(
-        default_factory=lambda: lambda _: {}
-    )
-    entity_registry_enabled_default: bool = True
-    entity_registry_visible_default: bool = True
-    entity_category: Optional[Union[str, EntityCategory]] = None
-
-    def get_state(self, data: dict) -> StateType:
-        """Get the state value."""
-        try:
-            return self.value_fn(data)
-        except Exception:
-            _LOGGER.exception("Failed to evaluate state for '%s'", self.key)
-            return STATE_UNAVAILABLE
-
-    def get_attributes(self, data: dict) -> dict[str, Union[StateType, list]]:
-        """Get the additional attributes."""
-        try:
-            return self.attr_fn(data)
-        except Exception:
-            _LOGGER.exception("Failed to evaluate attributes for '%s'", self.key)
-            return {}
-
-    @property
-    def is_authenticated(self) -> bool:
-        """Check if the entity is authenticated."""
-        return self.authenticated
 
 
 class FrankEnergieBatterySessionSensor(
@@ -715,6 +714,177 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
                 for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
             ]
         },
+    ),
+    FrankEnergieEntityDescription(
+        key="total_charge_capacity",
+        name="Total Charge Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_CHARGERS,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda data: (
+            sum(
+                charger.charge_settings.capacity
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_settings
+                and charger.charge_settings.capacity is not None
+            )
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else None
+        ),
+        attr_fn=lambda data: {
+            "chargers capacity": {
+                charger.id: charger.charge_settings.capacity
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_settings
+                and charger.charge_settings.capacity is not None
+            }
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else {}
+        },
+    ),
+    FrankEnergieEntityDescription(
+        key="total_charge_rate",
+        name="Total Charge Rate",
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        authenticated=True,
+        service_name=SERVICE_NAME_ENODE_CHARGERS,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.POWER,
+        value_fn=lambda data: (
+            sum(
+                charger.charge_state.charge_rate
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_state and charger.charge_state.charge_rate is not None
+            )
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else None
+        ),
+        attr_fn=lambda data: {
+            "chargers charge rate": {
+                charger.id: charger.charge_state.charge_rate
+                for charger in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
+                if charger.charge_state and charger.charge_state.charge_rate is not None
+            }
+            if DATA_ENODE_CHARGERS in data
+            and getattr(data[DATA_ENODE_CHARGERS], "chargers", None)
+            else {}
+        },
+    ),
+)
+
+
+ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
+    ChargerSensorDescription(
+        key="charger_brand",
+        name="Brand",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.information.get("brand") if charger.information else None
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    ChargerSensorDescription(
+        key="charger_model",
+        name="Model",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.information.get("model") if charger.information else None
+        ),
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    ChargerSensorDescription(
+        key="can_smart_charge",
+        name="Can Smart Charge",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: charger.can_smart_charge,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    ChargerSensorDescription(
+        key="charge_capacity",
+        name="Charge Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.ENERGY,
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_settings.capacity if charger.charge_settings else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_plugged_in",
+        name="Is Plugged In",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.is_plugged_in if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="power_delivery_state",
+        name="Power Delivery State",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.power_delivery_state if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_reachable",
+        name="Is Reachable",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: charger.is_reachable,
+    ),
+    ChargerSensorDescription(
+        key="is_charging",
+        name="Is Charging",
+        icon="mdi:ev-station",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.is_charging if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="charge_rate",
+        name="Charge Rate",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.POWER,
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_state.charge_rate if charger.charge_state else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_smart_charging_enabled",
+        name="Is Smart Charging Enabled",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_settings.is_smart_charging_enabled
+            if charger.charge_settings
+            else None
+        ),
+    ),
+    ChargerSensorDescription(
+        key="is_solar_charging_enabled",
+        name="Is Solar Charging Enabled",
+        icon="mdi:flash",
+        authenticated=True,
+        value_fn=lambda charger: (
+            charger.charge_settings.is_solar_charging_enabled
+            if charger.charge_settings
+            else None
+        ),
     ),
 )
 
@@ -3658,13 +3828,11 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    dt_util.as_local(
-                        datetime.fromisoformat(
-                            connection["externalDetails"]["contract"][
-                                "startDate"
-                            ].replace("Z", "+00:00")
-                        )
-                    ).strftime(FORMAT_DATE)
+                    _parse_contract_date(
+                        connection.get("externalDetails", {})
+                        .get("contract", {})
+                        .get("startDate")
+                    )
                     for connection in getattr(data.get(DATA_USER), "connections", [])
                     if connection.get("externalDetails", {})
                     .get("contract", {})
@@ -3686,15 +3854,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    conn.get("contractStatus")
+                    conn.contractStatus
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
                         else []
                     )
-                    if isinstance(conn, dict)
-                    and conn.get("segment") == "ELECTRICITY"
-                    and conn.get("contractStatus")
+                    if getattr(conn, "segment", None) == "ELECTRICITY"
+                    and getattr(conn, "contractStatus", None)
                 ),
                 None,
             )
@@ -3712,15 +3879,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    conn.get("contractStatus")
+                    conn.contractStatus
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
                         else []
                     )
-                    if isinstance(conn, dict)
-                    and conn.get("segment") == "GAS"
-                    and conn.get("contractStatus")
+                    if getattr(conn, "segment", None) == "GAS"
+                    and getattr(conn, "contractStatus", None)
                 ),
                 None,
             )
@@ -3979,55 +4145,41 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
 
 
 class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for a single Enode wall charger, grouped under its own device.
+    """Representation of an Enode charger sensor, grouped under its own device."""
 
-    Each instance is bound to a specific charger by ID.  The device uses the
-    charger brand/model so it appears as e.g. "Wallbox Copper Business" in the
-    HA device registry, linked to the parent "Frank Energie - Chargers" device
-    via ``via_device``.
-    """
-
+    _attr_should_poll = False
     _attr_has_entity_name = True
+    _attr_entity_registry_enabled_default = True
     _attr_attribution = ATTRIBUTION
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        charger: Any,
-        description: Any,
-        entry: ConfigEntry,
+        description: ChargerSensorDescription,
+        charger: EnodeCharger,
     ) -> None:
-        """Initialize the per-charger sensor."""
+        """Initialize the Enode charger sensor."""
         super().__init__(coordinator)
-        self._charger_id: str = charger.id
         self.entity_description = description
-        self._attr_unique_id = f"{DOMAIN}_{self._charger_id}_{description.key}"
-        self._attr_icon = description.icon
-        self._attr_device_class = description.device_class
-        self._attr_state_class = description.state_class
-        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
-        self._attr_entity_category = description.entity_category
-        self._attr_entity_registry_enabled_default = (
-            description.entity_registry_enabled_default
-        )
+        self._charger_id = charger.id
 
         info = charger.information or {}
-        brand = info.get("brand") or "Frank Energie"
-        model = info.get("model") or "EV Charger"
-        charger_name = f"{brand} {model}".strip()
+        brand = info.get("brand", "Frank Energie")
+        model = info.get("model", "Charger")
+        charger_name = f"{brand} {model}".strip() or f"Charger {charger.id}"
 
-        # Use the same identifier as datetime.py so both platforms share the
-        # "Wallbox Copper Business" device card in the HA UI.
+        self._attr_unique_id = f"{DOMAIN}_{self._charger_id}_{description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._charger_id)},
-            name=charger_name,
             manufacturer=brand,
             model=model,
-            via_device=(
-                DOMAIN,
-                f"{entry.entry_id}_{SERVICE_NAME_ENODE_CHARGERS}",
-            ),
+            name=charger_name,
         )
+        if coordinator.config_entry:
+            self._attr_device_info["via_device"] = (
+                DOMAIN,
+                f"{coordinator.config_entry.entry_id}_{SERVICE_NAME_ENODE_CHARGERS}",
+            )
 
     def _get_charger(self) -> Any | None:
         """Look up the current charger object from coordinator data by ID."""
@@ -4044,7 +4196,7 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> StateType:
-        """Return the sensor value for the current coordinator data."""
+        """Return the current value from the latest coordinator data."""
         charger = self._get_charger()
         if charger is None:
             return None
@@ -4057,7 +4209,7 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         """Return extra attributes."""
         charger = self._get_charger()
-        if charger is None or self.entity_description.attr_fn is None:
+        if charger is None or not hasattr(self.entity_description, "attr_fn") or self.entity_description.attr_fn is None:
             return {}
         try:
             return self.entity_description.attr_fn(charger)
@@ -4332,188 +4484,6 @@ class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
             )
         return {}
 
-
-class EnodeChargersData:
-    """Class to hold Enode charger data."""
-
-    def __init__(self, chargers: list[object]) -> None:
-        self.chargers = chargers
-
-
-@dataclass(frozen=False)
-class EnodeChargerSensorDescription(SensorEntityDescription):
-    """Description for a sensor that belongs to a single Enode charger device.
-
-    Extends ``SensorEntityDescription`` so HA's ``SensorEntity`` base class
-    always finds the fields it needs (translation_key, suggested_unit_of_measurement,
-    etc.) without raising ``AttributeError``.
-    """
-
-    value_fn: Callable[[Any], StateType] = field(default_factory=lambda: lambda _: None)
-    attr_fn: Callable[[Any], dict] | None = None
-    authenticated: bool = True
-
-
-ENODE_CHARGER_SENSOR_TYPES: tuple[EnodeChargerSensorDescription, ...] = (
-    EnodeChargerSensorDescription(
-        key="is_reachable",
-        name="Is Reachable",
-        icon="mdi:ev-station",
-        value_fn=lambda c: c.is_reachable,
-    ),
-    EnodeChargerSensorDescription(
-        key="is_plugged_in",
-        name="Is Plugged In",
-        icon="mdi:power-plug",
-        value_fn=lambda c: c.charge_state.is_plugged_in if c.charge_state else None,
-    ),
-    EnodeChargerSensorDescription(
-        key="is_charging",
-        name="Is Charging",
-        icon="mdi:ev-station",
-        value_fn=lambda c: c.charge_state.is_charging if c.charge_state else None,
-    ),
-    EnodeChargerSensorDescription(
-        key="power_delivery_state",
-        name="Power Delivery State",
-        icon="mdi:flash",
-        value_fn=lambda c: (
-            c.charge_state.power_delivery_state if c.charge_state else None
-        ),
-    ),
-    EnodeChargerSensorDescription(
-        key="charge_rate",
-        name="Charge Rate",
-        icon="mdi:flash",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
-        value_fn=lambda c: c.charge_state.charge_rate if c.charge_state else None,
-    ),
-    EnodeChargerSensorDescription(
-        key="can_smart_charge",
-        name="Can Smart Charge",
-        icon="mdi:flash-auto",
-        value_fn=lambda c: c.can_smart_charge,
-    ),
-    EnodeChargerSensorDescription(
-        key="is_smart_charging_enabled",
-        name="Is Smart Charging Enabled",
-        icon="mdi:flash-auto",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: (
-            c.charge_settings.is_smart_charging_enabled if c.charge_settings else None
-        ),
-    ),
-    EnodeChargerSensorDescription(
-        key="is_solar_charging_enabled",
-        name="Is Solar Charging Enabled",
-        icon="mdi:solar-power",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: (
-            c.charge_settings.is_solar_charging_enabled if c.charge_settings else None
-        ),
-    ),
-    EnodeChargerSensorDescription(
-        key="charge_capacity",
-        name="Charge Capacity",
-        icon="mdi:battery",
-        device_class=SensorDeviceClass.ENERGY,
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.charge_settings.capacity if c.charge_settings else None,
-    ),
-    EnodeChargerSensorDescription(
-        key="calculated_deadline",
-        name="Calculated Deadline",
-        icon="mdi:clock",
-        device_class=SensorDeviceClass.TIMESTAMP,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: (
-            c.charge_settings.calculated_deadline if c.charge_settings else None
-        ),
-    ),
-    EnodeChargerSensorDescription(
-        key="last_updated",
-        name="Last Updated",
-        icon="mdi:clock",
-        device_class=SensorDeviceClass.TIMESTAMP,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda c: c.charge_state.last_updated if c.charge_state else None,
-    ),
-    EnodeChargerSensorDescription(
-        key="battery_level",
-        name="Battery Level",
-        icon="mdi:battery",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda c: c.charge_state.battery_level if c.charge_state else None,
-    ),
-    EnodeChargerSensorDescription(
-        key="charger_id",
-        name="Charger ID",
-        icon="mdi:identifier",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
-        value_fn=lambda c: c.id,
-    ),
-)
-
-
-def _build_dynamic_enode_sensor_descriptions(
-    enode_data: EnodeChargersData,
-) -> list[FrankEnergieEntityDescription]:
-    """Build aggregate Enode sensor descriptions for the parent chargers device.
-
-    Per-charger sensors are created as ``EnodeChargerSensor`` instances in
-    ``async_setup_entry``, grouped under each charger's own device card
-    (e.g. "Wallbox Copper Business").  This function only returns the
-    fleet-level aggregate sensors for the parent "Frank Energie - Chargers" device.
-    """
-    return [
-        FrankEnergieEntityDescription(
-            key="total_charge_capacity",
-            name="Total Charge Capacity",
-            native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-            authenticated=True,
-            service_name=SERVICE_NAME_ENODE_CHARGERS,
-            icon="mdi:flash",
-            device_class=SensorDeviceClass.ENERGY,
-            value_fn=lambda data: sum(
-                c.charge_settings.capacity
-                for c in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
-                if c.charge_settings and c.charge_settings.capacity is not None
-            ),
-            attr_fn=lambda data: {
-                "chargers_capacity": {
-                    c.id: c.charge_settings.capacity
-                    for c in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
-                    if c.charge_settings
-                }
-            },
-        ),
-        FrankEnergieEntityDescription(
-            key="total_charge_rate",
-            name="Total Charge Rate",
-            native_unit_of_measurement=UnitOfPower.KILO_WATT,
-            authenticated=True,
-            service_name=SERVICE_NAME_ENODE_CHARGERS,
-            icon="mdi:flash",
-            device_class=SensorDeviceClass.POWER,
-            value_fn=lambda data: sum(
-                c.charge_state.charge_rate
-                for c in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
-                if c.charge_state and c.charge_state.charge_rate is not None
-            ),
-            attr_fn=lambda data: {
-                "chargers_charge_rate": {
-                    c.id: c.charge_state.charge_rate
-                    for c in getattr(data.get(DATA_ENODE_CHARGERS), "chargers", [])
-                    if c.charge_state
-                }
-            },
-        ),
-    ]
 
 
 class SmartBatteriesData:
@@ -5136,10 +5106,8 @@ async def async_setup_entry(
         if isinstance(first_connection, dict):
             estimated_feed_in = first_connection.get("estimatedFeedIn")
         else:
-            _LOGGER.warning(
-                "Expected first connection to be a dict, got %s",
-                type(first_connection).__name__,
-            )
+            # Connection dataclass — use attribute access (DictLikeMixin also supports .get())
+            estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
     else:
         _LOGGER.debug("No connections found in user_data")
 
@@ -5178,22 +5146,18 @@ async def async_setup_entry(
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
-        # Fleet-level aggregate sensors → "Frank Energie - Chargers" device
-        aggregate_descriptions = list(
-            STATIC_ENODE_SENSOR_TYPES
-        ) + _build_dynamic_enode_sensor_descriptions(enode)
-        for description in aggregate_descriptions:
+        for description in STATIC_ENODE_SENSOR_TYPES:
             if not description.authenticated or coordinator.api.is_authenticated:
                 entities.append(
                     FrankEnergieSensor(coordinator, description, config_entry)
                 )
 
-        # Per-charger sensors → individual charger device (e.g. "Wallbox Copper Business")
         for charger in enode.chargers:
             for description in ENODE_CHARGER_SENSOR_TYPES:
-                entities.append(
-                    EnodeChargerSensor(coordinator, charger, description, config_entry)
-                )
+                if not description.authenticated or coordinator.api.is_authenticated:
+                    entities.append(
+                        EnodeChargerSensor(coordinator, description, charger)
+                    )
 
 
     # coordinator.data.get(DATA_BATTERIES)) = <class 'python_frank_energie.models.SmartBatteries'>
