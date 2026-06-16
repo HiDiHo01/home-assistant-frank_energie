@@ -83,6 +83,8 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS,
+    UNIT_GAS_BE,
+    UNIT_GAS_NL,
     VERSION,
 )
 from python_frank_energie.models import EnodeCharger
@@ -99,6 +101,27 @@ _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
+PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
+    "M3": UNIT_GAS_NL,
+    "KWH": UNIT_GAS_BE,
+}
+
+def _get_gas_unit(per_unit: str | None) -> str:
+    """Return the Home Assistant gas unit for an API perUnit value."""
+
+    if per_unit is None:
+        return UNIT_GAS_NL
+
+    unit = PER_UNIT_TO_UNIT.get(per_unit.upper())
+
+    if unit is None:
+        _LOGGER.warning(
+            "Unsupported gas perUnit value received from API: %s",
+            per_unit,
+        )
+        return UNIT_GAS_NL
+
+    return unit
 
 def _format_battery_date(date_val) -> datetime | None:
     """Parse a battery session date value (str or date) into a timezone-aware datetime.
