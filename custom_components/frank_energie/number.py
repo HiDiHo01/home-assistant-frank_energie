@@ -150,7 +150,7 @@ class FrankEnergieBatteryThresholdNumber(
             self._battery_id,
             value,
         )
-        success = await self.coordinator.api.SmartBatteryUpdateSettings(
+        success = await self.coordinator.api.smart_battery_update_settings(
             self._battery_id, {"selfConsumptionTradingThresholdPrice": value}
         )
         if success:
@@ -195,7 +195,7 @@ class FrankEnergieBatteryThresholdNumber(
         )
 
         try:
-            success = await self.coordinator.api.SmartBatteryUpdateSettings(
+            success = await self.coordinator.api.smart_battery_update_settings(
                 self._battery_id,
                 {
                     "selfConsumptionTradingThresholdPrice": value,
@@ -210,7 +210,7 @@ class FrankEnergieBatteryThresholdNumber(
 
         if not success:
             message = (
-                "SmartBatteryUpdateSettings returned unsuccessful result "
+                "smart_battery_update_settings returned unsuccessful result "
                 "for smart battery %s"
             )
 
