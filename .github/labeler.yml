@@ -41,3 +41,97 @@ ci:
           - ".github/dependabot.yml"
           - "pyproject.toml"
           - "pytest.ini"
+
+sensor:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/sensor.py"
+          - "tests/test_sensor.py"
+          - "tests/**/test_sensor*.py"
+
+switch:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/switch.py"
+          - "tests/test_switch.py"
+          - "tests/**/test_switch*.py"
+
+smart_feature:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/select.py"
+          - "custom_components/frank_energie/number.py"
+          - "custom_components/frank_energie/button.py"
+          - "custom_components/frank_energie/switch.py"
+          - "tests/**/test_select*.py"
+          - "tests/**/test_number*.py"
+          - "tests/**/test_button*.py"
+          - "tests/**/test_switch*.py"
+
+constants:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/const.py"
+          - "python_frank_energie/const.py"
+
+datetime:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/datetime.py"
+          - "tests/test_datetime.py"
+          - "tests/**/test_datetime*.py"
+
+helper:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/helpers.py"
+          - "custom_components/frank_energie/helper.py"
+          - "custom_components/frank_energie/utils.py"
+          - "custom_components/frank_energie/util.py"
+          - "python_frank_energie/helpers.py"
+          - "python_frank_energie/helper.py"
+          - "python_frank_energie/utils.py"
+          - "python_frank_energie/util.py"
+
+manifest:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/manifest.json"
+          - "hacs.json"
+          - "requirements.txt"
+          - "pyproject.toml"
+
+binary_sensor:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/binary_sensor.py"
+
+select:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/select.py"
+
+number:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/number.py"
+
+config_flow:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/config_flow.py"
+
+coordinator:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/coordinator.py"
+
+models:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "python_frank_energie/models.py"
+
+api:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "python_frank_energie/frank_energie.py"
