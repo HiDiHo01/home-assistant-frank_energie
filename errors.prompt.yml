@@ -5,5 +5,5 @@ messages:
     content: >-
       Find errors in my code at
       https://github.com/HiDiHo01/home-assistant-frank_energie and list the most
-      in portend top 5
+      imported top 5
 model: xai/grok-3
