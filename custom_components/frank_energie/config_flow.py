@@ -26,6 +26,7 @@ from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import AuthException, ConnectionException
 
 from .const import CONF_SITE, DOMAIN
+from .helpers import decrypt_password, encrypt_password
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
@@ -138,6 +139,8 @@ class ConfigFlow(config_entries.ConfigFlow):
         """Handle possible multi site accounts."""
         if user_input and user_input.get(CONF_SITE) is not None:
             self.sign_in_data[CONF_SITE] = user_input[CONF_SITE]
+            site_titles = self.sign_in_data.get("site_titles", {})
+            self.sign_in_data["site_title"] = site_titles.get(user_input[CONF_SITE])
             return await self._async_create_entry(self.sign_in_data)
 
         data_schema = vol.Schema(
@@ -273,6 +276,10 @@ class ConfigFlow(config_entries.ConfigFlow):
                     # self.sign_in_data[CONF_USERNAME] = self.create_title(first_site)
                     self.sign_in_data["site_title"] = self.create_title(first_site)
                     # return await self._async_create_entry(self.sign_in_data)
+
+                self.sign_in_data["site_titles"] = {
+                    site.reference: self.create_title(site) for site in suitable_sites
+                }
 
                 # Prepare site options for selection
                 site_options = [
@@ -525,19 +532,32 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data=updated_data,
             )
 
-        # unique_id = data.get(CONF_USERNAME, "frank_energie")
-        # if data.get(CONF_SITE, None):
-        #     _LOGGER.debug("CONF_SITE: %s", CONF_SITE)
-        #     _LOGGER.debug("data CONF_SITE: %s", data[CONF_SITE])
-        #     _LOGGER.debug("CONF_USERNAME: %s", CONF_USERNAME)
-        #     _LOGGER.debug("data CONF_USERNAME: %s", data[CONF_USERNAME])
-        #     unique_id = f"{data[CONF_SITE] or data.get(CONF_USERNAME, 'frank_energie')}"
-        unique_id = str(data.get(CONF_SITE) or data.get(CONF_USERNAME) or DOMAIN)
+        # Construct options dictionary with credentials
+        options = {
+            CONF_USERNAME: data.get(CONF_USERNAME),
+            CONF_PASSWORD: data.get(
+                CONF_PASSWORD
+            ),  # Encrypted in _handle_authentication_success
+        }
+        # Clean data from credentials
+        entry_data = {
+            k: v for k, v in data.items() if k not in (CONF_USERNAME, CONF_PASSWORD)
+        }
+
+        unique_id = str(
+            entry_data.get(CONF_SITE) or options.get(CONF_USERNAME) or DOMAIN
+        )
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
+        site_title = entry_data.pop("site_title", None)
+        entry_data.pop("site_titles", None)
+        title = site_title or options.get(CONF_USERNAME) or "Frank Energie"
+
         return self.async_create_entry(
-            title=data.get(CONF_USERNAME, "Frank Energie"), data=data
+            title=title,
+            data=entry_data,
+            options=options,
         )
 
     @staticmethod
@@ -631,21 +651,31 @@ class ConfigFlow(config_entries.ConfigFlow):
         self, user_input: dict[str, Any], auth: Authentication
     ) -> ConfigFlowResult:
         """Handle successful authentication."""
+        encrypted_password = encrypt_password(self.hass, user_input[CONF_PASSWORD])
         self.sign_in_data = {
             CONF_USERNAME: user_input[CONF_USERNAME],
+            CONF_PASSWORD: encrypted_password,
             CONF_ACCESS_TOKEN: auth.authToken,
             CONF_TOKEN: auth.refreshToken,
         }
         if self._reauth_entry:
-            # Preserve existing entry data (e.g. site_reference) and only overwrite tokens
+            # Preserve existing entry data/options
+            updated_options = {
+                **self._reauth_entry.options,
+                CONF_USERNAME: self.sign_in_data[CONF_USERNAME],
+                CONF_PASSWORD: encrypted_password,
+            }
             updated_data = {
                 **self._reauth_entry.data,
-                CONF_USERNAME: self.sign_in_data[CONF_USERNAME],
                 CONF_ACCESS_TOKEN: self.sign_in_data[CONF_ACCESS_TOKEN],
                 CONF_TOKEN: self.sign_in_data[CONF_TOKEN],
             }
+            # Remove plaintext credentials from data if any
+            updated_data.pop(CONF_USERNAME, None)
+            updated_data.pop(CONF_PASSWORD, None)
+
             self.hass.config_entries.async_update_entry(
-                self._reauth_entry, data=updated_data
+                self._reauth_entry, data=updated_data, options=updated_options
             )
             self.hass.async_create_task(
                 self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
@@ -710,15 +740,12 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, entry_data: dict[str, Any]) -> None:
         """Initialize Frank Energie options flow."""
         self.entry_data = entry_data
-        self.options = dict(
-            entry_data
-        )  # Gebruik entry_data in plaats van config_entry.options
 
     async def async_step_init(
         self, user_input: Optional[dict[str, Any]] = None
     ) -> ConfigFlowResult:
         """Manage the options."""
-        return await self.async_step_user()
+        return await self.async_step_user(user_input)
 
     async def async_step_user(
         self,
@@ -726,27 +753,68 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         errors: Optional[dict[str, str]] = None,
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
-        if user_input is not None:
-            self.options.update(user_input)
-            return await self._update_options()
+        entry = self.config_entry
 
-        username = self.entry_data.get("username", "")
+        if user_input is not None:
+            try:
+                async with FrankEnergie() as api:
+                    auth = await api.login(
+                        user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+                    )
+
+                # Encrypt password before storing in options
+                encrypted_password = encrypt_password(
+                    self.hass, user_input[CONF_PASSWORD]
+                )
+                options = {
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: encrypted_password,
+                }
+
+                # Update tokens in data
+                updated_data = {
+                    **entry.data,
+                    CONF_ACCESS_TOKEN: auth.authToken,
+                    CONF_TOKEN: auth.refreshToken,
+                }
+                # Clean up plaintext credentials from data if any
+                updated_data.pop(CONF_USERNAME, None)
+                updated_data.pop(CONF_PASSWORD, None)
+
+                self.hass.config_entries.async_update_entry(entry, data=updated_data)
+
+                return self.async_create_entry(title=entry.title, data=options)
+
+            except AuthException:
+                errors = {"base": "invalid_auth"}
+            except ConnectionException:
+                errors = {"base": "connection_error"}
+            except Exception as ex:
+                _LOGGER.exception("Unexpected error in options flow: %s", ex)
+                errors = {"base": "unknown_error"}
+
+        current_username = (
+            entry.options.get(CONF_USERNAME) or entry.data.get(CONF_USERNAME) or ""
+        )
+        current_password = (
+            entry.options.get(CONF_PASSWORD) or entry.data.get(CONF_PASSWORD) or ""
+        )
+        decrypted_password = ""
+        if current_password:
+            try:
+                decrypted_password = decrypt_password(self.hass, current_password)
+            except Exception:
+                pass
 
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_USERNAME, default=username): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_USERNAME, default=current_username): str,
+                vol.Required(CONF_PASSWORD, default=decrypted_password): str,
             }
         )
 
         return self.async_show_form(
             step_id="user", data_schema=data_schema, errors=errors
-        )
-
-    async def _update_options(self) -> ConfigFlowResult:
-        """Update config entry options."""
-        return self.async_create_entry(
-            title=self.entry_data.get(CONF_USERNAME, "Frank Energie"), data=self.options
         )
 
 
