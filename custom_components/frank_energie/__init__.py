@@ -20,7 +20,6 @@ from .exceptions import NoSuitableSitesFoundError
 
 _LOGGER = logging.getLogger(__name__)
 
-# PLATFORMS = [Platform.SENSOR, "frank_energie_diagnostic_sensor"]
 PLATFORMS: list[str] = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.BUTTON]
 
 
