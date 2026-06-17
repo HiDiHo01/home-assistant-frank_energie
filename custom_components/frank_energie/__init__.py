@@ -41,7 +41,7 @@ async def async_setup_platform(
     hass: HomeAssistant,
     config: dict[str, Any],
     async_add_entities,
-    discovery_info=None
+    _discovery_info=None
 ) -> bool:
     """Set up the Frank Energie sensor platform.
     Deprecated for new development because Home Assistant encourages the use of
