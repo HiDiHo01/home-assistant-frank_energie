@@ -131,7 +131,11 @@ async def test_renew_token(coordinator, mock_frank_energie):
     # Verify that the entry data was updated with new tokens
     coordinator.hass.config_entries.async_update_entry.assert_called_once_with(
         coordinator.config_entry,
-        data={"access_token": "new_token", "token": "new_refresh_token"},  # NOSONAR
+        data={
+            "site_reference": "test_reference",
+            "access_token": "new_token",
+            "token": "new_refresh_token",  # NOSONAR
+        },
     )
 
 

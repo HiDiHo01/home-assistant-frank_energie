@@ -11,11 +11,13 @@ from typing import Any, Final
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
+from python_frank_energie.exceptions import AuthException
 from python_frank_energie.models import UserSites
 
 from .const import CONF_COORDINATOR, DATA_ELECTRICITY, DATA_GAS, DOMAIN
@@ -343,7 +345,21 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             CONF_ACCESS_TOKEN
         )
 
-        if self.entry.data.get("site_reference") is not None or not access_token:
+        site_reference = self.entry.data.get("site_reference")
+
+        if site_reference is not None:
+            if "@" in self.entry.title or self.entry.title == "Frank Energie":
+                _LOGGER.info(
+                    "Config entry title is email or default; restoring site address title"
+                )
+                try:
+                    _, title = await self._get_site_reference_and_title(coordinator)
+                    if title and isinstance(title, str) and title != "Onbekend adres":
+                        self.hass.config_entries.async_update_entry(
+                            self.entry, title=title
+                        )
+                except Exception as ex:
+                    _LOGGER.warning("Could not restore site title: %s", ex)
             return
 
         if self.entry.data.get("site_reference") is None and access_token:
@@ -377,8 +393,19 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         """Fetch site reference and human-readable title."""
         _LOGGER.debug("Getting site reference and title for coordinator")
 
-        # Haal de 'UserSites' gegevens op van de coordinator API
-        user_sites_data: UserSites = await coordinator.api.UserSites()
+        try:
+            # Haal de 'UserSites' gegevens op van de coordinator API
+            user_sites_data: UserSites = await coordinator.api.UserSites()
+        except AuthException:
+            _LOGGER.debug(
+                "Authentication failed during site fetch, attempting token renewal"
+            )
+            try:
+                await coordinator._try_renew_token()
+                user_sites_data = await coordinator.api.UserSites()
+            except Exception as renew_ex:
+                _LOGGER.exception("Token renewal failed during setup: %s", renew_ex)
+                raise ConfigEntryAuthFailed from renew_ex
 
         # Haal de bezorgsites op uit de 'UserSites' gegevens
         user_sites = user_sites_data.deliverySites

@@ -17,7 +17,12 @@ from typing import Any, Awaitable, Callable, Final, TypedDict, cast
 from aiohttp import ClientError
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
+from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_PASSWORD,
+    CONF_TOKEN,
+    CONF_USERNAME,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
@@ -74,6 +79,7 @@ from .const import (
     DEFAULT_RESOLUTION,
     EVENT_FRANK_ENERGIE,
 )
+from .helpers import decrypt_password
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
@@ -884,11 +890,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     country_code = country_code_raw.upper()
                     if country_code in {"NL", "BE"}:
                         self._country_code = country_code
-            if (
-                not self._connection_id
-                and user_data
-                and user_data.connections
-            ):
+            if not self._connection_id and user_data and user_data.connections:
                 connection = user_data.connections[0]
 
                 if connection_id := connection.get("connectionId"):
@@ -1669,16 +1671,65 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         try:
             updated_tokens = await self.api.renew_token()
-            data = {
+            updated_data = {
+                **self.config_entry.data,
                 CONF_ACCESS_TOKEN: updated_tokens.authToken,
                 CONF_TOKEN: updated_tokens.refreshToken,
             }
+            # Clean up old plaintext credentials in data if any
+            updated_data.pop(CONF_USERNAME, None)
+            updated_data.pop(CONF_PASSWORD, None)
+
             # Update the config entry with the new tokens
-            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=updated_data
+            )
 
             _LOGGER.debug("Successfully renewed token")
 
         except AuthException as ex:
+            _LOGGER.debug(
+                "Token renewal failed, attempting silent re-login using stored credentials"
+            )
+            username = self.config_entry.options.get(
+                CONF_USERNAME
+            ) or self.config_entry.data.get(CONF_USERNAME)
+            password = self.config_entry.options.get(
+                CONF_PASSWORD
+            ) or self.config_entry.data.get(CONF_PASSWORD)
+
+            if username and password:
+                try:
+                    decrypted_password = decrypt_password(self.hass, password)
+                    if not decrypted_password:
+                        raise AuthException("Decrypted password is empty")
+                    auth = await self.api.login(username, decrypted_password)
+                    updated_data = {
+                        **self.config_entry.data,
+                        CONF_ACCESS_TOKEN: auth.authToken,
+                        CONF_TOKEN: auth.refreshToken,
+                    }
+                    updated_data.pop(CONF_USERNAME, None)
+                    updated_data.pop(CONF_PASSWORD, None)
+
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, data=updated_data
+                    )
+                    _LOGGER.info(
+                        "Successfully re-authenticated silently using stored credentials"
+                    )
+                    return
+                except (AuthException, FrankEnergieException) as login_ex:
+                    _LOGGER.warning(
+                        "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
+                        login_ex,
+                    )
+                except Exception as login_ex:
+                    _LOGGER.exception(
+                        "Unexpected error during silent re-login: %s. Proceeding to reauth flow",
+                        login_ex,
+                    )
+
             _LOGGER.exception(
                 "Failed to renew token: %s. Starting user reauth flow", ex
             )
