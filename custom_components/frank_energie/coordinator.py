@@ -888,11 +888,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 not self._connection_id
                 and user_data
                 and user_data.connections
-                and getattr(user_data.connections[0], "connectionId", None)
-            ):
-                self._connection_id = getattr(
-                    user_data.connections[0], "connectionId", None
                 )
+            ):
+                connection = user_data.connections[0]
+
+                if connection_id := connection.get("connectionId"):
+                    self._connection_id = connection_id
+
             return user_data
         except AuthException as ex:
             _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
