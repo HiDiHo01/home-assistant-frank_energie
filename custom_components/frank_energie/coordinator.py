@@ -1701,6 +1701,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             if username and password:
                 try:
                     decrypted_password = decrypt_password(self.hass, password)
+                    if not decrypted_password:
+                        raise AuthException("Decrypted password is empty")
                     auth = await self.api.login(username, decrypted_password)
                     updated_data = {
                         **self.config_entry.data,
@@ -1717,9 +1719,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         "Successfully re-authenticated silently using stored credentials"
                     )
                     return
-                except Exception as login_ex:
+                except (AuthException, FrankEnergieException) as login_ex:
                     _LOGGER.warning(
-                        "Silent re-login failed: %s. Proceeding to reauth flow",
+                        "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
+                        login_ex,
+                    )
+                except Exception as login_ex:
+                    _LOGGER.exception(
+                        "Unexpected error during silent re-login: %s. Proceeding to reauth flow",
                         login_ex,
                     )
 

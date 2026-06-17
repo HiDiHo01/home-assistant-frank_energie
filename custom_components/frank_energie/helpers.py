@@ -70,7 +70,11 @@ def build_charge_settings_input(
 
 def _get_fernet_key(hass: HomeAssistant) -> bytes:
     """Derive a Fernet key from the Home Assistant instance UUID."""
-    instance_uuid = hass.data.get("core.uuid", "default_key_fallback_frank_energie")
+    instance_uuid = hass.data.get("core.uuid")
+    if not instance_uuid:
+        raise ValueError(
+            "Home Assistant core.uuid is missing. Cannot derive encryption key."
+        )
     key_material = hashlib.sha256(instance_uuid.encode()).digest()
     return base64.urlsafe_b64encode(key_material)
 

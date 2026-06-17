@@ -201,3 +201,44 @@ async def test_successful_flow_creates_entry(
 
     assert result3["options"]["username"] == "user@example.com"
     assert decrypt_password(hass, result3["options"]["password"]) == "secure_password"
+
+
+async def test_options_flow_submit_blank_password(
+    hass: HomeAssistant, config_entry_with_site, mock_auth_success
+) -> None:
+    """Test options flow submission with a blank password preserves existing password."""
+    hass.data["core.uuid"] = "test_uuid_123"
+
+    from custom_components.frank_energie.helpers import (
+        decrypt_password,
+        encrypt_password,
+    )
+
+    hashed_pwd = encrypt_password(hass, "original_secure_pwd")
+    hass.config_entries.async_update_entry(
+        config_entry_with_site,
+        options={
+            "username": "user@example.com",
+            "password": hashed_pwd,
+        },
+    )
+
+    result = await hass.config_entries.options.async_init(
+        config_entry_with_site.entry_id
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+    # Submit options flow with blank password
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "username": "user@example.com",
+            "password": "",
+        },
+    )
+
+    assert result2["type"] == FlowResultType.CREATE_ENTRY
+    # It should preserve the existing password (which decrypts to the original value)
+    assert result2["data"]["username"] == "user@example.com"
+    assert decrypt_password(hass, result2["data"]["password"]) == "original_secure_pwd"

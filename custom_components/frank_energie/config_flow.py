@@ -755,17 +755,29 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         """Handle a flow initialized by the user."""
         entry = self.config_entry
 
+        current_username = (
+            entry.options.get(CONF_USERNAME) or entry.data.get(CONF_USERNAME) or ""
+        )
+        current_password = (
+            entry.options.get(CONF_PASSWORD) or entry.data.get(CONF_PASSWORD) or ""
+        )
+
         if user_input is not None:
+            password_to_validate = user_input.get(CONF_PASSWORD)
+            if not password_to_validate and current_password:
+                try:
+                    password_to_validate = decrypt_password(self.hass, current_password)
+                except Exception:
+                    pass
+
             try:
                 async with FrankEnergie() as api:
                     auth = await api.login(
-                        user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+                        user_input[CONF_USERNAME], password_to_validate
                     )
 
                 # Encrypt password before storing in options
-                encrypted_password = encrypt_password(
-                    self.hass, user_input[CONF_PASSWORD]
-                )
+                encrypted_password = encrypt_password(self.hass, password_to_validate)
                 options = {
                     CONF_USERNAME: user_input[CONF_USERNAME],
                     CONF_PASSWORD: encrypted_password,
@@ -793,23 +805,11 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.exception("Unexpected error in options flow: %s", ex)
                 errors = {"base": "unknown_error"}
 
-        current_username = (
-            entry.options.get(CONF_USERNAME) or entry.data.get(CONF_USERNAME) or ""
-        )
-        current_password = (
-            entry.options.get(CONF_PASSWORD) or entry.data.get(CONF_PASSWORD) or ""
-        )
-        decrypted_password = ""
-        if current_password:
-            try:
-                decrypted_password = decrypt_password(self.hass, current_password)
-            except Exception:
-                pass
-
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME, default=current_username): str,
-                vol.Required(CONF_PASSWORD, default=decrypted_password): str,
+                # Leave password blank to avoid exposing it in the UI
+                vol.Optional(CONF_PASSWORD, default=""): str,
             }
         )
 
