@@ -888,7 +888,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 not self._connection_id
                 and user_data
                 and user_data.connections
-                )
             ):
                 connection = user_data.connections[0]
 
