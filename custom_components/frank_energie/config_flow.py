@@ -300,8 +300,7 @@ class ConfigFlow(config_entries.ConfigFlow):
 
     async def async_step_reconfigure(
         self,
-        user_input: Optional[dict[str, Any]] = None,
-        errors: Optional[dict[str, str]] = None
+        user_input: Optional[dict[str, Any]] = None
     ) -> ConfigFlowResult:
         """Handle the reconfiguration step."""
         if self._reauth_entry is None:
@@ -312,10 +311,10 @@ class ConfigFlow(config_entries.ConfigFlow):
         if not user_input:
             return self._show_login_form()
 
-        errors = self._validate_login_input(user_input)
+        validation_errors = self._validate_login_input(user_input)
 
-        if errors:
-            return self._show_login_form(errors=errors)
+        if validation_errors:
+            return self._show_login_form(errors=validation_errors)
 
         try:
             auth = await self._authenticate(user_input)
