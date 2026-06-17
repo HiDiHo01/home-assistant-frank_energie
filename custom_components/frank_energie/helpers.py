@@ -87,7 +87,7 @@ def encrypt_password(hass: HomeAssistant, password: str) -> str:
         f = Fernet(_get_fernet_key(hass))
         return f.encrypt(password.encode()).decode()
     except Exception as ex:
-        _LOGGER.error("Failed to encrypt password: %s", ex)
+        _LOGGER.exception("Failed to encrypt password: %s", ex)
         return password
 
 

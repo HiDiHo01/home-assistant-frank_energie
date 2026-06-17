@@ -404,7 +404,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 await coordinator._try_renew_token()
                 user_sites_data = await coordinator.api.UserSites()
             except Exception as renew_ex:
-                _LOGGER.error("Token renewal failed during setup: %s", renew_ex)
+                _LOGGER.exception("Token renewal failed during setup: %s", renew_ex)
                 raise ConfigEntryAuthFailed from renew_ex
 
         # Haal de bezorgsites op uit de 'UserSites' gegevens
