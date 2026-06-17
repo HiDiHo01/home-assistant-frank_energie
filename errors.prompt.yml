@@ -6,4 +6,4 @@ messages:
       Find errors in my code at
       https://github.com/HiDiHo01/home-assistant-frank_energie and list the most
       imported top 5
-model: xai/grok-3
+model: openai/gpt-4o
