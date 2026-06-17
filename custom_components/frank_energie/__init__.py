@@ -164,7 +164,7 @@ entry.options: bevat de gegevens die via een options flow zijn aangepast/nagelev
                 await coordinator._try_renew_token()
                 user_sites_data = await coordinator.api.UserSites()
                 _LOGGER.info("Token renewal successful during setup")
-            except (AuthException, Exception) as renew_err:
+            except Exception as renew_err:
                 _LOGGER.warning("Token renewal failed: %s — trying credential re-login", renew_err)
                 username = self.entry.data.get(CONF_USERNAME)
                 password = self.entry.data.get(CONF_PASSWORD)
