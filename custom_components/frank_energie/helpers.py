@@ -9,7 +9,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING, Final
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 from homeassistant.core import HomeAssistant
 
 from .const import UNIT_GAS_BE, UNIT_GAS_NL
@@ -91,7 +91,7 @@ def encrypt_password(hass: HomeAssistant, password: str) -> str:
         return password
 
 
-def decrypt_password(hass: HomeAssistant, password: str) -> str:
+def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
     """Decrypt password using Fernet with plaintext fallback."""
     if not password:
         return ""
@@ -99,7 +99,7 @@ def decrypt_password(hass: HomeAssistant, password: str) -> str:
         try:
             f = Fernet(_get_fernet_key(hass))
             return f.decrypt(password.encode()).decode()
-        except (InvalidToken, Exception) as ex:
+        except Exception as ex:
             _LOGGER.warning("Failed to decrypt stored password: %s", ex)
-            return ""
+            return None
     return password

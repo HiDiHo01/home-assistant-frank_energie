@@ -150,7 +150,6 @@ async def test_setup_entry_recovery_via_renew(
     enable_custom_integrations,
 ) -> None:
     """Test setup recovers using token renewal when AuthException is raised."""
-    import zoneinfo
     from python_frank_energie.exceptions import AuthException
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
@@ -230,7 +229,6 @@ async def test_setup_entry_recovery_via_login(
     enable_custom_integrations,
 ) -> None:
     """Test setup recovers using silent login when token renewal fails."""
-    import zoneinfo
     from python_frank_energie.exceptions import AuthException
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
@@ -315,7 +313,6 @@ async def test_setup_entry_restores_title(
     enable_custom_integrations,
 ) -> None:
     """Test setup restores the address-based title if overwritten by email."""
-    import zoneinfo
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
