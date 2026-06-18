@@ -1186,7 +1186,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
     def _has_valid_usage_data(self, usage: PeriodUsageAndCosts | None) -> bool:
-        """Check if the usage data is fully populated for the active categories."""
+        """Check if the usage data has been populated with actual values."""
         if usage is None:
             return False
 
@@ -1202,10 +1202,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         for cat in active_categories:
             usage_total = getattr(cat, "usage_total", None)
             costs_total = getattr(cat, "costs_total", None)
-            if usage_total is None or costs_total is None:
-                return False
+            if usage_total is not None or costs_total is not None:
+                return True
 
-        return True
+        return False
 
     async def _get_static_data(
         self, today: date, tomorrow: date, start_date: date
