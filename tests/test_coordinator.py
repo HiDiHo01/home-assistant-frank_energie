@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -424,7 +424,9 @@ class TestInitNewAttributes:
         )
         assert coord.site_reference is None
 
-    def test_site_reference_updates_dynamically(self, mock_frank_energie):
+    def test_site_reference_updates_dynamically(
+        self, mock_frank_energie: AsyncMock
+    ) -> None:
         """site_reference must update dynamically when config_entry.data is updated."""
         entry = MockConfigEntry(
             version=1,
@@ -894,8 +896,8 @@ async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_en
 
 @pytest.mark.asyncio
 async def test_dynamic_fetch_network_errors_during_first_refresh(
-    coordinator, mock_frank_energie
-):
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
     """Test that transient network errors in dynamic fetch methods propagate only during initial refresh."""
     from python_frank_energie.exceptions import NetworkError
 
@@ -907,20 +909,18 @@ async def test_dynamic_fetch_network_errors_during_first_refresh(
         "transient network issue"
     )
     with pytest.raises(NetworkError):
-        await coordinator._fetch_enode_chargers(datetime.now(timezone.utc).date(), True)
+        await coordinator._fetch_enode_chargers(datetime.now(UTC).date(), True)
 
     # Under subsequent refresh (last_fetch_today is set), it should swallow NetworkError and return None
-    coordinator.last_fetch_today = datetime.now(timezone.utc)
-    result = await coordinator._fetch_enode_chargers(
-        datetime.now(timezone.utc).date(), True
-    )
+    coordinator.last_fetch_today = datetime.now(UTC)
+    result = await coordinator._fetch_enode_chargers(datetime.now(UTC).date(), True)
     assert result is None
 
 
 @pytest.mark.asyncio
 async def test_dynamic_fetch_non_network_errors_ignored(
-    coordinator, mock_frank_energie
-):
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
     """Test that non-network errors in dynamic fetch methods are swallowed even during initial refresh."""
     from python_frank_energie.exceptions import SmartTradingNotEnabledException
 
