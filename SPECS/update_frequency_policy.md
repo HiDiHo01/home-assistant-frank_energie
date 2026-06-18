@@ -29,6 +29,17 @@ Sensor updates must not trigger API requests.
 
 Sensors should derive their state from cached data.
 
+### Timezone Awareness
+
+All market publication windows must be evaluated using timezone-aware datetimes.
+
+Rules:
+
+- Use Europe/Amsterdam for market-related schedules.
+- Use timezone-aware datetimes exclusively.
+- Never hardcode CET or CEST offsets.
+- Let DST transitions be handled automatically.
+
 ### Maintenance Window
 
 No API requests between:
@@ -62,22 +73,31 @@ Load today's prices only when:
 Once loaded:
 
 - Store in cache.
-- Do not fetch again.
+- Stop polling.
+- Do not fetch again that day.
 
 ### Tomorrow Prices
 
-Before 11:00 UTC:
+Before the publication window:
 
 - Never request tomorrow prices.
 
-Release window:
+Publication window:
 
 - 11:00 UTC until 13:00 UTC.
 - Poll every 5 minutes.
 
 After 13:00 UTC:
 
-- Continue polling every 5 minutes only when tomorrow prices are still unavailable.
+If tomorrow prices are still unavailable:
+
+- Poll every 15 minutes.
+
+After 16:00 UTC:
+
+If tomorrow prices are still unavailable:
+
+- Poll every 30 minutes.
 
 Once tomorrow prices are loaded:
 
@@ -110,14 +130,17 @@ These updates must use cached data only.
 
 ### Discovery Window
 
-Poll only during:
+Poll only during the gas publication discovery window.
 
-- 04:00 UTC
-- 07:00 UTC
+Observed publication behavior:
 
-Frequency:
+- Winter: approximately 07:00 local time.
+- Summer: approximately 06:00 local time.
 
-- Every 5 minutes.
+Implementation policy:
+
+- Open a discovery window around the expected publication time.
+- Poll every 5 minutes while today's gas price is unavailable.
 
 ### Stop Condition
 
@@ -133,9 +156,20 @@ Outside the discovery window:
 
 ## Realtime Energy Data
 
+### Configurable Refresh Intervals
+
+Realtime refresh intervals should be configurable through the Options Flow.
+
+Recommended options:
+
+- 30 seconds (default)
+- 60 seconds
+
+The default should favor responsiveness while allowing users to reduce API traffic when necessary.
+
 ### PV Systems
 
-Refresh interval:
+Default refresh interval:
 
 - 30 seconds.
 
@@ -147,7 +181,7 @@ Includes:
 
 ### Home Batteries
 
-Refresh interval:
+Default refresh interval:
 
 - 30 seconds.
 
@@ -218,8 +252,6 @@ Event-driven refreshes remain allowed during:
 
 ## Coordinator Separation
 
-Recommended coordinator groups:
-
 ### Price Coordinator
 
 Responsible for:
@@ -262,10 +294,23 @@ Responsible for:
 - Capabilities.
 - Contract information.
 
+## Data Classification Matrix
+
+| Class | Examples | Strategy |
+|---------|---------|---------|
+| Immutable | Electricity prices | Cache until rollover |
+| Daily | Gas prices | Fetch once per day |
+| Realtime | PV, batteries, chargers | 30-60 seconds |
+| Operational | Vehicle state | Adaptive |
+| Historical | Statistics | Hourly |
+| Configuration | Settings, contracts | Daily |
+| Recovery | Startup, reauth | On demand |
+
 ## Final Rule
 
 Once valid data is loaded and cached:
 
 - Stop polling.
 - Serve data from cache.
-- Refresh only when new information is expected or cache recovery is required.
+- Refresh only when new information is expected.
+- Refresh only when cache recovery is required.
