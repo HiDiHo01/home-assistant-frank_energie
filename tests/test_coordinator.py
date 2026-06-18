@@ -583,12 +583,36 @@ class TestReconcileResolution:
             coordinator._reconcile_resolution()
             mock_logger.warning.assert_not_called()
 
-    def test_logs_debug_when_drift_detected(self, coordinator):
-        """Must log a debug message when config and API resolution values differ."""
+    def test_logs_warning_when_unexpected_drift_detected(self, coordinator):
+        """Must log a warning when config and API resolution values differ and no matching change is pending."""
         from unittest.mock import patch
 
         mock_state = MagicMock()
         mock_state.activeOption = "PT60M"
+        mock_state.upcomingChange = None
+        coordinator._api_resolution_state = mock_state
+        mock_config_entry = MagicMock()
+        mock_config_entry.options = {"resolution": "PT15M"}
+        coordinator.config_entry = mock_config_entry
+
+        with patch(
+            "custom_components.frank_energie.coordinator._LOGGER"
+        ) as mock_logger:
+            coordinator._reconcile_resolution()
+            mock_logger.warning.assert_called_once()
+            warning_args = mock_logger.warning.call_args[0]
+            assert (
+                "drift" in warning_args[0].lower()
+                or "resolution" in warning_args[0].lower()
+            )
+
+    def test_logs_debug_when_expected_drift_detected(self, coordinator):
+        """Must log a debug message when config and API values differ but a matching change is pending."""
+        from unittest.mock import patch
+
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT60M"
+        mock_state.upcomingChange = "PT15M"
         coordinator._api_resolution_state = mock_state
         mock_config_entry = MagicMock()
         mock_config_entry.options = {"resolution": "PT15M"}

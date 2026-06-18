@@ -1855,11 +1855,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         # Only log drift — do NOT overwrite config automatically
         if api_value and config_value and api_value != config_value:
-            _LOGGER.debug(
-                "Resolution drift detected (config=%s api=%s)",
-                config_value,
-                api_value,
-            )
+            upcoming_change = self._api_resolution_state.upcomingChange
+            if upcoming_change == config_value:
+                _LOGGER.debug(
+                    "Resolution drift detected but expected due to pending change (config=%s api=%s upcoming=%s)",
+                    config_value,
+                    api_value,
+                    upcoming_change,
+                )
+            else:
+                _LOGGER.warning(
+                    "Resolution drift detected (config=%s api=%s)",
+                    config_value,
+                    api_value,
+                )
 
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
