@@ -365,6 +365,7 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=f"{COMPONENT_TITLE} - {description.service_name}",
+                translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
                 manufacturer=COMPONENT_TITLE,
                 entry_type=DeviceEntryType.SERVICE,
                 model=description.service_name,
