@@ -583,12 +583,13 @@ class TestReconcileResolution:
             coordinator._reconcile_resolution()
             mock_logger.warning.assert_not_called()
 
-    def test_logs_warning_when_drift_detected(self, coordinator):
-        """Must log a warning when config and API resolution values differ."""
+    def test_logs_warning_when_unexpected_drift_detected(self, coordinator):
+        """Must log a warning when config and API resolution values differ and no matching change is pending."""
         from unittest.mock import patch
 
         mock_state = MagicMock()
         mock_state.activeOption = "PT60M"
+        mock_state.upcomingChange = None
         coordinator._api_resolution_state = mock_state
         mock_config_entry = MagicMock()
         mock_config_entry.options = {"resolution": "PT15M"}
@@ -603,6 +604,29 @@ class TestReconcileResolution:
             assert (
                 "drift" in warning_args[0].lower()
                 or "resolution" in warning_args[0].lower()
+            )
+
+    def test_logs_debug_when_expected_drift_detected(self, coordinator):
+        """Must log a debug message when config and API values differ but a matching change is pending."""
+        from unittest.mock import patch
+
+        mock_state = MagicMock()
+        mock_state.activeOption = "PT60M"
+        mock_state.upcomingChange = "PT15M"
+        coordinator._api_resolution_state = mock_state
+        mock_config_entry = MagicMock()
+        mock_config_entry.options = {"resolution": "PT15M"}
+        coordinator.config_entry = mock_config_entry
+
+        with patch(
+            "custom_components.frank_energie.coordinator._LOGGER"
+        ) as mock_logger:
+            coordinator._reconcile_resolution()
+            mock_logger.debug.assert_called_once()
+            debug_args = mock_logger.debug.call_args[0]
+            assert (
+                "drift" in debug_args[0].lower()
+                or "resolution" in debug_args[0].lower()
             )
 
     def test_no_warning_when_api_value_is_none(self, coordinator):
@@ -933,3 +957,51 @@ async def test_dynamic_fetch_non_network_errors_ignored(
     )
     result = await coordinator._fetch_smart_batteries(True)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_contract_price_resolution_state_skips_when_unauthenticated_or_no_conn_id(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Test that _fetch_contract_price_resolution_state returns None and skips API fetch when unauthenticated or connection_id is missing."""
+    mock_frank_energie.is_authenticated = False
+    mock_frank_energie.contract_price_resolution_state = AsyncMock()
+
+    # Case 1: Unauthenticated
+    result = await coordinator._fetch_contract_price_resolution_state("conn-123")
+    assert result is None
+    mock_frank_energie.contract_price_resolution_state.assert_not_called()
+
+    # Case 2: Authenticated but connection_id is None
+    mock_frank_energie.is_authenticated = True
+    result = await coordinator._fetch_contract_price_resolution_state(None)
+    assert result is None
+    mock_frank_energie.contract_price_resolution_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_fetches_skip_when_feature_disabled(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Test that dynamic fetch methods skip calls when respective smart features are disabled."""
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.enode_chargers = AsyncMock()
+    mock_frank_energie.smart_batteries = AsyncMock()
+    mock_frank_energie.enode_vehicles = AsyncMock()
+
+    # Chargers fetch skipped when smart charging is disabled
+    result_chargers = await coordinator._fetch_enode_chargers(
+        datetime.now(UTC).date(), False
+    )
+    assert result_chargers is None
+    mock_frank_energie.enode_chargers.assert_not_called()
+
+    # Batteries fetch skipped when smart trading is disabled
+    result_batteries = await coordinator._fetch_smart_batteries(False)
+    assert result_batteries is None
+    mock_frank_energie.smart_batteries.assert_not_called()
+
+    # Vehicles fetch skipped when smart charging is disabled
+    result_vehicles = await coordinator._fetch_enode_vehicles(False)
+    assert result_vehicles is None
+    mock_frank_energie.enode_vehicles.assert_not_called()
