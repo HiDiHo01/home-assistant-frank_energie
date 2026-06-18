@@ -925,33 +925,31 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Fetching contract price resolution state for connection ID: %s",
                 connection_id,
             )
-            if self.api.is_authenticated and connection_id:
-                resolution_state = await self.api.contract_price_resolution_state(
-                    connection_id
+            resolution_state = await self.api.contract_price_resolution_state(
+                connection_id
+            )
+
+            self._api_resolution_state = resolution_state
+            self._resolution_change_pending = (
+                False  # change has been processed by API, reset pending flag
+            )
+
+            # resolution_state is already a ContractPriceResolutionState dataclass
+            if (
+                self.config_entry.options.get("resolution")
+                != resolution_state.activeOption
+            ):
+                options = dict(self.config_entry.options)
+                options["resolution"] = resolution_state.activeOption
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, options=options
                 )
 
-                self._api_resolution_state = resolution_state
-                self._resolution_change_pending = (
-                    False  # change has been processed by API, reset pending flag
-                )
-
-                # resolution_state is already a ContractPriceResolutionState dataclass
-                if (
-                    self.config_entry.options.get("resolution")
-                    != resolution_state.activeOption
-                ):
-                    options = dict(self.config_entry.options)
-                    options["resolution"] = resolution_state.activeOption
-                    self.hass.config_entries.async_update_entry(
-                        self.config_entry, options=options
-                    )
-
-                _LOGGER.debug(
-                    "Good ContractPriceResolutionState: %s",
-                    resolution_state,
-                )
-                return resolution_state
-            return None
+            _LOGGER.debug(
+                "Good ContractPriceResolutionState: %s",
+                resolution_state,
+            )
+            return resolution_state
 
         except asyncio.CancelledError:
             raise
