@@ -279,6 +279,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     @property
     def site_reference(self) -> str | None:
         """Return active site reference."""
+        if self.config_entry and self.config_entry.data:
+            return self.config_entry.data.get("site_reference") or self._site_reference
         return self._site_reference
 
     def _should_skip_api_calls(
@@ -972,6 +974,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug("Network error fetching enode chargers: %s", err)
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:
             _LOGGER.debug("Failed to fetch enode chargers: %s", err)
             return None
@@ -988,6 +1001,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug("Network error fetching smart batteries: %s", err)
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:
             _LOGGER.debug("Failed to fetch smart batteries: %s", err)
             return None
@@ -1013,6 +1037,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug("Network error fetching enode vehicles: %s", err)
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:
             _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
             return None
@@ -1052,6 +1087,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug("Network error fetching smart PV systems: %s", err)
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
             return None
@@ -1073,6 +1119,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug(
+                "Network error fetching smart PV system summary for %s: %s",
+                device_id,
+                err,
+            )
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
                 "Failed to fetch smart PV system summary for %s: %s", device_id, err
@@ -1089,6 +1150,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug("Network error fetching user smart feed-in status: %s", err)
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Failed to fetch user smart feed-in status: %s", err)
             return None
@@ -1126,6 +1198,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug(
+                "Network error fetching details for battery %s: %s", battery.id, err
+            )
+            if self.last_fetch_today is None:
+                raise
+            return None
         except Exception as err:
             _LOGGER.exception(
                 "Failed to fetch details for battery %s: %s",
@@ -1168,10 +1253,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except (
+            NetworkError,
+            RequestException,
+            ClientError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        ) as err:
+            _LOGGER.debug(
+                "Network error fetching sessions for battery %s: %s", battery.id, err
+            )
+            if self.last_fetch_today is None:
+                raise
+            return None
+        except Exception as err:
             _LOGGER.exception(
-                "Failed to fetch sessions for battery %s",
+                "Failed to fetch sessions for battery %s: %s",
                 battery.id,
+                err,
             )
             return None
 

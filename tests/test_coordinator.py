@@ -424,6 +424,31 @@ class TestInitNewAttributes:
         )
         assert coord.site_reference is None
 
+    def test_site_reference_updates_dynamically(self, mock_frank_energie):
+        """site_reference must update dynamically when config_entry.data is updated."""
+        entry = MockConfigEntry(
+            version=1,
+            domain="frank_energie",
+            title="Frank Energie",
+            data={"access_token": "tok"},
+            options={},
+            source="user",
+            entry_id="abc",
+            state="loaded",
+            minor_version=1,
+            unique_id="uid-xyz",
+        )
+        coord = FrankEnergieCoordinator(
+            hass=MagicMock(),
+            config_entry=entry,
+            api=mock_frank_energie,
+        )
+        assert coord.site_reference is None
+
+        # Simulate updating config entry data during setup
+        entry.__dict__["data"] = {**entry.data, "site_reference": "ref-xyz"}
+        assert coord.site_reference == "ref-xyz"
+
 
 class TestMarkLowest4pEventFired:
     """Tests for the renamed _mark_lowest_4p_event_fired method."""
@@ -856,3 +881,46 @@ async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_en
 
     assert call_count == 1
     coordinator._try_renew_token.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_fetch_network_errors_during_first_refresh(
+    coordinator, mock_frank_energie
+):
+    """Test that transient network errors in dynamic fetch methods propagate only during initial refresh."""
+    from python_frank_energie.exceptions import NetworkError
+
+    coordinator.last_fetch_today = None
+    mock_frank_energie.is_authenticated = True
+
+    # Under initial refresh, it should propagate NetworkError
+    mock_frank_energie.enode_chargers.side_effect = NetworkError(
+        "transient network issue"
+    )
+    with pytest.raises(NetworkError):
+        await coordinator._fetch_enode_chargers(datetime.now(timezone.utc).date(), True)
+
+    # Under subsequent refresh (last_fetch_today is set), it should swallow NetworkError and return None
+    coordinator.last_fetch_today = datetime.now(timezone.utc)
+    result = await coordinator._fetch_enode_chargers(
+        datetime.now(timezone.utc).date(), True
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_dynamic_fetch_non_network_errors_ignored(
+    coordinator, mock_frank_energie
+):
+    """Test that non-network errors in dynamic fetch methods are swallowed even during initial refresh."""
+    from python_frank_energie.exceptions import SmartTradingNotEnabledException
+
+    coordinator.last_fetch_today = None
+    mock_frank_energie.is_authenticated = True
+
+    # SmartTradingNotEnabledException is a subclass of FrankEnergieException, not a network/connection error
+    mock_frank_energie.smart_batteries.side_effect = SmartTradingNotEnabledException(
+        "disabled"
+    )
+    result = await coordinator._fetch_smart_batteries(True)
+    assert result is None
