@@ -1185,6 +1185,28 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._fetch_battery_sessions(battery, start_date, tomorrow),
         )
 
+    def _has_valid_usage_data(self, usage: PeriodUsageAndCosts | None) -> bool:
+        """Check if the usage data is fully populated for the active categories."""
+        if usage is None:
+            return False
+
+        categories = []
+        for attr in ("gas", "electricity", "feed_in"):
+            if hasattr(usage, attr):
+                categories.append(getattr(usage, attr))
+
+        active_categories = [c for c in categories if c is not None]
+        if not active_categories:
+            return False
+
+        for cat in active_categories:
+            usage_total = getattr(cat, "usage_total", None)
+            costs_total = getattr(cat, "costs_total", None)
+            if usage_total is None or costs_total is None:
+                return False
+
+        return True
+
     async def _get_static_data(
         self, today: date, tomorrow: date, start_date: date
     ) -> tuple[
@@ -1238,11 +1260,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             data_month_summary = self._static_month_summary
             data_invoices = self._static_invoices
             user_sites = self._static_user_sites
-            data_period_usage = self._static_period_usage
             data_contract_price_resolution_state = (
                 self._static_contract_price_resolution_state
             )
             data_user = self._static_user
+
+            # If we don't have valid/complete usage data yet, try to fetch it now
+            if not self._has_valid_usage_data(self._static_period_usage):
+                _LOGGER.debug(
+                    "Fetching Frank Energie usage data (retry because previous data was missing or incomplete)"
+                )
+                try:
+                    data_period_usage = await self._fetch_period_usage(start_date)
+                    self._static_period_usage = data_period_usage
+                except Exception as err:
+                    _LOGGER.debug("Failed to fetch usage data during retry: %s", err)
+                    data_period_usage = self._static_period_usage
+            else:
+                data_period_usage = self._static_period_usage
 
         return (
             prices_today,
