@@ -1005,3 +1005,86 @@ async def test_dynamic_fetches_skip_when_feature_disabled(
     result_vehicles = await coordinator._fetch_enode_vehicles(False)
     assert result_vehicles is None
     mock_frank_energie.enode_vehicles.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_coordinator_retry_incomplete_usage_data(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Test that coordinator retries fetching usage data if it is None or incomplete."""
+    from python_frank_energie.models import EnergyCategory, PeriodUsageAndCosts
+
+    today = datetime.now(timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+    yesterday = today - timedelta(days=1)
+
+    # 1. Test helper _has_valid_usage_data
+    assert coordinator._has_valid_usage_data(None) is False
+
+    # Incomplete usage: electricity category is present but has usage_total/costs_total as None
+    incomplete_electricity = EnergyCategory(
+        usage_total=None,
+        costs_total=None,
+        unit="KWH",
+        items=[],
+    )
+    incomplete_usage = PeriodUsageAndCosts(
+        _id="123",
+        gas=None,
+        electricity=incomplete_electricity,
+        feed_in=None,
+    )
+    assert coordinator._has_valid_usage_data(incomplete_usage) is False
+
+    # Complete usage
+    complete_electricity = EnergyCategory(
+        usage_total=10.5,
+        costs_total=2.5,
+        unit="KWH",
+        items=[],
+    )
+    complete_usage = PeriodUsageAndCosts(
+        _id="123",
+        gas=None,
+        electricity=complete_electricity,
+        feed_in=None,
+    )
+    assert coordinator._has_valid_usage_data(complete_usage) is True
+
+    # 2. Test coordinator caching & retry logic
+    # Mock all other static fetches
+    coordinator._fetch_prices_with_fallback = AsyncMock()
+    coordinator._fetch_user_sites = AsyncMock()
+    coordinator._fetch_month_summary = AsyncMock()
+    coordinator._fetch_invoices = AsyncMock()
+    coordinator._fetch_user_data = AsyncMock()
+    coordinator._fetch_contract_price_resolution_state = AsyncMock()
+
+    # Setup first fetch with incomplete usage
+    coordinator._fetch_period_usage = AsyncMock(return_value=incomplete_usage)
+
+    # Trigger first fetch (which populates cache and sets last_fetch_today)
+    await coordinator._get_static_data(today, tomorrow, yesterday)
+    coordinator.last_fetch_today = datetime.now(timezone.utc)
+
+    # Verify first fetch called _fetch_period_usage
+    coordinator._fetch_period_usage.assert_called_once_with(yesterday)
+    assert coordinator._static_period_usage == incomplete_usage
+
+    # Reset mock call count
+    coordinator._fetch_period_usage.reset_mock()
+
+    # Subsequent fetch with incomplete cache should retry fetching
+    coordinator._fetch_period_usage.return_value = complete_usage
+    await coordinator._get_static_data(today, tomorrow, yesterday)
+
+    # Verify that it retried fetching usage data, and successfully updated the cache
+    coordinator._fetch_period_usage.assert_called_once_with(yesterday)
+    assert coordinator._static_period_usage == complete_usage
+
+    # Reset mock call count again
+    coordinator._fetch_period_usage.reset_mock()
+
+    # Subsequent fetch with complete cache should NOT retry fetching
+    await coordinator._get_static_data(today, tomorrow, yesterday)
+    coordinator._fetch_period_usage.assert_not_called()
