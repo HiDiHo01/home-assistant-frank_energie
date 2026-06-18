@@ -991,7 +991,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not is_smart_charging:
-            _LOGGER.debug("Smart charging not enabled for this account, skipping Enode chargers fetch")
+            _LOGGER.debug(
+                "Smart charging not enabled for this account, skipping Enode chargers fetch"
+            )
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode chargers.")
@@ -1009,7 +1011,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not is_smart_trading:
-            _LOGGER.debug("Smart trading not enabled for this account, skipping smart batteries fetch")
+            _LOGGER.debug(
+                "Smart trading not enabled for this account, skipping smart batteries fetch"
+            )
             return None
         try:
             return await self.api.smart_batteries()
@@ -1024,7 +1028,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not is_smart_charging:
-            _LOGGER.debug("Smart charging not enabled for this account, skipping Enode vehicles fetch")
+            _LOGGER.debug(
+                "Smart charging not enabled for this account, skipping Enode vehicles fetch"
+            )
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")

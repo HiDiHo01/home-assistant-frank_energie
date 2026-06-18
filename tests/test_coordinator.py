@@ -966,7 +966,9 @@ async def test_dynamic_fetches_skip_when_feature_disabled(
     mock_frank_energie.enode_vehicles = AsyncMock()
 
     # Chargers fetch skipped when smart charging is disabled
-    result_chargers = await coordinator._fetch_enode_chargers(datetime.now(UTC).date(), False)
+    result_chargers = await coordinator._fetch_enode_chargers(
+        datetime.now(UTC).date(), False
+    )
     assert result_chargers is None
     mock_frank_energie.enode_chargers.assert_not_called()
 
@@ -979,4 +981,3 @@ async def test_dynamic_fetches_skip_when_feature_disabled(
     result_vehicles = await coordinator._fetch_enode_vehicles(False)
     assert result_vehicles is None
     mock_frank_energie.enode_vehicles.assert_not_called()
-
