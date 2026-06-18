@@ -445,8 +445,17 @@ class TestInitNewAttributes:
         )
         assert coord.site_reference is None
 
-        # Simulate updating config entry data during setup
-        entry.__dict__["data"] = {**entry.data, "site_reference": "ref-xyz"}
+        # Setup side effect to simulate async_update_entry behavior on entry.__dict__
+        def mock_update_entry(entry, **kwargs):
+            if "data" in kwargs:
+                entry.__dict__["data"] = kwargs["data"]
+
+        coord.hass.config_entries.async_update_entry.side_effect = mock_update_entry
+
+        # Simulate updating config entry data during setup using the public API
+        coord.hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "site_reference": "ref-xyz"}
+        )
         assert coord.site_reference == "ref-xyz"
 
 
