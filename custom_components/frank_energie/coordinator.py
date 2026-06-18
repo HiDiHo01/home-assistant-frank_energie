@@ -910,10 +910,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self, connection_id: str | None
     ) -> ContractPriceResolutionState | None:
         """Fetch and process the contract price resolution state."""
-        if not self.api.is_authenticated or connection_id is None:
+        if not self.api.is_authenticated:
             _LOGGER.debug(
-                "Skipping contract price resolution state fetch: "
-                "user not authenticated or no connection ID available"
+                "Skipping contract price resolution state fetch: user is not authenticated"
+            )
+            return None
+        if connection_id is None:
+            _LOGGER.debug(
+                "Skipping contract price resolution state fetch: connection ID is missing"
             )
             return None
         try:
@@ -991,9 +995,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not is_smart_charging:
-            _LOGGER.debug(
-                "Smart charging not enabled for this account, skipping Enode chargers fetch"
-            )
+            _LOGGER.debug("Skipping Enode chargers fetch: smart charging is disabled")
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode chargers.")
@@ -1011,9 +1013,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not is_smart_trading:
-            _LOGGER.debug(
-                "Smart trading not enabled for this account, skipping smart batteries fetch"
-            )
+            _LOGGER.debug("Skipping smart batteries fetch: smart trading is disabled")
             return None
         try:
             return await self.api.smart_batteries()
@@ -1028,9 +1028,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return None
         if not is_smart_charging:
-            _LOGGER.debug(
-                "Smart charging not enabled for this account, skipping Enode vehicles fetch"
-            )
+            _LOGGER.debug("Skipping Enode vehicles fetch: smart charging is disabled")
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
