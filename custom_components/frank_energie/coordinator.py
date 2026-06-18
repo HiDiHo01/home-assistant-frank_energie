@@ -279,6 +279,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     @property
     def site_reference(self) -> str | None:
         """Return active site reference."""
+        if self.config_entry and self.config_entry.data:
+            return self.config_entry.data.get("site_reference") or self._site_reference
         return self._site_reference
 
     def _should_skip_api_calls(
@@ -947,6 +949,35 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.exception("Error fetching ContractPriceResolutionState: %s", err)
             return None
 
+    def _handle_dynamic_fetch_error(self, method_name: str, err: Exception) -> None:
+        """Handle errors during dynamic fetches, propagating network errors on initial refresh."""
+        if isinstance(
+            err, (AuthException, AuthRequiredException, asyncio.CancelledError)
+        ):
+            raise err
+        if isinstance(
+            err,
+            (
+                NetworkError,
+                RequestException,
+                ClientError,
+                ConnectionError,
+                asyncio.TimeoutError,
+            ),
+        ):
+            _LOGGER.debug("Network error fetching %s: %s", method_name, err)
+            if self.last_fetch_today is None:
+                raise err
+            return
+
+        # Log generic exceptions (other than network errors or cancel/auth)
+        if method_name.startswith("details for battery") or method_name.startswith(
+            "sessions for battery"
+        ):
+            _LOGGER.exception("Failed to fetch %s: %s", method_name, err)
+        else:
+            _LOGGER.debug("Failed to fetch %s: %s", method_name, err)
+
     async def _fetch_enode_chargers(
         self, start_date: date, is_smart_charging: bool
     ) -> dict[str, EnodeChargers] | None:
@@ -968,12 +999,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             return await self.api.enode_chargers(self.site_reference, start_date)
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
         except Exception as err:
-            _LOGGER.debug("Failed to fetch enode chargers: %s", err)
+            self._handle_dynamic_fetch_error("enode chargers", err)
             return None
 
     async def _fetch_smart_batteries(
@@ -984,12 +1011,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             return await self.api.smart_batteries()
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
         except Exception as err:
-            _LOGGER.debug("Failed to fetch smart batteries: %s", err)
+            self._handle_dynamic_fetch_error("smart batteries", err)
             return None
 
     async def _fetch_enode_vehicles(
@@ -1009,12 +1032,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             vehicles = await self.api.enode_vehicles()
             _LOGGER.debug("Fetched Enode vehicles: %s", vehicles)
             return vehicles
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
         except Exception as err:
-            _LOGGER.debug("Failed to fetch enode vehicles: %s", err)
+            self._handle_dynamic_fetch_error("enode vehicles", err)
             return None
 
     async def old_fetch_smart_pv_systems(self) -> SmartPvSystems | None:
@@ -1048,12 +1067,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             result = await self.api.smart_pv_systems()
             self._has_pv_systems = bool(result and result.systems)
             return result
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
+        except Exception as err:
+            self._handle_dynamic_fetch_error("smart PV systems", err)
             return None
 
     async def _fetch_smart_pv_summary(
@@ -1069,13 +1084,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             return await self.api.smart_pv_system_summary(device_id)
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug(
-                "Failed to fetch smart PV system summary for %s: %s", device_id, err
+        except Exception as err:
+            self._handle_dynamic_fetch_error(
+                f"smart PV system summary for {device_id}", err
             )
             return None
 
@@ -1085,12 +1096,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             return await self.api.user_smart_feed_in()
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Failed to fetch user smart feed-in status: %s", err)
+        except Exception as err:
+            self._handle_dynamic_fetch_error("user smart feed-in status", err)
             return None
 
     async def _fetch_battery_details(self, battery) -> SmartBatteryDetails | None:
@@ -1122,16 +1129,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     battery.summary,
                 )
             return details
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
         except Exception as err:
-            _LOGGER.exception(
-                "Failed to fetch details for battery %s: %s",
-                battery.id,
-                err,
-            )
+            self._handle_dynamic_fetch_error(f"details for battery {battery.id}", err)
             return None
 
     async def _fetch_battery_sessions(
@@ -1164,15 +1163,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     battery.id,
                 )
                 return None
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _LOGGER.exception(
-                "Failed to fetch sessions for battery %s",
-                battery.id,
-            )
+        except Exception as err:
+            self._handle_dynamic_fetch_error(f"sessions for battery {battery.id}", err)
             return None
 
     async def _fetch_battery_details_and_sessions(
