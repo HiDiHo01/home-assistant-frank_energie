@@ -910,6 +910,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self, connection_id: str | None
     ) -> ContractPriceResolutionState | None:
         """Fetch and process the contract price resolution state."""
+        if not self.api.is_authenticated or connection_id is None:
+            _LOGGER.debug(
+                "Skipping contract price resolution state fetch: "
+                "user not authenticated or no connection ID available"
+            )
+            return None
         try:
             _LOGGER.debug(
                 "Fetching contract price resolution state for connection ID: %s",
@@ -981,18 +987,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_enode_chargers(
         self, start_date: date, is_smart_charging: bool
     ) -> dict[str, EnodeChargers] | None:
-        """Fetch Enode chargers from the API.
-
-        Chargers are fetched for all authenticated users regardless of whether
-        smart charging is activated.  A user may have a physical charger
-        registered without having the smart-charging feature enabled — the
-        API will simply return the charger with `canSmartCharge=False` or
-        `isSmartChargingEnabled=False` in chargeSettings.
-
-        The ``is_smart_charging`` parameter is retained in the signature to
-        avoid changing the call site; it is intentionally not used as a gate.
-        """
+        """Fetch Enode chargers from the API."""
         if not self.api.is_authenticated:
+            return None
+        if not is_smart_charging:
+            _LOGGER.debug("Smart charging not enabled for this account, skipping Enode chargers fetch")
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode chargers.")
@@ -1009,6 +1008,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Fetch smart batteries from the API."""
         if not self.api.is_authenticated:
             return None
+        if not is_smart_trading:
+            _LOGGER.debug("Smart trading not enabled for this account, skipping smart batteries fetch")
+            return None
         try:
             return await self.api.smart_batteries()
         except Exception as err:
@@ -1018,12 +1020,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_enode_vehicles(
         self, is_smart_charging: bool
     ) -> EnodeVehicles | None:
-        """Fetch Enode vehicles from the API.
-
-        Previously ``is_smart_charging`` was required but now chargers and vehicles
-        are always fetched when authenticated to ensure sensors are visible.
-        """
+        """Fetch Enode vehicles from the API."""
         if not self.api.is_authenticated:
+            return None
+        if not is_smart_charging:
+            _LOGGER.debug("Smart charging not enabled for this account, skipping Enode vehicles fetch")
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
@@ -1850,7 +1851,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         # Only log drift — do NOT overwrite config automatically
         if api_value and config_value and api_value != config_value:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Resolution drift detected (config=%s api=%s)",
                 config_value,
                 api_value,
