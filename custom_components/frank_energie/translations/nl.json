@@ -491,47 +491,6 @@
             "phone_number": {
                 "name": "Telefoonnummer"
             },
-            "smartcharging_isactivated": {
-                "name": "Slim laden",
-                "state": {
-                    "True": "Actief",
-                    "False": "Niet actief"
-                },
-                "state_attributes": {
-                    "provider": {
-                        "name": "Aanbieder"
-                    },
-                    "Available In Country": {
-                        "name": "Beschikbaar in Nederland",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    },
-                    "User Created At": {
-                        "name": "Gebruiker aangemaakt op"
-                    }
-                }
-            },
-            "smarttrading_isactivated": {
-                "name": "Slim handelen",
-                "state": {
-                    "True": "Actief",
-                    "False": "Niet actief"
-                },
-                "state_attributes": {
-                    "Available In Country": {
-                        "name": "Beschikbaar in Nederland",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    },
-                    "User Created At": {
-                        "name": "Gebruiker aangemaakt op"
-                    }
-                }
-            },
             "status": {
                 "name": "Status",
                 "state": {
@@ -541,25 +500,11 @@
                     "INACTIVE": "Inactief"
                 }
             },
-            "co2_compensation": {
-                "name": "CO₂ compensatie",
-                "state": {
-                    "True": "Aan",
-                    "False": "Uit"
-                }
-            },
             "reward_payout_preference": {
                 "name": "Beloningsuitbetalingsvoorkeur",
                 "state": {
                     "DISCOUNT": "Korting",
                     "TREES": "Bomen"
-                }
-            },
-            "smart_push_notification_price_alerts": {
-                "name": "Stroomprijsadvies",
-                "state": {
-                    "True": "Aan",
-                    "False": "Uit"
                 }
             },
             "meter_type": {
@@ -598,22 +543,97 @@
         },
         "binary_sensor": {
             "smartcharging_isactivated": {
-                "name": "Slim laden"
+                "name": "Slim laden",
+                "state": {
+                    "True": "Actief",
+                    "False": "Niet actief"
+                },
+                "state_attributes": {
+                    "provider": {
+                        "name": "Aanbieder"
+                    },
+                    "available_in_country": {
+                        "name": "Beschikbaar in Nederland",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    },
+                    "user_created_at": {
+                        "name": "Gebruiker aangemaakt op"
+                    },
+                    "needs_subscription": {
+                        "name": "Abonnement nodig",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    }
+                }
             },
             "smarttrading_isactivated": {
-                "name": "Slim handelen"
+                "name": "Slim handelen",
+                "state": {
+                    "True": "Actief",
+                    "False": "Niet actief"
+                },
+                "state_attributes": {
+                    "available_in_country": {
+                        "name": "Beschikbaar in Nederland",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    },
+                    "user_created_at": {
+                        "name": "Gebruiker aangemaakt op"
+                    },
+                    "needs_subscription": {
+                        "name": "Abonnement nodig",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    }
+                }
             },
             "smart_feed_in": {
                 "name": "Slim terugleveren"
             },
             "smart_pv_systems": {
-                "name": "Slimme zonnepanelen"
+                "name": "Slimme zonnepanelen",
+                "state": {
+                    "True": "Actief",
+                    "False": "Niet actief"
+                },
+                "state_attributes": {
+                    "system_count": {
+                        "name": "Aantal systemen"
+                    }
+                }
             },
             "smart_hvac": {
                 "name": "Slimme HVAC"
             },
             "disabled_haptic_feedback": {
                 "name": "Haptische feedback uitgeschakeld"
+            },
+            "battery_self_consumption_trading_allowed": {
+                "name": "Eigen verbruik handel toegestaan"
+            },
+            "smart_push_notification_price_alerts": {
+                "name": "Stroomprijsadvies",
+                "state": {
+                    "True": "Aan",
+                    "False": "Uit"
+                }
+            },
+            "co2_compensation": {
+                "name": "CO₂ compensatie",
+                "state": {
+                    "True": "Aan",
+                    "False": "Uit"
+                }
             }
         },
         "select": {
@@ -622,6 +642,42 @@
                 "state": {
                     "pt15m": "Elke 15 minuten",
                     "pt60m": "Elk uur"
+                }
+            },
+            "resolution": {
+                "name": "Resolutie",
+                "state": {
+                    "pt15m": "15 minuten",
+                    "pt60m": "60 minuten",
+                    "15 minutes": "15 minuten",
+                    "60 minutes": "60 minuten"
+                },
+                "state_attributes": {
+                    "is_authenticated": {
+                        "name": "Aangemeld",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    },
+                    "resolution": {
+                        "name": "Resolutie",
+                        "state": {
+                            "pt15m": "15 minuten",
+                            "pt60m": "60 minuten",
+                            "15 minutes": "15 minuten",
+                            "60 minutes": "60 minuten"
+                        }
+                    },
+                    "options": {
+                        "name": "Opties",
+                        "state": {
+                            "pt15m": "15 minuten",
+                            "pt60m": "60 minuten",
+                            "15 minutes": "15 minuten",
+                            "60 minutes": "60 minuten"
+                        }
+                    }
                 }
             },
             "battery_mode": {
@@ -666,11 +722,6 @@
         "switch": {
             "enode_smart_charging": {
                 "name": "Slim laden"
-            }
-        },
-        "binary_sensor": {
-            "battery_self_consumption_trading_allowed": {
-                "name": "Eigen verbruik handel toegestaan"
             }
         },
         "number": {
