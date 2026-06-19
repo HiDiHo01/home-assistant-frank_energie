@@ -395,7 +395,33 @@
                 "name": "Contract productnaam"
             },
             "contract_price_resolution_state": {
-                "name": "Prijs resolutie"
+                "name": "Prijs resolutie",
+                "state_attributes": {
+                    "available_options": {
+                        "name": "Mogelijke opties",
+                        "state": {
+                            "PT15M": "15 minuten",
+                            "PT60M": "60 minuten"
+                        }
+                    },
+                    "is_change_request_possible": {
+                        "name": "Is verandering mogelijk",
+                        "state": {
+                            "true": "Ja",
+                            "false": "Nee"
+                        }
+                    },
+                    "upcoming_change": {
+                        "name": "Aankomende verandering",
+                        "state": {
+                            "PT15M": "15 minuten",
+                            "PT60M": "60 minuten"
+                        }
+                    },
+                    "upcoming_change_effective_date": {
+                        "name": "Volgende verandering datum"
+                    }
+                }
             },
             "elec_contract_status": {
                 "name": "Elektriciteit contract status",
