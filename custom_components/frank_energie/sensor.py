@@ -46,6 +46,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 from homeassistant.util import dt as dt_util
+from python_frank_energie.models import EnodeCharger
 
 from .const import (
     API_CONF_URL,
@@ -71,6 +72,7 @@ from .const import (
     DATA_USER_SITES,
     DOMAIN,
     ICON,
+    PER_UNIT_TO_UNIT,
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_COSTS,
@@ -81,14 +83,11 @@ from .const import (
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
     TIMEZONE_AMSTERDAM,
-    PER_UNIT_TO_UNIT,
     UNIT_ELECTRICITY,
     UNIT_GAS,
     UNIT_GAS_NL,
     VERSION,
 )
-from python_frank_energie.models import EnodeCharger
-
 from .coordinator import (
     FrankEnergieBatterySessionCoordinator,
     FrankEnergieCoordinator,
@@ -3542,19 +3541,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
     ),
     FrankEnergieEntityDescription(
-        key="has_CO2_compensation",
-        name="Has CO₂ compensation",
-        translation_key="co2_compensation",
-        icon="mdi:molecule-co2",
-        authenticated=True,
-        service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: (
-            data[DATA_USER].hasCO2Compensation
-            if data[DATA_USER] and data[DATA_USER].hasCO2Compensation
-            else False
-        ),
-    ),
-    FrankEnergieEntityDescription(
         key="reference",
         name="Reference",
         translation_key="reference",
@@ -4002,91 +3988,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             data[DATA_USER].UserSettings.get("rewardPayoutPreference")
             if data[DATA_USER] and data[DATA_USER].UserSettings
             else None
-        ),
-    ),
-    FrankEnergieEntityDescription(
-        key="smartPushNotifications",
-        name="Smart Push notification price alerts",
-        translation_key="smart_push_notification_price_alerts",
-        icon="mdi:bell-alert",
-        authenticated=True,
-        service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: (
-            data[DATA_USER].UserSettings.get("smartPushNotifications")
-            if data[DATA_USER] and data[DATA_USER].UserSettings
-            else None
-        ),
-    ),
-    FrankEnergieEntityDescription(
-        key="smartChargingisActivated",
-        name="Smart Charging Activated",
-        translation_key="smartcharging_isactivated",
-        icon="mdi:ev-station",
-        authenticated=True,
-        service_name=SERVICE_NAME_USER,
-        entity_registry_enabled_default=False,
-        value_fn=lambda data: (
-            data[DATA_USER].smartCharging.get("isActivated")
-            if data[DATA_USER] and data[DATA_USER].smartCharging
-            else None
-        ),
-        attr_fn=lambda data: (
-            {
-                k: v
-                for k, v in {
-                    "Provider": data[DATA_USER].smartCharging.get("provider")
-                    if data[DATA_USER].smartCharging
-                    else None,
-                    "Available In Country": data[DATA_USER].smartCharging.get(
-                        "isAvailableInCountry"
-                    )
-                    if data[DATA_USER].smartCharging
-                    else None,
-                    "User Created At": data[DATA_USER].smartCharging.get(
-                        "userCreatedAt"
-                    )
-                    if data[DATA_USER].smartCharging
-                    else None,
-                }.items()
-                if v is not None
-            }
-            if data[DATA_USER] and data[DATA_USER].smartCharging
-            else []
-        ),
-    ),
-    FrankEnergieEntityDescription(
-        key="smartTradingisActivated",
-        name="Smart Trading Activated",
-        translation_key="smarttrading_isactivated",
-        icon="mdi:ev-station",
-        authenticated=True,
-        service_name=SERVICE_NAME_USER,
-        entity_registry_enabled_default=False,
-        value_fn=lambda data: (
-            data[DATA_USER].smartTrading.get("isActivated")
-            if data[DATA_USER] and data[DATA_USER].smartTrading
-            else None
-        ),
-        attr_fn=lambda data: (
-            {
-                k: v
-                for k, v in {
-                    "Provider": data[DATA_USER].smartTrading.get("provider")
-                    if data[DATA_USER].smartTrading
-                    else None,
-                    "Available In Country": data[DATA_USER].smartTrading.get(
-                        "isAvailableInCountry"
-                    )
-                    if data[DATA_USER].smartTrading
-                    else None,
-                    "User Created At": data[DATA_USER].smartTrading.get("userCreatedAt")
-                    if data[DATA_USER].smartTrading
-                    else None,
-                }.items()
-                if v is not None
-            }
-            if data[DATA_USER] and data[DATA_USER].smartTrading
-            else []
         ),
     ),
     FrankEnergieEntityDescription(

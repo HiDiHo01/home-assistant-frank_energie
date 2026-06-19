@@ -495,6 +495,33 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         ),
         attr_fn=_pv_systems_attributes,
     ),
+    FrankEnergieBinarySensorDescription(
+        key="smartPushNotifications",
+        name="Smart Push notification price alerts",
+        translation_key="smart_push_notification_price_alerts",
+        icon="mdi:bell-alert",
+        authenticated=True,
+        device_class=BinarySensorDeviceClass.RUNNING,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: (
+            data[DATA_USER].UserSettings.get("smartPushNotifications")
+            if data[DATA_USER] and data[DATA_USER].UserSettings
+            else None
+        ),
+    ),
+    FrankEnergieBinarySensorDescription(
+        key="has_CO2_compensation",
+        name="Has CO₂ compensation",
+        translation_key="co2_compensation",
+        icon="mdi:molecule-co2",
+        authenticated=True,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: (
+            data[DATA_USER].hasCO2Compensation
+            if data[DATA_USER] and data[DATA_USER].hasCO2Compensation
+            else False
+        ),
+    ),
 )
 
 
