@@ -73,16 +73,39 @@ Common problems, expected behavior, and troubleshooting guidance.
 
 Answers to frequently asked questions.
 
+## Contributor Documentation
+
+### Architecture
+
+- [Architecture](architecture.md)
+
+High-level architecture, coordinator design, data flow, authentication, events, and entity generation.
+
+### Development
+
+- [Developer Guide](developer.md)
+
+Development standards, testing, Home Assistant best practices, and contribution guidelines.
+
+### Releases
+
+- [Release Process](release_process.md)
+
+Versioning, release workflow, validation, quality standards, and HACS release guidance.
+
 ## Documentation Map
 
 | Document | Description |
 |-----------|-------------|
+| architecture.md | Integration architecture |
 | configuration.md | Setup and configuration |
+| developer.md | Developer guide |
 | diagnostics.md | Diagnostics and debugging |
 | entities.md | Entity reference |
 | events.md | Event reference |
 | examples.md | Automation examples |
 | faq.md | Frequently asked questions |
+| release_process.md | Release workflow |
 | smart_battery.md | Smart Battery functionality |
 | smart_charging.md | Smart Charging functionality |
 | troubleshooting.md | Troubleshooting guide |
