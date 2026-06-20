@@ -6,22 +6,22 @@
             "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
         },
         "error": {
-            "connection_error": "Verbindingsfout met Frank Energie API.",
-            "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord.",
-            "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
-            "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
-            "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw.",
+            "connection_error": "Connection error with Frank Energie API.",
+            "invalid_auth": "Credentials rejected, please check your username and password.",
+            "no_delivery_sites": "No delivery sites found for this account.",
+            "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
+            "site_retrieval_failed": "Error retrieving delivery sites. Please try again later.",
             "unknown_error": "Unknown error occurred. Please consult logs for details."
         },
         "flow_title": "Frank Energie",
         "step": {
             "confirm": {
                 "description": "[%key:common::config_flow::description::confirm_setup%]",
-                "title": "Frank Energie configureren"
+                "title": "Configure Frank Energie"
             },
             "import": {
-                "description": "Importeer een bestaande configuratie voor Frank Energie.",
-                "title": "Importeer configuratie"
+                "description": "Import an existing configuration for Frank Energie.",
+                "title": "Import configuration"
             },
             "login": {
                 "data": {
@@ -32,16 +32,16 @@
                 "title": "Enter your Frank Energie account credentials"
             },
             "options": {
-                "description": "Configureer de opties voor Frank Energie.",
-                "title": "Opties configureren"
+                "description": "Configure the options for Frank Energie.",
+                "title": "Configure options"
             },
             "reauth": {
-                "description": "Her-authenticatie is vereist voor Frank Energie.",
-                "title": "Her-authenticatie vereist"
+                "description": "Re-authentication is required for Frank Energie.",
+                "title": "Re-authentication required"
             },
             "reauth_confirm": {
-                "description": "Her-authenticatie is vereist voor Frank Energie.",
-                "title": "Her-authenticatie vereist"
+                "description": "Re-authentication is required for Frank Energie.",
+                "title": "Re-authentication required"
             },
             "reconfigure": {
                 "data": {
@@ -55,15 +55,15 @@
                 "data": {
                     "site_reference": "Delivery location"
                 },
-                "description": "Kies de leveringslocatie die je toe wilt voegen.",
-                "title": "Selecteer leveringslocatie"
+                "description": "Choose the delivery location you want to add.",
+                "title": "Select delivery location"
             },
             "user": {
                 "data": {
                     "authentication": "Use Frank Energie account credentials"
                 },
                 "description": "[%key:common::config_flow::description::confirm_setup%]",
-                "title": "Frank Energie configureren"
+                "title": "Configure Frank Energie"
             }
         }
     },
@@ -250,15 +250,22 @@
                             "true": "Yes"
                         }
                     },
-                    "options": {
-                        "name": "Options",
+                    "available_options": {
+                        "name": "Available options",
                         "state": {
                             "pt15m": "15 minutes",
                             "pt60m": "60 minutes"
                         }
                     },
-                    "resolution": {
-                        "name": "Resolution",
+                    "api_resolution": {
+                        "name": "API resolution",
+                        "state": {
+                            "pt15m": "15 minutes",
+                            "pt60m": "60 minutes"
+                        }
+                    },
+                    "active_option": {
+                        "name": "Active option",
                         "state": {
                             "pt15m": "15 minutes",
                             "pt60m": "60 minutes"

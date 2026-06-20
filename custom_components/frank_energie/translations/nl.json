@@ -28,7 +28,7 @@
                     "password": "Wachtwoord",
                     "username": "Email"
                 },
-                "description": "Enter your Frank Energie account credentials.",
+                "description": "Voer je inloggegevens van Frank Energie in.",
                 "title": "Inloggen bij Frank Energie"
             },
             "options": {
@@ -250,15 +250,22 @@
                             "true": "Ja"
                         }
                     },
-                    "options": {
-                        "name": "Opties",
+                    "available_options": {
+                        "name": "Beschikbare opties",
                         "state": {
                             "pt15m": "15 minuten",
                             "pt60m": "60 minuten"
                         }
                     },
-                    "resolution": {
-                        "name": "Resolutie",
+                    "api_resolution": {
+                        "name": "API-resolutie",
+                        "state": {
+                            "pt15m": "15 minuten",
+                            "pt60m": "60 minuten"
+                        }
+                    },
+                    "active_option": {
+                        "name": "Actieve optie",
                         "state": {
                             "pt15m": "15 minuten",
                             "pt60m": "60 minuten"
@@ -332,7 +339,7 @@
                 "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding komende uren"
             },
             "bank_account_number": {
-                "name": "Rekeningrummer"
+                "name": "Rekeningnummer"
             },
             "contract_price_resolution_state": {
                 "name": "Prijs resolutie",

@@ -20,8 +20,8 @@
                 "title": "Frank Energie"
             },
             "import": {
-                "description": "Importeer een bestaande configuratie voor Frank Energie.",
-                "title": "Importeer configuratie"
+                "description": "Import an existing configuration for Frank Energie.",
+                "title": "Import configuration"
             },
             "login": {
                 "data": {
@@ -32,16 +32,16 @@
                 "title": "Enter your Frank Energie account credentials"
             },
             "options": {
-                "description": "Configureer de opties voor Frank Energie.",
-                "title": "Opties configureren"
+                "description": "Configure the options for Frank Energie.",
+                "title": "Configure options"
             },
             "reauth": {
                 "description": "Re-authentication is required for Frank Energie.",
                 "title": "Re-authentication required"
             },
             "reauth_confirm": {
-                "description": "Her-authenticatie is vereist voor Frank Energie.",
-                "title": "Her-authenticatie vereist"
+                "description": "Re-authentication is required for Frank Energie.",
+                "title": "Re-authentication required"
             },
             "reconfigure": {
                 "data": {
@@ -250,15 +250,22 @@
                             "true": "Yes"
                         }
                     },
-                    "options": {
-                        "name": "Options",
+                    "available_options": {
+                        "name": "Available options",
                         "state": {
                             "pt15m": "15 minutes",
                             "pt60m": "60 minutes"
                         }
                     },
-                    "resolution": {
-                        "name": "Resolution",
+                    "api_resolution": {
+                        "name": "API resolution",
+                        "state": {
+                            "pt15m": "15 minutes",
+                            "pt60m": "60 minutes"
+                        }
+                    },
+                    "active_option": {
+                        "name": "Active option",
                         "state": {
                             "pt15m": "15 minutes",
                             "pt60m": "60 minutes"
