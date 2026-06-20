@@ -21,9 +21,14 @@ from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import AuthException
 from python_frank_energie.models import UserSites
 
-from .const import CONF_COORDINATOR, DATA_ELECTRICITY, DATA_GAS, DOMAIN
+from .const import CONF_COORDINATOR, DOMAIN
 from .coordinator import (
     FrankEnergieCoordinator,
+    FrankEnergieSettingsCoordinator,
+    FrankEnergiePriceCoordinator,
+    FrankEnergieRealtimeCoordinator,
+    FrankEnergieVehicleCoordinator,
+    FrankEnergieStatisticsCoordinator,
 )
 from .exceptions import NoSuitableSitesFoundError
 
@@ -36,6 +41,11 @@ class FrankEnergieEntryData:
     """Runtime data stored on a ConfigEntry."""
 
     coordinator: FrankEnergieCoordinator
+    settings_coordinator: FrankEnergieSettingsCoordinator
+    price_coordinator: FrankEnergiePriceCoordinator
+    realtime_coordinator: FrankEnergieRealtimeCoordinator
+    vehicle_coordinator: FrankEnergieVehicleCoordinator
+    statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
 
 
@@ -122,143 +132,42 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.hass = hass
         self.entry = entry
 
-    async def _maybe_refresh_tomorrow(
-        self,
-        coordinator: FrankEnergieCoordinator,
-    ) -> None:
-        """Refresh tomorrow prices when they are expected to be available."""
-
-        now_utc = dt_util.utcnow()
-
-        if now_utc.hour == 0 and now_utc.minute == 0:
-            coordinator.promote_tomorrow_prices()
-            return
-
-        if now_utc.hour == 0:
-            return
-
-        # Convert to Europe/Amsterdam time to handle publication window in local time
-        tz_amsterdam = ZoneInfo("Europe/Amsterdam")
-        now_local = now_utc.astimezone(tz_amsterdam)
-
-        if now_local.hour < 13:
-            return
-
-        if coordinator.cached_prices_tomorrow is not None and (
-            coordinator.cached_prices_tomorrow.electricity is not None
-            or coordinator.cached_prices_tomorrow.gas is not None
-        ):
-            _LOGGER.debug("Tomorrow prices already available, skipping refresh")
-            return
-
-        _LOGGER.debug(
-            "Tomorrow prices not available, requesting refresh at %s local time",
-            now_local.strftime("%H:%M"),
-        )
-
-        await coordinator.async_request_refresh()
-
-    async def old_maybe_refresh_tomorrow(
-        self, coordinator: FrankEnergieCoordinator, minute: int
-    ) -> None:
-        """Trigger a refresh during the price release window (11:00-12:59 UTC)."""
-        # now_utc = datetime.now(timezone.utc)
-        now_utc = dt_util.utcnow()
-
-        if (
-            now_utc.hour == 0
-            and now_utc.minute == 0
-            and coordinator.cached_prices_tomorrow is not None
-        ):
-            cached_prices = coordinator.cached_prices or coordinator.data
-
-            if cached_prices is None:
-                _LOGGER.warning(
-                    "Cannot promote tomorrow prices: no cached data available"
-                )
-                return
-
-            cached_prices[DATA_ELECTRICITY] = (
-                coordinator.cached_prices_tomorrow.electricity
-            )
-            cached_prices[DATA_GAS] = coordinator.cached_prices_tomorrow.gas
-
-            coordinator.cached_prices_tomorrow = None
-            coordinator.cached_prices = cached_prices
-            coordinator.data = cached_prices
-
-            coordinator.async_update_listeners()
-
-            _LOGGER.debug("Promoted tomorrow prices to today prices at midnight")
-
-        if now_utc.hour == 1 and coordinator.cached_prices_tomorrow is not None:
-            coordinator.cached_prices_tomorrow = None
-            _LOGGER.debug("Cleared cached tomorrow's prices at midnight UTC")
-
-        if (
-            now_utc.hour < PRICE_RELEASE_HOUR_UTC
-            and coordinator.cached_prices_tomorrow is not None
-        ):
-            _LOGGER.debug("Tomorrow's prices already cached, skipping extra refresh")
-            return
-
-        if now_utc.hour in {11, 13} and coordinator.cached_prices_tomorrow is None:
-            _LOGGER.debug(
-                "Price release window: triggering refresh at %02d:%02d UTC",
-                now_utc.hour,
-                minute,
-            )
-            await coordinator.async_request_refresh()
-
-        if now_utc.hour > 13 and coordinator.cached_prices_tomorrow is None:
-            _LOGGER.debug(
-                "After price release window and no cached prices: triggering refresh"
-            )
-            await coordinator.async_request_refresh()
-
     async def _schedule_aligned_updates(
         self,
-        coordinator: FrankEnergieCoordinator,
+        price_coordinator: FrankEnergiePriceCoordinator,
     ) -> None:
-        """Schedule coordinator refreshes."""
+        """Schedule coordinator updates on aligned boundaries and handle midnight local rollover."""
 
-        async def _async_refresh(
+        async def _async_aligned_refresh(
             _: datetime,
         ) -> None:
-            await coordinator.async_request_refresh()
+            # Check for midnight local Europe/Amsterdam rollover
+            now_local = dt_util.now(ZoneInfo("Europe/Amsterdam"))
+            if now_local.hour == 0 and now_local.minute == 0:
+                _LOGGER.info(
+                    "Midnight local time: promoting tomorrow's prices to today"
+                )
+                price_coordinator.promote_tomorrow_prices()
 
-        if coordinator.resolution == "PT15M":
+            # Trigger sensor state updates using cached data
+            price_coordinator.async_update_listeners()
+
+        if price_coordinator.resolution == "PT15M":
             unsub = async_track_utc_time_change(
                 self.hass,
-                _async_refresh,
+                _async_aligned_refresh,
                 minute=[0, 15, 30, 45],
                 second=0,
             )
         else:
             unsub = async_track_utc_time_change(
                 self.hass,
-                _async_refresh,
+                _async_aligned_refresh,
                 minute=0,
                 second=0,
             )
 
         self.entry.async_on_unload(unsub)
-
-        async def _async_tomorrow_refresh(
-            now: datetime,
-        ) -> None:
-            await self._maybe_refresh_tomorrow(
-                coordinator,
-            )
-
-        self.entry.async_on_unload(
-            async_track_utc_time_change(
-                self.hass,
-                _async_tomorrow_refresh,
-                minute=list(range(0, 60, 5)),
-                second=0,
-            )
-        )
 
     async def setup(self) -> bool:
         """Set up the Frank Energie component from a config entry."""
@@ -267,7 +176,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # For backwards compatibility, update the unique ID
         self._update_unique_id()
 
-        # Create API and Coordinator
+        # Create API and Coordinators
         _LOGGER.debug("Creating Frank Energie API instance")
         clientsession = async_get_clientsession(self.hass)
         api = FrankEnergie(
@@ -275,26 +184,48 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             auth_token=self.entry.data.get(CONF_ACCESS_TOKEN),
             refresh_token=self.entry.data.get(CONF_TOKEN),
         )
-        coordinator = self._create_frank_energie_coordinator(api)
 
-        # Awaiting the coroutine method call
-        await self._select_site_reference(coordinator)
+        settings_coordinator = FrankEnergieSettingsCoordinator(
+            self.hass, self.entry, api
+        )
+        price_coordinator = FrankEnergiePriceCoordinator(
+            self.hass, self.entry, api, settings_coordinator
+        )
+        realtime_coordinator = FrankEnergieRealtimeCoordinator(
+            self.hass, self.entry, api, settings_coordinator
+        )
+        vehicle_coordinator = FrankEnergieVehicleCoordinator(
+            self.hass, self.entry, api, settings_coordinator
+        )
+        statistics_coordinator = FrankEnergieStatisticsCoordinator(
+            self.hass, self.entry, api
+        )
 
-        # Load cached data before the first refresh to ensure we have data to work with immediately
-        # await coordinator.async_load_cached_data() # not in use yet, but could be implemented in the future if needed
+        # Awaiting the site reference selection using settings coordinator
+        await self._select_site_reference(settings_coordinator)
 
-        # Perform the initial refresh for the coordinator
-        _LOGGER.debug("Performing initial refresh for coordinator")
-        await coordinator.async_config_entry_first_refresh()
+        # Perform the initial refresh sequentially for sub-coordinators in dependency order
+        _LOGGER.debug("Performing initial refresh for sub-coordinators")
+        await settings_coordinator.async_config_entry_first_refresh()
+        await price_coordinator.async_config_entry_first_refresh()
+        await statistics_coordinator.async_config_entry_first_refresh()
+        await realtime_coordinator.async_config_entry_first_refresh()
+        await vehicle_coordinator.async_config_entry_first_refresh()
 
-        # Schedule updates aliged to price slot boundaries
-        _LOGGER.debug("Scheduling aligned updates for coordinator")
-        await self._schedule_aligned_updates(coordinator)
+        # Schedule updates aligned to price slot boundaries for price coordinator
+        _LOGGER.debug("Scheduling aligned updates for price coordinator")
+        await self._schedule_aligned_updates(price_coordinator)
 
-        # Save the coordinator to Home Assistant data
-        await self._save_coordinator_to_hass_data(coordinator)
+        # Save the coordinators to Home Assistant data
+        await self._save_coordinator_to_hass_data(
+            settings_coordinator,
+            price_coordinator,
+            realtime_coordinator,
+            vehicle_coordinator,
+            statistics_coordinator,
+        )
 
-        # Forward entry setups to appropriate platforms
+        # Forward entry setups to platforms
         _LOGGER.debug("Forwarding entry setups to platforms")
         await self._async_forward_entry_setups()
         _LOGGER.debug("Finished forwarding entry setups to platforms")
@@ -453,17 +384,26 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
     async def _save_coordinator_to_hass_data(
         self,
-        coordinator: FrankEnergieCoordinator,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+        price_coordinator: FrankEnergiePriceCoordinator,
+        realtime_coordinator: FrankEnergieRealtimeCoordinator,
+        vehicle_coordinator: FrankEnergieVehicleCoordinator,
+        statistics_coordinator: FrankEnergieStatisticsCoordinator,
     ) -> None:
-        """Save the coordinator to the Home Assistant data."""
-        _LOGGER.debug("Saving coordinator to Home Assistant data (entry.runtime_data)")
+        """Save the coordinators to the Home Assistant data."""
+        _LOGGER.debug("Saving coordinators to Home Assistant data (entry.runtime_data)")
         hass_data = self.hass.data.setdefault(DOMAIN, {})
         hass_data[self.entry.entry_id] = {
-            CONF_COORDINATOR: coordinator,
+            CONF_COORDINATOR: price_coordinator,
         }
 
         self.entry.runtime_data = FrankEnergieEntryData(
-            coordinator=coordinator,
+            coordinator=price_coordinator,
+            settings_coordinator=settings_coordinator,
+            price_coordinator=price_coordinator,
+            realtime_coordinator=realtime_coordinator,
+            vehicle_coordinator=vehicle_coordinator,
+            statistics_coordinator=statistics_coordinator,
         )
 
     def _remove_entry_from_hass_data(self) -> None:

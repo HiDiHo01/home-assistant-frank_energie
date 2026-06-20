@@ -78,8 +78,14 @@ from .const import (
     SERVICE_NAME_COSTS,
     SERVICE_NAME_ENODE_CHARGERS,
     SERVICE_NAME_ENODE_VEHICLES,
+    SERVICE_NAME_ELEC_PRICES,
     SERVICE_NAME_GAS_PRICES,
+    SERVICE_NAME_INVOICES,
+    SERVICE_NAME_MONTH_SUMMARY,
     SERVICE_NAME_PRICES,
+    SERVICE_NAME_PV_SUMMARY,
+    SERVICE_NAME_PV_SYSTEMS,
+    SERVICE_NAME_SETTINGS,
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
     TIMEZONE_AMSTERDAM,
@@ -4268,21 +4274,18 @@ class FrankEnergieSensor(
 
         # Zet enabled_default op False bij feed-in sensor zonder waarde
         if hasattr(description, "is_feed_in") and description.is_feed_in:
-            user_data = coordinator.data.get(DATA_USER)
-            connection = user_data.connections[0]
-            estimated_feed_in = int(connection.get("estimatedFeedIn"))
-            _LOGGER.debug("estimated_feed_in = %s", estimated_feed_in)
-            _LOGGER.debug("has connections = %s", hasattr(user_data, "connections"))
-            _LOGGER.debug("user connections = %s", user_data.connections)
-            _LOGGER.debug("estimated_feed_in > 0 = %s", estimated_feed_in > 0)
-
-            if user_data and connection:
-                estimated_feed_in = int(connection.get("estimatedFeedIn"))
-
-            _LOGGER.debug(
-                "_attr_entity_registry_enabled_default = %s", estimated_feed_in > 0
-            )
-            self._attr_entity_registry_enabled_default = estimated_feed_in > 0
+            user_data = entry.runtime_data.settings_coordinator.data.get(DATA_USER)
+            if user_data and hasattr(user_data, "connections") and user_data.connections:
+                connection = user_data.connections[0]
+                if isinstance(connection, dict):
+                    estimated_feed_in = int(connection.get("estimatedFeedIn") or 0)
+                else:
+                    estimated_feed_in = int(getattr(connection, "estimatedFeedIn", 0) or 0)
+                _LOGGER.debug("estimated_feed_in = %s", estimated_feed_in)
+                self._attr_entity_registry_enabled_default = estimated_feed_in > 0
+            else:
+                _LOGGER.debug("No connections found or user_data is None; setting enabled_default to False")
+                self._attr_entity_registry_enabled_default = False
 
         super().__init__(coordinator)
 
@@ -4936,14 +4939,52 @@ async def async_setup_entry(
         "Setting up Frank Energie sensors for entry: %s", config_entry.entry_id
     )
 
-    coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
-    batteries = coordinator.data.get(DATA_BATTERIES, [])
+    runtime_data = config_entry.runtime_data
+    settings_coordinator = runtime_data.settings_coordinator
+    price_coordinator = runtime_data.price_coordinator
+    realtime_coordinator = runtime_data.realtime_coordinator
+    vehicle_coordinator = runtime_data.vehicle_coordinator
+    statistics_coordinator = runtime_data.statistics_coordinator
+
+    def _get_coordinator_for_description(
+        description: FrankEnergieEntityDescription,
+    ) -> FrankEnergieCoordinator:
+        """Return the sub-coordinator responsible for the given sensor description."""
+        if description.key == "contract_price_resolution_state":
+            return price_coordinator
+        if description.service_name in (
+            SERVICE_NAME_PRICES,
+            SERVICE_NAME_GAS_PRICES,
+            SERVICE_NAME_ELEC_PRICES,
+        ):
+            return price_coordinator
+        if description.service_name in (
+            SERVICE_NAME_MONTH_SUMMARY,
+            SERVICE_NAME_INVOICES,
+            SERVICE_NAME_COSTS,
+            SERVICE_NAME_USAGE,
+        ):
+            return statistics_coordinator
+        if description.service_name in (
+            SERVICE_NAME_BATTERIES,
+            SERVICE_NAME_ENODE_CHARGERS,
+            SERVICE_NAME_PV_SYSTEMS,
+            SERVICE_NAME_PV_SUMMARY,
+        ):
+            return realtime_coordinator
+        if description.service_name == SERVICE_NAME_ENODE_VEHICLES:
+            return vehicle_coordinator
+        if description.service_name == SERVICE_NAME_SETTINGS:
+            return settings_coordinator
+        return price_coordinator
+
+    batteries = realtime_coordinator.data.get(DATA_BATTERIES, [])
 
     session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = {}
     entities: list = []
 
     if batteries and batteries.batteries:
-        api = coordinator.api  # type: ignore[attr-defined]
+        api = settings_coordinator.api  # type: ignore[attr-defined]
 
         # Set up session coordinators per battery
         for battery in batteries.batteries:
@@ -4966,32 +5007,28 @@ async def async_setup_entry(
 
         config_entry.runtime_data.battery_session_coordinators = session_coordinators
 
-    # Add an entity for each sensor type, when authenticated is True,
-    # only add the entity if the user is authenticated
-    # entities: list[SensorEntity] = []
-    # entities: list[FrankEnergieSensor] = []
-    # entities: list[FrankEnergieBatterySessionSensor] = []
-
     # Safely access user segments from DATA_USER_SITES
-    user_segments = getattr(coordinator.data.get(DATA_USER_SITES), "segments", [])
-
-    # Safely access user data, default to an empty dictionary if None
+    user_segments = getattr(
+        settings_coordinator.data.get(DATA_USER_SITES), "segments", []
+    )
 
     user_data = None
-    if coordinator.api.is_authenticated:
-        if DATA_USER in coordinator.data:
-            user_data = coordinator.data.get(DATA_USER, {})
+    if settings_coordinator.api.is_authenticated:
+        if DATA_USER in settings_coordinator.data:
+            user_data = settings_coordinator.data.get(DATA_USER, {})
             _LOGGER.debug("user_data: %s", user_data)
         if isinstance(user_data, object) and hasattr(user_data, "connections"):
             connections = user_data.connections
             first_connection = connections[0]
-            estimated_feed_in = first_connection.get("estimatedFeedIn")
+            if isinstance(first_connection, dict):
+                estimated_feed_in = first_connection.get("estimatedFeedIn")
+            else:
+                estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
             _LOGGER.debug("estimated_feed_in1: %s", estimated_feed_in)
 
-    # Safely access user data (defaulting to an empty dictionary if None)
     connections: list[dict] = []
-    first_connection: dict | None = None
-    estimated_feed_in: float | None = None
+    first_connection = None
+    estimated_feed_in = None
 
     if isinstance(user_data, object) and hasattr(user_data, "connections"):
         if isinstance(user_data.connections, list):
@@ -5012,25 +5049,29 @@ async def async_setup_entry(
         if isinstance(first_connection, dict):
             estimated_feed_in = first_connection.get("estimatedFeedIn")
         else:
-            # Connection dataclass — use attribute access (DictLikeMixin also supports .get())
             estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
     else:
         _LOGGER.debug("No connections found in user_data")
 
     _LOGGER.debug("estimated_feed_in: %s", estimated_feed_in)
 
-    entities: list = [
+    entities = [
         FrankEnergieSensor(
-            coordinator,
+            _get_coordinator_for_description(description),
             description,
             config_entry,
         )
         for description in SENSOR_TYPES
         if (
-            (not description.authenticated or coordinator.api.is_authenticated)
+            (
+                not description.authenticated
+                or _get_coordinator_for_description(description).api.is_authenticated
+            )
             and (
                 not description.is_gas
-                or not coordinator.api.is_authenticated
+                or not _get_coordinator_for_description(
+                    description
+                ).api.is_authenticated
                 or "GAS" in user_segments
             )
             and (
@@ -5039,42 +5080,42 @@ async def async_setup_entry(
             )
             and not (
                 description.service_name == SERVICE_NAME_GAS_PRICES
-                and coordinator.api.is_authenticated
+                and _get_coordinator_for_description(description).api.is_authenticated
                 and "GAS" not in user_segments
             )
         )
     ]
 
-    if coordinator.api.is_authenticated and "GAS" not in user_segments:
+    if settings_coordinator.api.is_authenticated and "GAS" not in user_segments:
         await _disable_gas_price_sensors(hass, config_entry)
 
-    if (enode := coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
+    if (enode := realtime_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
         for description in STATIC_ENODE_SENSOR_TYPES:
-            if not description.authenticated or coordinator.api.is_authenticated:
+            if (
+                not description.authenticated
+                or realtime_coordinator.api.is_authenticated
+            ):
                 entities.append(
-                    FrankEnergieSensor(coordinator, description, config_entry)
+                    FrankEnergieSensor(realtime_coordinator, description, config_entry)
                 )
 
         for charger in enode.chargers:
             for description in ENODE_CHARGER_SENSOR_TYPES:
-                if not description.authenticated or coordinator.api.is_authenticated:
+                if (
+                    not description.authenticated
+                    or realtime_coordinator.api.is_authenticated
+                ):
                     entities.append(
-                        EnodeChargerSensor(coordinator, description, charger)
+                        EnodeChargerSensor(realtime_coordinator, description, charger)
                     )
 
-    # coordinator.data.get(DATA_BATTERIES)) = <class 'python_frank_energie.models.SmartBatteries'>
-    if (batteries := coordinator.data.get(DATA_BATTERIES)) and batteries.batteries:
+    if (
+        batteries := realtime_coordinator.data.get(DATA_BATTERIES)
+    ) and batteries.batteries:
         _LOGGER.debug("Setting up smart battery sensors: %s", batteries)
-        # SmartBatteries(smart_batteries=[SmartBatteries.SmartBattery(brand='Sessy', capacity=5.2, external_reference='AJM6UPPP', id='cm3sunryl0000tc3nhygweghn', max_charge_power=2.2, max_discharge_power=1.7, provider='SESSY', created_at=datetime.datetime(2024, 11, 22, 14, 41, 47, 853000, tzinfo=datetime.timezone.utc), updated_at=datetime.datetime(2025, 2, 7, 22, 3, 21, 898000, tzinfo=datetime.timezone.utc))])
-        # <class 'python_frank_energie.models.SmartBatteries'>
-        _LOGGER.debug("Setting up smart battery type: %s", type(batteries))
-        _LOGGER.debug("Number of smart battery sensors: %d", len(batteries.batteries))
-        _LOGGER.debug(
-            "Setting up smart battery type: %s", type(batteries.batteries)
-        )  # <class 'list'>
         dynamic_battery_descriptions = _build_dynamic_smart_batteries_descriptions(
             batteries.batteries
         )
@@ -5083,30 +5124,18 @@ async def async_setup_entry(
         )
         for i, battery in enumerate(batteries.batteries):
             _LOGGER.debug("Setting up smart battery: %s", battery)
-            _LOGGER.debug("Setting up smart battery type: %s", type(battery))
             _LOGGER.debug("Setting up smart battery brand: %s", battery.brand)
             _LOGGER.debug("Setting up smart battery id: %s", battery.id)
-            _LOGGER.debug(
-                "Setting up smart battery external_reference: %s",
-                battery.external_reference,
-            )
-            _LOGGER.debug(
-                "Setting up smart battery max_charge_power: %s",
-                battery.max_charge_power,
-            )
-            _LOGGER.debug(
-                "Setting up smart battery max_discharge_power: %s",
-                battery.max_discharge_power,
-            )
-            _LOGGER.debug("Setting up smart battery provider: %s", battery.provider)
-            _LOGGER.debug("Setting up smart battery created_at: %s", battery.created_at)
-            _LOGGER.debug("Setting up smart battery updated_at: %s", battery.updated_at)
-            _LOGGER.debug("Setting up smart battery capacity: %s", battery.capacity)
 
             for description in sensor_descriptions:
-                if not description.authenticated or coordinator.api.is_authenticated:
+                if (
+                    not description.authenticated
+                    or realtime_coordinator.api.is_authenticated
+                ):
                     entities.append(
-                        FrankEnergieSensor(coordinator, description, config_entry)
+                        FrankEnergieSensor(
+                            realtime_coordinator, description, config_entry
+                        )
                     )
                     _LOGGER.debug("Added sensor for %s", description.key)
 
@@ -5124,7 +5153,7 @@ async def async_setup_entry(
                     for description in descriptions:
                         if (
                             not description.authenticated
-                            or coordinator.api.is_authenticated
+                            or settings_coordinator.api.is_authenticated
                         ):
                             sensor = FrankEnergieBatterySessionSensor(
                                 coordinator=session_coordinator,
@@ -5145,14 +5174,13 @@ async def async_setup_entry(
             )
             for desc in total_descriptions:
                 sensor = FrankEnergieBatterySessionSensor(
-                    coordinator=coordinator,  # hoofdcoördinator!
+                    coordinator=realtime_coordinator,  # realtime coördinator
                     description=desc,
                     battery_id="all_batteries",
                     is_total=True,
                 )
-                # entities.append(sensor)
 
-    enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+    enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
     _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
 
@@ -5162,7 +5190,9 @@ async def async_setup_entry(
         for veh_idx, vehicle in enumerate(enode_vehicles.vehicles):
             for description in ENODE_VEHICLE_SENSOR_TYPES:
                 enode_vehicle_sensors.append(
-                    EnodeVehicleSensor(hass, coordinator, description, vehicle, veh_idx)
+                    EnodeVehicleSensor(
+                        hass, vehicle_coordinator, description, vehicle, veh_idx
+                    )
                 )
 
         for entity in enode_vehicle_sensors:
@@ -5170,7 +5200,7 @@ async def async_setup_entry(
 
         entities.extend(enode_vehicle_sensors)
 
-    pv_systems = coordinator.data.get(DATA_PV_SYSTEMS)
+    pv_systems = realtime_coordinator.data.get(DATA_PV_SYSTEMS)
     if pv_systems and pv_systems.systems:
         _LOGGER.debug(
             "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
@@ -5179,11 +5209,15 @@ async def async_setup_entry(
             if system:
                 entities.extend(
                     [
-                        FrankEnergiePvSensor(coordinator, system.id, "total_bonus"),
                         FrankEnergiePvSensor(
-                            coordinator, system.id, "operational_status"
+                            realtime_coordinator, system.id, "total_bonus"
                         ),
-                        FrankEnergiePvSensor(coordinator, system.id, "steering_status"),
+                        FrankEnergiePvSensor(
+                            realtime_coordinator, system.id, "operational_status"
+                        ),
+                        FrankEnergiePvSensor(
+                            realtime_coordinator, system.id, "steering_status"
+                        ),
                     ]
                 )
 

@@ -30,18 +30,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie switches."""
-    coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
+    vehicle_coordinator = config_entry.runtime_data.vehicle_coordinator
     entities: list[SwitchEntity] = []
 
-    if coordinator.api.is_authenticated:
+    if vehicle_coordinator.api.is_authenticated:
         # Enode smart charging: true bidirectional switch (both mutations confirmed)
-        enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+        enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
         if enode_vehicles and enode_vehicles.vehicles:
             for vehicle in enode_vehicles.vehicles:
                 if vehicle.can_smart_charge:
                     entities.append(
                         FrankEnergieEnodeSmartChargingSwitch(
-                            coordinator, config_entry, vehicle.id
+                            vehicle_coordinator, config_entry, vehicle.id
                         )
                     )
 

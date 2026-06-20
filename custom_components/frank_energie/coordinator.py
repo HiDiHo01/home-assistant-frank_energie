@@ -2146,6 +2146,377 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         return EnodeVehicles(vehicles=vehicles_list)
 
 
+class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
+    """Coordinator for user configuration and site settings."""
+
+    def __init__(
+        self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
+    ) -> None:
+        """Initialize the settings coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie settings coordinator"
+        self.update_interval = timedelta(hours=24)
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch settings data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        if self._should_skip_api_calls(now_utc):
+            _LOGGER.debug("Skipping settings fetch during maintenance window")
+            if self.data:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+
+        try:
+            user_sites, data_user = await asyncio.gather(
+                self._fetch_user_sites(),
+                self._fetch_user_data(),
+            )
+            result = _empty_data()
+            result[DATA_USER] = data_user
+            result[DATA_USER_SITES] = user_sites
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch settings data: {err}") from err
+
+
+class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
+    """Coordinator for energy prices and resolution state."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+    ) -> None:
+        """Initialize the price coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie price coordinator"
+        self.settings_coordinator = settings_coordinator
+        self.update_interval = None
+
+    def _adjust_update_interval(self, now_utc: datetime) -> None:
+        """Adjust coordinator update interval based on publication window and cache status."""
+        today = now_utc.date()
+        if (
+            self.cached_prices_tomorrow is not None
+            and self.last_fetch_tomorrow is not None
+            and self.last_fetch_tomorrow.date() == today
+        ):
+            new_interval = None
+        else:
+            tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+            now_local = now_utc.astimezone(tz_amsterdam)
+            local_time = now_local.time()
+            if local_time < time(13, 0):
+                new_interval = None
+            elif time(13, 0) <= local_time < time(15, 0):
+                new_interval = timedelta(minutes=5)
+            elif time(15, 0) <= local_time < time(18, 0):
+                new_interval = timedelta(minutes=15)
+            else:
+                new_interval = timedelta(minutes=30)
+
+        if self.update_interval != new_interval:
+            _LOGGER.debug(
+                "Price coordinator update interval changed to %s", new_interval
+            )
+            self.update_interval = new_interval
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch price data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        today = now_utc.date()
+        tomorrow = today + timedelta(days=1)
+
+        skip_api_calls = self._should_skip_api_calls(now_utc)
+        self._reconcile_resolution()
+        self._adjust_update_interval(now_utc)
+
+        # Reset daily flags on new day
+        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
+            self._today_prices_logged = False
+
+        if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
+            self._tomorrow_prices_logged = False
+
+        connection_id = None
+        user_data = self.settings_coordinator.data.get(DATA_USER)
+        if user_data and user_data.connections:
+            connection = user_data.connections[0]
+            if isinstance(connection, dict):
+                connection_id = connection.get("connectionId")
+            else:
+                connection_id = getattr(connection, "connectionId", None)
+
+        if skip_api_calls:
+            _LOGGER.debug("Skipping price API calls during maintenance window")
+            prices_today = self._static_prices_today
+            data_contract_price_resolution_state = (
+                self._static_contract_price_resolution_state
+            )
+            prices_tomorrow = self.cached_prices_tomorrow
+        else:
+            if (
+                self._static_prices_today is None
+                or self.last_fetch_today is None
+                or self.last_fetch_today.date() != today
+            ):
+                try:
+                    prices_today = await self._fetch_prices_with_fallback(
+                        today, tomorrow, use_fallback=True
+                    )
+                    self._static_prices_today = prices_today
+                    self.last_fetch_today = now_utc
+                    self._today_prices_logged = True
+                except Exception as err:
+                    await self._handle_fetch_exceptions(err)
+                    raise UpdateFailed(f"Failed to fetch today prices: {err}") from err
+            else:
+                prices_today = self._static_prices_today
+
+            data_contract_price_resolution_state = (
+                await self._fetch_contract_price_resolution_state(connection_id)
+            )
+            self._static_contract_price_resolution_state = (
+                data_contract_price_resolution_state
+            )
+            prices_tomorrow = await self._refresh_tomorrow_cache(
+                today, tomorrow, now_utc
+            )
+
+        result = _empty_data()
+        result[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = (
+            data_contract_price_resolution_state
+        )
+
+        cache = PricesTodayCache(
+            prices_today=prices_today,
+            data_month_summary=None,
+            data_invoices=None,
+            data_user=None,
+            user_sites=None,
+            data_period_usage=None,
+            data_enode_chargers=None,
+            data_smart_batteries=None,
+            data_smart_battery_details=[],
+            data_smart_battery_sessions=[],
+            data_enode_vehicles=None,
+            data_pv_systems=None,
+            data_pv_summary=None,
+            data_user_smart_feed_in=None,
+            data_contract_price_resolution_state=data_contract_price_resolution_state,
+        )
+
+        aggregated = self._aggregate_data(cache, prices_tomorrow)
+        result[DATA_ELECTRICITY] = aggregated.get(DATA_ELECTRICITY)
+        result[DATA_GAS] = aggregated.get(DATA_GAS)
+
+        self.cached_prices = result
+
+        # Events
+        self._maybe_fire_lowest_price_event(prices_today, today, now_utc)
+        self._maybe_fire_lowest_4p_event(prices_today, today, now_utc)
+        self._maybe_fire_lowest_16p_event(prices_today, today, now_utc)
+
+        return result
+
+
+class FrankEnergieRealtimeCoordinator(FrankEnergieCoordinator):
+    """Coordinator for realtime PV, battery, and EV charger data."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+    ) -> None:
+        """Initialize the realtime coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie realtime coordinator"
+        self.settings_coordinator = settings_coordinator
+        self.update_interval = timedelta(seconds=30)
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch realtime energy data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        if self._should_skip_api_calls(now_utc):
+            _LOGGER.debug("Skipping realtime fetch during maintenance window")
+            if self.data:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+
+        today = now_utc.date()
+        tomorrow = today + timedelta(days=1)
+        yesterday = today - timedelta(days=1)
+        start_date = yesterday
+
+        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
+            self._has_pv_systems = None
+        self.last_fetch_today = now_utc
+
+        user_data = self.settings_coordinator.data.get(DATA_USER)
+        is_smart_charging = self._is_smart_charging_enabled(user_data)
+        is_smart_trading = self._is_smart_trading_enabled(user_data)
+
+        try:
+            (
+                data_enode_chargers,
+                data_smart_batteries,
+                data_pv_systems,
+                data_user_smart_feed_in,
+            ) = await asyncio.gather(
+                self._fetch_enode_chargers(start_date, is_smart_charging),
+                self._fetch_smart_batteries(is_smart_trading),
+                self._fetch_smart_pv_systems(),
+                self._fetch_user_smart_feed_in(),
+            )
+
+            (
+                data_smart_battery_details,
+                data_smart_battery_sessions,
+            ) = await self._get_battery_details_and_sessions(
+                data_smart_batteries, start_date, tomorrow
+            )
+
+            data_pv_summary = {}
+            if data_pv_systems and data_pv_systems.systems:
+                systems = [s for s in data_pv_systems.systems if s]
+                pv_tasks = [
+                    self._fetch_smart_pv_summary(system.id) for system in systems
+                ]
+                pv_summaries = await asyncio.gather(*pv_tasks)
+                for system, summary in zip(systems, pv_summaries):
+                    if summary:
+                        data_pv_summary[system.id] = summary
+
+            has_pv = bool(data_pv_systems and data_pv_systems.systems)
+            has_battery = bool(data_smart_batteries and data_smart_batteries.batteries)
+            has_active_charger = False
+            if data_enode_chargers and data_enode_chargers.chargers:
+                for charger in data_enode_chargers.chargers:
+                    if charger.charge_state and charger.charge_state.is_charging:
+                        has_active_charger = True
+                        break
+
+            if has_pv or has_battery or has_active_charger:
+                self.update_interval = timedelta(seconds=30)
+            else:
+                self.update_interval = timedelta(minutes=5)
+
+            result = _empty_data()
+            result[DATA_ENODE_CHARGERS] = data_enode_chargers
+            result[DATA_BATTERIES] = data_smart_batteries
+            result[DATA_BATTERY_DETAILS] = data_smart_battery_details
+            result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
+            result[DATA_PV_SYSTEMS] = data_pv_systems
+            result[DATA_PV_SUMMARY] = data_pv_summary
+            result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch realtime data: {err}") from err
+
+
+class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
+    """Coordinator for EV vehicles."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+    ) -> None:
+        """Initialize the vehicle coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie vehicle coordinator"
+        self.settings_coordinator = settings_coordinator
+        self.update_interval = timedelta(minutes=15)
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch vehicle data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        if self._should_skip_api_calls(now_utc):
+            _LOGGER.debug("Skipping vehicle fetch during maintenance window")
+            if self.data:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+
+        user_data = self.settings_coordinator.data.get(DATA_USER)
+        is_smart_charging = self._is_smart_charging_enabled(user_data)
+
+        try:
+            enode_vehicles = await self._fetch_enode_vehicles(is_smart_charging)
+
+            is_active = False
+            if enode_vehicles and enode_vehicles.vehicles:
+                for vehicle in enode_vehicles.vehicles:
+                    if vehicle.is_reachable or (
+                        vehicle.charge_state
+                        and (
+                            vehicle.charge_state.is_charging
+                            or vehicle.charge_state.is_plugged_in
+                        )
+                    ):
+                        is_active = True
+                        break
+
+            if is_active:
+                self.update_interval = timedelta(minutes=1)
+            else:
+                self.update_interval = timedelta(minutes=15)
+
+            result = _empty_data()
+            result[DATA_ENODE_VEHICLES] = enode_vehicles
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch vehicle data: {err}") from err
+
+
+class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
+    """Coordinator for historical statistics, billing, and invoices."""
+
+    def __init__(
+        self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
+    ) -> None:
+        """Initialize the statistics coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie statistics coordinator"
+        self.update_interval = timedelta(hours=1)
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch historical statistics data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        if self._should_skip_api_calls(now_utc):
+            _LOGGER.debug("Skipping statistics fetch during maintenance window")
+            if self.data:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+
+        today = now_utc.date()
+        yesterday = today - timedelta(days=1)
+        start_date = yesterday
+
+        try:
+            data_month_summary, data_invoices, data_period_usage = await asyncio.gather(
+                self._fetch_month_summary(),
+                self._fetch_invoices(),
+                self._fetch_period_usage(start_date),
+            )
+            result = _empty_data()
+            result[DATA_MONTH_SUMMARY] = data_month_summary
+            result[DATA_INVOICES] = data_invoices
+            result[DATA_USAGE] = data_period_usage
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch statistics data: {err}") from err
+
+
 class FrankEnergieBatterySessionCoordinator(
     DataUpdateCoordinator[SmartBatterySessions | None]
 ):

@@ -13,6 +13,11 @@ from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import (
     FrankEnergieCoordinator,
     PricesTodayCache,
+    FrankEnergieSettingsCoordinator,
+    FrankEnergiePriceCoordinator,
+    FrankEnergieRealtimeCoordinator,
+    FrankEnergieVehicleCoordinator,
+    FrankEnergieStatisticsCoordinator,
 )
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -1272,79 +1277,134 @@ async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_tomorrow_before_window(coordinator, monkeypatch):
-    """Test that _maybe_refresh_tomorrow does not request refresh before local 13:00."""
-    from homeassistant.util import dt as dt_util
-
+async def test_price_coordinator_before_window(
+    mock_frank_energie, mock_config_entry, monkeypatch
+):
+    """Test that price coordinator update interval is None before local 13:00 when tomorrow's prices are not cached."""
     # Mock utcnow to 10:00 UTC (12:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
     monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
 
-    coordinator.async_request_refresh = AsyncMock()
-    coordinator.promote_tomorrow_prices = MagicMock()
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
 
-    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
-    await component._maybe_refresh_tomorrow(coordinator)
+    price_coordinator.cached_prices_tomorrow = None
+    price_coordinator._adjust_update_interval(mock_now)
 
-    coordinator.async_request_refresh.assert_not_called()
-    coordinator.promote_tomorrow_prices.assert_not_called()
+    assert price_coordinator.update_interval is None
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_tomorrow_inside_window(coordinator, monkeypatch):
-    """Test that _maybe_refresh_tomorrow requests refresh inside local window if cache missing."""
-    from homeassistant.util import dt as dt_util
-
+async def test_price_coordinator_inside_window(
+    mock_frank_energie, mock_config_entry, monkeypatch
+):
+    """Test that price coordinator update interval is 5 minutes inside local 13:00 to 15:00 when tomorrow's prices are not cached."""
     # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
     monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
 
-    coordinator.async_request_refresh = AsyncMock()
-    coordinator.cached_prices_tomorrow = None
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
 
-    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
-    await component._maybe_refresh_tomorrow(coordinator)
+    price_coordinator.cached_prices_tomorrow = None
+    price_coordinator._adjust_update_interval(mock_now)
 
-    coordinator.async_request_refresh.assert_awaited_once()
+    assert price_coordinator.update_interval == timedelta(minutes=5)
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_tomorrow_skipped_when_cached(coordinator, monkeypatch):
-    """Test that _maybe_refresh_tomorrow skips refresh if tomorrow's prices are already cached."""
-    from homeassistant.util import dt as dt_util
-
+async def test_price_coordinator_skipped_when_cached(
+    mock_frank_energie, mock_config_entry, monkeypatch
+):
+    """Test that price coordinator update interval is None if tomorrow's prices are already cached."""
     # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
     monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
 
-    coordinator.async_request_refresh = AsyncMock()
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
 
-    # Mock cached tomorrow prices as available
+    # Mock cached tomorrow prices as available and fetched today
+    tomorrow_prices = MagicMock()
+    price_coordinator.cached_prices_tomorrow = tomorrow_prices
+    price_coordinator.last_fetch_tomorrow = mock_now
+
+    price_coordinator._adjust_update_interval(mock_now)
+
+    assert price_coordinator.update_interval is None
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_midnight_rollover(
+    mock_frank_energie, mock_config_entry
+):
+    """Test that promote_tomorrow_prices correctly promotes tomorrow's prices to today."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
     tomorrow_prices = MagicMock()
     tomorrow_prices.electricity = MagicMock()
     tomorrow_prices.gas = MagicMock()
-    coordinator.cached_prices_tomorrow = tomorrow_prices
+    price_coordinator.cached_prices_tomorrow = tomorrow_prices
 
-    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
-    await component._maybe_refresh_tomorrow(coordinator)
+    price_coordinator.cached_prices = {
+        DATA_ELECTRICITY: MagicMock(),
+        DATA_GAS: MagicMock(),
+    }
 
-    coordinator.async_request_refresh.assert_not_called()
+    price_coordinator.promote_tomorrow_prices()
+
+    assert price_coordinator.cached_prices_tomorrow is None
+    assert (
+        price_coordinator.cached_prices[DATA_ELECTRICITY] == tomorrow_prices.electricity
+    )
+    assert price_coordinator.cached_prices[DATA_GAS] == tomorrow_prices.gas
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_tomorrow_midnight_rollover(coordinator, monkeypatch):
-    """Test that _maybe_refresh_tomorrow performs midnight rollover at 00:00 UTC."""
-    from homeassistant.util import dt as dt_util
+async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry):
+    """Test default properties and intervals of sub-coordinators."""
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(
+        hass, mock_config_entry, mock_frank_energie
+    )
+    price = FrankEnergiePriceCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    realtime = FrankEnergieRealtimeCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    vehicle = FrankEnergieVehicleCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    stats = FrankEnergieStatisticsCoordinator(
+        hass, mock_config_entry, mock_frank_energie
+    )
 
-    # Mock utcnow to 00:00 UTC
-    mock_now = datetime(2026, 5, 27, 0, 0, 0, tzinfo=ZoneInfo("UTC"))
-    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
-
-    coordinator.async_request_refresh = AsyncMock()
-    coordinator.promote_tomorrow_prices = MagicMock()
-
-    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
-    await component._maybe_refresh_tomorrow(coordinator)
-
-    coordinator.promote_tomorrow_prices.assert_called_once()
-    coordinator.async_request_refresh.assert_not_called()
+    assert settings.update_interval == timedelta(hours=24)
+    assert price.update_interval is None
+    assert realtime.update_interval == timedelta(seconds=30)
+    assert vehicle.update_interval == timedelta(minutes=15)
+    assert stats.update_interval == timedelta(hours=1)
