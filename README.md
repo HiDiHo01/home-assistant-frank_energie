@@ -19,6 +19,18 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
 - [Examples](docs/examples.md)
 
+- [Configuration](docs/configuration.md)
+- [Diagnostics](docs/diagnostics.md)
+- [Entities](docs/entities.md)
+- [Events](docs/events.md)
+- [Examples](docs/examples.md)
+- [FAQ](docs/faq.md)
+- [Smart Battery](docs/smart_battery.md)
+- [Smart Charging](docs/smart_charging.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Update Frequency](docs/update_frequency.md)
+- [User Features](docs/user_features.md)
+
 # Services
 
 The Frank Energie integration does not currently register any Home Assistant services.
