@@ -90,10 +90,24 @@ Bij een combinatie van stroom en gas ontvangen beide klanten dus maximaal **€5
 
 De korting wordt na 12 maanden toegekend via een kortingsfactuur, mits beide klanten gedurende die periode tegelijkertijd klant zijn geweest bij Frank Energie.
 
-### 🔗 Aanmeldlink
+### 🔗 Persoonlijke uitnodiging van Roy
 
-**Meld je aan via mijn link:**
+**Aanmeldlink:**
 http://frnk.app/cxaknroy
+
+<p align="center">
+  <a href="http://frnk.app/cxaknroy">
+    <img
+      src="https://raw.githubusercontent.com/HiDiHo01/home-assistant-frank_energie/main/images/Frank%20Energie%20QR.png"
+      alt="Frank Energie uitnodiging van Roy"
+      width="200"
+    />
+  </a>
+</p>
+
+<p align="center">
+  Scan de QR-code of klik erop om je direct aan te melden.
+</p>
 
 Door gebruik te maken van deze link ontvang jij de vriendenkorting en steun je tegelijkertijd de verdere ontwikkeling van de Frank Energie Home Assistant-integratie.
 
