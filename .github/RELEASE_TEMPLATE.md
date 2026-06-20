@@ -76,3 +76,26 @@ If Frank Energie has been useful to you, consider supporting its continued devel
 * ☕ Buy me a coffee: https://buymeacoffee.com/royarx
 
 Every contribution—whether it's a bug report, pull request, translation, documentation update, testing feedback, or financial support—helps improve the integration for the entire community.
+
+### 🎁 Frank Vriendenkorting
+
+Overweeg je over te stappen naar Frank Energie? Gebruik dan mijn persoonlijke aanmeldlink.
+
+Voor iedere nieuwe klant die zich via een geldige vriendencode aanmeldt, ontvangen zowel de nieuwe als de bestaande klant een beloning van:
+
+* €25 korting voor stroom
+* €25 korting voor gas
+
+Bij een combinatie van stroom en gas ontvangen beide klanten dus maximaal **€50 korting**.
+
+De korting wordt na 12 maanden toegekend via een kortingsfactuur, mits beide klanten gedurende die periode tegelijkertijd klant zijn geweest bij Frank Energie.
+
+### 🔗 Aanmeldlink
+
+**Meld je aan via mijn link:**
+http://frnk.app/cxaknroy
+
+Door gebruik te maken van deze link ontvang jij de vriendenkorting en steun je tegelijkertijd de verdere ontwikkeling van de Frank Energie Home Assistant-integratie.
+
+Raadpleeg de Frank-app voor de actuele voorwaarden en spelregels van het vriendenprogramma.
+
