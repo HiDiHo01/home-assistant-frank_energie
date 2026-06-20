@@ -12,8 +12,12 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 
 - [Entities](docs/entities.md) - Overview of all entity platforms and features.
 - [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
+- [Update Frequency](docs/update_frequency.md)
+- [User Features](docs/user_features.md)
+- [Smart Battery](docs/smart_battery.md)
 - [Smart Charging](docs/smart_charging.md) - Smart Charging features and troubleshooting.
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
+- [Examples](docs/examples.md)
 
 # Services
 
