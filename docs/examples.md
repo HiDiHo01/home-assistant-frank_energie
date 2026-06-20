@@ -16,8 +16,7 @@ triggers:
 actions:
   - action: notify.mobile_app_phone
     data:
-      title: Frank Energie
-      message: Tomorrow's electricity prices are now available.
+      message: Tomorrow's prices are available.
 ```
 
 ## Lowest Price Notification
@@ -25,7 +24,7 @@ actions:
 Notify when the cheapest electricity period starts.
 
 ```yaml
-alias: Frank Energie - Lowest Price
+alias: Frank Energie - Lowest Price Started
 triggers:
   - trigger: event
     event_type: frank_energie_event
@@ -34,8 +33,7 @@ triggers:
 actions:
   - action: notify.mobile_app_phone
     data:
-      title: Electricity Price Alert
-      message: The cheapest electricity period has started.
+      message: Lowest electricity price period has started.
 ```
 
 ## Cheapest Charging Window Notification
@@ -43,7 +41,7 @@ actions:
 Notify when the cheapest charging window begins.
 
 ```yaml
-alias: Frank Energie - Cheapest Charging Window
+alias: Frank Energie - Lowest 4 Period Price Started
 triggers:
   - trigger: event
     event_type: frank_energie_event
@@ -52,8 +50,24 @@ triggers:
 actions:
   - action: notify.mobile_app_phone
     data:
-      title: EV Charging
-      message: The cheapest charging window has started.
+      message: Cheapest 4-period window has started.
+```
+
+## Cheapest Charging Window Notification
+
+Notify when the cheapest charging window begins.
+
+```yaml
+alias: Frank Energie - Lowest 16 Period Price Started
+triggers:
+  - trigger: event
+    event_type: frank_energie_event
+    event_data:
+      action: lowest_16p_price
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      message: Cheapest 16-period window has started.
 ```
 
 ## Refresh Price Data
