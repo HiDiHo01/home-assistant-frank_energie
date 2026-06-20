@@ -62,8 +62,8 @@
                 "data": {
                     "authentication": "Use Frank Energie account credentials"
                 },
-                "description": "[%key:common::config_flow::description::confirm_setup%]",
-                "title": "Configure Frank Energie"
+                "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
+                "title": "Do you want to sign in to Frank Energie?"
             }
         }
     },

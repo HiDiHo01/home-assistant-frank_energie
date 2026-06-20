@@ -247,3 +247,24 @@ def test_no_unused_or_missing_translation_keys():
     for key in sorted(missing_entity_keys):
         # Allow technical fields that don't need translations, but fail if we expect a translation
         pass
+
+
+def test_all_translation_keys_are_lowercase():
+    """Verify that all translation keys (dictionary keys) in strings.json are entirely lowercase."""
+    with open(STRINGS_FILE, "r", encoding="utf-8") as f:
+        strings_content = json.load(f)
+
+    def check_lowercase_keys(d: dict, path: str = "") -> None:
+        if isinstance(d, dict):
+            for k, v in d.items():
+                current_path = f"{path}.{k}" if path else k
+                assert k == k.lower(), f"Translation key '{current_path}' is not entirely lowercase"
+                if isinstance(v, dict):
+                    check_lowercase_keys(v, current_path)
+
+    # We specifically check configuration step keys, device keys, and entity keys
+    check_lowercase_keys(strings_content.get("config", {}), "config")
+    check_lowercase_keys(strings_content.get("device", {}), "device")
+    check_lowercase_keys(strings_content.get("entity", {}), "entity")
+    check_lowercase_keys(strings_content.get("options", {}), "options")
+
