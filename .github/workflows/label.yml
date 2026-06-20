@@ -27,14 +27,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Apply labels
-        uses: actions/labeler@v6
+        uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 #v6
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           configuration-path: .github/labeler.yml
           sync-labels: true
 
       - name: Size label
-        uses: codelytv/pr-size-labeler@v1
+        uses: codelytv/pr-size-labeler@095a41fca88b8764fd9e008ad269bcdb82bb38b9 #v1
         with:
           xs_label: size/xs
           xs_max_size: 10
