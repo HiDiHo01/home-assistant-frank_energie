@@ -10,7 +10,7 @@ import logging
 
 # import secrets
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Awaitable, Callable, Final, TypedDict, cast
 
@@ -1256,14 +1256,25 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             cached_is_valid_for_today = False
             if self._static_prices_today is not None:
                 cached_elec = self._static_prices_today.electricity
+                cached_gas = self._static_prices_today.gas
+
+                elec_valid = True
                 if cached_elec and cached_elec.all:
-                    first_price_date = cached_elec.all[0].date_from.date()
-                    if first_price_date == today:
-                        cached_is_valid_for_today = True
+                    elec_valid = cached_elec.all[0].date_from.date() == today
+
+                gas_valid = True
+                if cached_gas and cached_gas.all:
+                    gas_valid = cached_gas.all[0].date_from.date() == today
+
+                has_cached_data = (cached_elec and cached_elec.all) or (
+                    cached_gas and cached_gas.all
+                )
+                if has_cached_data and elec_valid and gas_valid:
+                    cached_is_valid_for_today = True
 
             if not (has_fetched_elec or has_fetched_gas) and cached_is_valid_for_today:
                 _LOGGER.info(
-                    "API returned no prices for today, using cached/promoted prices from yesterday"
+                    "API returned no prices for today, reusing valid cached prices"
                 )
                 prices_today = self._static_prices_today
 
@@ -1537,6 +1548,37 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if isinstance(smart_trading, dict):
             return smart_trading.get("isActivated", False) is True
         return getattr(smart_trading, "isActivated", False) is True
+
+    def promote_tomorrow_prices(self) -> None:
+        """Promote cached tomorrow prices to today's prices."""
+        prices_tomorrow = self.cached_prices_tomorrow
+        if prices_tomorrow is None:
+            return
+
+        source_data = self.cached_prices or self.data
+        if source_data is None:
+            _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
+            return
+
+        updated_data = source_data.copy()
+
+        updated_data[DATA_ELECTRICITY] = prices_tomorrow.electricity
+        updated_data[DATA_GAS] = prices_tomorrow.gas
+
+        self.cached_prices_tomorrow = None
+        self.cached_prices = updated_data
+        self.data = updated_data
+        self._static_prices_today = prices_tomorrow
+        self._cached_prices = prices_tomorrow
+
+        if self.cached_prices_today is not None:
+            self.cached_prices_today = replace(
+                self.cached_prices_today, prices_today=prices_tomorrow
+            )
+
+        self.async_update_listeners()
+
+        _LOGGER.debug("Promoted cached tomorrow prices to today's prices")
 
     def get_pv_system_metadata(self, system_id: str) -> dict[str, Any]:
         """Get PV system metadata (brand, model, display_name, serial_number)."""

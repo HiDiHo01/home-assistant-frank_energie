@@ -4,7 +4,7 @@
 
 import logging
 import warnings
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Final
 
@@ -121,41 +121,6 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.hass = hass
         self.entry = entry
 
-    def _promote_tomorrow_prices(
-        self,
-        coordinator: FrankEnergieCoordinator,
-    ) -> None:
-        """Promote cached tomorrow prices to today's prices."""
-
-        prices_tomorrow = coordinator.cached_prices_tomorrow
-        if prices_tomorrow is None:
-            return
-
-        source_data = coordinator.cached_prices or coordinator.data
-        if source_data is None:
-            _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
-            return
-
-        updated_data = source_data.copy()
-
-        updated_data[DATA_ELECTRICITY] = prices_tomorrow.electricity
-        updated_data[DATA_GAS] = prices_tomorrow.gas
-
-        coordinator.cached_prices_tomorrow = None
-        coordinator.cached_prices = updated_data
-        coordinator.data = updated_data
-        coordinator._static_prices_today = prices_tomorrow
-        coordinator._cached_prices = prices_tomorrow
-
-        if coordinator.cached_prices_today is not None:
-            coordinator.cached_prices_today = replace(
-                coordinator.cached_prices_today, prices_today=prices_tomorrow
-            )
-
-        coordinator.async_update_listeners()
-
-        _LOGGER.debug("Promoted cached tomorrow prices to today's prices")
-
     async def _maybe_refresh_tomorrow(
         self,
         coordinator: FrankEnergieCoordinator,
@@ -165,7 +130,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         now_utc = dt_util.utcnow()
 
         if now_utc.hour == 0 and now_utc.minute == 0:
-            self._promote_tomorrow_prices(coordinator)
+            coordinator.promote_tomorrow_prices()
             return
 
         if now_utc.hour < PRICE_RELEASE_HOUR_UTC:
