@@ -16,7 +16,6 @@ categories:
     labels:
       - feature
 
-```
   - title: 🐛 Bug Fixes
     labels:
       - bug
@@ -92,4 +91,3 @@ categories:
   - title: Other Changes
     labels:
       - "*"
-```
