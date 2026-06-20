@@ -28,5 +28,5 @@ jobs:
             --accept 200,429
             README.md
             docs/**/*.md
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
