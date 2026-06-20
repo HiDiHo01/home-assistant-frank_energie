@@ -1244,6 +1244,29 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 await self._fetch_contract_price_resolution_state(self._connection_id)
             )
 
+            # Check if fetched prices are valid (i.e., contain actual price points)
+            has_fetched_elec = (
+                prices_today
+                and prices_today.electricity
+                and prices_today.electricity.all
+            )
+            has_fetched_gas = prices_today and prices_today.gas and prices_today.gas.all
+
+            # Check if our cached/promoted prices are valid and belong to the current day
+            cached_is_valid_for_today = False
+            if self._static_prices_today is not None:
+                cached_elec = self._static_prices_today.electricity
+                if cached_elec and cached_elec.all:
+                    first_price_date = cached_elec.all[0].date_from.date()
+                    if first_price_date == today:
+                        cached_is_valid_for_today = True
+
+            if not (has_fetched_elec or has_fetched_gas) and cached_is_valid_for_today:
+                _LOGGER.info(
+                    "API returned no prices for today, using cached/promoted prices from yesterday"
+                )
+                prices_today = self._static_prices_today
+
             self._static_prices_today = prices_today
             self._static_month_summary = data_month_summary
             self._static_invoices = data_invoices
