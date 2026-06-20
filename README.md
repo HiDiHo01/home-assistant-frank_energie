@@ -10,17 +10,27 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 
 ## Documentation
 
-- [Configuration](docs/configuration.md)
-- [Diagnostics](docs/diagnostics.md)
+- [Documentation Index](docs/index.md) - Complete documentation overview.
+
+### User Documentation
+
+- [Configuration](docs/configuration.md) - Setup, authentication, site selection, and configuration.
+- [Diagnostics](docs/diagnostics.md) - Collect diagnostics, enable debug logging, and report issues.
 - [Entities](docs/entities.md) - Overview of all entity platforms and features.
 - [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
-- [Examples](docs/examples.md)
-- [FAQ](docs/faq.md)
-- [Smart Battery](docs/smart_battery.md)
+- [Examples](docs/examples.md) - Automation examples, notifications, and dashboard ideas.
+- [FAQ](docs/faq.md) - Frequently asked questions and common scenarios.
+- [Smart Battery](docs/smart_battery.md) - Smart Battery features, modes, and configuration.
 - [Smart Charging](docs/smart_charging.md) - Smart Charging features and troubleshooting.
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
-- [Update Frequency](docs/update_frequency.md)
-- [User Features](docs/user_features.md)
+- [Update Frequency](docs/update_frequency.md) - Polling intervals, maintenance windows, and price publication timing.
+- [User Features](docs/user_features.md) - Overview of all supported Frank Energie features.
+
+### Contributor Documentation
+
+- [Architecture](docs/architecture.md) - Integration architecture, coordinator design, and data flow.
+- [Developer Guide](docs/developer.md) - Development standards, testing, and contribution guidelines.
+- [Release Process](docs/release_process.md) - Versioning, release workflow, and HACS publishing.
 
 # Services
 
