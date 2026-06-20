@@ -1,0 +1,95 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - size/xl
+      - size/l
+      - size/m
+      - size/s
+
+categories:
+  - title: ⚠️ Breaking Changes
+    labels:
+      - breaking-change
+
+  - title: 🚀 New Features
+    labels:
+      - feature
+
+```
+  - title: 🐛 Bug Fixes
+    labels:
+      - bug
+
+  - title: 🛠 Improvements
+    labels:
+      - enhancement
+      - improvements
+
+  - title: 🔌 API Changes
+    labels:
+      - api
+
+  - title: 🏠 Home Assistant
+    labels:
+      - integration
+      - config_flow
+      - coordinator
+      - sensor
+      - binary_sensor
+      - binary sensor
+      - number
+      - select
+      - button
+      - diagnostics
+      - repair
+      - blueprint
+
+  - title: ⚡ Performance
+    labels:
+      - performance
+
+  - title: 🔧 Refactoring
+    labels:
+      - refactor
+
+  - title: 📦 Dependency Updates
+    labels:
+      - dependency
+      - dependencies
+
+  - title: 🧪 Testing
+    labels:
+      - test
+
+  - title: 📚 Documentation
+    labels:
+      - documentation
+
+  - title: 🌍 Translations
+    labels:
+      - translations
+
+  - title: 🔄 CI/CD
+    labels:
+      - ci
+
+  - title: 🧹 Maintenance
+    labels:
+      - helper
+      - constants
+      - manifest
+
+  - title: 🤖 AI Assisted
+    labels:
+      - codex
+
+  - title: ⭐ Quality Scale
+    labels:
+      - platinum-quality
+      - platinum
+
+  - title: Other Changes
+    labels:
+      - "*"
+```
