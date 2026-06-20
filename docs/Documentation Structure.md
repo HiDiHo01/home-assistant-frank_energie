@@ -1,0 +1,16 @@
+docs/
+├── events.md
+├── services.md
+├── sensors.md
+├── binary_sensors.md
+├── numbers.md
+├── selects.md
+├── buttons.md
+├── smart_charging.md
+├── smart_battery.md
+├── user_data.md
+├── update_frequency.md
+├── troubleshooting.md
+├── diagnostics.md
+├── examples.md
+└── faq.md
