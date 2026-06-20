@@ -2,6 +2,14 @@
 
 This page contains practical Home Assistant automation examples for the Frank Energie integration.
 
+For entity-based examples, replace placeholder entity IDs with the actual entities created in your installation.
+
+See:
+
+- [Entities](entities.md)
+
+for information about available entities and features.
+
 ## Tomorrow Prices Available Notification
 
 Receive a notification when tomorrow's prices become available.
@@ -36,9 +44,9 @@ actions:
       message: Lowest electricity price period has started.
 ```
 
-## Cheapest Charging Window Notification
+## Cheapest 4-Period Window Notification
 
-Notify when the cheapest charging window begins.
+Notify when the cheapest 4-period electricity window starts.
 
 ```yaml
 alias: Frank Energie - Lowest 4 Period Price Started
@@ -53,9 +61,9 @@ actions:
       message: Cheapest 4-period window has started.
 ```
 
-## Cheapest Charging Window Notification
+## Cheapest 16-Period Window Notification
 
-Notify when the cheapest charging window begins.
+Notify when the cheapest 16-period electricity window starts.
 
 ```yaml
 alias: Frank Energie - Lowest 16 Period Price Started
@@ -72,7 +80,9 @@ actions:
 
 ## Refresh Price Data
 
-Manually refresh Frank Energie data using the refresh button entity.
+The integration creates a refresh button entity.
+
+Use the entity picker in Home Assistant to select the correct button entity.
 
 ```yaml
 alias: Frank Energie - Refresh Prices
@@ -82,12 +92,12 @@ triggers:
 actions:
   - action: button.press
     target:
-      entity_id: button.frank_energie_refresh_prices
+      entity_id: button.<your_refresh_prices_entity>
 ```
 
-## Battery Session Refresh
+## Refresh Battery Sessions
 
-Refresh battery session information daily.
+Battery session entities are only available when Smart Battery functionality is enabled.
 
 ```yaml
 alias: Frank Energie - Refresh Battery Sessions
@@ -97,18 +107,18 @@ triggers:
 actions:
   - action: button.press
     target:
-      entity_id: button.frank_energie_refresh_battery_sessions
+      entity_id: button.<your_refresh_battery_sessions_entity>
 ```
 
 ## Battery Mode Change Notification
 
-Notify when the battery operating mode changes.
+Smart Battery entity IDs depend on the connected battery and account configuration.
 
 ```yaml
 alias: Frank Energie - Battery Mode Changed
 triggers:
   - trigger: state
-    entity_id: select.frank_energie_battery_mode
+    entity_id: select.<your_battery_mode_entity>
 actions:
   - action: notify.mobile_app_phone
     data:
@@ -118,13 +128,13 @@ actions:
 
 ## Smart Charging Availability Alert
 
-Notify when Smart Charging becomes unavailable.
+Smart Charging entities are only available for supported accounts.
 
 ```yaml
 alias: Frank Energie - Smart Charging Unavailable
 triggers:
   - trigger: state
-    entity_id: binary_sensor.frank_energie_smart_charging
+    entity_id: binary_sensor.<your_smart_charging_entity>
     to: "off"
 actions:
   - action: notify.mobile_app_phone
@@ -135,13 +145,13 @@ actions:
 
 ## Negative Price Alert
 
-Notify when electricity prices become negative.
+Select an electricity price sensor from your installation.
 
 ```yaml
 alias: Frank Energie - Negative Electricity Price
 triggers:
   - trigger: numeric_state
-    entity_id: sensor.frank_energie_current_electricity_price
+    entity_id: sensor.<your_electricity_price_sensor>
     below: 0
 actions:
   - action: notify.mobile_app_phone
@@ -164,9 +174,12 @@ Useful entities for Energy dashboards:
 - Trading strategy
 - Contract resolution
 
+Refer to [Entities](entities.md) to identify the corresponding entity IDs in your installation.
+
 ## Notes
 
-- Entity IDs may differ depending on language and configuration.
+- Entity IDs may differ depending on language, account features, and configuration.
 - Use Home Assistant's entity picker to select the correct entities.
 - Events are generally preferred over polling sensors for automation triggers.
 - Smart Charging and Smart Battery examples require supported Frank Energie account features.
+- The integration dynamically creates entities based on available account data and connected devices.
