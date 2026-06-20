@@ -122,18 +122,19 @@ Features include:
 - Smart HVAC status
 - Heat pump optimization participation status
 
-## Smart Solar (PV)
+## PV Systems
 
-Supported accounts may expose photovoltaic (PV) information.
+Supported accounts may expose photovoltaic (PV) system information.
 
 Features include:
 
-- Smart PV status
 - Connected PV systems
-- Manufacturer information
-- Model information
-- Onboarding status
+- PV system manufacturer information
+- PV system model information
+- PV system onboarding status
 - PV system count
+
+The integration exposes metadata and status information reported by Frank Energie for connected photovoltaic installations.
 
 ## Smart Batteries
 
@@ -226,5 +227,5 @@ See:
 - Available features depend on your Frank Energie account.
 - Available features depend on enabled Frank Energie services.
 - Some entities are created dynamically based on available account data.
-- Smart Charging, Smart Trading, Smart Feed-In, Smart HVAC, Smart Solar, and Smart Battery features may not be available for all users.
+- Smart Charging, Smart Trading, Smart Feed-In, Smart HVAC, PV System, and Smart Battery features may not be available for all users.
 - New features may automatically appear as Frank Energie expands API capabilities.
