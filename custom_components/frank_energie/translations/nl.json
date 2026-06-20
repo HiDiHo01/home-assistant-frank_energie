@@ -29,11 +29,6 @@
                     "username": "Email"
                 },
                 "description": "Enter your Frank Energie account credentials.",
-                "error": {
-                    "connection_error": "Kan geen verbinding maken met Frank Energie",
-                    "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord",
-                    "unknown_error": "Onbekende fout opgetreden"
-                },
                 "title": "Inloggen bij Frank Energie"
             },
             "options": {
@@ -73,58 +68,31 @@
         }
     },
     "device": {
-        "Frank Energie - Batteries": {
-            "model": {
-                "Batteries": "Batterijen"
-            },
+        "frank_energie_batteries": {
             "name": "Frank Energie - Batterijen"
         },
-        "Frank Energie - Chargers": {
-            "model": {
-                "Chargers": "Opladers"
-            },
+        "frank_energie_chargers": {
             "name": "Frank Energie - Opladers"
         },
-        "Frank Energie - Costs": {
-            "model": {
-                "Costs": "Kosten"
-            },
+        "frank_energie_costs": {
             "name": "Frank Energie - Kosten"
         },
-        "Frank Energie - Gasprices": {
-            "model": {
-                "Gasprices": "Gasprijzen"
-            },
+        "frank_energie_gasprices": {
             "name": "Frank Energie - Gasprijzen"
         },
-        "Frank Energie - Prices": {
-            "model": {
-                "Prices": "Prijzen"
-            },
+        "frank_energie_prices": {
             "name": "Frank Energie - Prijzen"
         },
-        "Frank Energie - Settings": {
-            "model": {
-                "Settings": "Instellingen"
-            },
+        "frank_energie_settings": {
             "name": "Frank Energie - Instellingen"
         },
-        "Frank Energie - Usage": {
-            "model": {
-                "Usage": "Inzicht"
-            },
+        "frank_energie_usage": {
             "name": "Frank Energie - Inzicht"
         },
-        "Frank Energie - User": {
-            "model": {
-                "User": "Gebruiker"
-            },
+        "frank_energie_user": {
             "name": "Frank Energie - Gebruiker"
         },
-        "Frank Energie - Vehicles": {
-            "model": {
-                "Vehicles": "Voertuigen"
-            },
+        "frank_energie_vehicles": {
             "name": "Frank Energie - Voertuigen"
         }
     },

@@ -29,11 +29,6 @@
                     "username": "Username / e-mail"
                 },
                 "description": "Enter your Frank Energie account credentials.",
-                "error": {
-                    "connection_error": "Cannot connect to Frank Energie",
-                    "invalid_auth": "Invalid username or password",
-                    "unknown_error": "Unknown error occurred"
-                },
                 "title": "Enter your Frank Energie account credentials"
             },
             "options": {
@@ -73,58 +68,31 @@
         }
     },
     "device": {
-        "Frank Energie - Batteries": {
-            "model": {
-                "Batteries": "Batteries"
-            },
+        "frank_energie_batteries": {
             "name": "Frank Energie - Batteries"
         },
-        "Frank Energie - Chargers": {
-            "model": {
-                "Chargers": "Chargers"
-            },
+        "frank_energie_chargers": {
             "name": "Frank Energie - Chargers"
         },
-        "Frank Energie - Costs": {
-            "model": {
-                "Costs": "Costs"
-            },
+        "frank_energie_costs": {
             "name": "Frank Energie - Costs"
         },
-        "Frank Energie - Gasprices": {
-            "model": {
-                "Gasprices": "Gasprices"
-            },
+        "frank_energie_gasprices": {
             "name": "Frank Energie - Gasprices"
         },
-        "Frank Energie - Prices": {
-            "model": {
-                "Prices": "Prices"
-            },
+        "frank_energie_prices": {
             "name": "Frank Energie - Prices"
         },
-        "Frank Energie - Settings": {
-            "model": {
-                "Settings": "Settings"
-            },
+        "frank_energie_settings": {
             "name": "Frank Energie - Settings"
         },
-        "Frank Energie - Usage": {
-            "model": {
-                "Usage": "Usage"
-            },
+        "frank_energie_usage": {
             "name": "Frank Energie - Usage"
         },
-        "Frank Energie - User": {
-            "model": {
-                "User": "User"
-            },
+        "frank_energie_user": {
             "name": "Frank Energie - User"
         },
-        "Frank Energie - Vehicles": {
-            "model": {
-                "Vehicles": "Vehicles"
-            },
+        "frank_energie_vehicles": {
             "name": "Frank Energie - Vehicles"
         }
     },
