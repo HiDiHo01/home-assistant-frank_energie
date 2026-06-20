@@ -1400,7 +1400,7 @@ async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry
         hass, mock_config_entry, mock_frank_energie, settings
     )
     stats = FrankEnergieStatisticsCoordinator(
-        hass, mock_config_entry, mock_frank_energie
+        hass, mock_config_entry, mock_frank_energie, settings
     )
 
     assert settings.update_interval == timedelta(hours=24)

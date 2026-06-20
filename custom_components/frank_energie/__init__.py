@@ -198,7 +198,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             self.hass, self.entry, api, settings_coordinator
         )
         statistics_coordinator = FrankEnergieStatisticsCoordinator(
-            self.hass, self.entry, api
+            self.hass, self.entry, api, settings_coordinator
         )
 
         # Awaiting the site reference selection using settings coordinator

@@ -2313,6 +2313,10 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         result[DATA_ELECTRICITY] = aggregated.get(DATA_ELECTRICITY)
         result[DATA_GAS] = aggregated.get(DATA_GAS)
 
+        if self.settings_coordinator.data:
+            result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+            result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+
         self.cached_prices = result
 
         # Events
@@ -2407,6 +2411,9 @@ class FrankEnergieRealtimeCoordinator(FrankEnergieCoordinator):
                 self.update_interval = timedelta(minutes=5)
 
             result = _empty_data()
+            if self.settings_coordinator.data:
+                result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
             result[DATA_ENODE_CHARGERS] = data_enode_chargers
             result[DATA_BATTERIES] = data_smart_batteries
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
@@ -2470,6 +2477,9 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
                 self.update_interval = timedelta(minutes=15)
 
             result = _empty_data()
+            if self.settings_coordinator.data:
+                result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
             result[DATA_ENODE_VEHICLES] = enode_vehicles
             return result
         except Exception as err:
@@ -2481,11 +2491,16 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
     """Coordinator for historical statistics, billing, and invoices."""
 
     def __init__(
-        self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
         """Initialize the statistics coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie statistics coordinator"
+        self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(hours=1)
 
     async def _async_update_data(self) -> FrankEnergieData:
@@ -2508,6 +2523,9 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 self._fetch_period_usage(start_date),
             )
             result = _empty_data()
+            if self.settings_coordinator.data:
+                result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
             result[DATA_MONTH_SUMMARY] = data_month_summary
             result[DATA_INVOICES] = data_invoices
             result[DATA_USAGE] = data_period_usage
