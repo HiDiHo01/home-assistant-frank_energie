@@ -12,6 +12,7 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 
 - [Entities](docs/entities.md) - Overview of all entity platforms and features.
 - [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
 
 # Services
 
