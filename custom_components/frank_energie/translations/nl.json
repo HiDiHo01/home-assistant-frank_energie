@@ -181,20 +181,8 @@
             }
         },
         "button": {
-            "disable_smart_feed_in": {
-                "name": "Slim terugleveren uitschakelen"
-            },
-            "disable_smart_hvac": {
-                "name": "Slimme HVAC uitschakelen"
-            },
-            "disable_smart_trading": {
-                "name": "Slim handelen uitschakelen"
-            },
             "refresh_battery_sessions": {
                 "name": "Batterijsessies vernieuwen"
-            },
-            "refresh_chargers": {
-                "name": "Laders vernieuwen"
             },
             "refresh_prices": {
                 "name": "Prijzen vernieuwen"
@@ -227,13 +215,6 @@
                     "balanced": "Standaard",
                     "conservative": "Conservatief",
                     "imbalance_only": "Alleen onbalans"
-                }
-            },
-            "electericity_active_resolution": {
-                "name": "Elektriciteit prijs resolutie",
-                "state": {
-                    "pt15m": "Elke 15 minuten",
-                    "pt60m": "Elk uur"
                 }
             },
             "resolution": {
@@ -637,9 +618,6 @@
             "meter_type": {
                 "name": "Meter",
                 "state": {}
-            },
-            "mini_cooper_vehicle_name": {
-                "name": "Naam voertuig"
             },
             "phone_number": {
                 "name": "Telefoonnummer"

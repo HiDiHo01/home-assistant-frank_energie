@@ -181,20 +181,8 @@
             }
         },
         "button": {
-            "disable_smart_feed_in": {
-                "name": "Disable Smart Feed-In"
-            },
-            "disable_smart_hvac": {
-                "name": "Disable Smart HVAC"
-            },
-            "disable_smart_trading": {
-                "name": "Disable Smart Trading"
-            },
             "refresh_battery_sessions": {
                 "name": "Refresh Battery Sessions"
-            },
-            "refresh_chargers": {
-                "name": "Refresh Chargers"
             },
             "refresh_prices": {
                 "name": "Refresh Prices"
@@ -227,13 +215,6 @@
                     "balanced": "Standard",
                     "conservative": "Conservative",
                     "imbalance_only": "Imbalance only"
-                }
-            },
-            "electericity_active_resolution": {
-                "name": "Electricity price resolution",
-                "state": {
-                    "pt15m": "Every 15 minutes",
-                    "pt60m": "Every hour"
                 }
             },
             "resolution": {
@@ -637,9 +618,6 @@
             "meter_type": {
                 "name": "Meter Type",
                 "state": {}
-            },
-            "mini_cooper_vehicle_name": {
-                "name": "Vehicle name"
             },
             "phone_number": {
                 "name": "Phonenumber"
