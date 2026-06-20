@@ -1263,11 +1263,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
                 elec_valid = True
                 if cached_elec and cached_elec.all:
-                    elec_valid = cached_elec.all[0].date_from.date() == today
+                    elec_valid = (
+                        cached_elec.all[0].date_from.date() == today
+                        and cached_elec.all[-1].date_from.date() == today
+                    )
 
                 gas_valid = True
                 if cached_gas and cached_gas.all:
-                    gas_valid = cached_gas.all[0].date_from.date() == today
+                    gas_valid = (
+                        cached_gas.all[0].date_from.date() == today
+                        and cached_gas.all[-1].date_from.date() == today
+                    )
 
                 has_cached_data = (cached_elec and cached_elec.all) or (
                     cached_gas and cached_gas.all
@@ -1281,7 +1287,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
                 prices_today = self._static_prices_today
 
-            self._static_prices_today = prices_today
+            self._update_today_prices(prices_today)
             self._static_month_summary = data_month_summary
             self._static_invoices = data_invoices
             self._static_user = data_user
@@ -1552,6 +1558,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return smart_trading.get("isActivated", False) is True
         return getattr(smart_trading, "isActivated", False) is True
 
+    def _update_today_prices(self, prices: MarketPrices) -> None:
+        """Update all internal cache fields representing today's prices."""
+        self._static_prices_today = prices
+        self._cached_prices = prices
+        if self.cached_prices_today is not None:
+            self.cached_prices_today = replace(
+                self.cached_prices_today, prices_today=prices
+            )
+
     def promote_tomorrow_prices(self) -> None:
         """Promote cached tomorrow prices to today's prices."""
         prices_tomorrow = self.cached_prices_tomorrow
@@ -1571,13 +1586,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.cached_prices_tomorrow = None
         self.cached_prices = updated_data
         self.data = updated_data
-        self._static_prices_today = prices_tomorrow
-        self._cached_prices = prices_tomorrow
-
-        if self.cached_prices_today is not None:
-            self.cached_prices_today = replace(
-                self.cached_prices_today, prices_today=prices_tomorrow
-            )
+        self._update_today_prices(prices_tomorrow)
 
         self.async_update_listeners()
 
@@ -2267,7 +2276,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     prices_today = await self._fetch_prices_with_fallback(
                         today, tomorrow, use_fallback=True
                     )
-                    self._static_prices_today = prices_today
+                    self._update_today_prices(prices_today)
                     self.last_fetch_today = now_utc
                     self._today_prices_logged = True
                 except Exception as err:
