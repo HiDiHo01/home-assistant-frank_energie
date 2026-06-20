@@ -7,6 +7,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Final
+from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
@@ -133,19 +134,26 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             coordinator.promote_tomorrow_prices()
             return
 
-        if now_utc.hour < PRICE_RELEASE_HOUR_UTC:
+        if now_utc.hour == 0:
             return
 
-        if coordinator.cached_prices_tomorrow is None or (
-            coordinator.cached_prices_tomorrow.electricity is None
-            and coordinator.cached_prices_tomorrow.gas is None
+        # Convert to Europe/Amsterdam time to handle publication window in local time
+        tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+        now_local = now_utc.astimezone(tz_amsterdam)
+
+        if now_local.hour < 13:
+            return
+
+        if coordinator.cached_prices_tomorrow is not None and (
+            coordinator.cached_prices_tomorrow.electricity is not None
+            or coordinator.cached_prices_tomorrow.gas is not None
         ):
             _LOGGER.debug("Tomorrow prices already available, skipping refresh")
             return
 
         _LOGGER.debug(
-            "Tomorrow prices not available, requesting refresh at %02d UTC",
-            now_utc.hour,
+            "Tomorrow prices not available, requesting refresh at %s local time",
+            now_local.strftime("%H:%M"),
         )
 
         await coordinator.async_request_refresh()

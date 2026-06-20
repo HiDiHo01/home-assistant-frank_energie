@@ -11,8 +11,9 @@ import logging
 # import secrets
 import sys
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from typing import Any, Awaitable, Callable, Final, TypedDict, cast
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientError
 from homeassistant.components.persistent_notification import async_create
@@ -349,7 +350,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self.config_entry.title,
         )
 
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(ZoneInfo("UTC"))
         today = now_utc.date()
         tomorrow = today + timedelta(days=1)
 
@@ -516,11 +517,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         now_utc: datetime,
     ) -> MarketPrices | None:
         """Fetch and cache tomorrow's prices if the release window has passed."""
-        if now_utc.hour < self.FETCH_TOMORROW_HOUR_UTC:
+        tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+        now_local = now_utc.astimezone(tz_amsterdam)
+
+        if now_local.hour < 13:
             _LOGGER.debug(
-                "Not fetching tomorrow's prices yet (%02d:00 UTC, threshold: %02d:00 UTC).",
-                now_utc.hour,
-                self.FETCH_TOMORROW_HOUR_UTC,
+                "Not fetching tomorrow's prices yet (%02d:00 local time, threshold: 13:00 local time).",
+                now_local.hour,
             )
             return None
 
@@ -1865,25 +1868,27 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval around price release windows."""
         # default_interval is None outside the release window — polling is
-        # event-driven (e.g. HA restart, button press) outside 11:00–13:00 UTC.
+        # event-driven (e.g. HA restart, button press) outside 13:00–15:00 Europe/Amsterdam local time.
         default_interval = None
+
+        tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+        now_local = now_utc.astimezone(tz_amsterdam)
+        local_time = now_local.time()
 
         new_interval = (
             timedelta(minutes=5)
-            if self.PRICE_RELEASE_START_UTC
-            <= now_utc.time()
-            <= self.PRICE_RELEASE_END_UTC
+            if time(13, 0) <= local_time <= time(15, 0)
             else default_interval
         )
 
         if self.update_interval != new_interval:
-            _LOGGER.debug("Update interval (old method) changed to %s", new_interval)
+            _LOGGER.debug("Update interval changed to %s", new_interval)
             self.update_interval = new_interval
 
     def _ensure_utc(self, value: datetime) -> datetime:
         """Ensure datetime is timezone-aware UTC."""
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=ZoneInfo("UTC"))
         return value
 
     def _find_lowest_consecutive_hours(

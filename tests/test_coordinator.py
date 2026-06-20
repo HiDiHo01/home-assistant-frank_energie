@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import UTC, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -186,10 +187,12 @@ async def test_aggregate_data(coordinator):
 @pytest.mark.asyncio
 async def test_adjust_update_interval_inside_window(coordinator):
     """Test update interval adjustment inside the price release window."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    # Price release window is between 11:00 and 13:00 UTC
-    now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
+    # Price release window is between 13:00 and 15:00 local time
+    # On May 27th (summer), 12:00 UTC = 14:00 local time (inside window)
+    now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
 
     coordinator._adjust_update_interval(now_utc)
     # Exactly 300 seconds (5 minutes)
@@ -199,9 +202,11 @@ async def test_adjust_update_interval_inside_window(coordinator):
 @pytest.mark.asyncio
 async def test_adjust_update_interval_outside_window(coordinator):
     """Test update interval adjustment outside the price release window."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
+    # On May 27th, 10:00 UTC = 12:00 local time (outside window)
+    now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
 
     coordinator._adjust_update_interval(now_utc)
     # Update interval is disabled (None) outside window
@@ -1264,3 +1269,82 @@ async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
 
     # Verify fallback happened
     assert prices_today is cached_prices
+
+
+@pytest.mark.asyncio
+async def test_maybe_refresh_tomorrow_before_window(coordinator, monkeypatch):
+    """Test that _maybe_refresh_tomorrow does not request refresh before local 13:00."""
+    from homeassistant.util import dt as dt_util
+
+    # Mock utcnow to 10:00 UTC (12:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.promote_tomorrow_prices = MagicMock()
+
+    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.async_request_refresh.assert_not_called()
+    coordinator.promote_tomorrow_prices.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_maybe_refresh_tomorrow_inside_window(coordinator, monkeypatch):
+    """Test that _maybe_refresh_tomorrow requests refresh inside local window if cache missing."""
+    from homeassistant.util import dt as dt_util
+
+    # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.cached_prices_tomorrow = None
+
+    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_maybe_refresh_tomorrow_skipped_when_cached(coordinator, monkeypatch):
+    """Test that _maybe_refresh_tomorrow skips refresh if tomorrow's prices are already cached."""
+    from homeassistant.util import dt as dt_util
+
+    # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    coordinator.async_request_refresh = AsyncMock()
+
+    # Mock cached tomorrow prices as available
+    tomorrow_prices = MagicMock()
+    tomorrow_prices.electricity = MagicMock()
+    tomorrow_prices.gas = MagicMock()
+    coordinator.cached_prices_tomorrow = tomorrow_prices
+
+    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.async_request_refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_maybe_refresh_tomorrow_midnight_rollover(coordinator, monkeypatch):
+    """Test that _maybe_refresh_tomorrow performs midnight rollover at 00:00 UTC."""
+    from homeassistant.util import dt as dt_util
+
+    # Mock utcnow to 00:00 UTC
+    mock_now = datetime(2026, 5, 27, 0, 0, 0, tzinfo=ZoneInfo("UTC"))
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.promote_tomorrow_prices = MagicMock()
+
+    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_called_once()
+    coordinator.async_request_refresh.assert_not_called()

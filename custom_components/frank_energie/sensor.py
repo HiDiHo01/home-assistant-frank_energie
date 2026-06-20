@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
 
@@ -4309,7 +4309,7 @@ class FrankEnergieSensor(
 
         # Schedule the next update at exactly the next whole hour sharp or every quarter hour
         # TODO: Use hour updates when prices are available hourly only
-        now = dt_util.now(timezone.utc)
+        now = dt_util.now(ZoneInfo("UTC"))
         minute = now.minute
         if minute >= 45:
             # Next whole hour
