@@ -12,6 +12,12 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 
 - [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
 
+# Services
+
+The Frank Energie integration does not currently register any Home Assistant services.
+
+The integration exposes functionality through entities, events, buttons, selects, and sensors.
+
 ## Installatie
 Plaats de map `frank_energie` uit de map `custom_components` binnen deze repo in de `custom_components` map van je Home Assistant installatie.
 
