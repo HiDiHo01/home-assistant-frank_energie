@@ -297,7 +297,7 @@
             }
         },
         "sensor": {
-            "EAN": {
+            "ean": {
                 "name": "EAN (Energie Account Nummer)"
             },
             "actual_costs_until_last_meter_reading_date": {

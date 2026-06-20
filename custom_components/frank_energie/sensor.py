@@ -3769,7 +3769,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="EAN",
         name="EAN (Energy Account Number)",
-        translation_key="EAN",
+        translation_key="ean",
         icon="mdi:meter-electric",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
