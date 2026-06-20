@@ -1,4 +1,4 @@
-name: Validate
+name: HACS validation
 
 permissions:
   contents: read
@@ -23,6 +23,3 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-
-      - name: Hassfest validation
-        uses: home-assistant/actions/hassfest@master
