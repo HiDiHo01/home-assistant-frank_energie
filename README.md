@@ -8,6 +8,10 @@ Middels deze integratie wordt de huidige prijsinformatie van Frank Energie besch
 
 De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuur te schakelen op basis van de huidige energieprijs.
 
+## Documentation
+
+- [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
+
 ## Installatie
 Plaats de map `frank_energie` uit de map `custom_components` binnen deze repo in de `custom_components` map van je Home Assistant installatie.
 
