@@ -4,7 +4,7 @@
 
 import logging
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Final
 
@@ -144,6 +144,13 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         coordinator.cached_prices_tomorrow = None
         coordinator.cached_prices = updated_data
         coordinator.data = updated_data
+        coordinator._static_prices_today = prices_tomorrow
+        coordinator._cached_prices = prices_tomorrow
+
+        if coordinator.cached_prices_today is not None:
+            coordinator.cached_prices_today = replace(
+                coordinator.cached_prices_today, prices_today=prices_tomorrow
+            )
 
         coordinator.async_update_listeners()
 
