@@ -3,26 +3,31 @@
 import json
 from pathlib import Path
 
-INTEGRATION_DIR = (
-    Path(__file__).parent.parent
-    / "custom_components"
-    / "frank_energie"
-)
+INTEGRATION_DIR = Path(__file__).parent.parent / "custom_components" / "frank_energie"
 STRINGS_FILE = INTEGRATION_DIR / "strings.json"
 TRANSLATIONS_DIR = INTEGRATION_DIR / "translations"
 
 
 def get_key_paths(d: dict, prefix: str = "") -> set[str]:
-    """Recursively find all key paths in a dictionary."""
+    """Recursively find all key paths in a dictionary.
+
+    Both intermediate group keys and leaf keys are intentionally included
+    to verify that the exact dictionary nesting structure is identical.
+    """
     paths = set()
     for k, v in d.items():
         path = f"{prefix}.{k}" if prefix else k
         paths.add(path)
         if isinstance(v, dict):
             paths.update(get_key_paths(v, path))
-        else:
-            paths.add(path)
     return paths
+
+
+def test_get_key_paths():
+    """Verify that get_key_paths correctly extracts nested dictionary paths."""
+    test_dict = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
+    expected = {"a", "b", "b.c", "b.d", "b.d.e"}
+    assert get_key_paths(test_dict) == expected
 
 
 def test_translation_keys_alignment():
@@ -30,7 +35,15 @@ def test_translation_keys_alignment():
     json_files = list(TRANSLATIONS_DIR.glob("*.json"))
     json_files.append(STRINGS_FILE)
 
-    assert len(json_files) >= 3, "There should be strings.json and at least two translation files (en.json and nl.json)"
+    file_names = {file_path.name for file_path in json_files}
+    required_files = {"strings.json", "en.json", "nl.json"}
+
+    missing_files = required_files - file_names
+    assert not missing_files, (
+        "Missing required translation files: "
+        f"{', '.join(sorted(missing_files))}. "
+        "Expected at least strings.json, en.json, and nl.json to be present."
+    )
 
     translations = {}
     for file_path in json_files:
@@ -38,26 +51,21 @@ def test_translation_keys_alignment():
             translations[file_path.name] = json.load(f)
 
     # Get key paths for each file
-    key_paths = {
-        name: get_key_paths(content)
-        for name, content in translations.items()
-    }
+    key_paths = {name: get_key_paths(content) for name, content in translations.items()}
 
-    # Compare each pair of translation files
-    file_names = list(key_paths.keys())
-    for i in range(len(file_names)):
-        for j in range(i + 1, len(file_names)):
-            file_a = file_names[i]
-            file_b = file_names[j]
-            keys_a = key_paths[file_a]
-            keys_b = key_paths[file_b]
+    strings_keys = key_paths["strings.json"]
 
-            only_in_a = keys_a - keys_b
-            only_in_b = keys_b - keys_a
+    # Compare each translation file against strings.json as the single source of truth
+    for name, keys in key_paths.items():
+        if name == "strings.json":
+            continue
 
-            assert not only_in_a, (
-                f"Keys found in {file_a} but missing in {file_b}: {sorted(only_in_a)}"
-            )
-            assert not only_in_b, (
-                f"Keys found in {file_b} but missing in {file_a}: {sorted(only_in_b)}"
-            )
+        only_in_strings = strings_keys - keys
+        only_in_translation = keys - strings_keys
+
+        assert not only_in_strings, (
+            f"Keys found in strings.json but missing in {name}: {sorted(only_in_strings)}"
+        )
+        assert not only_in_translation, (
+            f"Keys found in {name} but missing in strings.json: {sorted(only_in_translation)}"
+        )

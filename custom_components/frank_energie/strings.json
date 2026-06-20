@@ -135,10 +135,7 @@
             },
             "co2_compensation": {
                 "name": "CO₂ compensation",
-                "state": {
-                    "False": "Off",
-                    "True": "On"
-                }
+                "state": {}
             },
             "disabled_haptic_feedback": {
                 "name": "Haptic feedback disabled"
@@ -151,17 +148,11 @@
             },
             "smart_push_notification_price_alerts": {
                 "name": "Smart push notification price alerts",
-                "state": {
-                    "False": "Off",
-                    "True": "On"
-                }
+                "state": {}
             },
             "smart_pv_systems": {
                 "name": "Smart solar panels",
-                "state": {
-                    "False": "Inactive",
-                    "True": "Active"
-                },
+                "state": {},
                 "state_attributes": {
                     "system_count": {
                         "name": "System count"
@@ -170,10 +161,7 @@
             },
             "smartcharging_isactivated": {
                 "name": "Smart Charging",
-                "state": {
-                    "False": "Inactive",
-                    "True": "Active"
-                },
+                "state": {},
                 "state_attributes": {
                     "available_in_country": {
                         "name": "Available in country",
@@ -199,10 +187,7 @@
             },
             "smarttrading_isactivated": {
                 "name": "Smart Trading",
-                "state": {
-                    "False": "Inactive",
-                    "True": "Active"
-                },
+                "state": {},
                 "state_attributes": {
                     "available_in_country": {
                         "name": "Available in country",
@@ -283,8 +268,6 @@
             "resolution": {
                 "name": "Resolution",
                 "state": {
-                    "15 minutes": "15 minutes",
-                    "60 minutes": "60 minutes",
                     "pt15m": "15 minutes",
                     "pt60m": "60 minutes"
                 },
@@ -299,8 +282,6 @@
                     "options": {
                         "name": "Options",
                         "state": {
-                            "15 minutes": "15 minutes",
-                            "60 minutes": "60 minutes",
                             "pt15m": "15 minutes",
                             "pt60m": "60 minutes"
                         }
@@ -308,8 +289,6 @@
                     "resolution": {
                         "name": "Resolution",
                         "state": {
-                            "15 minutes": "15 minutes",
-                            "60 minutes": "60 minutes",
                             "pt15m": "15 minutes",
                             "pt60m": "60 minutes"
                         }
@@ -389,10 +368,7 @@
                 "state_attributes": {
                     "available_options": {
                         "name": "Contract Price Resolution State",
-                        "state": {
-                            "PT15M": "15 minutes",
-                            "PT60M": "60 minutes"
-                        }
+                        "state": {}
                     },
                     "is_change_request_possible": {
                         "name": "Contract Price Resolution State",
@@ -403,10 +379,7 @@
                     },
                     "upcoming_change": {
                         "name": "Contract Price Resolution State",
-                        "state": {
-                            "PT15M": "15 minutes",
-                            "PT60M": "60 minutes"
-                        }
+                        "state": {}
                     },
                     "upcoming_change_effective_date": {
                         "name": "Contract Price Resolution State"
@@ -506,10 +479,7 @@
             },
             "elec_contract_status": {
                 "name": "Electricity Contract Status",
-                "state": {
-                    "LOSS": "Stopped",
-                    "SWITCHED": "Switched"
-                }
+                "state": {}
             },
             "elec_fixed_kwh": {
                 "name": "Fixed electricity cost kWh"
@@ -582,10 +552,7 @@
             },
             "gas_contract_status": {
                 "name": "Gas Contract Status",
-                "state": {
-                    "LOSS": "Stopped",
-                    "SWITCHED": "Switched"
-                }
+                "state": {}
             },
             "gas_hourcount": {
                 "name": "Number of hours with gas prices loaded"
@@ -691,9 +658,7 @@
             },
             "meter_type": {
                 "name": "Meter Type",
-                "state": {
-                    "SLM": "Smart meter"
-                }
+                "state": {}
             },
             "mini_cooper_vehicle_name": {
                 "name": "Vehicle name"
@@ -706,9 +671,7 @@
             },
             "proposition_type": {
                 "name": "Proposition type",
-                "state": {
-                    "DYNAMIC": "Dynamic"
-                }
+                "state": {}
             },
             "pv_operational_status": {
                 "name": "Operational status"
@@ -724,22 +687,14 @@
             },
             "reward_payout_preference": {
                 "name": "Reward payout preference",
-                "state": {
-                    "DISCOUNT": "Discount",
-                    "TREES": "Trees"
-                }
+                "state": {}
             },
             "segments": {
                 "name": "Segments"
             },
             "status": {
                 "name": "Status",
-                "state": {
-                    "ACTIVE": "Active",
-                    "DELIVERY_ENDED": "Delivery ended",
-                    "INACTIVE": "Inactive",
-                    "IN_DELIVERY": "In delivery"
-                }
+                "state": {}
             },
             "total_costs": {
                 "name": "Total costs"

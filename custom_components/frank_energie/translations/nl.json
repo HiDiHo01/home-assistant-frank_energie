@@ -135,10 +135,7 @@
             },
             "co2_compensation": {
                 "name": "CO₂ compensatie",
-                "state": {
-                    "False": "Uit",
-                    "True": "Aan"
-                }
+                "state": {}
             },
             "disabled_haptic_feedback": {
                 "name": "Haptische feedback uitgeschakeld"
@@ -151,17 +148,11 @@
             },
             "smart_push_notification_price_alerts": {
                 "name": "Stroomprijsadvies",
-                "state": {
-                    "False": "Uit",
-                    "True": "Aan"
-                }
+                "state": {}
             },
             "smart_pv_systems": {
                 "name": "Slimme zonnepanelen",
-                "state": {
-                    "False": "Niet actief",
-                    "True": "Actief"
-                },
+                "state": {},
                 "state_attributes": {
                     "system_count": {
                         "name": "Aantal systemen"
@@ -170,10 +161,7 @@
             },
             "smartcharging_isactivated": {
                 "name": "Slim laden",
-                "state": {
-                    "False": "Niet actief",
-                    "True": "Actief"
-                },
+                "state": {},
                 "state_attributes": {
                     "available_in_country": {
                         "name": "Beschikbaar in Nederland",
@@ -199,10 +187,7 @@
             },
             "smarttrading_isactivated": {
                 "name": "Slim handelen",
-                "state": {
-                    "False": "Niet actief",
-                    "True": "Actief"
-                },
+                "state": {},
                 "state_attributes": {
                     "available_in_country": {
                         "name": "Beschikbaar in Nederland",
@@ -283,8 +268,6 @@
             "resolution": {
                 "name": "Resolutie",
                 "state": {
-                    "15 minutes": "15 minuten",
-                    "60 minutes": "60 minuten",
                     "pt15m": "15 minuten",
                     "pt60m": "60 minuten"
                 },
@@ -299,8 +282,6 @@
                     "options": {
                         "name": "Opties",
                         "state": {
-                            "15 minutes": "15 minuten",
-                            "60 minutes": "60 minuten",
                             "pt15m": "15 minuten",
                             "pt60m": "60 minuten"
                         }
@@ -308,8 +289,6 @@
                     "resolution": {
                         "name": "Resolutie",
                         "state": {
-                            "15 minutes": "15 minuten",
-                            "60 minutes": "60 minuten",
                             "pt15m": "15 minuten",
                             "pt60m": "60 minuten"
                         }
@@ -389,10 +368,7 @@
                 "state_attributes": {
                     "available_options": {
                         "name": "Mogelijke opties",
-                        "state": {
-                            "PT15M": "15 minuten",
-                            "PT60M": "60 minuten"
-                        }
+                        "state": {}
                     },
                     "is_change_request_possible": {
                         "name": "Is verandering mogelijk",
@@ -403,10 +379,7 @@
                     },
                     "upcoming_change": {
                         "name": "Aankomende verandering",
-                        "state": {
-                            "PT15M": "15 minuten",
-                            "PT60M": "60 minuten"
-                        }
+                        "state": {}
                     },
                     "upcoming_change_effective_date": {
                         "name": "Volgende verandering datum"
@@ -506,10 +479,7 @@
             },
             "elec_contract_status": {
                 "name": "Elektriciteit contract status",
-                "state": {
-                    "LOSS": "Gestopt",
-                    "SWITCHED": "Overgestapt"
-                }
+                "state": {}
             },
             "elec_fixed_kwh": {
                 "name": "Vaste elektriciteitsprijs per kWh"
@@ -582,10 +552,7 @@
             },
             "gas_contract_status": {
                 "name": "Gas contract status",
-                "state": {
-                    "LOSS": "Gestopt",
-                    "SWITCHED": "Overgestapt"
-                }
+                "state": {}
             },
             "gas_hourcount": {
                 "name": "Aantal gasprijzen geladen"
@@ -691,9 +658,7 @@
             },
             "meter_type": {
                 "name": "Meter",
-                "state": {
-                    "SLM": "Slimme meter"
-                }
+                "state": {}
             },
             "mini_cooper_vehicle_name": {
                 "name": "Naam voertuig"
@@ -706,9 +671,7 @@
             },
             "proposition_type": {
                 "name": "Aanbod",
-                "state": {
-                    "DYNAMIC": "Dynamisch"
-                }
+                "state": {}
             },
             "pv_operational_status": {
                 "name": "Operationele status"
@@ -724,22 +687,14 @@
             },
             "reward_payout_preference": {
                 "name": "Beloningsuitbetalingsvoorkeur",
-                "state": {
-                    "DISCOUNT": "Korting",
-                    "TREES": "Bomen"
-                }
+                "state": {}
             },
             "segments": {
                 "name": "Segmenten"
             },
             "status": {
                 "name": "Status",
-                "state": {
-                    "ACTIVE": "Actief",
-                    "DELIVERY_ENDED": "Levering beëindigd",
-                    "INACTIVE": "Inactief",
-                    "IN_DELIVERY": "In levering"
-                }
+                "state": {}
             },
             "total_costs": {
                 "name": "Totaal kosten"

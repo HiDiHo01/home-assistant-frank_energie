@@ -26,13 +26,13 @@ _LOGGER = logging.getLogger(__name__)
 
 
 DISPLAY_TO_VALUE: dict[str, str] = {
-    "15 minutes": "PT15M",
-    "60 minutes": "PT60M",
+    "pt15m": "PT15M",
+    "pt60m": "PT60M",
 }
 
 VALUE_TO_DISPLAY: dict[str, str] = {v: k for k, v in DISPLAY_TO_VALUE.items()}
 
-DEFAULT_DISPLAY = "15 minutes"
+DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
 
 
