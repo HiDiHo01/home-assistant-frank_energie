@@ -258,7 +258,9 @@ def test_all_translation_keys_are_lowercase():
         if isinstance(d, dict):
             for k, v in d.items():
                 current_path = f"{path}.{k}" if path else k
-                assert k == k.lower(), f"Translation key '{current_path}' is not entirely lowercase"
+                assert k == k.lower(), (
+                    f"Translation key '{current_path}' is not entirely lowercase"
+                )
                 if isinstance(v, dict):
                     check_lowercase_keys(v, current_path)
 
@@ -267,4 +269,3 @@ def test_all_translation_keys_are_lowercase():
     check_lowercase_keys(strings_content.get("device", {}), "device")
     check_lowercase_keys(strings_content.get("entity", {}), "entity")
     check_lowercase_keys(strings_content.get("options", {}), "options")
-
