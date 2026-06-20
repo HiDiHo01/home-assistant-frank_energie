@@ -93,7 +93,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
                 )
             },
             name=f"{COMPONENT_TITLE} - {self.service_name}",
-            translation_key=f"{DOMAIN}_{self.service_name.lower()}",
+            translation_key=f"{DOMAIN}_{self.service_name.lower().replace(' ', '_')}",
             manufacturer=COMPONENT_TITLE,
             model=self.service_name,
             configuration_url=API_CONF_URL,

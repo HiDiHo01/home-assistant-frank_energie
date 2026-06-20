@@ -94,6 +94,9 @@
         },
         "frank_energie_vehicles": {
             "name": "Frank Energie - Voertuigen"
+        },
+        "frank_energie_battery_sessions": {
+            "name": "Frank Energie - Batterijsessies"
         }
     },
     "entity": {

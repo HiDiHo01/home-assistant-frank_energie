@@ -3983,6 +3983,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="reward_payout_preference",
         icon="mdi:trophy",
         authenticated=True,
+        entity_registry_enabled_default=False,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             data[DATA_USER].UserSettings.get("rewardPayoutPreference")
@@ -4250,7 +4251,7 @@ class FrankEnergieSensor(
         self._attr_device_info = DeviceInfo(
             identifiers=device_info_identifiers,
             name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=f"{DOMAIN}_{description.service_name.lower()}",
+            translation_key=f"{DOMAIN}_{description.service_name.lower().replace(' ', '_')}",
             manufacturer=COMPONENT_TITLE,
             entry_type=DeviceEntryType.SERVICE,
             configuration_url=API_CONF_URL,
