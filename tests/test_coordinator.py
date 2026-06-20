@@ -1092,7 +1092,7 @@ async def test_coordinator_retry_incomplete_usage_data(
 
 @pytest.mark.asyncio
 async def test_promote_tomorrow_prices_updates_all_caches(coordinator):
-    """Test that _promote_tomorrow_prices promotes tomorrow's prices to all relevant today caching fields."""
+    """Test that promote_tomorrow_prices promotes tomorrow's prices to all relevant today caching fields."""
     tomorrow_prices = MagicMock()
     tomorrow_prices.electricity = MagicMock()
     tomorrow_prices.gas = MagicMock()
@@ -1123,8 +1123,7 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator):
         data_contract_price_resolution_state=None,
     )
 
-    component = FrankEnergieComponent(coordinator.hass, coordinator.config_entry)
-    component._promote_tomorrow_prices(coordinator)
+    coordinator.promote_tomorrow_prices()
 
     # Assertions
     assert coordinator.cached_prices_tomorrow is None
@@ -1146,7 +1145,7 @@ async def test_get_static_data_fallback_to_promoted_prices_when_api_returns_empt
     tomorrow = date(2026, 6, 21)
     start_date = date(2026, 6, 19)
 
-    # Mock cached prices for today
+    # Mock cached prices for today (electricity valid, gas empty)
     valid_price = MagicMock()
     valid_price.date_from.date.return_value = today
 
@@ -1168,6 +1167,94 @@ async def test_get_static_data_fallback_to_promoted_prices_when_api_returns_empt
     coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
 
     # Force refetch by setting last_fetch_today date to yesterday
+    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+
+    # Perform get static data
+    prices_today, *rest = await coordinator._get_static_data(
+        today, tomorrow, start_date
+    )
+
+    # Verify fallback happened
+    assert prices_today is cached_prices
+
+
+@pytest.mark.asyncio
+async def test_get_static_data_no_fallback_when_cached_prices_belong_to_other_day(
+    coordinator,
+):
+    """Test that _get_static_data does NOT fall back if the cached prices are for a different day."""
+    from datetime import date
+
+    today = date(2026, 6, 20)
+    tomorrow = date(2026, 6, 21)
+    start_date = date(2026, 6, 19)
+
+    # Mock cached prices for yesterday (not today)
+    invalid_price = MagicMock()
+    invalid_price.date_from.date.return_value = date(2026, 6, 19)
+
+    cached_prices = MagicMock()
+    cached_prices.electricity.all = [invalid_price]
+    cached_prices.gas.all = []
+    coordinator._static_prices_today = cached_prices
+
+    # Mock fetches returning empty prices
+    empty_prices = MagicMock()
+    empty_prices.electricity.all = []
+    empty_prices.gas.all = []
+    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=empty_prices)
+    coordinator._fetch_user_sites = AsyncMock(return_value=None)
+    coordinator._fetch_month_summary = AsyncMock(return_value=None)
+    coordinator._fetch_invoices = AsyncMock(return_value=None)
+    coordinator._fetch_period_usage = AsyncMock(return_value=None)
+    coordinator._fetch_user_data = AsyncMock(return_value=None)
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+
+    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+
+    # Perform get static data
+    prices_today, *rest = await coordinator._get_static_data(
+        today, tomorrow, start_date
+    )
+
+    # Verify fallback did NOT happen (we get the empty/fetched prices instead of the stale cached ones)
+    assert prices_today is empty_prices
+
+
+@pytest.mark.asyncio
+async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
+    coordinator,
+):
+    """Test that _get_static_data falls back to cached prices when both electricity and gas are valid for today."""
+    from datetime import date
+
+    today = date(2026, 6, 20)
+    tomorrow = date(2026, 6, 21)
+    start_date = date(2026, 6, 19)
+
+    # Mock cached prices where both are present and valid
+    valid_elec = MagicMock()
+    valid_elec.date_from.date.return_value = today
+    valid_gas = MagicMock()
+    valid_gas.date_from.date.return_value = today
+
+    cached_prices = MagicMock()
+    cached_prices.electricity.all = [valid_elec]
+    cached_prices.gas.all = [valid_gas]
+    coordinator._static_prices_today = cached_prices
+
+    # Mock fetches returning empty prices
+    empty_prices = MagicMock()
+    empty_prices.electricity.all = []
+    empty_prices.gas.all = []
+    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=empty_prices)
+    coordinator._fetch_user_sites = AsyncMock(return_value=None)
+    coordinator._fetch_month_summary = AsyncMock(return_value=None)
+    coordinator._fetch_invoices = AsyncMock(return_value=None)
+    coordinator._fetch_period_usage = AsyncMock(return_value=None)
+    coordinator._fetch_user_data = AsyncMock(return_value=None)
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+
     coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 
     # Perform get static data
