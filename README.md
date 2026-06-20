@@ -10,24 +10,15 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 
 ## Documentation
 
-- [Entities](docs/entities.md) - Overview of all entity platforms and features.
-- [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
-- [Update Frequency](docs/update_frequency.md)
-- [User Features](docs/user_features.md)
-- [Smart Battery](docs/smart_battery.md)
-- [Smart Charging](docs/smart_charging.md) - Smart Charging features and troubleshooting.
-- [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
-- [Examples](docs/examples.md)
-
 - [Configuration](docs/configuration.md)
 - [Diagnostics](docs/diagnostics.md)
-- [Entities](docs/entities.md)
-- [Events](docs/events.md)
+- [Entities](docs/entities.md) - Overview of all entity platforms and features.
+- [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
 - [Examples](docs/examples.md)
 - [FAQ](docs/faq.md)
 - [Smart Battery](docs/smart_battery.md)
-- [Smart Charging](docs/smart_charging.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- [Smart Charging](docs/smart_charging.md) - Smart Charging features and troubleshooting.
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
 - [Update Frequency](docs/update_frequency.md)
 - [User Features](docs/user_features.md)
 
