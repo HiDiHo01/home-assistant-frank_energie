@@ -108,20 +108,98 @@
             }
         },
         "binary_sensor": {
-            "smart_charging": {
-                "name": "Smart charging"
+            "smartcharging_isactivated": {
+                "name": "Smart charging",
+                "state": {
+                    "True": "Active",
+                    "False": "Inactive"
+                },
+                "state_attributes": {
+                    "provider": {
+                        "name": "Provider"
+                    },
+                    "available_in_country": {
+                        "name": "Available in country",
+                        "state": {
+                            "true": "Yes",
+                            "false": "No"
+                        }
+                    },
+                    "user_created_at": {
+                        "name": "User created at"
+                    },
+                    "needs_subscription": {
+                        "name": "Needs subscription",
+                        "state": {
+                            "true": "Yes",
+                            "false": "No"
+                        }
+                    }
+                }
             },
-            "smart_trading": {
-                "name": "Smart trading"
+            "smarttrading_isactivated": {
+                "name": "Smart trading",
+                "state": {
+                    "True": "Active",
+                    "False": "Inactive"
+                },
+                "state_attributes": {
+                    "available_in_country": {
+                        "name": "Available in country",
+                        "state": {
+                            "true": "Yes",
+                            "false": "No"
+                        }
+                    },
+                    "user_created_at": {
+                        "name": "User created at"
+                    },
+                    "needs_subscription": {
+                        "name": "Needs subscription",
+                        "state": {
+                            "true": "Yes",
+                            "false": "No"
+                        }
+                    }
+                }
             },
             "smart_feed_in": {
                 "name": "Smart feed-in"
             },
+            "smart_pv_systems": {
+                "name": "Smart solar panels",
+                "state": {
+                    "True": "Active",
+                    "False": "Inactive"
+                },
+                "state_attributes": {
+                    "system_count": {
+                        "name": "System count"
+                    }
+                }
+            },
             "smart_hvac": {
                 "name": "Smart HVAC"
             },
+            "disabled_haptic_feedback": {
+                "name": "Haptic feedback disabled"
+            },
             "battery_self_consumption_trading_allowed": {
                 "name": "Self consumption trading allowed"
+            },
+            "smart_push_notification_price_alerts": {
+                "name": "Smart push notification price alerts",
+                "state": {
+                    "True": "On",
+                    "False": "Off"
+                }
+            },
+            "co2_compensation": {
+                "name": "CO₂ compensation",
+                "state": {
+                    "True": "On",
+                    "False": "Off"
+                }
             }
         },
         "switch": {
