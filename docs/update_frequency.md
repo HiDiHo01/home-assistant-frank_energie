@@ -18,22 +18,43 @@ Depending on the active market resolution, electricity price sensors may contain
 | PT60M | 24 |
 | PT15M | 96 |
 
-## Gas Prices
+## API Maintenance Window
 
-Gas prices are updated when new gas price information becomes available from the API.
+The Frank Energie API has a daily maintenance window between **00:00 and 01:00 UTC**.
+
+During this period:
+
+- API calls are intentionally skipped.
+- The integration uses cached data when available.
+- Existing sensors continue to use cached values.
+- If no cached data exists, entities may temporarily become unavailable.
+
+The integration automatically resumes normal operation after 01:00 UTC.
 
 ## Tomorrow's Prices
 
-Tomorrow's electricity prices are normally published by the market during the afternoon.
+The integration starts checking for tomorrow's prices at approximately **11:00 UTC**.
+
+A dedicated publication window is used:
+
+| Window | Time (UTC) |
+|----------|-----------|
+| Publication start | 11:00 UTC |
+| Publication end | 13:00 UTC |
 
 Important notes:
 
-- Publication time is not guaranteed.
-- Prices may become available later than expected.
-- Availability depends on upstream market data.
-- The integration automatically detects when tomorrow's prices become available.
+- Publication time is controlled by upstream market operators.
+- Tomorrow's prices may appear at any point within or after the publication window.
+- The integration automatically retries when prices are not yet available.
+- Cached prices remain available while waiting.
 
-When tomorrow's prices are detected, the integration fires the `tomorrow_prices_available` event.
+When tomorrow's prices become available, the integration fires the following Home Assistant event:
+
+```text
+Event: frank_energie_event
+Action: tomorrow_prices_available
+```
 
 See:
 
@@ -41,27 +62,27 @@ See:
 
 ## Cache Behaviour
 
-The integration maintains cached price data.
+The integration maintains local caches for price and customer data.
 
 This means:
 
-- Existing prices remain available even if the API temporarily stops providing data.
-- Temporary API interruptions do not immediately remove historical price data.
-- Cached prices are used to maintain sensor continuity.
+- Existing prices remain available during temporary API interruptions.
+- Cached data is used during the maintenance window.
+- Historical prices are not immediately removed when the API temporarily returns no data.
+- Sensor continuity is preserved whenever possible.
 
-## Daily API Gap
+## Dynamic Update Intervals
 
-A short period exists each day where the Frank Energie API may not return price data.
+The coordinator dynamically adjusts its refresh interval throughout the day.
 
-This is expected behaviour.
+Polling becomes more aggressive during important periods such as:
 
-During this period:
+- Tomorrow price publication windows.
+- Resolution transitions.
+- Smart charging updates.
+- Smart battery updates.
 
-- The API may temporarily return no price data.
-- Cached prices remain available.
-- Sensors may continue to show previously retrieved values.
-
-The integration automatically recovers when new data becomes available.
+Outside these periods, the integration reduces API load by using less frequent updates.
 
 ## Authenticated Data
 
@@ -81,10 +102,11 @@ If authentication expires:
 - Authenticated entities may become unavailable.
 - Public price entities continue to operate.
 - The integration automatically attempts token renewal.
+- If required, the integration can re-authenticate using stored credentials.
 
 ## Resolution Changes
 
-Frank Energie may temporarily expose different market resolutions while new market data is being processed.
+Frank Energie may temporarily expose different market resolutions while market data is being processed.
 
 Examples:
 
@@ -93,21 +115,36 @@ Examples:
 
 This behaviour is normal and temporary.
 
-The integration automatically adapts when the preferred resolution becomes available again.
+The integration automatically reconciles resolution differences and switches back when the preferred resolution becomes available.
 
-## Coordinator Updates
+Messages such as:
 
-The integration periodically refreshes data in the background.
+```text
+Resolution drift detected (config=PT15M api=PT60M)
+```
 
-Refresh intervals may vary depending on:
+usually indicate a temporary upstream API state.
 
-- Data type
-- API availability
-- Authentication status
-- Smart charging providers
-- Smart battery providers
+## Event-Driven Updates
 
-The integration automatically balances data freshness with API load.
+The integration can fire Home Assistant events when important milestones occur.
+
+Examples include:
+
+- `tomorrow_prices_available`
+- `lowest_price`
+- `lowest_4p_price`
+- `lowest_16p_price`
+
+All events are emitted using:
+
+```text
+frank_energie_event
+```
+
+See:
+
+- [Events](events.md)
 
 ## Troubleshooting
 
@@ -116,29 +153,27 @@ The integration automatically balances data freshness with API load.
 Possible causes:
 
 - Prices have not yet been published.
-- Market data is delayed.
-- Upstream systems are temporarily unavailable.
+- Publication is delayed by the market.
+- The API is temporarily unavailable.
 
 ### Only 24 prices are available
 
-This indicates hourly pricing (`PT60M`) is currently active.
+Hourly pricing (`PT60M`) is currently active.
 
 ### 96 prices are available
 
-This indicates quarter-hourly pricing (`PT15M`) is currently active.
+Quarter-hourly pricing (`PT15M`) is currently active.
+
+### No new data between 00:00 and 01:00 UTC
+
+This is expected behaviour during the daily API maintenance window.
 
 ### Resolution drift detected
 
-Messages such as:
-
-```text
-Resolution drift detected (config=PT15M api=PT60M)
-```
-
-are expected during temporary API transitions and usually resolve automatically.
+Temporary resolution drift is expected and normally resolves automatically without user intervention.
 
 ## Notes
 
-- Update frequencies may change as Frank Energie expands API capabilities.
-- Publication times are controlled by upstream market operators.
+- Publication times are determined by upstream market operators.
+- Update frequencies may evolve as Frank Energie expands API capabilities.
 - Temporary data delays do not necessarily indicate a problem with the integration.
