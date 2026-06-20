@@ -17,8 +17,7 @@ from .const import (
     VERSION,
 )
 
-# if TYPE_CHECKING:
-#     pass
+from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,7 +97,7 @@ class FrankEnergieRefreshButton(ButtonEntity):
         self._attr_device_info = DeviceInfo(
             identifiers=device_info_identifiers,
             name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=f"{DOMAIN}_{description.service_name.lower().replace(' ', '_')}",
+            translation_key=device_translation_key(description.service_name),
             manufacturer=COMPONENT_TITLE,
             entry_type=DeviceEntryType.SERVICE,
             configuration_url=API_CONF_URL,

@@ -95,6 +95,7 @@ from .coordinator import (
     SmartBatterySessions,
 )
 from .statistics import lowest_window
+from .helpers import device_translation_key
 
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
@@ -4251,7 +4252,7 @@ class FrankEnergieSensor(
         self._attr_device_info = DeviceInfo(
             identifiers=device_info_identifiers,
             name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=f"{DOMAIN}_{description.service_name.lower().replace(' ', '_')}",
+            translation_key=device_translation_key(description.service_name),
             manufacturer=COMPONENT_TITLE,
             entry_type=DeviceEntryType.SERVICE,
             configuration_url=API_CONF_URL,

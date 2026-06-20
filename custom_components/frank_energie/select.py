@@ -21,6 +21,7 @@ from .const import (
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieCoordinator
+from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
                 )
             },
             name=f"{COMPONENT_TITLE} - {self.service_name}",
-            translation_key=f"{DOMAIN}_{self.service_name.lower().replace(' ', '_')}",
+            translation_key=device_translation_key(self.service_name),
             manufacturer=COMPONENT_TITLE,
             model=self.service_name,
             configuration_url=API_CONF_URL,

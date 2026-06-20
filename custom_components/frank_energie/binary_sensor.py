@@ -33,6 +33,7 @@ from .const import (
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
+from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -370,7 +371,7 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=f"{COMPONENT_TITLE} - {description.service_name}",
-                translation_key=f"{DOMAIN}_{description.service_name.lower().replace(' ', '_')}",
+                translation_key=device_translation_key(description.service_name),
                 manufacturer=COMPONENT_TITLE,
                 entry_type=DeviceEntryType.SERVICE,
                 model=description.service_name,
