@@ -95,6 +95,7 @@ from .coordinator import (
     SmartBatterySessions,
 )
 from .statistics import lowest_window
+from .helpers import device_translation_key
 
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
@@ -3769,7 +3770,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="EAN",
         name="EAN (Energy Account Number)",
-        translation_key="EAN",
+        translation_key="ean",
         icon="mdi:meter-electric",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3983,6 +3984,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="reward_payout_preference",
         icon="mdi:trophy",
         authenticated=True,
+        entity_registry_enabled_default=False,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             data[DATA_USER].UserSettings.get("rewardPayoutPreference")
@@ -4250,7 +4252,7 @@ class FrankEnergieSensor(
         self._attr_device_info = DeviceInfo(
             identifiers=device_info_identifiers,
             name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
+            translation_key=device_translation_key(description.service_name),
             manufacturer=COMPONENT_TITLE,
             entry_type=DeviceEntryType.SERVICE,
             configuration_url=API_CONF_URL,

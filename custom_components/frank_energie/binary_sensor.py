@@ -33,6 +33,7 @@ from .const import (
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
+from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class FrankEnergieBinarySensorDescription(
 
     service_name: str | None = None
     authenticated: bool = False
+    entity_registry_enabled_default: bool = True
 
     value_fn: (
         Callable[
@@ -341,6 +343,10 @@ class FrankEnergieBinarySensor(
 
         self.entity_description = description
 
+        self._attr_entity_registry_enabled_default = (
+            description.entity_registry_enabled_default
+        )
+
         self._attr_unique_id = f"{config_entry.unique_id}_{description.key}"
 
         if description.child_device_id:
@@ -365,7 +371,7 @@ class FrankEnergieBinarySensor(
                     )
                 },
                 name=f"{COMPONENT_TITLE} - {description.service_name}",
-                translation_key=f"{COMPONENT_TITLE} - {description.service_name}",
+                translation_key=device_translation_key(description.service_name),
                 manufacturer=COMPONENT_TITLE,
                 entry_type=DeviceEntryType.SERVICE,
                 model=description.service_name,
@@ -479,6 +485,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         translation_key="disabled_haptic_feedback",
         icon="mdi:vibrate-off",
         authenticated=True,
+        entity_registry_enabled_default=False,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
         value_fn=_disabled_haptic_feedback,
@@ -501,6 +508,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         translation_key="smart_push_notification_price_alerts",
         icon="mdi:bell-alert",
         authenticated=True,
+        entity_registry_enabled_default=False,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (

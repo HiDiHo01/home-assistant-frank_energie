@@ -1,13 +1,13 @@
 {
-    "title": "Frank Energie",
     "config": {
         "abort": {
             "already_configured": "Account is al toegevoegd",
-            "reauth_successful": "Opnieuw inloggen gelukt"
+            "reauth_successful": "Opnieuw inloggen gelukt",
+            "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
         },
         "error": {
-            "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
             "connection_error": "Verbindingsfout met Frank Energie API.",
+            "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
             "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
             "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
             "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw.",
@@ -15,177 +15,282 @@
         },
         "flow_title": "Frank Energie",
         "step": {
-            "login": {
-                "title": "Inloggen bij Frank Energie",
-                "data": {
-                    "username": "Email",
-                    "password": "Wachtwoord"
-                },
-                "error": {
-                    "invalid_auth": "Ongeldige gebruikersnaam of wachtwoord",
-                    "connection_error": "Kan geen verbinding maken met Frank Energie",
-                    "unknown_error": "Onbekende fout opgetreden"
-                }
-            },
-            "user": {
-                "title": "Wil je inloggen bij Frank Energie?",
-                "description": "Inloggen is niet nodig om deze integratie te kunnen gebruiken maar biedt wel de mogelijkheid extra gegevens op te halen.",
-                "data": {
-                    "authentication": "Gebruik Frank Energie-accountgegevens"
-                }
-            },
-            "site": {
-                "title": "Kies leveringslocatie",
-                "description": "Selecteer de leveringslocatie die je toe wilt voegen",
-                "data": {
-                    "site_reference": "Leveringslocaties:"
-                }
-            },
             "confirm": {
-                "title": "Frank Energie",
-                "description": "Wil je deze integratie toevoegen?"
+                "description": "Wil je deze integratie toevoegen?",
+                "title": "Frank Energie"
+            },
+            "import": {
+                "description": "Importeer een bestaande configuratie voor Frank Energie.",
+                "title": "Importeer configuratie"
+            },
+            "login": {
+                "data": {
+                    "password": "Wachtwoord",
+                    "username": "Email"
+                },
+                "description": "Voer je inloggegevens van Frank Energie in.",
+                "title": "Inloggen bij Frank Energie"
+            },
+            "options": {
+                "description": "Configureer de opties voor Frank Energie.",
+                "title": "Opties configureren"
             },
             "reauth": {
-                "title": "Her-authenticatie vereist",
-                "description": "Her-authenticatie is vereist voor Frank Energie."
+                "description": "Her-authenticatie is vereist voor Frank Energie.",
+                "title": "Her-authenticatie vereist"
+            },
+            "reauth_confirm": {
+                "description": "Her-authenticatie is vereist voor Frank Energie.",
+                "title": "Her-authenticatie vereist"
             },
             "reconfigure": {
-                "title": "Inloggen bij Frank Energie",
+                "data": {
+                    "password": "Wachtwoord",
+                    "username": "Email"
+                },
                 "description": "Voer de inloggegevens voor Frank Energie in om je account opnieuw te configureren.",
+                "title": "Inloggen bij Frank Energie"
+            },
+            "site": {
                 "data": {
-                    "username": "Email",
-                    "password": "Wachtwoord"
-                }
-            }
-        }
-    },
-    "options": {
-        "step": {
+                    "site_reference": "Leveringslocaties:"
+                },
+                "description": "Selecteer de leveringslocatie die je toe wilt voegen",
+                "title": "Kies leveringslocatie"
+            },
             "user": {
-                "title": "Inloggen bij Frank Energie",
                 "data": {
-                    "username": "Email",
-                    "password": "Wachtwoord"
-                }
+                    "authentication": "Gebruik Frank Energie-accountgegevens"
+                },
+                "description": "Inloggen is niet nodig om deze integratie te kunnen gebruiken maar biedt wel de mogelijkheid extra gegevens op te halen.",
+                "title": "Wil je inloggen bij Frank Energie?"
             }
         }
     },
     "device": {
-        "Frank Energie - Prices": {
-            "name": "Frank Energie - Prijzen",
-            "model": {
-                "Prices": "Prijzen"
-            }
+        "frank_energie_batteries": {
+            "name": "Frank Energie - Batterijen"
         },
-        "Frank Energie - Gasprices": {
-            "name": "Frank Energie - Gasprijzen",
-            "model": {
-                "Gasprices": "Gasprijzen"
-            }
+        "frank_energie_chargers": {
+            "name": "Frank Energie - Opladers"
         },
-        "Frank Energie - Costs": {
-            "name": "Frank Energie - Kosten",
-            "model": {
-                "Costs": "Kosten"
-            }
+        "frank_energie_costs": {
+            "name": "Frank Energie - Kosten"
         },
-        "Frank Energie - Usage": {
-            "name": "Frank Energie - Inzicht",
-            "model": {
-                "Usage": "Inzicht"
-            }
+        "frank_energie_gasprices": {
+            "name": "Frank Energie - Gasprijzen"
         },
-        "Frank Energie - User": {
-            "name": "Frank Energie - Gebruiker",
-            "model": {
-                "User": "Gebruiker"
-            }
+        "frank_energie_prices": {
+            "name": "Frank Energie - Prijzen"
         },
-        "Frank Energie - Chargers": {
-            "name": "Frank Energie - Opladers",
-            "model": {
-                "Chargers": "Opladers"
-            }
+        "frank_energie_settings": {
+            "name": "Frank Energie - Instellingen"
         },
-        "Frank Energie - Batteries": {
-            "name": "Frank Energie - Batterijen",
-            "model": {
-                "Batteries": "Batterijen"
-            }
+        "frank_energie_usage": {
+            "name": "Frank Energie - Inzicht"
         },
-        "Frank Energie - Vehicles": {
-            "name": "Frank Energie - Voertuigen",
-            "model": {
-                "Vehicles": "Voertuigen"
-            }
+        "frank_energie_user": {
+            "name": "Frank Energie - Gebruiker"
         },
-        "Frank Energie - Settings": {
-            "name": "Frank Energie - Instellingen",
-            "model": {
-                "Settings": "Instellingen"
-            }
+        "frank_energie_vehicles": {
+            "name": "Frank Energie - Voertuigen"
+        },
+        "frank_energie_battery_sessions": {
+            "name": "Frank Energie - Batterijsessies"
         }
     },
     "entity": {
-        "sensor": {
-            "current_electricity_price": {
-                "name": "Huidige elektriciteitsprijs (All-in)",
+        "binary_sensor": {
+            "battery_self_consumption_trading_allowed": {
+                "name": "Eigen verbruik handel toegestaan"
+            },
+            "co2_compensation": {
+                "name": "CO₂ compensatie",
+                "state": {}
+            },
+            "disabled_haptic_feedback": {
+                "name": "Haptische feedback uitgeschakeld"
+            },
+            "smart_feed_in": {
+                "name": "Slim terugleveren"
+            },
+            "smart_hvac": {
+                "name": "Slimme HVAC"
+            },
+            "smart_push_notification_price_alerts": {
+                "name": "Stroomprijsadvies",
+                "state": {}
+            },
+            "smart_pv_systems": {
+                "name": "Slimme zonnepanelen",
+                "state": {},
                 "state_attributes": {
-                    "prices": {
-                        "name": "Prijzen"
+                    "system_count": {
+                        "name": "Aantal systemen"
                     }
                 }
             },
-            "total_costs": {
-                "name": "Totaal kosten"
+            "smartcharging_isactivated": {
+                "name": "Slim laden",
+                "state": {},
+                "state_attributes": {
+                    "available_in_country": {
+                        "name": "Beschikbaar in Nederland",
+                        "state": {
+                            "false": "Nee",
+                            "true": "Ja"
+                        }
+                    },
+                    "needs_subscription": {
+                        "name": "Abonnement nodig",
+                        "state": {
+                            "false": "Nee",
+                            "true": "Ja"
+                        }
+                    },
+                    "provider": {
+                        "name": "Aanbieder"
+                    },
+                    "user_created_at": {
+                        "name": "Gebruiker aangemaakt op"
+                    }
+                }
             },
-            "costs_previous_year": {
-                "name": "Kosten vorig jaar"
+            "smarttrading_isactivated": {
+                "name": "Slim handelen",
+                "state": {},
+                "state_attributes": {
+                    "available_in_country": {
+                        "name": "Beschikbaar in Nederland",
+                        "state": {
+                            "false": "Nee",
+                            "true": "Ja"
+                        }
+                    },
+                    "needs_subscription": {
+                        "name": "Abonnement nodig",
+                        "state": {
+                            "false": "Nee",
+                            "true": "Ja"
+                        }
+                    },
+                    "user_created_at": {
+                        "name": "Gebruiker aangemaakt op"
+                    }
+                }
+            }
+        },
+        "button": {
+            "refresh_battery_sessions": {
+                "name": "Batterijsessies vernieuwen"
             },
-            "costs_this_year": {
-                "name": "Kosten dit jaar"
+            "refresh_prices": {
+                "name": "Prijzen vernieuwen"
+            }
+        },
+        "datetime": {
+            "charging_deadline": {
+                "name": "Vertrektijd"
+            }
+        },
+        "number": {
+            "consumption_threshold_price": {
+                "name": "Drempelprijs voor eigen verbruik"
+            }
+        },
+        "select": {
+            "battery_mode": {
+                "name": "Slimme batterij modus",
+                "state": {
+                    "imbalance_trading": "Onbalanshandel",
+                    "self_consumption": "Zelfconsumptie",
+                    "self_consumption_mix": "Zelfconsumptie Plus",
+                    "trading": "Handelen"
+                }
             },
-            "current_electricity_marketprice": {
-                "name": "Huidige elektriciteit inkoopprijs"
+            "battery_strategy": {
+                "name": "Slimme batterij strategie",
+                "state": {
+                    "aggressive": "Agressief",
+                    "balanced": "Standaard",
+                    "conservative": "Conservatief",
+                    "imbalance_only": "Alleen onbalans"
+                }
             },
-            "current_electricity_price_incl_tax": {
-                "name": "Huidige elektriciteit inkoopprijs + BTW"
+            "resolution": {
+                "name": "Resolutie",
+                "state": {
+                    "pt15m": "15 minuten",
+                    "pt60m": "60 minuten"
+                },
+                "state_attributes": {
+                    "is_authenticated": {
+                        "name": "Aangemeld",
+                        "state": {
+                            "false": "Nee",
+                            "true": "Ja"
+                        }
+                    },
+                    "available_options": {
+                        "name": "Beschikbare opties",
+                        "state": {
+                            "pt15m": "15 minuten",
+                            "pt60m": "60 minuten"
+                        }
+                    },
+                    "api_resolution": {
+                        "name": "API-resolutie",
+                        "state": {
+                            "pt15m": "15 minuten",
+                            "pt60m": "60 minuten"
+                        }
+                    },
+                    "active_option": {
+                        "name": "Actieve optie",
+                        "state": {
+                            "pt15m": "15 minuten",
+                            "pt60m": "60 minuten"
+                        }
+                    }
+                }
+            }
+        },
+        "sensor": {
+            "ean": {
+                "name": "EAN (Energie Account Nummer)"
             },
-            "current_electricity_price_incl_tax_markup": {
-                "name": "Huidige elektriciteit inkoopprijs + BTW + inkoopvergoeding"
+            "actual_costs_until_last_meter_reading_date": {
+                "name": "Werkelijke kosten tot vandaag"
             },
-            "current_electricity_tax_price": {
-                "name": "Huidige elektriciteit BTW prijs"
+            "advanced_payment_amount": {
+                "name": "Voorschotbedrag"
             },
-            "current_electricity_sourcing_markup": {
-                "name": "Huidige elektriciteit inkoopvergoeding"
+            "average_costs_per_month": {
+                "name": "Gemiddelde kosten per maand"
             },
-            "elec_fixed_kwh": {
-                "name": "Vaste elektriciteitsprijs per kWh"
+            "average_costs_per_month_previous_year": {
+                "name": "Gemiddelde kosten per maand vorig jaar"
             },
-            "elec_var_kwh": {
-                "name": "Variabele elektriciteitsprijs per kWh"
+            "average_costs_per_month_this_year": {
+                "name": "Gemiddelde kosten per maand dit jaar"
             },
-            "elec_tax_only": {
-                "name": "Elektriciteit energiebelasting per kWh"
+            "average_costs_per_year": {
+                "name": "Gemiddelde kosten per jaar"
             },
-            "elec_market_percent_tax": {
-                "name": "Elektriciteit procent BTW"
-            },
-            "elec_previoushour": {
-                "name": "Elektriciteitsprijs vorig uur (All-in)"
-            },
-            "elec_nexthour": {
-                "name": "Elektriciteitsprijs volgend uur (All-in)"
-            },
-            "elec_previoushour_market": {
-                "name": "Elektriciteit inkoopprijs vorig uur"
-            },
-            "elec_nexthour_market": {
-                "name": "Elektriciteit inkoopprijs volgend uur"
+            "average_costs_per_year_corrected": {
+                "name": "Gemiddelde kosten per jaar (gecorrigeerd)"
             },
             "average_electricity_market_price_today": {
                 "name": "Gemiddelde elektriciteit inkoopprijs vandaag"
+            },
+            "average_electricity_market_price_tomorrow": {
+                "name": "Gemiddelde elektriciteit inkoopprijs morgen"
+            },
+            "average_electricity_market_price_upcoming": {
+                "name": "Gemiddelde elektriciteitsprijs komende uren (All-in)"
+            },
+            "average_electricity_price_today_all_in": {
+                "name": "Gemiddelde elektriciteitsprijs vandaag (All-in)"
             },
             "average_electricity_price_today_including_tax": {
                 "name": "Gemiddelde elektriciteit inkoopprijs + BTW vandaag"
@@ -193,11 +298,8 @@
             "average_electricity_price_today_including_tax_and_markup": {
                 "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding vandaag"
             },
-            "average_electricity_price_today_all_in": {
-                "name": "Gemiddelde elektriciteitsprijs vandaag (All-in)"
-            },
-            "average_electricity_market_price_tomorrow": {
-                "name": "Gemiddelde elektriciteit inkoopprijs morgen"
+            "average_electricity_price_tomorrow_all_in": {
+                "name": "Gemiddelde elektriciteitsprijs morgen (All-in)"
             },
             "average_electricity_price_tomorrow_including_tax": {
                 "name": "Gemiddelde elektriciteit inkoopprijs + BTW morgen"
@@ -205,8 +307,8 @@
             "average_electricity_price_tomorrow_including_tax_and_markup": {
                 "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding morgen"
             },
-            "average_electricity_price_tomorrow_all_in": {
-                "name": "Gemiddelde elektriciteitsprijs morgen (All-in)"
+            "average_electricity_price_upcoming_all_in": {
+                "name": "Gemiddelde elektriciteitsprijs komende uren (All-in)"
             },
             "average_electricity_price_upcoming_market": {
                 "name": "Gemiddelde elektriciteit inkoopprijs komende uren"
@@ -217,104 +319,265 @@
             "average_electricity_price_upcoming_market_tax_markup": {
                 "name": "Gemiddelde elektriciteit inkoopprijs + BTW + inkoopvergoeding komende uren"
             },
-            "average_electricity_market_price_upcoming": {
-                "name": "Gemiddelde elektriciteitsprijs komende uren (All-in)"
+            "bank_account_number": {
+                "name": "Rekeningnummer"
             },
-            "average_electricity_price_upcoming_all_in": {
-                "name": "Gemiddelde elektriciteitsprijs komende uren (All-in)"
+            "contract_price_resolution_state": {
+                "name": "Prijs resolutie",
+                "state_attributes": {
+                    "available_options": {
+                        "name": "Mogelijke opties",
+                        "state": {}
+                    },
+                    "is_change_request_possible": {
+                        "name": "Is verandering mogelijk",
+                        "state": {
+                            "false": "Nee",
+                            "true": "Ja"
+                        }
+                    },
+                    "upcoming_change": {
+                        "name": "Aankomende verandering",
+                        "state": {}
+                    },
+                    "upcoming_change_effective_date": {
+                        "name": "Volgende verandering datum"
+                    }
+                }
             },
-            "elec_min": {
-                "name": "Laagste elektriciteitsprijs vandaag (All-in)"
+            "contract_product_name": {
+                "name": "Contract productnaam"
             },
-            "elec_max": {
-                "name": "Hoogste elektriciteitsprijs vandaag (All-in)"
+            "contract_start_date": {
+                "name": "Contract startdatum"
             },
-            "elec_tomorrow_min": {
-                "name": "Laagste elektriciteitsprijs morgen (All-in)"
+            "costs_electricity_yesterday": {
+                "name": "Kosten elektriciteit gisteren"
             },
-            "elec_tomorrow_max": {
-                "name": "Hoogste elektriciteitsprijs morgen (All-in)"
+            "costs_gas_yesterday": {
+                "name": "Kosten gas gisteren"
             },
-            "elec_upcoming_min": {
-                "name": "Laagste elektriciteitsprijs komende uren (All-in)"
+            "costs_per_day_till_now_this_month": {
+                "name": "Kosten per dag deze maand tot vandaag"
             },
-            "elec_upcoming_max": {
-                "name": "Hoogste elektriciteitsprijs komende uren (All-in)"
+            "costs_previous_year": {
+                "name": "Kosten vorig jaar"
+            },
+            "costs_this_year": {
+                "name": "Kosten dit jaar"
+            },
+            "country_code": {
+                "name": "Landcode"
+            },
+            "current_electricity_marketprice": {
+                "name": "Huidige elektriciteit inkoopprijs"
+            },
+            "current_electricity_price": {
+                "name": "Huidige elektriciteitsprijs (All-in)",
+                "state_attributes": {
+                    "prices": {
+                        "name": "Prijzen"
+                    }
+                }
+            },
+            "current_electricity_price_incl_tax": {
+                "name": "Huidige elektriciteit inkoopprijs + BTW"
+            },
+            "current_electricity_price_incl_tax_markup": {
+                "name": "Huidige elektriciteit inkoopprijs + BTW + inkoopvergoeding"
+            },
+            "current_electricity_sourcing_markup": {
+                "name": "Huidige elektriciteit inkoopvergoeding"
+            },
+            "current_electricity_tax_price": {
+                "name": "Huidige elektriciteit BTW prijs"
+            },
+            "delivered_feed_in_yesterday": {
+                "name": "Teruggeleverde elektriciteit gisteren"
+            },
+            "delivery_end_date": {
+                "name": "Levering einddatum"
+            },
+            "delivery_site": {
+                "name": "Leveringslocatie",
+                "state_attributes": {
+                    "city": {
+                        "name": "Plaats"
+                    },
+                    "house_number": {
+                        "name": "Huisnummer"
+                    },
+                    "house_number_addition": {
+                        "name": "Huisnummer toevoeging"
+                    },
+                    "street": {
+                        "name": "Straat"
+                    },
+                    "zip_code": {
+                        "name": "Postcode"
+                    }
+                }
+            },
+            "delivery_start_date": {
+                "name": "Levering startdatum"
+            },
+            "difference_costs_per_day": {
+                "name": "Verschil verwachte en werkelijke kosten per dag"
+            },
+            "difference_costs_until_last_meter_reading_date": {
+                "name": "Verschil verwachte en werkelijke kosten deze maand tot vandaag"
             },
             "elec_all": {
                 "name": "Gemiddelde elektriciteitsprijs alle uren (All-in)"
             },
-            "elec_all_min": {
-                "name": "Laagste elektriciteitsprijs alle uren (All-in)"
-            },
             "elec_all_max": {
                 "name": "Hoogste elektriciteitsprijs alle uren (All-in)"
             },
-            "gas_markup": {
-                "name": "Huidige gasprijs (All-in)"
+            "elec_all_min": {
+                "name": "Laagste elektriciteitsprijs alle uren (All-in)"
             },
-            "gas_tax_markup": {
-                "name": "Huidige gasprijs met BTW en inkoopvergoeding"
+            "elec_contract_status": {
+                "name": "Elektriciteit contract status",
+                "state": {}
             },
-            "gas_tax": {
-                "name": "Huidige gasprijs met BTW"
+            "elec_fixed_kwh": {
+                "name": "Vaste elektriciteitsprijs per kWh"
+            },
+            "elec_hourcount": {
+                "name": "Aantal elektriciteitprijzen geladen"
+            },
+            "elec_market_percent_tax": {
+                "name": "Elektriciteit procent BTW"
+            },
+            "elec_max": {
+                "name": "Hoogste elektriciteitsprijs vandaag (All-in)"
+            },
+            "elec_min": {
+                "name": "Laagste elektriciteitsprijs vandaag (All-in)"
+            },
+            "elec_nexthour": {
+                "name": "Elektriciteitsprijs volgend uur (All-in)"
+            },
+            "elec_nexthour_market": {
+                "name": "Elektriciteit inkoopprijs volgend uur"
+            },
+            "elec_previoushour": {
+                "name": "Elektriciteitsprijs vorig uur (All-in)"
+            },
+            "elec_previoushour_market": {
+                "name": "Elektriciteit inkoopprijs vorig uur"
+            },
+            "elec_tax_only": {
+                "name": "Elektriciteit energiebelasting per kWh"
+            },
+            "elec_tomorrow_max": {
+                "name": "Hoogste elektriciteitsprijs morgen (All-in)"
+            },
+            "elec_tomorrow_min": {
+                "name": "Laagste elektriciteitsprijs morgen (All-in)"
+            },
+            "elec_upcoming_max": {
+                "name": "Hoogste elektriciteitsprijs komende uren (All-in)"
+            },
+            "elec_upcoming_min": {
+                "name": "Laagste elektriciteitsprijs komende uren (All-in)"
+            },
+            "elec_var_kwh": {
+                "name": "Variabele elektriciteitsprijs per kWh"
+            },
+            "expected_costs_per_day_this_month": {
+                "name": "Verwachte kosten per dag deze maand"
+            },
+            "expected_costs_this_month": {
+                "name": "Verwachte kosten deze maand"
+            },
+            "expected_costs_this_year": {
+                "name": "Verwachte kosten dit jaar"
+            },
+            "expected_costs_until_last_meter_reading_date": {
+                "name": "Verwachte kosten tot vandaag"
+            },
+            "first_meter_reading_date": {
+                "name": "Eerste meter leesdatum"
+            },
+            "friends_count": {
+                "name": "Aantal vrienden"
+            },
+            "full_name": {
+                "name": "Volledige naam"
+            },
+            "gains_feed_in_yesterday": {
+                "name": "Opbrengst elektriciteit gisteren"
+            },
+            "gas_contract_status": {
+                "name": "Gas contract status",
+                "state": {}
+            },
+            "gas_hourcount": {
+                "name": "Aantal gasprijzen geladen"
             },
             "gas_market": {
                 "name": "Huidige gas marktprijs"
             },
-            "gas_tax_vat": {
-                "name": "Huidige gas energiebelasting prijs"
+            "gas_market_percent_tax": {
+                "name": "Gas procent BTW"
+            },
+            "gas_market_upcoming": {
+                "name": "Gemiddelde gas marktprijs komende uren"
+            },
+            "gas_markup": {
+                "name": "Huidige gasprijs (All-in)"
+            },
+            "gas_markup_after6am": {
+                "name": "Gasprijs na 6:00 uur vandaag (All-in)"
+            },
+            "gas_markup_before6am": {
+                "name": "Gasprijs voor 6:00 uur vandaag (All-in)"
+            },
+            "gas_max": {
+                "name": "Hoogste gasprijs vandaag (All-in)"
+            },
+            "gas_min": {
+                "name": "Laagste gasprijs vandaag (All-in)"
+            },
+            "gas_nexthour_all_in": {
+                "name": "Gasprijs volgend uur (All-in)"
+            },
+            "gas_nexthour_market": {
+                "name": "Gas inkoopprijs volgend uur"
+            },
+            "gas_previoushour_all_in": {
+                "name": "Gasprijs vorig uur (All-in)"
+            },
+            "gas_previoushour_market": {
+                "name": "Gas inkoopprijs vorig uur"
+            },
+            "gas_price_tomorrow_after6am_allin": {
+                "name": "Gas morgen na 6:00 uur (All-in)"
+            },
+            "gas_price_tomorrow_before6am_allin": {
+                "name": "Gas morgen voor 6:00 uur (All-in)"
             },
             "gas_sourcing": {
                 "name": "Huidige gas inkoopvergoeding prijs"
             },
+            "gas_tax": {
+                "name": "Huidige gasprijs met BTW"
+            },
+            "gas_tax_markup": {
+                "name": "Huidige gasprijs met BTW en inkoopvergoeding"
+            },
             "gas_tax_only": {
                 "name": "Huidige gas BTW prijs"
+            },
+            "gas_tax_vat": {
+                "name": "Huidige gas energiebelasting prijs"
             },
             "gas_today_avg_all_in": {
                 "name": "Gemiddelde gasprijs vandaag (All-in)"
             },
             "gas_tomorrow_avg_all_in": {
                 "name": "Gemiddelde gasprijs morgen (All-in)"
-            },
-            "gas_previoushour_all_in": {
-                "name": "Gasprijs vorig uur (All-in)"
-            },
-            "gas_nexthour_all_in": {
-                "name": "Gasprijs volgend uur (All-in)"
-            },
-            "gas_previoushour_market": {
-                "name": "Gas inkoopprijs vorig uur"
-            },
-            "gas_nexthour_market": {
-                "name": "Gas inkoopprijs volgend uur"
-            },
-            "gas_markup_before6am": {
-                "name": "Gasprijs voor 6:00 uur vandaag (All-in)"
-            },
-            "gas_markup_after6am": {
-                "name": "Gasprijs na 6:00 uur vandaag (All-in)"
-            },
-            "gas_price_tomorrow_before6am_allin": {
-                "name": "Gas morgen voor 6:00 uur (All-in)"
-            },
-            "gas_price_tomorrow_after6am_allin": {
-                "name": "Gas morgen na 6:00 uur (All-in)"
-            },
-            "gas_market_percent_tax": {
-                "name": "Gas procent BTW"
-            },
-            "gas_min": {
-                "name": "Laagste gasprijs vandaag (All-in)"
-            },
-            "gas_max": {
-                "name": "Hoogste gasprijs vandaag (All-in)"
-            },
-            "gas_tomorrow_min": {
-                "name": "Laagste gasprijs morgen (All-in)"
-            },
-            "gas_tomorrow_max": {
-                "name": "Hoogste gasprijs morgen (All-in)"
             },
             "gas_tomorrow_avg_market": {
                 "name": "Gemiddelde gas marktprijs morgen"
@@ -325,440 +588,102 @@
             "gas_tomorrow_avg_market_tax_markup": {
                 "name": "Gemiddelde gas marktprijs met BTW en inkoopvergoeding morgen"
             },
-            "gas_market_upcoming": {
-                "name": "Gemiddelde gas marktprijs komende uren"
+            "gas_tomorrow_max": {
+                "name": "Hoogste gasprijs morgen (All-in)"
             },
-            "gas_upcoming_min": {
-                "name": "Laagste gasprijs komende uren (All-in)"
+            "gas_tomorrow_min": {
+                "name": "Laagste gasprijs morgen (All-in)"
             },
             "gas_upcoming_max": {
                 "name": "Hoogste gasprijs komende uren (All-in)"
             },
-            "elec_hourcount": {
-                "name": "Aantal elektriciteitprijzen geladen"
-            },
-            "gas_hourcount": {
-                "name": "Aantal gasprijzen geladen"
-            },
-            "average_costs_per_year": {
-                "name": "Gemiddelde kosten per jaar"
-            },
-            "average_costs_per_year_corrected": {
-                "name": "Gemiddelde kosten per jaar (gecorrigeerd)"
-            },
-            "average_costs_per_month": {
-                "name": "Gemiddelde kosten per maand"
-            },
-            "average_costs_per_month_this_year": {
-                "name": "Gemiddelde kosten per maand dit jaar"
-            },
-            "average_costs_per_month_previous_year": {
-                "name": "Gemiddelde kosten per maand vorig jaar"
-            },
-            "expected_costs_until_last_meter_reading_date": {
-                "name": "Verwachte kosten tot vandaag"
-            },
-            "actual_costs_until_last_meter_reading_date": {
-                "name": "Werkelijke kosten tot vandaag"
-            },
-            "difference_costs_until_last_meter_reading_date": {
-                "name": "Verschil verwachte en werkelijke kosten deze maand tot vandaag"
-            },
-            "difference_costs_per_day": {
-                "name": "Verschil verwachte en werkelijke kosten per dag"
-            },
-            "costs_per_day_till_now_this_month": {
-                "name": "Kosten per dag deze maand tot vandaag"
-            },
-            "expected_costs_this_month": {
-                "name": "Verwachte kosten deze maand"
-            },
-            "expected_costs_per_day_this_month": {
-                "name": "Verwachte kosten per dag deze maand"
-            },
-            "expected_costs_this_year": {
-                "name": "Verwachte kosten dit jaar"
-            },
-            "invoice_previous_period": {
-                "name": "Factuurbedrag vorige maand"
-            },
-            "invoice_current_period": {
-                "name": "Factuurbedrag deze maand"
-            },
-            "invoice_upcoming_period": {
-                "name": "Factuurbedrag volgende maand"
-            },
-            "contract_start_date": {
-                "name": "Contract startdatum"
-            },
-            "contract_product_name": {
-                "name": "Contract productnaam"
-            },
-            "contract_price_resolution_state": {
-                "name": "Prijs resolutie",
-                "state_attributes": {
-                    "available_options": {
-                        "name": "Mogelijke opties",
-                        "state": {
-                            "PT15M": "15 minuten",
-                            "PT60M": "60 minuten"
-                        }
-                    },
-                    "is_change_request_possible": {
-                        "name": "Is verandering mogelijk",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    },
-                    "upcoming_change": {
-                        "name": "Aankomende verandering",
-                        "state": {
-                            "PT15M": "15 minuten",
-                            "PT60M": "60 minuten"
-                        }
-                    },
-                    "upcoming_change_effective_date": {
-                        "name": "Volgende verandering datum"
-                    }
-                }
-            },
-            "elec_contract_status": {
-                "name": "Elektriciteit contract status",
-                "state": {
-                    "LOSS": "Gestopt",
-                    "SWITCHED": "Overgestapt"
-                }
-            },
-            "gas_contract_status": {
-                "name": "Gas contract status",
-                "state": {
-                    "LOSS": "Gestopt",
-                    "SWITCHED": "Overgestapt"
-                }
-            },
-            "proposition_type": {
-                "name": "Aanbod",
-                "state": {
-                    "DYNAMIC": "Dynamisch"
-                }
-            },
-            "delivery_start_date": {
-                "name": "Levering startdatum"
-            },
-            "delivery_end_date": {
-                "name": "Levering einddatum"
-            },
-            "first_meter_reading_date": {
-                "name": "Eerste meter leesdatum"
-            },
-            "last_meter_reading_date": {
-                "name": "Laatste meter leesdatum"
-            },
-            "country_code": {
-                "name": "Landcode"
-            },
-            "costs_electricity_yesterday": {
-                "name": "Kosten elektriciteit gisteren"
-            },
-            "usage_electricity_yesterday": {
-                "name": "Verbruik elektriciteit gisteren"
-            },
-            "costs_gas_yesterday": {
-                "name": "Kosten gas gisteren"
-            },
-            "usage_gas_yesterday": {
-                "name": "Verbruik gas gisteren"
-            },
-            "gains_feed_in_yesterday": {
-                "name": "Opbrengst elektriciteit gisteren"
-            },
-            "delivered_feed_in_yesterday": {
-                "name": "Teruggeleverde elektriciteit gisteren"
-            },
-            "delivery_site": {
-                "name": "Leveringslocatie",
-                "state_attributes": {
-                    "street": {
-                        "name": "Straat"
-                    },
-                    "house_number": {
-                        "name": "Huisnummer"
-                    },
-                    "house_number_addition": {
-                        "name": "Huisnummer toevoeging"
-                    },
-                    "zip_code": {
-                        "name": "Postcode"
-                    },
-                    "city": {
-                        "name": "Plaats"
-                    }
-                }
-            },
-            "reference": {
-                "name": "Klantnummer"
-            },
-            "segments": {
-                "name": "Segmenten"
-            },
-            "friends_count": {
-                "name": "Aantal vrienden"
-            },
-            "trees_count": {
-                "name": "Aantal bomen"
-            },
-            "advanced_payment_amount": {
-                "name": "Voorschotbedrag"
-            },
-            "full_name": {
-                "name": "Volledige naam"
-            },
-            "phone_number": {
-                "name": "Telefoonnummer"
-            },
-            "status": {
-                "name": "Status",
-                "state": {
-                    "ACTIVE": "Actief",
-                    "IN_DELIVERY": "In levering",
-                    "DELIVERY_ENDED": "Levering beëindigd",
-                    "INACTIVE": "Inactief"
-                }
-            },
-            "reward_payout_preference": {
-                "name": "Beloningsuitbetalingsvoorkeur",
-                "state": {
-                    "DISCOUNT": "Korting",
-                    "TREES": "Bomen"
-                }
-            },
-            "meter_type": {
-                "name": "Meter",
-                "state": {
-                    "SLM": "Slimme meter"
-                }
-            },
-            "EAN": {
-                "name": "EAN (Energie Account Nummer)"
+            "gas_upcoming_min": {
+                "name": "Laagste gasprijs komende uren (All-in)"
             },
             "grid_operator": {
                 "name": "Netbeheerder"
             },
-            "bank_account_number": {
-                "name": "Rekeningrummer"
+            "invoice_current_period": {
+                "name": "Factuurbedrag deze maand"
+            },
+            "invoice_previous_period": {
+                "name": "Factuurbedrag vorige maand"
+            },
+            "invoice_upcoming_period": {
+                "name": "Factuurbedrag volgende maand"
+            },
+            "last_meter_reading_date": {
+                "name": "Laatste meter leesdatum"
+            },
+            "meter_type": {
+                "name": "Meter",
+                "state": {}
+            },
+            "phone_number": {
+                "name": "Telefoonnummer"
             },
             "preferred_automatic_collection_day": {
                 "name": "Voorkeur automatische incasso dag"
             },
-            "vehicle_name": {
-                "name": "Naam voertuig"
-            },
-            "mini_cooper_vehicle_name": {
-                "name": "Naam voertuig"
-            },
-            "pv_total_bonus": {
-                "name": "Totale bonus"
+            "proposition_type": {
+                "name": "Aanbod",
+                "state": {}
             },
             "pv_operational_status": {
                 "name": "Operationele status"
             },
             "pv_steering_status": {
                 "name": "Sturingsstatus"
-            }
-        },
-        "binary_sensor": {
-            "smartcharging_isactivated": {
-                "name": "Slim laden",
-                "state": {
-                    "True": "Actief",
-                    "False": "Niet actief"
-                },
-                "state_attributes": {
-                    "provider": {
-                        "name": "Aanbieder"
-                    },
-                    "available_in_country": {
-                        "name": "Beschikbaar in Nederland",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    },
-                    "user_created_at": {
-                        "name": "Gebruiker aangemaakt op"
-                    },
-                    "needs_subscription": {
-                        "name": "Abonnement nodig",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    }
-                }
             },
-            "smarttrading_isactivated": {
-                "name": "Slim handelen",
-                "state": {
-                    "True": "Actief",
-                    "False": "Niet actief"
-                },
-                "state_attributes": {
-                    "available_in_country": {
-                        "name": "Beschikbaar in Nederland",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    },
-                    "user_created_at": {
-                        "name": "Gebruiker aangemaakt op"
-                    },
-                    "needs_subscription": {
-                        "name": "Abonnement nodig",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    }
-                }
+            "pv_total_bonus": {
+                "name": "Totale bonus"
             },
-            "smart_feed_in": {
-                "name": "Slim terugleveren"
+            "reference": {
+                "name": "Klantnummer"
             },
-            "smart_pv_systems": {
-                "name": "Slimme zonnepanelen",
-                "state": {
-                    "True": "Actief",
-                    "False": "Niet actief"
-                },
-                "state_attributes": {
-                    "system_count": {
-                        "name": "Aantal systemen"
-                    }
-                }
+            "reward_payout_preference": {
+                "name": "Beloningsuitbetalingsvoorkeur",
+                "state": {}
             },
-            "smart_hvac": {
-                "name": "Slimme HVAC"
+            "segments": {
+                "name": "Segmenten"
             },
-            "disabled_haptic_feedback": {
-                "name": "Haptische feedback uitgeschakeld"
+            "status": {
+                "name": "Status",
+                "state": {}
             },
-            "battery_self_consumption_trading_allowed": {
-                "name": "Eigen verbruik handel toegestaan"
+            "total_costs": {
+                "name": "Totaal kosten"
             },
-            "smart_push_notification_price_alerts": {
-                "name": "Stroomprijsadvies",
-                "state": {
-                    "True": "Aan",
-                    "False": "Uit"
-                }
+            "trees_count": {
+                "name": "Aantal bomen"
             },
-            "co2_compensation": {
-                "name": "CO₂ compensatie",
-                "state": {
-                    "True": "Aan",
-                    "False": "Uit"
-                }
-            }
-        },
-        "select": {
-            "electericity_active_resolution": {
-                "name": "Elektriciteit prijs resolutie",
-                "state": {
-                    "pt15m": "Elke 15 minuten",
-                    "pt60m": "Elk uur"
-                }
+            "usage_electricity_yesterday": {
+                "name": "Verbruik elektriciteit gisteren"
             },
-            "resolution": {
-                "name": "Resolutie",
-                "state": {
-                    "pt15m": "15 minuten",
-                    "pt60m": "60 minuten",
-                    "15 minutes": "15 minuten",
-                    "60 minutes": "60 minuten"
-                },
-                "state_attributes": {
-                    "is_authenticated": {
-                        "name": "Aangemeld",
-                        "state": {
-                            "true": "Ja",
-                            "false": "Nee"
-                        }
-                    },
-                    "resolution": {
-                        "name": "Resolutie",
-                        "state": {
-                            "pt15m": "15 minuten",
-                            "pt60m": "60 minuten",
-                            "15 minutes": "15 minuten",
-                            "60 minutes": "60 minuten"
-                        }
-                    },
-                    "options": {
-                        "name": "Opties",
-                        "state": {
-                            "pt15m": "15 minuten",
-                            "pt60m": "60 minuten",
-                            "15 minutes": "15 minuten",
-                            "60 minutes": "60 minuten"
-                        }
-                    }
-                }
+            "usage_gas_yesterday": {
+                "name": "Verbruik gas gisteren"
             },
-            "battery_mode": {
-                "name": "Slimme batterij modus",
-                "state": {
-                    "self_consumption": "Zelfconsumptie",
-                    "self_consumption_mix": "Zelfconsumptie Plus",
-                    "imbalance_trading": "Onbalanshandel",
-                    "trading": "Handelen"
-                }
-            },
-            "battery_strategy": {
-                "name": "Slimme batterij strategie",
-                "state": {
-                    "balanced": "Standaard",
-                    "conservative": "Conservatief",
-                    "aggressive": "Agressief",
-                    "imbalance_only": "Alleen onbalans"
-                }
-            }
-        },
-        "button": {
-            "refresh_prices": {
-                "name": "Prijzen vernieuwen"
-            },
-            "refresh_battery_sessions": {
-                "name": "Batterijsessies vernieuwen"
-            },
-            "refresh_chargers": {
-                "name": "Laders vernieuwen"
-            },
-            "disable_smart_trading": {
-                "name": "Slim handelen uitschakelen"
-            },
-            "disable_smart_feed_in": {
-                "name": "Slim terugleveren uitschakelen"
-            },
-            "disable_smart_hvac": {
-                "name": "Slimme HVAC uitschakelen"
+            "vehicle_name": {
+                "name": "Naam voertuig"
             }
         },
         "switch": {
             "enode_smart_charging": {
                 "name": "Slim laden"
             }
-        },
-        "number": {
-            "consumption_threshold_price": {
-                "name": "Drempelprijs voor eigen verbruik"
-            }
-        },
-        "datetime": {
-            "charging_deadline": {
-                "name": "Vertrektijd"
+        }
+    },
+    "options": {
+        "step": {
+            "user": {
+                "data": {
+                    "password": "Wachtwoord",
+                    "username": "Email"
+                },
+                "title": "Inloggen bij Frank Energie"
             }
         }
-    }
+    },
+    "title": "Frank Energie"
 }

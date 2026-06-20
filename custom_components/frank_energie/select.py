@@ -21,18 +21,19 @@ from .const import (
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieCoordinator
+from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
 
 DISPLAY_TO_VALUE: dict[str, str] = {
-    "15 minutes": "PT15M",
-    "60 minutes": "PT60M",
+    "pt15m": "PT15M",
+    "pt60m": "PT60M",
 }
 
 VALUE_TO_DISPLAY: dict[str, str] = {v: k for k, v in DISPLAY_TO_VALUE.items()}
 
-DEFAULT_DISPLAY = "15 minutes"
+DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
 
 
@@ -93,7 +94,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
                 )
             },
             name=f"{COMPONENT_TITLE} - {self.service_name}",
-            translation_key=f"{COMPONENT_TITLE} - {self.service_name}",
+            translation_key=device_translation_key(self.service_name),
             manufacturer=COMPONENT_TITLE,
             model=self.service_name,
             configuration_url=API_CONF_URL,

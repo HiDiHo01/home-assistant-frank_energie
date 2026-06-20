@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING, Final
 from cryptography.fernet import Fernet
 from homeassistant.core import HomeAssistant
 
-from .const import UNIT_GAS_BE, UNIT_GAS_NL
+from .const import (
+    DOMAIN,
+    UNIT_GAS_BE,
+    UNIT_GAS_NL,
+)
 
 if TYPE_CHECKING:
     from python_frank_energie.models import ChargeSettings
@@ -103,3 +107,8 @@ def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
             _LOGGER.warning("Failed to decrypt stored password: %s", ex)
             return None
     return password
+
+
+def device_translation_key(service_name: str) -> str:
+    """Generate a lowercase slugified device translation key from a service name."""
+    return f"{DOMAIN}_{service_name.lower().replace(' ', '_')}"
