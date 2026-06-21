@@ -26,7 +26,10 @@ jobs:
             --verbose
             --no-progress
             --accept 200,429
+            --root .
             README.md
             docs/**/*.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
