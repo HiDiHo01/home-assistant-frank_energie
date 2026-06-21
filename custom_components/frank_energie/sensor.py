@@ -1296,6 +1296,29 @@ def _safe_getattr(obj: object, attr: str) -> object | None:
     return getattr(obj, attr, None) if obj else None
 
 
+def _calculate_market_percent_tax(price_data: object | None) -> float | None:
+    """Calculate market percent tax safely with fallback to any non-zero hour."""
+    if not price_data:
+        return None
+
+    # First, try to calculate using the current hour if price is non-zero
+    current = getattr(price_data, "current_hour", None)
+    if current and current.market_price != 0:
+        return 100 * current.market_price_tax / current.market_price
+
+    # Fallback to the first non-zero hour in the dataset
+    all_prices = getattr(price_data, "all", [])
+    for price in all_prices:
+        if price.market_price != 0:
+            return 100 * price.market_price_tax / price.market_price
+
+    # If all prices are 0, and tax is also 0, it means tax is 0%
+    if current and current.market_price == 0 and current.market_price_tax == 0:
+        return 0.0
+
+    return None
+
+
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     tuple[FrankEnergieEntityDescription, ...]
 ] = (
@@ -1910,20 +1933,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         suggested_display_precision=0,
         icon="mdi:percent",
-        value_fn=lambda data: (
-            100
-            / (
-                data[DATA_ELECTRICITY].current_hour.market_price
-                / data[DATA_ELECTRICITY].current_hour.market_price_tax
-            )
-            if (
-                data[DATA_ELECTRICITY]
-                and data[DATA_ELECTRICITY].current_hour
-                and data[DATA_ELECTRICITY].current_hour.market_price != 0
-                and data[DATA_ELECTRICITY].current_hour.market_price_tax != 0
-            )
-            else None
-        ),
+        value_fn=lambda data: _calculate_market_percent_tax(data.get(DATA_ELECTRICITY)),
         entity_registry_enabled_default=True,
     ),
     FrankEnergieEntityDescription(
@@ -1934,20 +1944,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=0,
         icon="mdi:percent",
         service_name=SERVICE_NAME_GAS_PRICES,
-        value_fn=lambda data: (
-            100
-            / (
-                data[DATA_GAS].current_hour.market_price
-                / data[DATA_GAS].current_hour.market_price_tax
-            )
-            if (
-                data[DATA_GAS]
-                and data[DATA_GAS].current_hour
-                and data[DATA_GAS].current_hour.market_price != 0
-                and data[DATA_GAS].current_hour.market_price_tax != 0
-            )
-            else None
-        ),
+        value_fn=lambda data: _calculate_market_percent_tax(data.get(DATA_GAS)),
         entity_registry_enabled_default=True,
     ),
     FrankEnergieEntityDescription(

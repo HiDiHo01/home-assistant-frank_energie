@@ -367,3 +367,94 @@ async def test_setup_entry_restores_title(
         assert entry.state is ConfigEntryState.LOADED
         # Title should be healed back to the address
         assert entry.title == "Main Street 123"
+
+
+async def test_maybe_refresh_tomorrow(hass: HomeAssistant, freezer) -> None:
+    """Test _maybe_refresh_tomorrow logic under various times and cache states."""
+    from custom_components.frank_energie import FrankEnergieComponent
+    from datetime import datetime, timezone
+
+    coordinator = MagicMock()
+    coordinator.promote_tomorrow_prices = MagicMock()
+    coordinator.async_request_refresh = AsyncMock()
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"username": "test@example.com"},
+        entry_id="1234abcd",
+    )
+
+    component = FrankEnergieComponent(hass, entry)
+
+    # 1. Midnight: now_utc is 00:00 UTC. Should promote prices and return.
+    freezer.move_to(datetime(2026, 6, 21, 0, 0, 0, tzinfo=timezone.utc))
+    coordinator.promote_tomorrow_prices.reset_mock()
+    coordinator.async_request_refresh.reset_mock()
+
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_called_once()
+    coordinator.async_request_refresh.assert_not_called()
+
+    # 2. Before release hour: now_utc is 10:00 UTC. Should return without doing anything.
+    freezer.move_to(datetime(2026, 6, 21, 10, 0, 0, tzinfo=timezone.utc))
+    coordinator.promote_tomorrow_prices.reset_mock()
+    coordinator.async_request_refresh.reset_mock()
+
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_not_called()
+    coordinator.async_request_refresh.assert_not_called()
+
+    # 3. After release hour, prices NOT available (cached_prices_tomorrow is None). Should request refresh.
+    freezer.move_to(datetime(2026, 6, 21, 12, 0, 0, tzinfo=timezone.utc))
+    coordinator.cached_prices_tomorrow = None
+    coordinator.promote_tomorrow_prices.reset_mock()
+    coordinator.async_request_refresh.reset_mock()
+
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_not_called()
+    coordinator.async_request_refresh.assert_called_once()
+
+    # 4. After release hour, cached_prices_tomorrow is not None but electricity & gas are both None.
+    # Should request refresh because tomorrow prices are not actually available.
+    mock_prices_empty = MagicMock()
+    mock_prices_empty.electricity = None
+    mock_prices_empty.gas = None
+    coordinator.cached_prices_tomorrow = mock_prices_empty
+    coordinator.promote_tomorrow_prices.reset_mock()
+    coordinator.async_request_refresh.reset_mock()
+
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_not_called()
+    coordinator.async_request_refresh.assert_called_once()
+
+    # 5. After release hour, prices already available (cached_prices_tomorrow is not None, e.g. electricity has prices).
+    # Should skip refresh.
+    mock_prices_available = MagicMock()
+    mock_prices_available.electricity = MagicMock()
+    mock_prices_available.gas = None
+    coordinator.cached_prices_tomorrow = mock_prices_available
+    coordinator.promote_tomorrow_prices.reset_mock()
+    coordinator.async_request_refresh.reset_mock()
+
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_not_called()
+    coordinator.async_request_refresh.assert_not_called()
+
+    # 6. After release hour, prices already available (gas has prices, electricity is None).
+    # Should skip refresh.
+    mock_prices_gas = MagicMock()
+    mock_prices_gas.electricity = None
+    mock_prices_gas.gas = MagicMock()
+    coordinator.cached_prices_tomorrow = mock_prices_gas
+    coordinator.promote_tomorrow_prices.reset_mock()
+    coordinator.async_request_refresh.reset_mock()
+
+    await component._maybe_refresh_tomorrow(coordinator)
+
+    coordinator.promote_tomorrow_prices.assert_not_called()
+    coordinator.async_request_refresh.assert_not_called()

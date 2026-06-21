@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import date, datetime, time
+from decimal import Decimal
+from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
+from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_PASSWORD,
+    CONF_TOKEN,
+    CONF_USERNAME,
+)
 from homeassistant.core import HomeAssistant
 
 from . import FrankEnergieEntryData
@@ -61,23 +70,35 @@ def _serialize(value: object) -> object:
     if value is None:
         return None
 
+    if isinstance(value, Enum):
+        return value.value
+
+    if isinstance(value, Decimal):
+        return str(value)
+
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+
+    if isinstance(value, UUID):
+        return str(value)
+
+    if isinstance(value, bytes):
+        return value.hex()
+
+    if isinstance(value, (set, frozenset)):
+        return [_serialize(item) for item in sorted(value)]
+
     if is_dataclass(value):
-        return {
-            key: _serialize(val)
-            for key, val in asdict(value).items()
-        }
+        return {key: _serialize(val) for key, val in asdict(value).items()}
 
     if isinstance(value, dict):
-        return {
-            str(key): _serialize(val)
-            for key, val in value.items()
-        }
+        return {str(key): _serialize(val) for key, val in value.items()}
 
     if isinstance(value, list):
         return [_serialize(item) for item in value]
 
     if isinstance(value, tuple):
-        return [_serialize(item) for item in value]
+        return tuple(_serialize(item) for item in value)
 
     if hasattr(value, "__dict__"):
         return {
