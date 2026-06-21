@@ -57,11 +57,11 @@ Vervolgens kunnen sensoren per stuk worden uitgeschakeld of verborgen indien gew
 
 #### Let op!
 
-Indien je deze plugin al gebruikte en hebt ingesteld via `configuration.yaml` dien je deze instellingen te verwijderen en Frank Energie opnieuw in te stellen middels de config flow zoals hierboven[...]
+Indien je deze plugin al gebruikte en hebt ingesteld via `configuration.yaml` dien je deze instellingen te verwijderen en Frank Energie opnieuw in te stellen middels de config flow zoals hierboven beschreven.
 
 #### Inloggen
 
-Bij het instellen van de integratie wordt de mogelijkheid gegeven in te loggen met je Frank Energie-account. Inloggen is geen vereiste voor werking van deze integratie maar biedt de mogelijkheid o[...]
+Bij het instellen van de integratie wordt de mogelijkheid gegeven in te loggen met je Frank Energie-account. Inloggen is geen vereiste voor werking van deze integratie maar biedt de mogelijkheid om ook klantspecifieke gegevens op te halen. Op dit moment krijg je na inloggen naast de gebruikelijke tariefsensoren ook de beschikking over sensoren voor de verwachte en daadwerkelijke verbruikskosten voor de huidige maand.
 
 ### Gebruik
 
