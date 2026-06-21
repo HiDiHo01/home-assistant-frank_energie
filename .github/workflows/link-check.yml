@@ -26,7 +26,7 @@ jobs:
             --verbose
             --no-progress
             --accept 200,429
-            --root .
+            --root-dir .
             README.md
             docs/**/*.md
         env:
