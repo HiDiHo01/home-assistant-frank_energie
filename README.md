@@ -1,4 +1,4 @@
-[![latest version](https://img.shields.io/github/tag/HiDiHo01/home-assistant-frank_energie?include_prereleases=&sort=semver&label=Versie)](https://github.com/HiDiHo01/home-assistant-frank_energie/releases/)
+[![latest version](https://img.shields.io/github/tag/HiDiHo01/home-assistant-frank_energie?include_prereleases=&sort=semver&label=Versie)](https://github.com/HiDiHo01/home-assistant-frank_energie/r[...]
 ![installations](https://img.shields.io/badge/dynamic/json?label=Installaties&query=%24.frank_energie.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-orange)](https://buymeacoffee.com/royarx)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue)](https://www.paypal.me/royarx)
@@ -57,11 +57,11 @@ Vervolgens kunnen sensoren per stuk worden uitgeschakeld of verborgen indien gew
 
 #### Let op!
 
-Indien je deze plugin al gebruikte en hebt ingesteld via `configuration.yaml` dien je deze instellingen te verwijderen en Frank Energie opnieuw in te stellen middels de config flow zoals hierboven beschreven.
+Indien je deze plugin al gebruikte en hebt ingesteld via `configuration.yaml` dien je deze instellingen te verwijderen en Frank Energie opnieuw in te stellen middels de config flow zoals hierboven[...]
 
 #### Inloggen
 
-Bij het instellen van de integratie wordt de mogelijkheid gegeven in te loggen met je Frank Energie-account. Inloggen is geen vereiste voor werking van deze integratie maar biedt de mogelijkheid om ook klantspecifieke gegevens op te halen. Op dit moment krijg je na inloggen naast de gebruikelijke tariefsensoren ook de beschikking over sensoren voor de verwachte en daadwerkelijke verbruikskosten voor de huidige maand.
+Bij het instellen van de integratie wordt de mogelijkheid gegeven in te loggen met je Frank Energie-account. Inloggen is geen vereiste voor werking van deze integratie maar biedt de mogelijkheid o[...]
 
 ### Gebruik
 
@@ -87,7 +87,7 @@ Middels [apex-card](https://github.com/RomRider/apexcharts-card) is het mogelijk
 
 #### Voorbeeld 1 - Alle data
 
-![Apex graph voorbeeld 1](/images/48%20uur%20per%20kwartier.png "Voorbeeld 1")
+![Apex graph voorbeeld 1](images/48%20uur%20per%20kwartier.png "Voorbeeld 1")
 
 ```yaml 
 type: custom:apexcharts-card
@@ -168,7 +168,7 @@ apex_config:
 
 #### Voorbeeld 2 - Komende 10 uur
 
-![Apex graph voorbeeld 2](/images/example_2.png "Voorbeeld 2")
+![Apex graph voorbeeld 2](images/example_2.png "Voorbeeld 2")
 
 ```yaml
 type: custom:apexcharts-card
@@ -249,7 +249,7 @@ apex_config:
 ```
 #### Voorbeeld 3 - Vandaag en morgen (conditional)
 
-![Apex graph voorbeeld 3](/images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
+![Apex graph voorbeeld 3](images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
 
 ```
 type: custom:apexcharts-card
@@ -426,7 +426,7 @@ card:
 
 #### Voorbeeld 4 - Kosten per maand dit jaar
 
-![Apex graph voorbeeld 4](/images/kosten%20per%20maand%20dit%20jaar.png "Voorbeeld 4")
+![Apex graph voorbeeld 4](images/kosten%20per%20maand%20dit%20jaar.png "Voorbeeld 4")
 
 ```
 type: custom:apexcharts-card
@@ -504,7 +504,7 @@ experimental:
 
 #### Voorbeeld 5 - Kosten per maand vorig jaar
 
-![Apex graph voorbeeld 5](/images/kosten%20per%20maand%20vorig%20jaar.png "Voorbeeld 5")
+![Apex graph voorbeeld 5](images/kosten%20per%20maand%20vorig%20jaar.png "Voorbeeld 5")
 
 ```
 type: custom:apexcharts-card
@@ -572,7 +572,7 @@ experimental:
 
 #### Voorbeeld 1 - Laagste en hoogste prijs vandaag
 
-![markdown voorbeeld 5](/images/vandaag%20laagste%20hoogste.png "Voorbeeld 1")
+![markdown voorbeeld 5](images/vandaag%20laagste%20hoogste.png "Voorbeeld 1")
 
 ```
 type: markdown
