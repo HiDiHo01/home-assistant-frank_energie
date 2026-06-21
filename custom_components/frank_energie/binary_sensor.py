@@ -37,6 +37,8 @@ from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
+class UserFeatureKey(str, Enum):
+    SMART_HVAC = "smartHvac"
 
 @dataclass(slots=True, frozen=True)
 class FrankEnergieBinarySensorDescription(
@@ -191,6 +193,9 @@ def _user_feature_attributes(
 
     return attr_fn
 
+def _smart_hvac_state(data: FrankEnergieData) -> bool:
+    """Return smart HVAC active state."""
+    return _user_feature_state(data, UserFeatureKey.SMART_HVAC)
 
 def _disabled_haptic_feedback(
     data: FrankEnergieData,
@@ -534,10 +539,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: _user_feature_state(
-            data,
-            "smartHvac",
-        ),
+        value_fn=_smart_hvac_state,
     ),
     FrankEnergieBinarySensorDescription(
         key="disabled_haptic_feedback",
