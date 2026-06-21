@@ -277,6 +277,62 @@ def _battery_self_consumption_allowed(
 
     return value_fn
 
+def _extract_activation_attributes(
+    value: object,
+) -> dict[str, object]:
+    """Extract smart feed-in attributes."""
+
+    if value is None:
+        return {}
+
+    if isinstance(value, dict):
+        return {
+            key: attr_value
+            for key, attr_value in {
+                "has_accepted_terms": value.get("has_accepted_terms"),
+                "is_app_onboarding_available": value.get(
+                    "is_app_onboarding_available",
+                ),
+                "is_available_in_country": value.get(
+                    "is_available_in_country",
+                ),
+                "user_created_at": value.get("user_created_at"),
+                "user_id": value.get("user_id"),
+            }.items()
+            if attr_value is not None
+        }
+
+    return {
+        key: attr_value
+        for key, attr_value in {
+            "has_accepted_terms": getattr(
+                value,
+                "has_accepted_terms",
+                None,
+            ),
+            "is_app_onboarding_available": getattr(
+                value,
+                "is_app_onboarding_available",
+                None,
+            ),
+            "is_available_in_country": getattr(
+                value,
+                "is_available_in_country",
+                None,
+            ),
+            "user_created_at": getattr(
+                value,
+                "user_created_at",
+                None,
+            ),
+            "user_id": getattr(
+                value,
+                "user_id",
+                None,
+            ),
+        }.items()
+        if attr_value is not None
+    }
 
 def _battery_attributes(
     battery_id: str,
@@ -465,6 +521,9 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: _extract_activation_state(
+            data.get(DATA_USER_SMART_FEED_IN),
+        ),
+        attr_fn=lambda data: _extract_activation_attributes(
             data.get(DATA_USER_SMART_FEED_IN),
         ),
     ),
