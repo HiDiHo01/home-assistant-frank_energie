@@ -283,6 +283,7 @@ def _battery_self_consumption_allowed(
 
     return value_fn
 
+
 def _extract_activation_attributes(
     value: object,
 ) -> dict[str, object]:
@@ -339,6 +340,7 @@ def _extract_activation_attributes(
         }.items()
         if attr_value is not None
     }
+
 
 def _battery_attributes(
     battery_id: str,
