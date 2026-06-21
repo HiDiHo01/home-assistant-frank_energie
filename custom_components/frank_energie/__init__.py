@@ -136,9 +136,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         if now_utc.hour < PRICE_RELEASE_HOUR_UTC:
             return
 
-        if coordinator.cached_prices_tomorrow is None or (
-            coordinator.cached_prices_tomorrow.electricity is None
-            and coordinator.cached_prices_tomorrow.gas is None
+        if coordinator.cached_prices_tomorrow is not None and (
+            coordinator.cached_prices_tomorrow.electricity is not None
+            or coordinator.cached_prices_tomorrow.gas is not None
         ):
             _LOGGER.debug("Tomorrow prices already available, skipping refresh")
             return
