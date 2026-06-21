@@ -10,7 +10,7 @@ import logging
 
 # import secrets
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Awaitable, Callable, Final, TypedDict, cast
 
@@ -245,8 +245,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_update_success = False
         self.user_electricity_enabled = False
         self.user_gas_enabled = False
-        self.force_next_refresh: bool = False
-
         _LOGGER.debug(
             "Initializing Frank Energie coordinator with country_code: %s",
             self.country_code,
@@ -423,18 +421,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # ---------------------------------------------------
         _LOGGER.debug(
             "Today electricity periods: %s",
-            len(self.cached_prices_today.prices_today.electricity.all)
-            if self.cached_prices_today
-            and self.cached_prices_today.prices_today
-            and self.cached_prices_today.prices_today.electricity
-            else 0,
+            (
+                len(self.cached_prices_today.prices_today.electricity.all)
+                if self.cached_prices_today
+                and self.cached_prices_today.prices_today
+                and self.cached_prices_today.prices_today.electricity
+                else 0
+            ),
         )
 
         _LOGGER.debug(
             "Tomorrow electricity periods: %s",
-            len(prices_tomorrow.electricity.all)
-            if prices_tomorrow and prices_tomorrow.electricity
-            else 0,
+            (
+                len(prices_tomorrow.electricity.all)
+                if prices_tomorrow and prices_tomorrow.electricity
+                else 0
+            ),
         )
         result = self._aggregate_data(self.cached_prices_today, prices_tomorrow)
         self.cached_prices = result
@@ -463,14 +465,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> None:
         """Fetch and cache today's data if stale or missing."""
         if (
-            not self.force_next_refresh
-            and self.cached_prices_today is not None
+            self.cached_prices_today is not None
             and self.last_fetch_today is not None
             and self.last_fetch_today.date() == today
         ):
             return
-
-        self.force_next_refresh = False
 
         try:
             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
@@ -609,9 +608,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "[%s][%s] Tomorrow electricity periods: %s",
                 self.config_entry.title,
                 self.site_reference,
-                len(prices_tomorrow.electricity.all)
-                if prices_tomorrow and prices_tomorrow.electricity
-                else 0,
+                (
+                    len(prices_tomorrow.electricity.all)
+                    if prices_tomorrow and prices_tomorrow.electricity
+                    else 0
+                ),
             )
             _LOGGER.debug(
                 "Listeners: %s",
@@ -619,9 +620,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             _LOGGER.debug(
                 "Coordinator electricity periods: %s",
-                len(self.data[DATA_ELECTRICITY].all)
-                if self.data[DATA_ELECTRICITY]
-                else 0,
+                (
+                    len(self.data[DATA_ELECTRICITY].all)
+                    if self.data[DATA_ELECTRICITY]
+                    else 0
+                ),
             )
 
         return self.cached_prices_tomorrow
@@ -891,7 +894,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             user_data = await self.api.user(self.site_reference)
-            if not self._country_code:
+            if user_data is not None:
+                try:
+                    smart_hvac = await self.api.smart_hvac_status()
+                    if smart_hvac:
+                        user_data.smartHvac = smart_hvac
+                except (RequestException, FrankEnergieException, ClientError) as ex:
+                    _LOGGER.debug(
+                        "Smart HVAC feature is not supported or accessible on this account: %s",
+                        ex,
+                    )
+            if not self._country_code and user_data:
                 country_code_raw = user_data.countryCode
                 if isinstance(country_code_raw, str) and country_code_raw:
                     country_code = country_code_raw.upper()
@@ -1249,7 +1262,47 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 await self._fetch_contract_price_resolution_state(self._connection_id)
             )
 
-            self._static_prices_today = prices_today
+            # Check if fetched prices are valid (i.e., contain actual price points)
+            has_fetched_elec = (
+                prices_today
+                and prices_today.electricity
+                and prices_today.electricity.all
+            )
+            has_fetched_gas = prices_today and prices_today.gas and prices_today.gas.all
+
+            # Check if our cached/promoted prices are valid and belong to the current day
+            cached_is_valid_for_today = False
+            if self._static_prices_today is not None:
+                cached_elec = self._static_prices_today.electricity
+                cached_gas = self._static_prices_today.gas
+
+                elec_valid = True
+                if cached_elec and cached_elec.all:
+                    elec_valid = (
+                        cached_elec.all[0].date_from.date() == today
+                        and cached_elec.all[-1].date_from.date() == today
+                    )
+
+                gas_valid = True
+                if cached_gas and cached_gas.all:
+                    gas_valid = (
+                        cached_gas.all[0].date_from.date() == today
+                        and cached_gas.all[-1].date_from.date() == today
+                    )
+
+                has_cached_data = (cached_elec and cached_elec.all) or (
+                    cached_gas and cached_gas.all
+                )
+                if has_cached_data and elec_valid and gas_valid:
+                    cached_is_valid_for_today = True
+
+            if not (has_fetched_elec or has_fetched_gas) and cached_is_valid_for_today:
+                _LOGGER.info(
+                    "API returned no prices for today, reusing valid cached prices"
+                )
+                prices_today = self._static_prices_today
+
+            self._update_today_prices(prices_today)
             self._static_month_summary = data_month_summary
             self._static_invoices = data_invoices
             self._static_user = data_user
@@ -1519,6 +1572,40 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if isinstance(smart_trading, dict):
             return smart_trading.get("isActivated", False) is True
         return getattr(smart_trading, "isActivated", False) is True
+
+    def _update_today_prices(self, prices: MarketPrices) -> None:
+        """Update all internal cache fields representing today's prices."""
+        self._static_prices_today = prices
+        self._cached_prices = prices
+        if self.cached_prices_today is not None:
+            self.cached_prices_today = replace(
+                self.cached_prices_today, prices_today=prices
+            )
+
+    def promote_tomorrow_prices(self) -> None:
+        """Promote cached tomorrow prices to today's prices."""
+        prices_tomorrow = self.cached_prices_tomorrow
+        if prices_tomorrow is None:
+            return
+
+        source_data = self.cached_prices or self.data
+        if source_data is None:
+            _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
+            return
+
+        updated_data = source_data.copy()
+
+        updated_data[DATA_ELECTRICITY] = prices_tomorrow.electricity
+        updated_data[DATA_GAS] = prices_tomorrow.gas
+
+        self.cached_prices_tomorrow = None
+        self.cached_prices = updated_data
+        self.data = updated_data
+        self._update_today_prices(prices_tomorrow)
+
+        self.async_update_listeners()
+
+        _LOGGER.debug("Promoted cached tomorrow prices to today's prices")
 
     def get_pv_system_metadata(self, system_id: str) -> dict[str, Any]:
         """Get PV system metadata (brand, model, display_name, serial_number)."""
@@ -2079,19 +2166,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
-
-    def update_vehicle_smart_charging_optimistic(
-        self, vehicle_id: str, enabled: bool
-    ) -> None:
-        """Optimistically update the smart charging status in the cache."""
-        enode_vehicles = self.data.get(DATA_ENODE_VEHICLES)
-        if enode_vehicles and enode_vehicles.vehicles:
-            vehicle = next(
-                (v for v in enode_vehicles.vehicles if v.id == vehicle_id),
-                None,
-            )
-            if vehicle and vehicle.charge_settings:
-                vehicle.charge_settings.is_smart_charging_enabled = enabled
 
 
 class FrankEnergieBatterySessionCoordinator(

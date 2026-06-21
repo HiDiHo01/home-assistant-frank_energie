@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import Callable
 
 from homeassistant.components.binary_sensor import (
@@ -36,6 +37,10 @@ from .coordinator import FrankEnergieCoordinator, FrankEnergieData
 from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class UserFeatureKey(str, Enum):
+    SMART_HVAC = "smartHvac"
 
 
 @dataclass(slots=True, frozen=True)
@@ -158,6 +163,7 @@ def _user_feature_attributes(
                     "available_in_country": feature.get("isAvailableInCountry"),
                     "user_created_at": feature.get("userCreatedAt"),
                     "needs_subscription": feature.get("needsSubscription"),
+                    "user_id": feature.get("userId"),
                 }.items()
                 if value is not None
             }
@@ -185,11 +191,37 @@ def _user_feature_attributes(
                     "needsSubscription",
                     None,
                 ),
+                "user_id": getattr(
+                    feature,
+                    "userId",
+                    None,
+                ),
             }.items()
             if value is not None
         }
 
     return attr_fn
+
+
+def _smart_hvac_state(data: FrankEnergieData) -> bool | None:
+    """Return smart HVAC active state."""
+    return _user_feature_state(data, UserFeatureKey.SMART_HVAC)
+
+
+def _smart_hvac_available(data: FrankEnergieData) -> bool:
+    """Return smart HVAC availability."""
+    user = data.get(DATA_USER)
+    if user is None:
+        return False
+
+    feature = getattr(user, "smartHvac", None)
+    if feature is None:
+        return False
+
+    if isinstance(feature, dict):
+        return feature.get("isActivated") is not None
+
+    return getattr(feature, "isActivated", None) is not None
 
 
 def _disabled_haptic_feedback(
@@ -367,9 +399,9 @@ def _battery_attributes(
             "max_charge_power_kw": sb.max_charge_power,
             "max_discharge_power_kw": sb.max_discharge_power,
             "battery_mode": settings.battery_mode if settings else None,
-            "imbalance_trading_strategy": settings.imbalance_trading_strategy
-            if settings
-            else None,
+            "imbalance_trading_strategy": (
+                settings.imbalance_trading_strategy if settings else None
+            ),
             "self_consumption_trading_threshold_price": getattr(
                 settings,
                 "self_consumption_trading_threshold_price",
@@ -536,8 +568,9 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: _user_feature_state(
-            data,
+        value_fn=_smart_hvac_state,
+        available_fn=_smart_hvac_available,
+        attr_fn=_user_feature_attributes(
             "smartHvac",
         ),
     ),

@@ -132,7 +132,6 @@ class FrankEnergieEnodeDeadlineEntity(
         )
         success = await self._update_charge_settings(input_data)
         if success:
-            self.coordinator.force_next_refresh = True
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(

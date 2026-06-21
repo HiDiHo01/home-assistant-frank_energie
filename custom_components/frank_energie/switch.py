@@ -141,10 +141,6 @@ class FrankEnergieEnodeSmartChargingSwitch(
             input_data
         )
         if success:
-            self.coordinator.update_vehicle_smart_charging_optimistic(
-                self._vehicle_id, True
-            )
-            self.coordinator.force_next_refresh = True
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(
@@ -177,10 +173,6 @@ class FrankEnergieEnodeSmartChargingSwitch(
             input_data
         )
         if success:
-            self.coordinator.update_vehicle_smart_charging_optimistic(
-                self._vehicle_id, False
-            )
-            self.coordinator.force_next_refresh = True
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(

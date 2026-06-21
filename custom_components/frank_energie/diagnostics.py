@@ -70,26 +70,23 @@ def _serialize(value: object) -> object:
     if value is None:
         return None
 
+    if isinstance(value, Enum):
+        return value.value
+
     if isinstance(value, Decimal):
         return str(value)
 
-    if isinstance(value, datetime):
+    if isinstance(value, (datetime, date, time)):
         return value.isoformat()
-
-    if isinstance(value, date):
-        return value.isoformat()
-
-    if isinstance(value, time):
-        return value.isoformat()
-
-    if isinstance(value, Enum):
-        return value.value
 
     if isinstance(value, UUID):
         return str(value)
 
     if isinstance(value, bytes):
         return value.hex()
+
+    if isinstance(value, (set, frozenset)):
+        return [_serialize(item) for item in sorted(value)]
 
     if is_dataclass(value):
         return {key: _serialize(val) for key, val in asdict(value).items()}
@@ -102,9 +99,6 @@ def _serialize(value: object) -> object:
 
     if isinstance(value, tuple):
         return tuple(_serialize(item) for item in value)
-
-    if isinstance(value, (set, frozenset)):
-        return sorted(_serialize(item) for item in value)
 
     if hasattr(value, "__dict__"):
         return {
