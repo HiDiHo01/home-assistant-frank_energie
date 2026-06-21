@@ -9,7 +9,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING, Final
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet # type: ignore[import]
 from homeassistant.core import HomeAssistant
 
 from .const import (
