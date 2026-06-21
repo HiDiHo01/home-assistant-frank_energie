@@ -109,26 +109,55 @@ def test_smart_hvac_binary_sensor(mock_coordinator, mock_config_entry):
     # Test when data is missing
     mock_coordinator.data = {}
     assert sensor.is_on is None
+    assert sensor.available is False
 
     # Test when active (dict payload inside mock object)
     mock_user = MagicMock()
     mock_user.smartHvac = {"isActivated": True}
     mock_coordinator.data = {DATA_USER: mock_user}
     assert sensor.is_on is True
+    assert sensor.available is True
 
     # Test when inactive (dict payload inside mock object)
     mock_user.smartHvac = {"isActivated": False}
     mock_coordinator.data = {DATA_USER: mock_user}
     assert sensor.is_on is False
+    assert sensor.available is True
 
     # Test with object attributes
     mock_user.smartHvac = MagicMock()
     mock_user.smartHvac.isActivated = True
     assert sensor.is_on is True
+    assert sensor.available is True
 
     # Test when smartHvac is None
     mock_user.smartHvac = None
     assert sensor.is_on is None
+    assert sensor.available is False
+
+    # Test attributes (dict payload)
+    mock_user.smartHvac = {
+        "isActivated": True,
+        "isAvailableInCountry": True,
+        "userCreatedAt": "2026-06-20T17:00:00Z",
+        "userId": "test-user-id",
+    }
+    mock_coordinator.data = {DATA_USER: mock_user}
+    attrs = sensor.extra_state_attributes
+    assert attrs["available_in_country"] is True
+    assert attrs["user_created_at"] == "2026-06-20T17:00:00Z"
+    assert attrs["user_id"] == "test-user-id"
+
+    # Test attributes (object payload)
+    mock_user.smartHvac = MagicMock()
+    mock_user.smartHvac.isAvailableInCountry = True
+    mock_user.smartHvac.userCreatedAt = "2026-06-20T17:00:00Z"
+    mock_user.smartHvac.userId = "test-user-id"
+    mock_coordinator.data = {DATA_USER: mock_user}
+    attrs = sensor.extra_state_attributes
+    assert attrs["available_in_country"] is True
+    assert attrs["user_created_at"] == "2026-06-20T17:00:00Z"
+    assert attrs["user_id"] == "test-user-id"
 
 
 def test_battery_self_consumption_trading_binary_sensor(
