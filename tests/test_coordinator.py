@@ -1088,3 +1088,29 @@ async def test_coordinator_retry_incomplete_usage_data(
     # Subsequent fetch with complete cache should NOT retry fetching
     await coordinator._get_static_data(today, tomorrow, yesterday)
     coordinator._fetch_period_usage.assert_not_called()
+
+
+def test_update_vehicle_smart_charging_optimistic(
+    coordinator: FrankEnergieCoordinator, create_mock_vehicle
+) -> None:
+    """Test update_vehicle_smart_charging_optimistic updates cache correctly."""
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from unittest.mock import MagicMock
+
+    vehicle_id = "test_veh_123"
+    vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        charge_settings_kwargs={"is_smart_charging_enabled": False},
+    )
+
+    mock_vehicles = MagicMock()
+    mock_vehicles.vehicles = [vehicle]
+    coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
+
+    # Update to True
+    coordinator.update_vehicle_smart_charging_optimistic(vehicle_id, True)
+    assert vehicle.charge_settings.is_smart_charging_enabled is True
+
+    # Update to False
+    coordinator.update_vehicle_smart_charging_optimistic(vehicle_id, False)
+    assert vehicle.charge_settings.is_smart_charging_enabled is False

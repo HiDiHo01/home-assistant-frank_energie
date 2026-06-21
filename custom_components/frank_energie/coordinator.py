@@ -245,6 +245,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_update_success = False
         self.user_electricity_enabled = False
         self.user_gas_enabled = False
+        self.force_next_refresh: bool = False
+
         _LOGGER.debug(
             "Initializing Frank Energie coordinator with country_code: %s",
             self.country_code,
@@ -461,11 +463,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> None:
         """Fetch and cache today's data if stale or missing."""
         if (
-            self.cached_prices_today is not None
+            not self.force_next_refresh
+            and self.cached_prices_today is not None
             and self.last_fetch_today is not None
             and self.last_fetch_today.date() == today
         ):
             return
+
+        self.force_next_refresh = False
 
         try:
             self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
@@ -2074,6 +2079,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def _parse_vehicles(self, data: list[dict]) -> EnodeVehicles:
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
+
+    def update_vehicle_smart_charging_optimistic(
+        self, vehicle_id: str, enabled: bool
+    ) -> None:
+        """Optimistically update the smart charging status in the cache."""
+        enode_vehicles = self.data.get(DATA_ENODE_VEHICLES)
+        if enode_vehicles and enode_vehicles.vehicles:
+            vehicle = next(
+                (v for v in enode_vehicles.vehicles if v.id == vehicle_id),
+                None,
+            )
+            if vehicle and vehicle.charge_settings:
+                vehicle.charge_settings.is_smart_charging_enabled = enabled
 
 
 class FrankEnergieBatterySessionCoordinator(

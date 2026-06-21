@@ -71,6 +71,11 @@ async def test_enode_smart_charging_switch_actions(
     mock_vehicles.vehicles = [mock_vehicle]
     mock_coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
 
+    def mock_optimistic_update(vehicle_id, enabled):
+        mock_vehicle.charge_settings.is_smart_charging_enabled = enabled
+
+    mock_coordinator.update_vehicle_smart_charging_optimistic = mock_optimistic_update
+
     switch = FrankEnergieEnodeSmartChargingSwitch(
         mock_coordinator, mock_config_entry, vehicle_id
     )
@@ -80,6 +85,8 @@ async def test_enode_smart_charging_switch_actions(
     await switch.async_turn_on()
     mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
     mock_coordinator.async_request_refresh.assert_called_once()
+    # Verify optimistic update succeeded
+    assert mock_vehicle.charge_settings.is_smart_charging_enabled is True
 
     # Verify input_data had isSmartChargingEnabled = True
     call_arg = mock_coordinator.api.enode_update_vehicle_charge_settings.call_args[0][0]
@@ -97,6 +104,8 @@ async def test_enode_smart_charging_switch_actions(
     await switch.async_turn_off()
     mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
     mock_coordinator.async_request_refresh.assert_called_once()
+    # Verify optimistic update succeeded
+    assert mock_vehicle.charge_settings.is_smart_charging_enabled is False
 
     call_arg = mock_coordinator.api.enode_update_vehicle_charge_settings.call_args[0][0]
     assert call_arg["isSmartChargingEnabled"] is False
