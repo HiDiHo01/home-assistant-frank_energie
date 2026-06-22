@@ -4007,9 +4007,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
     ),
     FrankEnergieEntityDescription(
-        key="authtoken_expires_at",
-        name="Auth token expires at",
-        translation_key="authtoken_expires_at",
+        key="token_expires_at",
+        name="Token expires at",
+        translation_key="token_expires_at",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:key-chain-variant",
