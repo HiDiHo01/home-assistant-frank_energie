@@ -84,7 +84,6 @@ async def test_enode_smart_charging_switch_actions(
     mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = True
     await switch.async_turn_on()
     mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
-    mock_coordinator.async_request_refresh.assert_called_once()
     # Verify optimistic update succeeded
     assert mock_vehicle.charge_settings.is_smart_charging_enabled is True
 
@@ -103,7 +102,6 @@ async def test_enode_smart_charging_switch_actions(
     )
     await switch.async_turn_off()
     mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
-    mock_coordinator.async_request_refresh.assert_called_once()
     # Verify optimistic update succeeded
     assert mock_vehicle.charge_settings.is_smart_charging_enabled is False
 

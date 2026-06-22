@@ -141,7 +141,9 @@ class FrankEnergieEnodeSmartChargingSwitch(
             input_data
         )
         if success:
-            await self.coordinator.async_request_refresh()
+            vehicle.charge_settings.is_smart_charging_enabled = True
+            if self.hass:
+                self.async_write_ha_state()
         else:
             _LOGGER.error(
                 "Failed to enable Enode smart charging for vehicle %s",
@@ -173,7 +175,9 @@ class FrankEnergieEnodeSmartChargingSwitch(
             input_data
         )
         if success:
-            await self.coordinator.async_request_refresh()
+            vehicle.charge_settings.is_smart_charging_enabled = False
+            if self.hass:
+                self.async_write_ha_state()
         else:
             _LOGGER.error(
                 "Failed to disable Enode smart charging for vehicle %s",
