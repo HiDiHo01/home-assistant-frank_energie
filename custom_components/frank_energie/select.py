@@ -427,6 +427,13 @@ class FrankEnergieEnodeChargingModeSelect(
 
     async def async_select_option(self, option: str) -> None:
         """Update charging mode via mutation."""
+        if option not in self.options:
+            _LOGGER.error("Invalid charging mode selected: %s", option)
+            return
+
+        if option == self.current_option:
+            return
+
         from .helpers import build_charge_settings_input
 
         vehicle = self._get_vehicle()
