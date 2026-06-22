@@ -4681,7 +4681,7 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery",
                     device_class=SensorDeviceClass.ENUM,
-                    options=["mode_smart", "mode_manual"],
+                    options=["mode_smart", "mode_manual", "self_consumption_mix"],
                     value_fn=lambda data, idx=i: (
                         b.settings.battery_mode.lower()
                         if (bats := data.get(DATA_BATTERIES))
@@ -4709,7 +4709,7 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:chart-line",
                     device_class=SensorDeviceClass.ENUM,
-                    options=["strategy_balanced", "strategy_max_return", "strategy_min_degradation"],
+                    options=["strategy_balanced", "strategy_max_return", "strategy_min_degradation", "aggressive"],
                     value_fn=lambda data, idx=i: (
                         b.settings.imbalance_trading_strategy.lower()
                         if (bats := data.get(DATA_BATTERIES))
@@ -4768,7 +4768,8 @@ def _build_single_smart_battery_descriptions(
                         "status_idle",
                         "status_unreliable_data",
                         "status_offline",
-                        "status_standby"
+                        "status_standby",
+                        "separate_imbalances"
                     ],
                     value_fn=lambda data, idx=i: (
                         b.summary.last_known_status.lower()

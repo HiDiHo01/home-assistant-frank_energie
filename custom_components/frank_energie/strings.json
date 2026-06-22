@@ -868,7 +868,8 @@
         "name": "Battery Mode",
         "state": {
           "mode_smart": "Smart Mode",
-          "mode_manual": "Manual Mode"
+          "mode_manual": "Manual Mode",
+          "self_consumption_mix": "Self Consumption Mix"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -876,7 +877,8 @@
         "state": {
           "strategy_balanced": "Balanced",
           "strategy_max_return": "Maximum Return",
-          "strategy_min_degradation": "Minimum Degradation"
+          "strategy_min_degradation": "Minimum Degradation",
+          "aggressive": "Aggressive"
         }
       },
       "battery_status": {
@@ -887,7 +889,8 @@
           "status_idle": "Idle",
           "status_unreliable_data": "Unreliable Data",
           "status_offline": "Offline",
-          "status_standby": "Standby"
+          "status_standby": "Standby",
+          "separate_imbalances": "Separate Imbalances"
         }
       }
     }
