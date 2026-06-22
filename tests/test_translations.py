@@ -1,5 +1,6 @@
 """Tests for translation files alignment."""
 
+import ast
 import json
 from pathlib import Path
 
@@ -288,8 +289,6 @@ def test_no_empty_state_translations():
     _check_for_empty_states(strings_content)
 
 
-import ast
-
 class _DescriptionValidator(ast.NodeVisitor):
     def __init__(self, filename):
         self.filename = filename
@@ -310,7 +309,9 @@ class _DescriptionValidator(ast.NodeVisitor):
     def visit_Call(self, node):
         func_name, full_name = self._get_call_names(node)
 
-        if func_name and ("Description" in func_name or "EntityDescription" in func_name):
+        if func_name and (
+            "Description" in func_name or "EntityDescription" in func_name
+        ):
             has_key = any(k.arg in ("translation_key", "key") for k in node.keywords)
             if not has_key:
                 self.failures.append(
