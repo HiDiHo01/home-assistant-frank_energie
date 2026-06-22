@@ -339,8 +339,9 @@ def test_all_descriptions_have_translation_key():
                 validator.visit(tree)
                 for failure in validator.failures:
                     failures.append(f"{py_file.name}: {failure}")
-            except Exception:
-                pass
+            except SyntaxError as exc:
+                import pytest
+                pytest.fail(f"Failed to parse {py_file}: {exc}")
 
     assert not failures, (
         f"Entity descriptions found without 'translation_key' or 'key':\n"
@@ -418,8 +419,9 @@ def test_sensors_with_state_translations_are_enums():
             try:
                 tree = ast.parse(f.read(), filename=py_file.name)
                 validator.visit(tree)
-            except Exception:
-                pass
+            except SyntaxError as exc:
+                import pytest
+                pytest.fail(f"Failed to parse {py_file}: {exc}")
 
     failures = []
     for key in state_translation_keys:
