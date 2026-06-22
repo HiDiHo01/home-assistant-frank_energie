@@ -9,6 +9,7 @@ import logging
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -65,8 +66,14 @@ async def async_setup_entry(
 
     enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
+        ent_reg = er.async_get(hass)
         for vehicle in enode_vehicles.vehicles:
             if vehicle.can_smart_charge:
+                # Clean up the deprecated switch entity
+                old_unique_id = f"{DOMAIN}_{vehicle.id}_enode_smart_charging"
+                if entity_id := ent_reg.async_get_entity_id("switch", DOMAIN, old_unique_id):
+                    ent_reg.async_remove(entity_id)
+
                 entities.append(
                     FrankEnergieEnodeChargingModeSelect(
                         coordinator, entry, vehicle.id

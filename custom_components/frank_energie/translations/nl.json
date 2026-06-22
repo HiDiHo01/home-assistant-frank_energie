@@ -255,10 +255,10 @@
                 }
             },
             "enode_charging_mode": {
-                "name": "EV charging mode",
+                "name": "EV laadmodus",
                 "state": {
-                    "smart_charging": "Smart charging",
-                    "boost_charging": "Boost charging"
+                    "smart_charging": "Slim laden",
+                    "boost_charging": "Boost laden"
                 }
             }
         },
