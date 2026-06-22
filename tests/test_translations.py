@@ -361,30 +361,37 @@ class _EnumStateValidator(ast.NodeVisitor):
             return kw.value.value
         return None
 
+    def _parse_keywords(
+        self, keywords: list[ast.keyword]
+    ) -> tuple[str | None, bool, bool]:
+        key = None
+        has_options = False
+        has_enum = False
+        for kw in keywords:
+            if kw.arg in ("translation_key", "key") and not key:
+                key = self._get_key_from_kwarg(kw)
+            elif kw.arg == "options":
+                has_options = True
+            elif kw.arg == "device_class" and isinstance(kw.value, ast.Attribute):
+                has_enum = kw.value.attr == "ENUM"
+        return key, has_options, has_enum
+
     def visit_Call(self, node):
         func_name = getattr(node.func, "id", getattr(node.func, "attr", None))
 
-        if func_name and (
-            "Description" in func_name or "EntityDescription" in func_name
+        if not func_name or (
+            "Description" not in func_name and "EntityDescription" not in func_name
         ):
-            key = None
-            has_options = False
-            has_enum = False
+            self.generic_visit(node)
+            return
 
-            for kw in node.keywords:
-                if kw.arg in ("translation_key", "key") and not key:
-                    key = self._get_key_from_kwarg(kw)
-                elif kw.arg == "options":
-                    has_options = True
-                elif kw.arg == "device_class" and isinstance(kw.value, ast.Attribute):
-                    has_enum = kw.value.attr == "ENUM"
-
-            if key:
-                self.all_keys.add(key)
-                if has_options:
-                    self.keys_with_options.add(key)
-                if has_enum:
-                    self.keys_with_enum.add(key)
+        key, has_options, has_enum = self._parse_keywords(node.keywords)
+        if key:
+            self.all_keys.add(key)
+            if has_options:
+                self.keys_with_options.add(key)
+            if has_enum:
+                self.keys_with_enum.add(key)
 
         self.generic_visit(node)
 
