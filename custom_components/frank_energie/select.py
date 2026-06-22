@@ -13,9 +13,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
-MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
-
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
@@ -26,6 +23,8 @@ from .const import (
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import device_translation_key
+
+MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
 
 _LOGGER = logging.getLogger(__name__)
 
