@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, fields, is_dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
@@ -102,10 +102,13 @@ def _serialize(value: object) -> object:
         return value.hex()
 
     if isinstance(value, (set, frozenset)):
-        return [_serialize(item) for item in sorted(value)]
+        return [_serialize(item) for item in sorted(value, key=str)]
 
-    if is_dataclass(value):
-        return {key: _serialize(val) for key, val in asdict(value).items()}
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _serialize(getattr(value, field.name))
+            for field in fields(value)
+        }
 
     if isinstance(value, dict):
         return {str(key): _serialize(val) for key, val in value.items()}
@@ -114,7 +117,7 @@ def _serialize(value: object) -> object:
         return [_serialize(item) for item in value]
 
     if isinstance(value, tuple):
-        return tuple(_serialize(item) for item in value)
+        return [_serialize(item) for item in value]
 
     if hasattr(value, "__dict__"):
         return {
@@ -129,13 +132,13 @@ def _serialize(value: object) -> object:
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Return diagnostics for a config entry."""
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
     coordinator = runtime_data.coordinator
 
-    diagnostics: dict[str, Any] = {
+    diagnostics: dict[str, object] = {
         "entry": {
             "entry_id": entry.entry_id,
             "title": entry.title,
