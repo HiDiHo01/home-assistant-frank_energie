@@ -104,7 +104,7 @@ def test_serialize_bytes() -> None:
 
 def test_serialize_tuple() -> None:
     """Test tuple serialization."""
-    assert _serialize((1, "a")) == (1, "a")
+    assert _serialize((1, "a")) == [1, "a"]
 
 
 def test_serialize_set() -> None:

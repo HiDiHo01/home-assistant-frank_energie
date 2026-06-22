@@ -105,7 +105,7 @@
                 "name": "Self consumption trading allowed"
             },
             "co2_compensation": {
-                "name": "CO₂ compensation",
+                "name": "CO\u2082 compensation",
                 "state": {}
             },
             "disabled_haptic_feedback": {
@@ -252,6 +252,13 @@
                             "pt60m": "60 minutes"
                         }
                     }
+                }
+            },
+            "enode_charging_mode": {
+                "name": "EV charging mode",
+                "state": {
+                    "smart_charging": "Smart charging",
+                    "boost_charging": "Boost charging"
                 }
             }
         },
@@ -666,11 +673,6 @@
             },
             "vehicle_name": {
                 "name": "Vehicle Name"
-            }
-        },
-        "switch": {
-            "enode_smart_charging": {
-                "name": "Smart charging"
             }
         }
     },

@@ -1934,7 +1934,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index: index + window]
+            window_prices = prices[index : index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
