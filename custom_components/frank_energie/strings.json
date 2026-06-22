@@ -674,11 +674,6 @@
             "vehicle_name": {
                 "name": "Vehicle Name"
             }
-        },
-        "switch": {
-            "enode_smart_charging": {
-                "name": "Smart Charging"
-            }
         }
     },
     "options": {

@@ -674,11 +674,6 @@
             "vehicle_name": {
                 "name": "Naam voertuig"
             }
-        },
-        "switch": {
-            "enode_smart_charging": {
-                "name": "Slim laden"
-            }
         }
     },
     "options": {
