@@ -341,6 +341,7 @@ def test_all_descriptions_have_translation_key():
                     failures.append(f"{py_file.name}: {failure}")
             except SyntaxError as exc:
                 import pytest
+
                 pytest.fail(f"Failed to parse {py_file}: {exc}")
 
     assert not failures, (
@@ -421,6 +422,7 @@ def test_sensors_with_state_translations_are_enums():
                 validator.visit(tree)
             except SyntaxError as exc:
                 import pytest
+
                 pytest.fail(f"Failed to parse {py_file}: {exc}")
 
     failures = []
