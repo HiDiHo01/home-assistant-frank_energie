@@ -72,6 +72,8 @@ from .const import (
     DATA_MONTH_SUMMARY,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
+    DATA_REFRESH_TOKEN_EXPIRES_AT,
+    DATA_TOKEN_EXPIRES_AT,
     DATA_USAGE,
     DATA_USER,
     DATA_USER_SITES,
@@ -188,6 +190,8 @@ def _empty_data() -> FrankEnergieData:
         DATA_PV_SUMMARY: None,
         DATA_USER_SMART_FEED_IN: None,
         DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
+        DATA_REFRESH_TOKEN_EXPIRES_AT: None,
+        DATA_TOKEN_EXPIRES_AT: None,
     }
 
 
@@ -1520,6 +1524,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> FrankEnergieData:
         """Aggregate today's cache and tomorrow's prices into FrankEnergieData."""
         result: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
+            DATA_TOKEN_EXPIRES_AT: self.api.token_expires_at,
+            DATA_REFRESH_TOKEN_EXPIRES_AT: self.api.refresh_token_expires_at,
             DATA_MONTH_SUMMARY: cache.data_month_summary,
             DATA_INVOICES: cache.data_invoices,
             DATA_USAGE: cache.data_period_usage,
@@ -1928,7 +1934,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index : index + window]
+            window_prices = prices[index: index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 

@@ -3,6 +3,7 @@ Constants used in the Frank Energie integration.
 """
 
 # const.py
+# date 2026.6.21
 
 import logging
 from dataclasses import dataclass
@@ -86,6 +87,8 @@ DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 DATA_PV_SYSTEMS: Final[str] = "smart_pv_systems"
 DATA_PV_SUMMARY: Final[str] = "smart_pv_summary"
 DATA_USER_SMART_FEED_IN: Final[str] = "user_smart_feed_in"
+DATA_TOKEN_EXPIRES_AT: Final[str] = "auth_token_expires_at"
+DATA_REFRESH_TOKEN_EXPIRES_AT: Final[str] = "refresh_token_expires_at"
 
 # --- Attribute Constants ---
 ATTR_FROM_TIME: Final[str] = "from_time"

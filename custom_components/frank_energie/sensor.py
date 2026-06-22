@@ -3,7 +3,7 @@ Sensor platform for Frank Energie integration."""
 
 # sensor.py
 # -*- coding: utf-8 -*-
-# VERSION = "2026.6.10"
+# VERSION = "2026.6.21"
 from __future__ import annotations
 
 import logging
@@ -67,6 +67,8 @@ from .const import (
     DATA_MONTH_SUMMARY,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
+    DATA_REFRESH_TOKEN_EXPIRES_AT,
+    DATA_TOKEN_EXPIRES_AT,
     DATA_USAGE,
     DATA_USER,
     DATA_USER_SITES,
@@ -94,8 +96,8 @@ from .coordinator import (
     FrankEnergieData,
     SmartBatterySessions,
 )
-from .statistics import lowest_window
 from .helpers import device_translation_key
+from .statistics import lowest_window
 
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
@@ -3742,6 +3744,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].segments
             else None
         ),
+        attr_fn=lambda data: (
+            {"available_segments": ["electricity", "gas"]}
+        ),
     ),
     FrankEnergieEntityDescription(
         key="gridOperator",
@@ -3999,6 +4004,32 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             data[DATA_USER_SITES].reference if data.get(DATA_USER_SITES) else None
+        ),
+    ),
+    FrankEnergieEntityDescription(
+        key="authtoken_expires_at",
+        name="Auth token expires at",
+        translation_key="authtoken_expires_at",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:key-chain-variant",
+        authenticated=True,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: data.get(
+            DATA_TOKEN_EXPIRES_AT
+        ),
+    ),
+    FrankEnergieEntityDescription(
+        key="refresh_token_expires_at",
+        name="Refresh token expires at",
+        translation_key="refresh_token_expires_at",
+        icon="mdi:key-chain-variant",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        authenticated=True,
+        service_name=SERVICE_NAME_USER,
+        value_fn=lambda data: data.get(
+            DATA_REFRESH_TOKEN_EXPIRES_AT
         ),
     ),
     FrankEnergieEntityDescription(
