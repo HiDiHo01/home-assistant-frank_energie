@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Any
 from uuid import UUID
 
 from homeassistant.components.diagnostics import async_redact_data

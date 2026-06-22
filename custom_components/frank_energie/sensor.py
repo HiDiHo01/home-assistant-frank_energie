@@ -3744,9 +3744,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].segments
             else None
         ),
-        attr_fn=lambda data: (
-            {"available_segments": ["electricity", "gas"]}
-        ),
+        attr_fn=lambda data: ({"available_segments": ["electricity", "gas"]}),
     ),
     FrankEnergieEntityDescription(
         key="gridOperator",
@@ -4015,9 +4013,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:key-chain-variant",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: data.get(
-            DATA_TOKEN_EXPIRES_AT
-        ),
+        value_fn=lambda data: data.get(DATA_TOKEN_EXPIRES_AT),
     ),
     FrankEnergieEntityDescription(
         key="refresh_token_expires_at",
@@ -4028,9 +4024,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: data.get(
-            DATA_REFRESH_TOKEN_EXPIRES_AT
-        ),
+        value_fn=lambda data: data.get(DATA_REFRESH_TOKEN_EXPIRES_AT),
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_4p",
@@ -4273,9 +4267,7 @@ class FrankEnergieSensor(
         )
 
         user_data = (
-            coordinator.data.get(DATA_USER)
-            if coordinator.data is not None
-            else None
+            coordinator.data.get(DATA_USER) if coordinator.data is not None else None
         )
 
         self._attr_device_info = DeviceInfo(
@@ -4284,10 +4276,7 @@ class FrankEnergieSensor(
             translation_key=device_translation_key(description.service_name),
             manufacturer=COMPONENT_TITLE,
             entry_type=DeviceEntryType.SERVICE,
-            configuration_url=(
-                getattr(user_data, "websiteUrl", None)
-                or API_CONF_URL
-            ),
+            configuration_url=(getattr(user_data, "websiteUrl", None) or API_CONF_URL),
             model=description.service_name,
             sw_version=VERSION,
         )
@@ -4314,9 +4303,7 @@ class FrankEnergieSensor(
                 "_attr_entity_registry_enabled_default = %s", estimated_feed_in > 0
             )
 
-            self._attr_entity_registry_enabled_default = (
-                estimated_feed_in > 0
-            )
+            self._attr_entity_registry_enabled_default = estimated_feed_in > 0
 
         super().__init__(coordinator)
 
