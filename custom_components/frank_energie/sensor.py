@@ -305,6 +305,9 @@ class FrankEnergieEntityDescription(
                 self, "entity_category", EntityCategory(self.entity_category)
             )
 
+        if not self.translation_key and not (self.key and self.key.startswith("test_")):
+            object.__setattr__(self, "translation_key", self.key)
+
         # Provide default value_fn and attr_fn if not set, to ensure they are always callable
         if self.value_fn is None:
             object.__setattr__(self, "value_fn", lambda _: STATE_UNKNOWN)
@@ -373,7 +376,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             state_class=state_class,
             native_unit_of_measurement=native_unit_of_measurement,
             suggested_display_precision=suggested_display_precision,
-            translation_key=translation_key,
+            translation_key=translation_key or key,
             entity_category=EntityCategory(entity_category)
             if isinstance(entity_category, str)
             else entity_category,
@@ -402,6 +405,10 @@ class ChargerSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[EnodeCharger], StateType]
     authenticated: bool = False
+
+    def __post_init__(self):
+        if not self.translation_key:
+            object.__setattr__(self, "translation_key", self.key)
 
 
 class FrankEnergieBatterySessionSensor(
@@ -3562,7 +3569,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            data[DATA_USER_SITES].status
+            data[DATA_USER_SITES].status.lower()
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].status
             else None
         ),
@@ -3589,7 +3596,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            data[DATA_USER_SITES].propositionType
+            data[DATA_USER_SITES].propositionType.lower()
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].propositionType
             else None
         ),
@@ -3797,7 +3804,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    connection["meterType"]
+                    connection["meterType"].lower()
                     for connection in data[DATA_USER].connections
                     if connection.get("meterType")
                 ),
@@ -3843,7 +3850,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    conn.contractStatus
+                    conn.contractStatus.lower()
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
@@ -3868,7 +3875,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             next(
                 (
-                    conn.contractStatus
+                    conn.contractStatus.lower()
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
@@ -3987,8 +3994,10 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            data[DATA_USER].UserSettings.get("rewardPayoutPreference")
-            if data[DATA_USER] and data[DATA_USER].UserSettings
+            pref.lower()
+            if data[DATA_USER]
+            and data[DATA_USER].UserSettings
+            and (pref := data[DATA_USER].UserSettings.get("rewardPayoutPreference"))
             else None
         ),
     ),

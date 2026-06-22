@@ -532,7 +532,7 @@ def test_contract_sensors_with_connections():
     assert contract_start_sensor.value_fn(data) == expected_date
 
     # Evaluate EleccontractStatus value_fn
-    assert elec_status_sensor.value_fn(data) == "SWITCHED"
+    assert elec_status_sensor.value_fn(data) == "switched"
 
     # Evaluate GascontractStatus value_fn (should be None since segment is ELECTRICITY)
     assert gas_status_sensor.value_fn(data) is None
@@ -544,7 +544,7 @@ def test_contract_sensors_with_connections():
         contractStatus="IN_DELIVERY",
     )
     mock_user.connections = [conn_obj_gas]
-    assert gas_status_sensor.value_fn(data) == "IN_DELIVERY"
+    assert gas_status_sensor.value_fn(data) == "in_delivery"
     assert elec_status_sensor.value_fn(data) is None
 
 

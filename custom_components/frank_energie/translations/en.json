@@ -105,8 +105,7 @@
                 "name": "Self consumption trading allowed"
             },
             "co2_compensation": {
-                "name": "CO\u2082 compensation",
-                "state": {}
+                "name": "CO\u2082 compensation"
             },
             "disabled_haptic_feedback": {
                 "name": "Haptic feedback disabled"
@@ -118,12 +117,10 @@
                 "name": "Smart HVAC"
             },
             "smart_push_notification_price_alerts": {
-                "name": "Smart push notification price alerts",
-                "state": {}
+                "name": "Smart push notification price alerts"
             },
             "smart_pv_systems": {
                 "name": "Smart solar panels",
-                "state": {},
                 "state_attributes": {
                     "system_count": {
                         "name": "System count"
@@ -132,7 +129,6 @@
             },
             "smartcharging_isactivated": {
                 "name": "Smart charging",
-                "state": {},
                 "state_attributes": {
                     "available_in_country": {
                         "name": "Available in country",
@@ -158,7 +154,6 @@
             },
             "smarttrading_isactivated": {
                 "name": "Smart trading",
-                "state": {},
                 "state_attributes": {
                     "available_in_country": {
                         "name": "Available in country",
@@ -334,7 +329,10 @@
                 "state_attributes": {
                     "available_options": {
                         "name": "Contract Price Resolution State",
-                        "state": {}
+                        "state": {
+                            "pt15m": "15 minutes",
+                            "pt60m": "60 minutes"
+                        }
                     },
                     "is_change_request_possible": {
                         "name": "Contract Price Resolution State",
@@ -345,7 +343,10 @@
                     },
                     "upcoming_change": {
                         "name": "Contract Price Resolution State",
-                        "state": {}
+                        "state": {
+                            "pt15m": "15 minutes",
+                            "pt60m": "60 minutes"
+                        }
                     },
                     "upcoming_change_effective_date": {
                         "name": "Contract Price Resolution State"
@@ -445,7 +446,10 @@
             },
             "elec_contract_status": {
                 "name": "Electricity Contract Status",
-                "state": {}
+                "state": {
+                    "loss": "Stopped",
+                    "switched": "Switched"
+                }
             },
             "elec_fixed_kwh": {
                 "name": "Fixed electricity cost kWh"
@@ -518,7 +522,10 @@
             },
             "gas_contract_status": {
                 "name": "Gas Contract Status",
-                "state": {}
+                "state": {
+                    "loss": "Stopped",
+                    "switched": "Switched"
+                }
             },
             "gas_hourcount": {
                 "name": "Number of hours with gas prices loaded"
@@ -624,7 +631,9 @@
             },
             "meter_type": {
                 "name": "Meter Type",
-                "state": {}
+                "state": {
+                    "slm": "Smart meter"
+                }
             },
             "phone_number": {
                 "name": "Phonenumber"
@@ -634,7 +643,9 @@
             },
             "proposition_type": {
                 "name": "Proposition type",
-                "state": {}
+                "state": {
+                    "dynamic": "Dynamic"
+                }
             },
             "pv_operational_status": {
                 "name": "Operational status"
@@ -650,14 +661,22 @@
             },
             "reward_payout_preference": {
                 "name": "Reward payout preference",
-                "state": {}
+                "state": {
+                    "discount": "Discount",
+                    "trees": "Trees"
+                }
             },
             "segments": {
                 "name": "Segments"
             },
             "status": {
                 "name": "Status",
-                "state": {}
+                "state": {
+                    "active": "Active",
+                    "delivery_ended": "Delivery ended",
+                    "inactive": "Inactive",
+                    "in_delivery": "In delivery"
+                }
             },
             "total_costs": {
                 "name": "Total costs"
@@ -673,6 +692,177 @@
             },
             "vehicle_name": {
                 "name": "Vehicle Name"
+            },
+            "costs_electricity_this_month": {
+                "name": "Costs electricity this month"
+            },
+            "elec_lowest_4p": {
+                "name": "Lowest average electricity price (4 periods)"
+            },
+            "elec_lowest_16p": {
+                "name": "Lowest average electricity price (16 periods)"
+            },
+            "refresh_token_expires_at": {
+                "name": "Refresh token expires at"
+            },
+            "site_reference": {
+                "name": "Site Reference"
+            },
+            "token_expires_at": {
+                "name": "Token expires at"
+            },
+            "enode_total_chargers": {
+                "name": "Total Chargers"
+            },
+            "total_charge_capacity": {
+                "name": "Total Charge Capacity"
+            },
+            "total_charge_rate": {
+                "name": "Total Charge Rate"
+            },
+            "charger_brand": {
+                "name": "Brand"
+            },
+            "charger_model": {
+                "name": "Model"
+            },
+            "can_smart_charge": {
+                "name": "Can Smart Charge"
+            },
+            "charge_capacity": {
+                "name": "Charge Capacity"
+            },
+            "is_plugged_in": {
+                "name": "Is Plugged In"
+            },
+            "power_delivery_state": {
+                "name": "Power Delivery State"
+            },
+            "is_reachable": {
+                "name": "Vehicle Reachable"
+            },
+            "is_charging": {
+                "name": "Is Charging"
+            },
+            "charge_rate": {
+                "name": "Charge Rate"
+            },
+            "is_smart_charging_enabled": {
+                "name": "Is Smart Charging Enabled"
+            },
+            "is_solar_charging_enabled": {
+                "name": "Is Solar Charging Enabled"
+            },
+            "total_batteries": {
+                "name": "Total Batteries"
+            },
+            "battery_capacity": {
+                "name": "Battery Capacity"
+            },
+            "battery_level": {
+                "name": "Battery Level"
+            },
+            "charge_limit": {
+                "name": "Charge Limit"
+            },
+            "charge_time_remaining": {
+                "name": "Charge Time Remaining"
+            },
+            "vehicle_range": {
+                "name": "Estimated Range"
+            },
+            "charge_last_updated": {
+                "name": "Charge Last Updated"
+            },
+            "is_fully_charged": {
+                "name": "Fully Charged"
+            },
+            "smart_charging_enabled": {
+                "name": "Smart Charging Enabled"
+            },
+            "solar_charging_enabled": {
+                "name": "Solar Charging Enabled"
+            },
+            "last_seen": {
+                "name": "Last Seen"
+            },
+            "calculated_deadline": {
+                "name": "Calculated Deadline"
+            },
+            "deadline": {
+                "name": "Charging Deadline"
+            },
+            "charge_settings_id": {
+                "name": "Charge Settings ID"
+            },
+            "max_charge_limit": {
+                "name": "Max Charge Limit"
+            },
+            "min_charge_limit": {
+                "name": "Min Charge Limit"
+            },
+            "vehicle_vin": {
+                "name": "VIN"
+            },
+            "interventions_count": {
+                "name": "Number of Interventions"
+            },
+            "intervention_description": {
+                "name": "Intervention Description"
+            },
+            "intervention_title": {
+                "name": "Intervention Title"
+            },
+            "device_id": {
+                "name": "Device ID"
+            },
+            "period_start_date": {
+                "name": "Period Start Date"
+            },
+            "period_end_date": {
+                "name": "Period End Date"
+            },
+            "period_trade_index": {
+                "name": "Period Trade Index"
+            },
+            "period_trading_result": {
+                "name": "Period Trading Result"
+            },
+            "period_total_result": {
+                "name": "Period Total Result"
+            },
+            "period_imbalance_result": {
+                "name": "Period Imbalance Result"
+            },
+            "period_epex_result": {
+                "name": "Period EPEX Result"
+            },
+            "period_frank_slim_bonus": {
+                "name": "Period Frank Slim Bonus"
+            },
+            "all_periods_trading_result": {
+                "name": "All Periods Trading Result"
+            },
+            "total_trading_result": {
+                "name": "Total Trading Result"
+            },
+            "total_capacity": {
+                "name": "Total Battery Capacity"
+            },
+            "total_max_charge_power": {
+                "name": "Total Max Charge Power"
+            },
+            "total_max_discharge_power": {
+                "name": "Total Max Discharge Power"
+            },
+            "total_result": {
+                "name": "Total Result"
+            },
+            "average_state_of_charge": {
+                "name": "Average State of Charge"
+            },
+            "battery_all_total_result": {
+                "name": "Total Result (All Batteries)"
             }
         }
     },
