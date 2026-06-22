@@ -4566,9 +4566,24 @@ def _get_battery_setting(data: Any, idx: int, key: str) -> Any | None:
     )
 
 
+def _get_battery_setting_lower(data: Any, idx: int, key: str) -> str | None:
+    val = _get_battery_setting(data, idx, key)
+    return val.lower() if val else None
+
+
+def _get_battery_settings_dict(data: Any, idx: int) -> dict:
+    battery = _get_battery(data, idx)
+    return asdict(battery.settings) if battery and battery.settings else {}
+
+
 def _get_battery_summary(data: Any, idx: int, key: str) -> Any | None:
     battery = _get_battery(data, idx)
     return getattr(battery.summary, key, None) if battery and battery.summary else None
+
+
+def _get_battery_summary_lower(data: Any, idx: int, key: str) -> str | None:
+    val = _get_battery_summary(data, idx, key)
+    return val.lower() if val else None
 
 
 def _build_single_smart_battery_descriptions(
@@ -4709,16 +4724,10 @@ def _build_single_smart_battery_descriptions(
                     icon="mdi:battery",
                     device_class=SensorDeviceClass.ENUM,
                     options=["mode_smart", "mode_manual", "self_consumption_mix"],
-                    value_fn=lambda data, idx=i: (
-                        val.lower()
-                        if (val := _get_battery_setting(data, idx, "battery_mode"))
-                        else None
+                    value_fn=lambda data, idx=i: _get_battery_setting_lower(
+                        data, idx, "battery_mode"
                     ),
-                    attr_fn=lambda data, idx=i: (
-                        asdict(b.settings)
-                        if (b := _get_battery(data, idx)) and b.settings
-                        else {}
-                    ),
+                    attr_fn=lambda data, idx=i: _get_battery_settings_dict(data, idx),
                 ),
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_imbalance_trading_strategy",
@@ -4734,20 +4743,10 @@ def _build_single_smart_battery_descriptions(
                         "strategy_min_degradation",
                         "aggressive",
                     ],
-                    value_fn=lambda data, idx=i: (
-                        val.lower()
-                        if (
-                            val := _get_battery_setting(
-                                data, idx, "imbalance_trading_strategy"
-                            )
-                        )
-                        else None
+                    value_fn=lambda data, idx=i: _get_battery_setting_lower(
+                        data, idx, "imbalance_trading_strategy"
                     ),
-                    attr_fn=lambda data, idx=i: (
-                        asdict(b.settings)
-                        if (b := _get_battery(data, idx)) and b.settings
-                        else {}
-                    ),
+                    attr_fn=lambda data, idx=i: _get_battery_settings_dict(data, idx),
                 ),
             ]
         )
@@ -4764,14 +4763,8 @@ def _build_single_smart_battery_descriptions(
                     device_class=SensorDeviceClass.BATTERY,
                     native_unit_of_measurement="%",
                     value_fn=lambda data, idx=i: (
-                        val
-                        if (
-                            val := _get_battery_summary(
-                                data, idx, "last_known_state_of_charge"
-                            )
-                        )
-                        is not None
-                        and _get_battery_summary(data, idx, "last_known_status").lower()
+                        _get_battery_summary(data, idx, "last_known_state_of_charge")
+                        if _get_battery_summary_lower(data, idx, "last_known_status")
                         != "status_unreliable_data"
                         else None
                     ),
@@ -4794,10 +4787,8 @@ def _build_single_smart_battery_descriptions(
                         "separate_imbalances",
                         "idle_full",
                     ],
-                    value_fn=lambda data, idx=i: (
-                        val.lower()
-                        if (val := _get_battery_summary(data, idx, "last_known_status"))
-                        else None
+                    value_fn=lambda data, idx=i: _get_battery_summary_lower(
+                        data, idx, "last_known_status"
                     ),
                 ),
                 FrankEnergieEntityDescription(
