@@ -4008,10 +4008,10 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            pref.lower()
-            if data[DATA_USER]
+            data[DATA_USER].UserSettings.get("rewardPayoutPreference").lower()
+            if data.get(DATA_USER)
             and data[DATA_USER].UserSettings
-            and (pref := data[DATA_USER].UserSettings.get("rewardPayoutPreference"))
+            and data[DATA_USER].UserSettings.get("rewardPayoutPreference")
             else None
         ),
     ),

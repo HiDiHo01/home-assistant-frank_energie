@@ -266,25 +266,58 @@ def test_all_translation_keys_are_lowercase():
     check_lowercase_keys(strings_content.get("options", {}), "options")
 
 
+def _check_for_empty_states(d: dict, path: str = "") -> None:
+    if isinstance(d, dict):
+        for k, v in d.items():
+            current_path = f"{path}.{k}" if path else k
+            if k == "state":
+                assert v != {}, (
+                    f"Empty 'state' dictionary found at '{current_path}'. "
+                    "State translations must be populated with lowercase keys, "
+                    "or the 'state' key must be removed entirely if no translations are needed."
+                )
+            if isinstance(v, dict):
+                _check_for_empty_states(v, current_path)
+
+
 def test_no_empty_state_translations():
     """Verify that there are no empty state translation dictionaries in strings.json."""
     with open(STRINGS_FILE, "r", encoding="utf-8") as f:
         strings_content = json.load(f)
 
-    def check_for_empty_states(d: dict, path: str = "") -> None:
-        if isinstance(d, dict):
-            for k, v in d.items():
-                current_path = f"{path}.{k}" if path else k
-                if k == "state":
-                    assert v != {}, (
-                        f"Empty 'state' dictionary found at '{current_path}'. "
-                        "State translations must be populated with lowercase keys, "
-                        "or the 'state' key must be removed entirely if no translations are needed."
-                    )
-                if isinstance(v, dict):
-                    check_for_empty_states(v, current_path)
+    _check_for_empty_states(strings_content)
 
-    check_for_empty_states(strings_content)
+
+import ast
+
+class _DescriptionValidator(ast.NodeVisitor):
+    def __init__(self, filename):
+        self.filename = filename
+        self.failures = []
+
+    def _get_call_names(self, node):
+        if isinstance(node.func, ast.Name):
+            return node.func.id, node.func.id
+        if isinstance(node.func, ast.Attribute):
+            full_name = (
+                f"{node.func.value.id}.{node.func.attr}"
+                if isinstance(node.func.value, ast.Name)
+                else node.func.attr
+            )
+            return node.func.attr, full_name
+        return None, None
+
+    def visit_Call(self, node):
+        func_name, full_name = self._get_call_names(node)
+
+        if func_name and ("Description" in func_name or "EntityDescription" in func_name):
+            has_key = any(k.arg in ("translation_key", "key") for k in node.keywords)
+            if not has_key:
+                self.failures.append(
+                    f"Line {node.lineno}: Entity description '{full_name}' "
+                    f"does not specify 'translation_key' or 'key'."
+                )
+        self.generic_visit(node)
 
 
 def test_all_descriptions_have_translation_key():
@@ -294,42 +327,6 @@ def test_all_descriptions_have_translation_key():
     translation_key defaulting to key). We exclude smart_feature_factory.py
     as it builds descriptions dynamically.
     """
-    import ast
-
-    class DescriptionValidator(ast.NodeVisitor):
-        def __init__(self, filename):
-            self.filename = filename
-            self.failures = []
-
-        def visit_Call(self, node):
-            func_name = None
-            full_name = None
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id
-                full_name = node.func.id
-            elif isinstance(node.func, ast.Attribute):
-                func_name = node.func.attr
-                if isinstance(node.func.value, ast.Name):
-                    full_name = f"{node.func.value.id}.{func_name}"
-                else:
-                    full_name = func_name
-
-            # Look for calls to classes that look like entity descriptions
-            if func_name and (
-                "Description" in func_name or "EntityDescription" in func_name
-            ):
-                has_key_or_translation_key = False
-                for keyword in node.keywords:
-                    if keyword.arg in ("translation_key", "key"):
-                        has_key_or_translation_key = True
-                        break
-                if not has_key_or_translation_key:
-                    self.failures.append(
-                        f"Line {node.lineno}: Entity description '{full_name}' "
-                        f"does not specify 'translation_key' or 'key'."
-                    )
-            self.generic_visit(node)
-
     failures = []
     for py_file in INTEGRATION_DIR.glob("**/*.py"):
         if py_file.name == "smart_feature_factory.py":
@@ -337,7 +334,7 @@ def test_all_descriptions_have_translation_key():
         with open(py_file, "r", encoding="utf-8") as f:
             try:
                 tree = ast.parse(f.read(), filename=py_file.name)
-                validator = DescriptionValidator(py_file.name)
+                validator = _DescriptionValidator(py_file.name)
                 validator.visit(tree)
                 for failure in validator.failures:
                     failures.append(f"{py_file.name}: {failure}")
