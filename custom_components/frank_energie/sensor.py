@@ -476,6 +476,13 @@ class FrankEnergieBatterySessionSensor(
     @property
     def device_info(self) -> dict | None:
         """Return device info."""
+        if self._is_total:
+            entry = self.coordinator.config_entry
+            return {
+                "identifiers": {(DOMAIN, f"{entry.entry_id}_{self.entity_description.service_name}")},
+                "name": f"Frank Energie - {self.entity_description.service_name}",
+            }
+
         if not self._battery_id:
             return None
         return {
@@ -5181,7 +5188,7 @@ async def async_setup_entry(
                 device_class=SensorDeviceClass.MONETARY,
                 native_unit_of_measurement=CURRENCY_EURO,
                 authenticated=True,
-                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                service_name=SERVICE_NAME_BATTERIES,
                 value_fn=lambda data: (
                     sum(
                         getattr(session, "period_total_result", 0.0)
