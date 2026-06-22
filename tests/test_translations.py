@@ -346,3 +346,81 @@ def test_all_descriptions_have_translation_key():
         f"Entity descriptions found without 'translation_key' or 'key':\n"
         f"{'\n'.join(failures)}"
     )
+
+class _EnumStateValidator(ast.NodeVisitor):
+    def __init__(self):
+        self.keys_with_options = set()
+        self.keys_with_enum = set()
+        self.all_keys = set()
+
+    def visit_Call(self, node):
+        func_name = None
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+
+        if func_name and ("Description" in func_name or "EntityDescription" in func_name):
+            key = None
+            has_options = False
+            has_enum = False
+            
+            for kw in node.keywords:
+                if kw.arg == "translation_key":
+                    if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                        key = kw.value.value
+                elif kw.arg == "key" and not key:
+                    if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                        key = kw.value.value
+                elif kw.arg == "options":
+                    has_options = True
+                elif kw.arg == "device_class":
+                    if isinstance(kw.value, ast.Attribute) and kw.value.attr == "ENUM":
+                        has_enum = True
+                        
+            if key:
+                self.all_keys.add(key)
+                if has_options:
+                    self.keys_with_options.add(key)
+                if has_enum:
+                    self.keys_with_enum.add(key)
+                    
+        self.generic_visit(node)
+
+def test_sensors_with_state_translations_are_enums():
+    """Verify that sensors with state translations use SensorDeviceClass.ENUM and define options."""
+    with open(STRINGS_FILE, "r", encoding="utf-8") as f:
+        strings_content = json.load(f)
+
+    # Find all translation keys in strings.json that have a 'state' sub-dictionary
+    state_translation_keys = set()
+    entity_section = strings_content.get("entity", {})
+    for platform, keys in entity_section.items():
+        if platform != "sensor":
+            continue
+        for key, value in keys.items():
+            if "state" in value:
+                state_translation_keys.add(key)
+
+    validator = _EnumStateValidator()
+    for py_file in INTEGRATION_DIR.glob("**/*.py"):
+        if py_file.name == "smart_feature_factory.py":
+            continue
+        with open(py_file, "r", encoding="utf-8") as f:
+            try:
+                tree = ast.parse(f.read(), filename=py_file.name)
+                validator.visit(tree)
+            except Exception:
+                pass
+
+    failures = []
+    for key in state_translation_keys:
+        if key in validator.all_keys:
+            if key not in validator.keys_with_enum:
+                failures.append(f"'{key}' has state translations but missing device_class=SensorDeviceClass.ENUM")
+            if key not in validator.keys_with_options:
+                failures.append(f"'{key}' has state translations but missing options=[...]")
+
+    assert not failures, (
+        "Sensors with state translations must be ENUMs with options:\n" + "\n".join(failures)
+    )
