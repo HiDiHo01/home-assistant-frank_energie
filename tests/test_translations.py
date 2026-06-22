@@ -302,9 +302,21 @@ def test_all_descriptions_have_translation_key():
             self.failures = []
 
         def visit_Call(self, node):
+            func_name = None
+            full_name = None
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+                full_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+                if isinstance(node.func.value, ast.Name):
+                    full_name = f"{node.func.value.id}.{func_name}"
+                else:
+                    full_name = func_name
+
             # Look for calls to classes that look like entity descriptions
-            if isinstance(node.func, ast.Name) and (
-                "Description" in node.func.id or "EntityDescription" in node.func.id
+            if func_name and (
+                "Description" in func_name or "EntityDescription" in func_name
             ):
                 has_key_or_translation_key = False
                 for keyword in node.keywords:
@@ -313,7 +325,7 @@ def test_all_descriptions_have_translation_key():
                         break
                 if not has_key_or_translation_key:
                     self.failures.append(
-                        f"Line {node.lineno}: Entity description '{node.func.id}' "
+                        f"Line {node.lineno}: Entity description '{full_name}' "
                         f"does not specify 'translation_key' or 'key'."
                     )
             self.generic_visit(node)
