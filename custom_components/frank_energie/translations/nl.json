@@ -105,7 +105,7 @@
         "name": "Eigen verbruik handel toegestaan"
       },
       "co2_compensation": {
-        "name": "CO\u2082 compensatie"
+        "name": "CO₂ compensatie"
       },
       "disabled_haptic_feedback": {
         "name": "Haptische feedback uitgeschakeld"
@@ -673,7 +673,7 @@
         "name": "Status",
         "state": {
           "active": "Actief",
-          "delivery_ended": "Levering be\u00ebindigd",
+          "delivery_ended": "Levering beëindigd",
           "inactive": "Inactief",
           "in_delivery": "In levering"
         }
@@ -860,9 +860,6 @@
       },
       "average_state_of_charge": {
         "name": "Gemiddelde laadtoestand"
-      },
-      "battery_all_total_result": {
-        "name": "Totaal resultaat (alle batterijen)"
       },
       "battery_mode": {
         "name": "Batterij Modus",

@@ -105,7 +105,7 @@
         "name": "Self consumption trading allowed"
       },
       "co2_compensation": {
-        "name": "CO\u2082 compensation"
+        "name": "CO₂ compensation"
       },
       "disabled_haptic_feedback": {
         "name": "Haptic feedback disabled"
@@ -860,9 +860,6 @@
       },
       "average_state_of_charge": {
         "name": "Average State of Charge"
-      },
-      "battery_all_total_result": {
-        "name": "Total Result (All Batteries)"
       },
       "battery_mode": {
         "name": "Battery Mode",

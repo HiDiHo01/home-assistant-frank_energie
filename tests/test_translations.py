@@ -347,6 +347,7 @@ def test_all_descriptions_have_translation_key():
         f"{'\n'.join(failures)}"
     )
 
+
 class _EnumStateValidator(ast.NodeVisitor):
     def __init__(self):
         self.keys_with_options = set()
@@ -360,32 +361,39 @@ class _EnumStateValidator(ast.NodeVisitor):
         elif isinstance(node.func, ast.Attribute):
             func_name = node.func.attr
 
-        if func_name and ("Description" in func_name or "EntityDescription" in func_name):
+        if func_name and (
+            "Description" in func_name or "EntityDescription" in func_name
+        ):
             key = None
             has_options = False
             has_enum = False
-            
+
             for kw in node.keywords:
                 if kw.arg == "translation_key":
-                    if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                    if isinstance(kw.value, ast.Constant) and isinstance(
+                        kw.value.value, str
+                    ):
                         key = kw.value.value
                 elif kw.arg == "key" and not key:
-                    if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                    if isinstance(kw.value, ast.Constant) and isinstance(
+                        kw.value.value, str
+                    ):
                         key = kw.value.value
                 elif kw.arg == "options":
                     has_options = True
                 elif kw.arg == "device_class":
                     if isinstance(kw.value, ast.Attribute) and kw.value.attr == "ENUM":
                         has_enum = True
-                        
+
             if key:
                 self.all_keys.add(key)
                 if has_options:
                     self.keys_with_options.add(key)
                 if has_enum:
                     self.keys_with_enum.add(key)
-                    
+
         self.generic_visit(node)
+
 
 def test_sensors_with_state_translations_are_enums():
     """Verify that sensors with state translations use SensorDeviceClass.ENUM and define options."""
@@ -417,10 +425,15 @@ def test_sensors_with_state_translations_are_enums():
     for key in state_translation_keys:
         if key in validator.all_keys:
             if key not in validator.keys_with_enum:
-                failures.append(f"'{key}' has state translations but missing device_class=SensorDeviceClass.ENUM")
+                failures.append(
+                    f"'{key}' has state translations but missing device_class=SensorDeviceClass.ENUM"
+                )
             if key not in validator.keys_with_options:
-                failures.append(f"'{key}' has state translations but missing options=[...]")
+                failures.append(
+                    f"'{key}' has state translations but missing options=[...]"
+                )
 
     assert not failures, (
-        "Sensors with state translations must be ENUMs with options:\n" + "\n".join(failures)
+        "Sensors with state translations must be ENUMs with options:\n"
+        + "\n".join(failures)
     )

@@ -479,7 +479,9 @@ class FrankEnergieBatterySessionSensor(
         if self._is_total:
             entry = self.coordinator.config_entry
             return {
-                "identifiers": {(DOMAIN, f"{entry.entry_id}_{self.entity_description.service_name}")},
+                "identifiers": {
+                    (DOMAIN, f"{entry.entry_id}_{self.entity_description.service_name}")
+                },
                 "name": f"Frank Energie - {self.entity_description.service_name}",
             }
 
@@ -4716,7 +4718,12 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:chart-line",
                     device_class=SensorDeviceClass.ENUM,
-                    options=["strategy_balanced", "strategy_max_return", "strategy_min_degradation", "aggressive"],
+                    options=[
+                        "strategy_balanced",
+                        "strategy_max_return",
+                        "strategy_min_degradation",
+                        "aggressive",
+                    ],
                     value_fn=lambda data, idx=i: (
                         b.settings.imbalance_trading_strategy.lower()
                         if (bats := data.get(DATA_BATTERIES))
@@ -4757,7 +4764,8 @@ def _build_single_smart_battery_descriptions(
                         and idx < len(bats.batteries)
                         and (b := bats.batteries[idx])
                         and b.summary
-                        and b.summary.last_known_status.lower() != "status_unreliable_data"
+                        and b.summary.last_known_status.lower()
+                        != "status_unreliable_data"
                         else None
                     ),
                 ),
@@ -4776,7 +4784,7 @@ def _build_single_smart_battery_descriptions(
                         "status_unreliable_data",
                         "status_offline",
                         "status_standby",
-                        "separate_imbalances"
+                        "separate_imbalances",
                     ],
                     value_fn=lambda data, idx=i: (
                         b.summary.last_known_status.lower()
@@ -4830,7 +4838,9 @@ def _build_single_smart_battery_descriptions(
     return descriptions
 
 
-def _build_aggregated_smart_batteries_descriptions() -> list[FrankEnergieEntityDescription]:
+def _build_aggregated_smart_batteries_descriptions() -> list[
+    FrankEnergieEntityDescription
+]:
     """Build aggregated entity descriptions for smart batteries."""
     descriptions: list[FrankEnergieEntityDescription] = []
 
@@ -4950,7 +4960,8 @@ def _build_aggregated_smart_batteries_descriptions() -> list[FrankEnergieEntityD
                             b
                             for b in bats
                             if b.summary
-                            and b.summary.last_known_status.lower() != "status_unreliable_data"
+                            and b.summary.last_known_status.lower()
+                            != "status_unreliable_data"
                         ]
                         else None
                     )
@@ -5115,10 +5126,16 @@ async def async_setup_entry(
         _LOGGER.debug(
             "Setting up smart battery type: %s", type(batteries.batteries)
         )  # <class 'list'>
-        aggregated_battery_descriptions = _build_aggregated_smart_batteries_descriptions()
-        for description in list(STATIC_BATTERY_SENSOR_TYPES) + aggregated_battery_descriptions:
+        aggregated_battery_descriptions = (
+            _build_aggregated_smart_batteries_descriptions()
+        )
+        for description in (
+            list(STATIC_BATTERY_SENSOR_TYPES) + aggregated_battery_descriptions
+        ):
             if not description.authenticated or coordinator.api.is_authenticated:
-                entities.append(FrankEnergieSensor(coordinator, description, config_entry))
+                entities.append(
+                    FrankEnergieSensor(coordinator, description, config_entry)
+                )
                 _LOGGER.debug("Added aggregate battery sensor for %s", description.key)
 
         for i, battery in enumerate(batteries.batteries):
@@ -5143,15 +5160,24 @@ async def async_setup_entry(
             _LOGGER.debug("Setting up smart battery updated_at: %s", battery.updated_at)
             _LOGGER.debug("Setting up smart battery capacity: %s", battery.capacity)
 
-            single_battery_descriptions = _build_single_smart_battery_descriptions(battery, i)
+            single_battery_descriptions = _build_single_smart_battery_descriptions(
+                battery, i
+            )
             for description in single_battery_descriptions:
                 if not description.authenticated or coordinator.api.is_authenticated:
                     entities.append(
                         FrankEnergieSmartBatterySensor(
-                            coordinator, description, config_entry, battery.id, f"Smart Battery {battery.id}", battery.brand
+                            coordinator,
+                            description,
+                            config_entry,
+                            battery.id,
+                            f"Smart Battery {battery.id}",
+                            battery.brand,
                         )
                     )
-                    _LOGGER.debug("Added individual smart battery sensor for %s", description.key)
+                    _LOGGER.debug(
+                        "Added individual smart battery sensor for %s", description.key
+                    )
 
             # Create sensors for each battery session coordinator
             for battery_id, session_coordinator in session_coordinators.items():
@@ -5179,43 +5205,6 @@ async def async_setup_entry(
                         battery_id,
                         config_entry.entry_id,
                     )
-
-            # Voeg één gecombineerde totaalsensor toe
-            total_desc = FrankEnergieEntityDescription(
-                key="battery_all_total_result",
-                name="Total Result (All Batteries)",
-                icon="mdi:chart-donut",
-                device_class=SensorDeviceClass.MONETARY,
-                native_unit_of_measurement=CURRENCY_EURO,
-                authenticated=True,
-                service_name=SERVICE_NAME_BATTERIES,
-                value_fn=lambda data: (
-                    sum(
-                        getattr(session, "period_total_result", 0.0)
-                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
-                        if session and hasattr(session, "period_total_result")
-                    )
-                    if isinstance(data.get(DATA_BATTERY_SESSIONS, None), dict)
-                    else None
-                ),
-                attr_fn=lambda data: {
-                    "battery_ids": list(data.get(DATA_BATTERY_SESSIONS, {}).keys()),
-                    "values": [
-                        getattr(session, "period_total_result", None)
-                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
-                    ],
-                },
-                state_class=SensorStateClass.TOTAL,
-                suggested_display_precision=2,
-            )
-            entities.append(
-                FrankEnergieBatterySessionSensor(
-                    coordinator=coordinator,
-                    description=total_desc,
-                    battery_id="all_batteries",
-                    is_total=True,
-                )
-            )
 
     enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
