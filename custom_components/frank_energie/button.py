@@ -85,7 +85,7 @@ class FrankEnergieRefreshButton(ButtonEntity):
         entry: ConfigEntry,
     ) -> None:
         self.entity_description = description  # type: ignore[override]
-        self._attr_translation_key = description.key
+        self._attr_translation_key = description.translation_key or description.key
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._coordinator = coordinator
 

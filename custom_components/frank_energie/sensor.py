@@ -305,6 +305,9 @@ class FrankEnergieEntityDescription(
                 self, "entity_category", EntityCategory(self.entity_category)
             )
 
+        if not self.translation_key and not (self.key and self.key.startswith("test_")):
+            object.__setattr__(self, "translation_key", self.key)
+
         # Provide default value_fn and attr_fn if not set, to ensure they are always callable
         if self.value_fn is None:
             object.__setattr__(self, "value_fn", lambda _: STATE_UNKNOWN)
@@ -361,6 +364,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         entity_category: Union[str, EntityCategory] | None = None,
         translation_key: str | None = None,
         icon: str | None = None,
+        options: list[str] | None = None,
         is_gas: bool = False,  # used externally for gas filtering
         is_electricity: bool = False,  # used externally for electricity filtering
         is_feed_in: bool = False,  # used to filter based on estimatedFeedIn
@@ -373,7 +377,8 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             state_class=state_class,
             native_unit_of_measurement=native_unit_of_measurement,
             suggested_display_precision=suggested_display_precision,
-            translation_key=translation_key,
+            translation_key=translation_key or key,
+            options=options,
             entity_category=EntityCategory(entity_category)
             if isinstance(entity_category, str)
             else entity_category,
@@ -402,6 +407,10 @@ class ChargerSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[EnodeCharger], StateType]
     authenticated: bool = False
+
+    def __post_init__(self):
+        if not self.translation_key:
+            object.__setattr__(self, "translation_key", self.key)
 
 
 class FrankEnergieBatterySessionSensor(
@@ -3558,11 +3567,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="status",
         name="Status",
         translation_key="status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["active", "delivery_ended", "inactive", "in_delivery"],
         icon="mdi:connection",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            data[DATA_USER_SITES].status
+            data[DATA_USER_SITES].status.lower()
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].status
             else None
         ),
@@ -3585,11 +3596,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="propositionType",
         name="Proposition type",
         translation_key="proposition_type",
+        device_class=SensorDeviceClass.ENUM,
+        options=["dynamic"],
         icon="mdi:file-document-check",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            data[DATA_USER_SITES].propositionType
+            data[DATA_USER_SITES].propositionType.lower()
             if data[DATA_USER_SITES] and data[DATA_USER_SITES].propositionType
             else None
         ),
@@ -3791,13 +3804,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="meterType",
         name="Meter Type",
         translation_key="meter_type",
+        device_class=SensorDeviceClass.ENUM,
+        options=["slm"],
         icon="mdi:meter-electric",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             next(
                 (
-                    connection["meterType"]
+                    connection["meterType"].lower()
                     for connection in data[DATA_USER].connections
                     if connection.get("meterType")
                 ),
@@ -3837,13 +3852,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="EleccontractStatus",
         name="Electricity Contract Status",
         translation_key="elec_contract_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["loss", "switched"],
         icon="mdi:file-document-outline",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             next(
                 (
-                    conn.contractStatus
+                    conn.contractStatus.lower()
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
@@ -3862,13 +3879,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="GascontractStatus",
         name="Gas Contract Status",
         translation_key="gas_contract_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["loss", "switched"],
         icon="mdi:file-document-outline",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             next(
                 (
-                    conn.contractStatus
+                    conn.contractStatus.lower()
                     for conn in (
                         getattr(data.get(DATA_USER), "connections", None)
                         if data.get(DATA_USER) is not None
@@ -3982,13 +4001,17 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="rewardPayoutPreference",
         name="Reward payout preference",
         translation_key="reward_payout_preference",
+        device_class=SensorDeviceClass.ENUM,
+        options=["discount", "trees"],
         icon="mdi:trophy",
         authenticated=True,
         entity_registry_enabled_default=False,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
-            data[DATA_USER].UserSettings.get("rewardPayoutPreference")
-            if data[DATA_USER] and data[DATA_USER].UserSettings
+            data[DATA_USER].UserSettings.get("rewardPayoutPreference").lower()
+            if data.get(DATA_USER)
+            and data[DATA_USER].UserSettings
+            and data[DATA_USER].UserSettings.get("rewardPayoutPreference")
             else None
         ),
     ),
@@ -4249,6 +4272,7 @@ class FrankEnergieSensor(
         else:
             self._attr_state_class = None
         self._attr_device_class = self.entity_description.device_class
+        self._attr_options = self.entity_description.options
 
         if hasattr(self.entity_description, "native_unit_of_measurement"):
             self._attr_unit_of_measurement = getattr(

@@ -1,5 +1,6 @@
 """Tests for translation files alignment."""
 
+import ast
 import json
 from pathlib import Path
 
@@ -239,14 +240,9 @@ def test_no_unused_or_missing_translation_keys():
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
     missing_entity_keys = extractor.translation_keys - strings_entity_keys
-    # Note: Filter out Enode field/unique identifiers that do not need to be translated (having no strings.json entry is permitted unless translation is wanted)
-    # We only verify keys that are explicitly declared in code as a translation_key.
-    # If the translation key is defined but not in strings.json, it will default to the key name.
-    # But for quality, all explicitly designated translation_keys should be translated.
-    # Let's verify this holds.
-    for key in sorted(missing_entity_keys):
-        # Allow technical fields that don't need translations, but fail if we expect a translation
-        pass
+    assert not missing_entity_keys, (
+        f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
+    )
 
 
 def test_all_translation_keys_are_lowercase():
@@ -269,3 +265,84 @@ def test_all_translation_keys_are_lowercase():
     check_lowercase_keys(strings_content.get("device", {}), "device")
     check_lowercase_keys(strings_content.get("entity", {}), "entity")
     check_lowercase_keys(strings_content.get("options", {}), "options")
+
+
+def _check_for_empty_states(d: dict, path: str = "") -> None:
+    if isinstance(d, dict):
+        for k, v in d.items():
+            current_path = f"{path}.{k}" if path else k
+            if k == "state":
+                assert v != {}, (
+                    f"Empty 'state' dictionary found at '{current_path}'. "
+                    "State translations must be populated with lowercase keys, "
+                    "or the 'state' key must be removed entirely if no translations are needed."
+                )
+            if isinstance(v, dict):
+                _check_for_empty_states(v, current_path)
+
+
+def test_no_empty_state_translations():
+    """Verify that there are no empty state translation dictionaries in strings.json."""
+    with open(STRINGS_FILE, "r", encoding="utf-8") as f:
+        strings_content = json.load(f)
+
+    _check_for_empty_states(strings_content)
+
+
+class _DescriptionValidator(ast.NodeVisitor):
+    def __init__(self, filename):
+        self.filename = filename
+        self.failures = []
+
+    def _get_call_names(self, node):
+        if isinstance(node.func, ast.Name):
+            return node.func.id, node.func.id
+        if isinstance(node.func, ast.Attribute):
+            full_name = (
+                f"{node.func.value.id}.{node.func.attr}"
+                if isinstance(node.func.value, ast.Name)
+                else node.func.attr
+            )
+            return node.func.attr, full_name
+        return None, None
+
+    def visit_Call(self, node):
+        func_name, full_name = self._get_call_names(node)
+
+        if func_name and (
+            "Description" in func_name or "EntityDescription" in func_name
+        ):
+            has_key = any(k.arg in ("translation_key", "key") for k in node.keywords)
+            if not has_key:
+                self.failures.append(
+                    f"Line {node.lineno}: Entity description '{full_name}' "
+                    f"does not specify 'translation_key' or 'key'."
+                )
+        self.generic_visit(node)
+
+
+def test_all_descriptions_have_translation_key():
+    """Verify that all entity descriptions have translation_key or key set.
+
+    This ensures that all entity descriptions can be translated (with
+    translation_key defaulting to key). We exclude smart_feature_factory.py
+    as it builds descriptions dynamically.
+    """
+    failures = []
+    for py_file in INTEGRATION_DIR.glob("**/*.py"):
+        if py_file.name == "smart_feature_factory.py":
+            continue
+        with open(py_file, "r", encoding="utf-8") as f:
+            try:
+                tree = ast.parse(f.read(), filename=py_file.name)
+                validator = _DescriptionValidator(py_file.name)
+                validator.visit(tree)
+                for failure in validator.failures:
+                    failures.append(f"{py_file.name}: {failure}")
+            except Exception:
+                pass
+
+    assert not failures, (
+        f"Entity descriptions found without 'translation_key' or 'key':\n"
+        f"{'\n'.join(failures)}"
+    )
