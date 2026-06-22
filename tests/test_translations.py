@@ -339,10 +339,105 @@ def test_all_descriptions_have_translation_key():
                 validator.visit(tree)
                 for failure in validator.failures:
                     failures.append(f"{py_file.name}: {failure}")
-            except Exception:
-                pass
+            except SyntaxError as exc:
+                import pytest
+
+                pytest.fail(f"Failed to parse {py_file}: {exc}")
 
     assert not failures, (
         f"Entity descriptions found without 'translation_key' or 'key':\n"
         f"{'\n'.join(failures)}"
+    )
+
+
+class _EnumStateValidator(ast.NodeVisitor):
+    def __init__(self):
+        self.keys_with_options = set()
+        self.keys_with_enum = set()
+        self.all_keys = set()
+
+    def _get_key_from_kwarg(self, kw) -> str | None:
+        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+            return kw.value.value
+        return None
+
+    def _parse_keywords(
+        self, keywords: list[ast.keyword]
+    ) -> tuple[str | None, bool, bool]:
+        key = None
+        has_options = False
+        has_enum = False
+        for kw in keywords:
+            if kw.arg in ("translation_key", "key") and not key:
+                key = self._get_key_from_kwarg(kw)
+            elif kw.arg == "options":
+                has_options = True
+            elif kw.arg == "device_class" and isinstance(kw.value, ast.Attribute):
+                has_enum = kw.value.attr == "ENUM"
+        return key, has_options, has_enum
+
+    def visit_Call(self, node):
+        func_name = getattr(node.func, "id", getattr(node.func, "attr", None))
+
+        if not func_name or (
+            "Description" not in func_name and "EntityDescription" not in func_name
+        ):
+            self.generic_visit(node)
+            return
+
+        key, has_options, has_enum = self._parse_keywords(node.keywords)
+        if key:
+            self.all_keys.add(key)
+            if has_options:
+                self.keys_with_options.add(key)
+            if has_enum:
+                self.keys_with_enum.add(key)
+
+        self.generic_visit(node)
+
+
+def _get_state_translation_keys() -> set[str]:
+    with open(STRINGS_FILE, "r", encoding="utf-8") as f:
+        strings_content = json.load(f)
+
+    keys = set()
+    sensor_entities = strings_content.get("entity", {}).get("sensor", {})
+    for key, value in sensor_entities.items():
+        if "state" in value:
+            keys.add(key)
+    return keys
+
+
+def test_sensors_with_state_translations_are_enums():
+    """Verify that sensors with state translations use SensorDeviceClass.ENUM and define options."""
+    state_translation_keys = _get_state_translation_keys()
+
+    validator = _EnumStateValidator()
+    for py_file in INTEGRATION_DIR.glob("**/*.py"):
+        if py_file.name == "smart_feature_factory.py":
+            continue
+        with open(py_file, "r", encoding="utf-8") as f:
+            try:
+                tree = ast.parse(f.read(), filename=py_file.name)
+                validator.visit(tree)
+            except SyntaxError as exc:
+                import pytest
+
+                pytest.fail(f"Failed to parse {py_file}: {exc}")
+
+    failures = []
+    for key in state_translation_keys:
+        if key in validator.all_keys:
+            if key not in validator.keys_with_enum:
+                failures.append(
+                    f"'{key}' has state translations but missing device_class=SensorDeviceClass.ENUM"
+                )
+            if key not in validator.keys_with_options:
+                failures.append(
+                    f"'{key}' has state translations but missing options=[...]"
+                )
+
+    assert not failures, (
+        "Sensors with state translations must be ENUMs with options:\n"
+        + "\n".join(failures)
     )
