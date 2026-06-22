@@ -17,6 +17,7 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_ENODE_VEHICLES,
     DOMAIN,
     SERVICE_NAME_SETTINGS,
 )
@@ -59,6 +60,16 @@ async def async_setup_entry(
                 entities.append(
                     FrankEnergieBatteryStrategySelect(
                         coordinator, entry, battery.smart_battery.id
+                    )
+                )
+
+    enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+    if enode_vehicles and enode_vehicles.vehicles:
+        for vehicle in enode_vehicles.vehicles:
+            if vehicle.can_smart_charge:
+                entities.append(
+                    FrankEnergieEnodeChargingModeSelect(
+                        coordinator, entry, vehicle.id
                     )
                 )
 
@@ -336,3 +347,80 @@ class FrankEnergieBatteryStrategySelect(
             _LOGGER.error(
                 "Failed to set battery %s strategy to %s", self._battery_id, option
             )
+
+class FrankEnergieEnodeChargingModeSelect(
+    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
+):
+    """Select entity for controlling EV charging mode."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:ev-station"
+    _attr_options = ["smart_charging", "boost_charging"]
+    _attr_translation_key = "enode_charging_mode"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry,
+        vehicle_id: str,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator)
+        self._entry = entry
+        self._vehicle_id = vehicle_id
+        self._attr_unique_id = f"{DOMAIN}_{vehicle_id}_enode_charging_mode"
+
+        # Device Info registration
+        enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+        vehicle = next(
+            (v for v in enode_vehicles.vehicles if v.id == vehicle_id), None
+        ) if enode_vehicles and enode_vehicles.vehicles else None
+
+        brand = vehicle.information.brand if vehicle and vehicle.information else "Frank Energie"
+        model = vehicle.information.model if vehicle and vehicle.information else "Vehicle"
+        name = f"{brand} {model}".strip() if (brand or model) else f"Vehicle {vehicle_id}"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, vehicle_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    def _get_vehicle(self):
+        enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+        if not enode_vehicles or not enode_vehicles.vehicles:
+            return None
+        return next(
+            (v for v in enode_vehicles.vehicles if v.id == self._vehicle_id), None
+        )
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current charging mode."""
+        vehicle = self._get_vehicle()
+        if not vehicle or not vehicle.charge_settings:
+            return None
+        return "smart_charging" if vehicle.charge_settings.is_smart_charging_enabled else "boost_charging"
+
+    async def async_select_option(self, option: str) -> None:
+        """Update charging mode via mutation."""
+        from .helpers import build_charge_settings_input
+        vehicle = self._get_vehicle()
+        if not vehicle or not vehicle.charge_settings:
+            _LOGGER.error("Cannot change charging mode: vehicle %s not found or has no charge settings", self._vehicle_id)
+            return
+
+        is_smart = option == "smart_charging"
+        input_data = build_charge_settings_input(vehicle.charge_settings)
+        input_data["isSmartChargingEnabled"] = is_smart
+
+        _LOGGER.debug("Setting EV charging mode for vehicle %s to %s", self._vehicle_id, option)
+        success = await self.coordinator.api.enode_update_vehicle_charge_settings(input_data)
+        
+        if success:
+            vehicle.charge_settings.is_smart_charging_enabled = is_smart
+            if self.hass:
+                self.async_write_ha_state()
+        else:
+            _LOGGER.error("Failed to set EV charging mode for vehicle %s to %s", self._vehicle_id, option)
