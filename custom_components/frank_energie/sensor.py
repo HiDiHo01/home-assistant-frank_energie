@@ -4552,6 +4552,25 @@ class SmartBatteriesData:
         return len(self.batteries)
 
 
+def _get_battery(data: Any, idx: int) -> Any | None:
+    bats = data.get(DATA_BATTERIES)
+    if bats and bats.batteries and idx < len(bats.batteries):
+        return bats.batteries[idx]
+    return None
+
+
+def _get_battery_setting(data: Any, idx: int, key: str) -> Any | None:
+    battery = _get_battery(data, idx)
+    return (
+        getattr(battery.settings, key, None) if battery and battery.settings else None
+    )
+
+
+def _get_battery_summary(data: Any, idx: int, key: str) -> Any | None:
+    battery = _get_battery(data, idx)
+    return getattr(battery.summary, key, None) if battery and battery.summary else None
+
+
 def _build_single_smart_battery_descriptions(
     battery: Any,
     i: int,
@@ -4691,21 +4710,13 @@ def _build_single_smart_battery_descriptions(
                     device_class=SensorDeviceClass.ENUM,
                     options=["mode_smart", "mode_manual", "self_consumption_mix"],
                     value_fn=lambda data, idx=i: (
-                        b.settings.battery_mode.lower()
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.settings
+                        val.lower()
+                        if (val := _get_battery_setting(data, idx, "battery_mode"))
                         else None
                     ),
                     attr_fn=lambda data, idx=i: (
                         asdict(b.settings)
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.settings
+                        if (b := _get_battery(data, idx)) and b.settings
                         else {}
                     ),
                 ),
@@ -4724,21 +4735,17 @@ def _build_single_smart_battery_descriptions(
                         "aggressive",
                     ],
                     value_fn=lambda data, idx=i: (
-                        b.settings.imbalance_trading_strategy.lower()
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.settings
+                        val.lower()
+                        if (
+                            val := _get_battery_setting(
+                                data, idx, "imbalance_trading_strategy"
+                            )
+                        )
                         else None
                     ),
                     attr_fn=lambda data, idx=i: (
                         asdict(b.settings)
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.settings
+                        if (b := _get_battery(data, idx)) and b.settings
                         else {}
                     ),
                 ),
@@ -4757,13 +4764,14 @@ def _build_single_smart_battery_descriptions(
                     device_class=SensorDeviceClass.BATTERY,
                     native_unit_of_measurement="%",
                     value_fn=lambda data, idx=i: (
-                        b.summary.last_known_state_of_charge
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.summary
-                        and b.summary.last_known_status.lower()
+                        val
+                        if (
+                            val := _get_battery_summary(
+                                data, idx, "last_known_state_of_charge"
+                            )
+                        )
+                        is not None
+                        and _get_battery_summary(data, idx, "last_known_status").lower()
                         != "status_unreliable_data"
                         else None
                     ),
@@ -4787,12 +4795,8 @@ def _build_single_smart_battery_descriptions(
                         "idle_full",
                     ],
                     value_fn=lambda data, idx=i: (
-                        b.summary.last_known_status.lower()
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.summary
+                        val.lower()
+                        if (val := _get_battery_summary(data, idx, "last_known_status"))
                         else None
                     ),
                 ),
@@ -4803,14 +4807,8 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:clock-outline",
                     device_class=SensorDeviceClass.TIMESTAMP,
-                    value_fn=lambda data, idx=i: (
-                        b.summary.last_update
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.summary
-                        else None
+                    value_fn=lambda data, idx=i: _get_battery_summary(
+                        data, idx, "last_update"
                     ),
                 ),
                 FrankEnergieEntityDescription(
@@ -4822,20 +4820,50 @@ def _build_single_smart_battery_descriptions(
                     native_unit_of_measurement=CURRENCY_EURO,
                     suggested_display_precision=2,
                     icon="mdi:currency-eur",
-                    value_fn=lambda data, idx=i: (
-                        b.summary.total_result
-                        if (bats := data.get(DATA_BATTERIES))
-                        and bats.batteries
-                        and idx < len(bats.batteries)
-                        and (b := bats.batteries[idx])
-                        and b.summary
-                        else None
+                    value_fn=lambda data, idx=i: _get_battery_summary(
+                        data, idx, "total_result"
                     ),
                 ),
             ]
         )
 
     return descriptions
+
+
+def _get_batteries_from_data(data: Any) -> list:
+    bats = data.get(DATA_BATTERIES)
+    return bats.batteries if bats and hasattr(bats, "batteries") else []
+
+
+def _get_total_max_charge_power(data: Any) -> float | None:
+    bats = _get_batteries_from_data(data)
+    return sum((b.max_charge_power or 0) for b in bats) or None
+
+
+def _get_total_max_discharge_power(data: Any) -> float | None:
+    bats = _get_batteries_from_data(data)
+    return sum((b.max_discharge_power or 0) for b in bats) or None
+
+
+def _get_total_result(data: Any) -> float | None:
+    bats = _get_batteries_from_data(data)
+    return sum((b.summary.total_result or 0) for b in bats if b.summary) or None
+
+
+def _get_average_state_of_charge(data: Any) -> float | None:
+    valid_bats = [
+        b
+        for b in _get_batteries_from_data(data)
+        if b.summary
+        and getattr(b.summary, "last_known_status", "").lower()
+        != "status_unreliable_data"
+    ]
+    return (
+        sum((b.summary.last_known_state_of_charge or 0) for b in valid_bats)
+        / len(valid_bats)
+        if valid_bats
+        else None
+    )
 
 
 def _build_aggregated_smart_batteries_descriptions() -> list[
@@ -4875,16 +4903,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
-                value_fn=lambda data: (
-                    sum(
-                        (b.max_charge_power or 0)
-                        for b in (
-                            data.get(DATA_BATTERIES)
-                            or type("_", (), {"batteries": []})()
-                        ).batteries
-                    )
-                    or None
-                ),
+                value_fn=_get_total_max_charge_power,
             ),
             FrankEnergieEntityDescription(
                 key="total_max_discharge_power",
@@ -4895,16 +4914,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
-                value_fn=lambda data: (
-                    sum(
-                        (b.max_discharge_power or 0)
-                        for b in (
-                            data.get(DATA_BATTERIES)
-                            or type("_", (), {"batteries": []})()
-                        ).batteries
-                    )
-                    or None
-                ),
+                value_fn=_get_total_max_discharge_power,
             ),
             FrankEnergieEntityDescription(
                 key="total_result",
@@ -4915,17 +4925,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 native_unit_of_measurement=CURRENCY_EURO,
                 suggested_display_precision=2,
                 icon="mdi:currency-eur",
-                value_fn=lambda data: (
-                    sum(
-                        (b.summary.total_result or 0)
-                        for b in (
-                            data.get(DATA_BATTERIES)
-                            or type("_", (), {"batteries": []})()
-                        ).batteries
-                        if b.summary
-                    )
-                    or None
-                ),
+                value_fn=_get_total_result,
             ),
             FrankEnergieEntityDescription(
                 key="average_state_of_charge",
@@ -4936,40 +4936,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 suggested_display_precision=0,
                 icon="mdi:battery-high",
                 native_unit_of_measurement="%",
-                value_fn=lambda data: (
-                    lambda bats: (
-                        (
-                            sum(
-                                (b.summary.last_known_state_of_charge or 0)
-                                for b in bats
-                                if b.summary
-                                and b.summary.last_known_status.lower()
-                                != "status_unreliable_data"
-                            )
-                            / len(
-                                [
-                                    b
-                                    for b in bats
-                                    if b.summary
-                                    and b.summary.last_known_status.lower()
-                                    != "status_unreliable_data"
-                                ]
-                            )
-                        )
-                        if [
-                            b
-                            for b in bats
-                            if b.summary
-                            and b.summary.last_known_status.lower()
-                            != "status_unreliable_data"
-                        ]
-                        else None
-                    )
-                )(
-                    (
-                        data.get(DATA_BATTERIES) or type("_", (), {"batteries": []})()
-                    ).batteries
-                ),
+                value_fn=_get_average_state_of_charge,
             ),
         ]
     )

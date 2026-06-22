@@ -356,12 +356,13 @@ class _EnumStateValidator(ast.NodeVisitor):
         self.keys_with_enum = set()
         self.all_keys = set()
 
+    def _get_key_from_kwarg(self, kw) -> str | None:
+        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+            return kw.value.value
+        return None
+
     def visit_Call(self, node):
-        func_name = None
-        if isinstance(node.func, ast.Name):
-            func_name = node.func.id
-        elif isinstance(node.func, ast.Attribute):
-            func_name = node.func.attr
+        func_name = getattr(node.func, "id", getattr(node.func, "attr", None))
 
         if func_name and (
             "Description" in func_name or "EntityDescription" in func_name
@@ -371,21 +372,12 @@ class _EnumStateValidator(ast.NodeVisitor):
             has_enum = False
 
             for kw in node.keywords:
-                if kw.arg == "translation_key":
-                    if isinstance(kw.value, ast.Constant) and isinstance(
-                        kw.value.value, str
-                    ):
-                        key = kw.value.value
-                elif kw.arg == "key" and not key:
-                    if isinstance(kw.value, ast.Constant) and isinstance(
-                        kw.value.value, str
-                    ):
-                        key = kw.value.value
+                if kw.arg in ("translation_key", "key") and not key:
+                    key = self._get_key_from_kwarg(kw)
                 elif kw.arg == "options":
                     has_options = True
-                elif kw.arg == "device_class":
-                    if isinstance(kw.value, ast.Attribute) and kw.value.attr == "ENUM":
-                        has_enum = True
+                elif kw.arg == "device_class" and isinstance(kw.value, ast.Attribute):
+                    has_enum = kw.value.attr == "ENUM"
 
             if key:
                 self.all_keys.add(key)
@@ -397,20 +389,21 @@ class _EnumStateValidator(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def test_sensors_with_state_translations_are_enums():
-    """Verify that sensors with state translations use SensorDeviceClass.ENUM and define options."""
+def _get_state_translation_keys() -> set[str]:
     with open(STRINGS_FILE, "r", encoding="utf-8") as f:
         strings_content = json.load(f)
 
-    # Find all translation keys in strings.json that have a 'state' sub-dictionary
-    state_translation_keys = set()
-    entity_section = strings_content.get("entity", {})
-    for platform, keys in entity_section.items():
-        if platform != "sensor":
-            continue
-        for key, value in keys.items():
-            if "state" in value:
-                state_translation_keys.add(key)
+    keys = set()
+    sensor_entities = strings_content.get("entity", {}).get("sensor", {})
+    for key, value in sensor_entities.items():
+        if "state" in value:
+            keys.add(key)
+    return keys
+
+
+def test_sensors_with_state_translations_are_enums():
+    """Verify that sensors with state translations use SensorDeviceClass.ENUM and define options."""
+    state_translation_keys = _get_state_translation_keys()
 
     validator = _EnumStateValidator()
     for py_file in INTEGRATION_DIR.glob("**/*.py"):
