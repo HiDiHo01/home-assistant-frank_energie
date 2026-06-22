@@ -14,6 +14,8 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
+
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
@@ -39,16 +41,8 @@ DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
 
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up Frank Energie select entities."""
-    coordinator: FrankEnergieCoordinator = entry.runtime_data.coordinator
-
-    entities: list[SelectEntity] = [FrankEnergieResolutionSelect(coordinator)]
-
+def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
+    entities = []
     if coordinator.api.is_authenticated:
         battery_details = coordinator.data.get(DATA_BATTERY_DETAILS)
         if battery_details:
@@ -63,7 +57,11 @@ async def async_setup_entry(
                         coordinator, entry, battery.smart_battery.id
                     )
                 )
+    return entities
 
+
+def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
+    entities = []
     enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
         ent_reg = er.async_get(hass)
@@ -79,6 +77,20 @@ async def async_setup_entry(
                 entities.append(
                     FrankEnergieEnodeChargingModeSelect(coordinator, entry, vehicle.id)
                 )
+    return entities
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Frank Energie select entities."""
+    coordinator: FrankEnergieCoordinator = entry.runtime_data.coordinator
+
+    entities: list[SelectEntity] = [FrankEnergieResolutionSelect(coordinator)]
+    entities.extend(_setup_battery_entities(coordinator, entry))
+    entities.extend(_setup_enode_entities(hass, coordinator, entry))
 
     async_add_entities(entities)
 
@@ -216,7 +228,7 @@ class FrankEnergieBatteryModeSelect(
         )
         sb = battery.smart_battery if battery else None
 
-        brand = sb.brand if sb else "Frank Energie"
+        brand = sb.brand if sb else MANUFACTURER_FRANK_ENERGIE
         model = "Smart Battery"
         name = f"{brand} {model}".strip()
 
@@ -297,7 +309,7 @@ class FrankEnergieBatteryStrategySelect(
         )
         sb = battery.smart_battery if battery else None
 
-        brand = sb.brand if sb else "Frank Energie"
+        brand = sb.brand if sb else MANUFACTURER_FRANK_ENERGIE
         model = "Smart Battery"
         name = f"{brand} {model}".strip()
 
@@ -389,7 +401,7 @@ class FrankEnergieEnodeChargingModeSelect(
         brand = (
             vehicle.information.brand
             if vehicle and vehicle.information
-            else "Frank Energie"
+            else MANUFACTURER_FRANK_ENERGIE
         )
         model = (
             vehicle.information.model if vehicle and vehicle.information else "Vehicle"
