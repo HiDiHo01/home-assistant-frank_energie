@@ -364,6 +364,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         entity_category: Union[str, EntityCategory] | None = None,
         translation_key: str | None = None,
         icon: str | None = None,
+        options: list[str] | None = None,
         is_gas: bool = False,  # used externally for gas filtering
         is_electricity: bool = False,  # used externally for electricity filtering
         is_feed_in: bool = False,  # used to filter based on estimatedFeedIn
@@ -377,6 +378,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             native_unit_of_measurement=native_unit_of_measurement,
             suggested_display_precision=suggested_display_precision,
             translation_key=translation_key or key,
+            options=options,
             entity_category=EntityCategory(entity_category)
             if isinstance(entity_category, str)
             else entity_category,
@@ -3565,6 +3567,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="status",
         name="Status",
         translation_key="status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["active", "delivery_ended", "inactive", "in_delivery"],
         icon="mdi:connection",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3592,6 +3596,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="propositionType",
         name="Proposition type",
         translation_key="proposition_type",
+        device_class=SensorDeviceClass.ENUM,
+        options=["dynamic"],
         icon="mdi:file-document-check",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3798,6 +3804,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="meterType",
         name="Meter Type",
         translation_key="meter_type",
+        device_class=SensorDeviceClass.ENUM,
+        options=["slm"],
         icon="mdi:meter-electric",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3844,6 +3852,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="EleccontractStatus",
         name="Electricity Contract Status",
         translation_key="elec_contract_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["loss", "switched"],
         icon="mdi:file-document-outline",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3869,6 +3879,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="GascontractStatus",
         name="Gas Contract Status",
         translation_key="gas_contract_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=["loss", "switched"],
         icon="mdi:file-document-outline",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3989,6 +4001,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="rewardPayoutPreference",
         name="Reward payout preference",
         translation_key="reward_payout_preference",
+        device_class=SensorDeviceClass.ENUM,
+        options=["discount", "trees"],
         icon="mdi:trophy",
         authenticated=True,
         entity_registry_enabled_default=False,
@@ -4258,6 +4272,7 @@ class FrankEnergieSensor(
         else:
             self._attr_state_class = None
         self._attr_device_class = self.entity_description.device_class
+        self._attr_options = self.entity_description.options
 
         if hasattr(self.entity_description, "native_unit_of_measurement"):
             self._attr_unit_of_measurement = getattr(
