@@ -4959,66 +4959,6 @@ def _build_aggregated_smart_batteries_descriptions() -> list[FrankEnergieEntityD
     return descriptions
 
 
-def _build_dynamic_battery_session_descriptions(
-    battery_ids: list[str], include_total: bool = True
-) -> list[FrankEnergieEntityDescription]:
-    """Genereer sensorbeschrijvingen voor alle smart battery sessions."""
-    descriptions: list[FrankEnergieEntityDescription] = []
-
-    for battery_id in battery_ids:
-        for base_description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
-            desc = FrankEnergieEntityDescription(
-                key=f"battery_{battery_id}_{base_description.key}",
-                name=f"{base_description.name} {battery_id}",
-                icon=base_description.icon,
-                device_class=base_description.device_class,
-                state_class=base_description.state_class,
-                native_unit_of_measurement=base_description.native_unit_of_measurement,
-                suggested_display_precision=base_description.suggested_display_precision,
-                entity_category=base_description.entity_category,
-                authenticated=True,
-                service_name=base_description.service_name,
-                value_fn=base_description.value_fn,
-                attr_fn=base_description.attr_fn,
-            )
-            descriptions.append(desc)
-
-    if include_total:
-        # Voeg één gecombineerde totaalsensor toe
-        # Deze sensor verwacht dat alle sessies in FrankEnergieCoordinator.data[DATA_BATTERY_SESSIONS] zitten als dict[battery_id → SmartBatterySessions]
-        descriptions.append(
-            FrankEnergieEntityDescription(
-                key="battery_all_total_result",
-                name="Total Result (All Batteries)",
-                icon="mdi:chart-donut",
-                device_class=SensorDeviceClass.MONETARY,
-                native_unit_of_measurement=CURRENCY_EURO,
-                authenticated=True,
-                service_name=SERVICE_NAME_BATTERY_SESSIONS,
-                value_fn=lambda data: (
-                    sum(
-                        getattr(session, "period_total_result", 0.0)
-                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
-                        if session and hasattr(session, "period_total_result")
-                    )
-                    if isinstance(data.get(DATA_BATTERY_SESSIONS, None), dict)
-                    else None
-                ),
-                attr_fn=lambda data: {
-                    "battery_ids": list(data.get(DATA_BATTERY_SESSIONS, {}).keys()),
-                    "values": [
-                        getattr(session, "period_total_result", None)
-                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
-                    ],
-                },
-                state_class=SensorStateClass.TOTAL,
-                suggested_display_precision=2,
-            )
-        )
-
-    return descriptions
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -5208,16 +5148,13 @@ async def async_setup_entry(
 
             # Create sensors for each battery session coordinator
             for battery_id, session_coordinator in session_coordinators.items():
-                descriptions = _build_dynamic_battery_session_descriptions(
-                    [battery_id], include_total=False
-                )
                 sessions_data = session_coordinator.data
                 if sessions_data and sessions_data.sessions:
                     _LOGGER.debug(
-                        "Creating dynamic battery session sensors for battery: %s",
+                        "Creating battery session sensors for battery: %s",
                         battery_id,
                     )
-                    for description in descriptions:
+                    for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
                         if (
                             not description.authenticated
                             or coordinator.api.is_authenticated
@@ -5236,17 +5173,42 @@ async def async_setup_entry(
                         config_entry.entry_id,
                     )
 
-            total_descriptions = _build_dynamic_battery_session_descriptions(
-                [], include_total=True
+            # Voeg één gecombineerde totaalsensor toe
+            total_desc = FrankEnergieEntityDescription(
+                key="battery_all_total_result",
+                name="Total Result (All Batteries)",
+                icon="mdi:chart-donut",
+                device_class=SensorDeviceClass.MONETARY,
+                native_unit_of_measurement=CURRENCY_EURO,
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                value_fn=lambda data: (
+                    sum(
+                        getattr(session, "period_total_result", 0.0)
+                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
+                        if session and hasattr(session, "period_total_result")
+                    )
+                    if isinstance(data.get(DATA_BATTERY_SESSIONS, None), dict)
+                    else None
+                ),
+                attr_fn=lambda data: {
+                    "battery_ids": list(data.get(DATA_BATTERY_SESSIONS, {}).keys()),
+                    "values": [
+                        getattr(session, "period_total_result", None)
+                        for session in data.get(DATA_BATTERY_SESSIONS, {}).values()
+                    ],
+                },
+                state_class=SensorStateClass.TOTAL,
+                suggested_display_precision=2,
             )
-            for desc in total_descriptions:
-                sensor = FrankEnergieBatterySessionSensor(
-                    coordinator=coordinator,  # hoofdcoördinator!
-                    description=desc,
+            entities.append(
+                FrankEnergieBatterySessionSensor(
+                    coordinator=coordinator,
+                    description=total_desc,
                     battery_id="all_batteries",
                     is_total=True,
                 )
-                # entities.append(sensor)
+            )
 
     enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
