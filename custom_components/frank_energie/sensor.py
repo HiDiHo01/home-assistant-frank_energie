@@ -4785,6 +4785,7 @@ def _build_single_smart_battery_descriptions(
                         "status_offline",
                         "status_standby",
                         "separate_imbalances",
+                        "idle_full",
                     ],
                     value_fn=lambda data, idx=i: (
                         b.summary.last_known_status.lower()

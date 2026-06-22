@@ -887,7 +887,8 @@
           "status_unreliable_data": "Onbetrouwbare Data",
           "status_offline": "Offline",
           "status_standby": "Stand-by",
-          "separate_imbalances": "Onbalans Gescheiden"
+          "separate_imbalances": "Onbalans Gescheiden",
+          "idle_full": "Inactief (Vol)"
         }
       }
     }

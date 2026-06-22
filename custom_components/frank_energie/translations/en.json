@@ -887,7 +887,8 @@
           "status_unreliable_data": "Unreliable Data",
           "status_offline": "Offline",
           "status_standby": "Standby",
-          "separate_imbalances": "Separate Imbalances"
+          "separate_imbalances": "Separate Imbalances",
+          "idle_full": "Idle (Full)"
         }
       }
     }
