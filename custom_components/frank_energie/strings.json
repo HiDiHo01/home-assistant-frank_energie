@@ -1,881 +1,907 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "[%key:common::config_flow::abort::already_configured%]",
-            "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
-            "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
-        },
-        "error": {
-            "connection_error": "Connection error with Frank Energie API.",
-            "invalid_auth": "Credentials rejected, please check your username and password.",
-            "no_delivery_sites": "No delivery sites found for this account.",
-            "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
-            "site_retrieval_failed": "Error retrieving delivery sites. Please try again later.",
-            "unknown_error": "Unknown error occurred. Please consult logs for details."
-        },
-        "flow_title": "Frank Energie",
-        "step": {
-            "confirm": {
-                "description": "[%key:common::config_flow::description::confirm_setup%]",
-                "title": "Configure Frank Energie"
-            },
-            "import": {
-                "description": "Import an existing configuration for Frank Energie.",
-                "title": "Import configuration"
-            },
-            "login": {
-                "data": {
-                    "password": "Password",
-                    "username": "Username / e-mail"
-                },
-                "description": "Enter your Frank Energie account credentials.",
-                "title": "Enter your Frank Energie account credentials"
-            },
-            "options": {
-                "description": "Configure the options for Frank Energie.",
-                "title": "Configure options"
-            },
-            "reauth": {
-                "description": "Re-authentication is required for Frank Energie.",
-                "title": "Re-authentication required"
-            },
-            "reauth_confirm": {
-                "description": "Re-authentication is required for Frank Energie.",
-                "title": "Re-authentication required"
-            },
-            "reconfigure": {
-                "data": {
-                    "password": "Password",
-                    "username": "Username / e-mail"
-                },
-                "description": "Enter your Frank Energie credentials to reconfigure your account.",
-                "title": "Reconfigure account"
-            },
-            "site": {
-                "data": {
-                    "site_reference": "Delivery location"
-                },
-                "description": "Choose the delivery location you want to add.",
-                "title": "Select delivery location"
-            },
-            "user": {
-                "data": {
-                    "authentication": "Use Frank Energie account credentials"
-                },
-                "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
-                "title": "Do you want to sign in to Frank Energie?"
-            }
-        }
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
-    "device": {
-        "frank_energie_batteries": {
-            "name": "Frank Energie - Batteries"
-        },
-        "frank_energie_chargers": {
-            "name": "Frank Energie - Chargers"
-        },
-        "frank_energie_costs": {
-            "name": "Frank Energie - Costs"
-        },
-        "frank_energie_gasprices": {
-            "name": "Frank Energie - Gasprices"
-        },
-        "frank_energie_prices": {
-            "name": "Frank Energie - Prices"
-        },
-        "frank_energie_settings": {
-            "name": "Frank Energie - Settings"
-        },
-        "frank_energie_usage": {
-            "name": "Frank Energie - Usage"
-        },
-        "frank_energie_user": {
-            "name": "Frank Energie - User"
-        },
-        "frank_energie_vehicles": {
-            "name": "Frank Energie - Vehicles"
-        },
-        "frank_energie_battery_sessions": {
-            "name": "Frank Energie - Battery Sessions"
-        }
+    "error": {
+      "connection_error": "Connection error with Frank Energie API.",
+      "invalid_auth": "Credentials rejected, please check your username and password.",
+      "no_delivery_sites": "No delivery sites found for this account.",
+      "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
+      "site_retrieval_failed": "Error retrieving delivery sites. Please try again later.",
+      "unknown_error": "Unknown error occurred. Please consult logs for details."
     },
-    "entity": {
-        "binary_sensor": {
-            "battery_self_consumption_trading_allowed": {
-                "name": "Self consumption trading allowed"
-            },
-            "co2_compensation": {
-                "name": "CO\u2082 compensation"
-            },
-            "disabled_haptic_feedback": {
-                "name": "Haptic feedback disabled"
-            },
-            "smart_feed_in": {
-                "name": "Smart Feed-In"
-            },
-            "smart_hvac": {
-                "name": "Smart HVAC"
-            },
-            "smart_push_notification_price_alerts": {
-                "name": "Smart push notification price alerts"
-            },
-            "smart_pv_systems": {
-                "name": "Smart solar panels",
-                "state_attributes": {
-                    "system_count": {
-                        "name": "System count"
-                    }
-                }
-            },
-            "smartcharging_isactivated": {
-                "name": "Smart Charging",
-                "state_attributes": {
-                    "available_in_country": {
-                        "name": "Available in country",
-                        "state": {
-                            "false": "No",
-                            "true": "Yes"
-                        }
-                    },
-                    "needs_subscription": {
-                        "name": "Needs subscription",
-                        "state": {
-                            "false": "No",
-                            "true": "Yes"
-                        }
-                    },
-                    "provider": {
-                        "name": "Provider"
-                    },
-                    "user_created_at": {
-                        "name": "User created at"
-                    }
-                }
-            },
-            "smarttrading_isactivated": {
-                "name": "Smart Trading",
-                "state_attributes": {
-                    "available_in_country": {
-                        "name": "Available in country",
-                        "state": {
-                            "false": "No",
-                            "true": "Yes"
-                        }
-                    },
-                    "needs_subscription": {
-                        "name": "Needs subscription",
-                        "state": {
-                            "false": "No",
-                            "true": "Yes"
-                        }
-                    },
-                    "user_created_at": {
-                        "name": "User created at"
-                    }
-                }
-            }
+    "flow_title": "Frank Energie",
+    "step": {
+      "confirm": {
+        "description": "[%key:common::config_flow::description::confirm_setup%]",
+        "title": "Configure Frank Energie"
+      },
+      "import": {
+        "description": "Import an existing configuration for Frank Energie.",
+        "title": "Import configuration"
+      },
+      "login": {
+        "data": {
+          "password": "Password",
+          "username": "Username / e-mail"
         },
-        "button": {
-            "refresh_battery_sessions": {
-                "name": "Refresh Battery Sessions"
-            },
-            "refresh_prices": {
-                "name": "Refresh Prices"
-            }
+        "description": "Enter your Frank Energie account credentials.",
+        "title": "Enter your Frank Energie account credentials"
+      },
+      "options": {
+        "description": "Configure the options for Frank Energie.",
+        "title": "Configure options"
+      },
+      "reauth": {
+        "description": "Re-authentication is required for Frank Energie.",
+        "title": "Re-authentication required"
+      },
+      "reauth_confirm": {
+        "description": "Re-authentication is required for Frank Energie.",
+        "title": "Re-authentication required"
+      },
+      "reconfigure": {
+        "data": {
+          "password": "Password",
+          "username": "Username / e-mail"
         },
-        "datetime": {
-            "charging_deadline": {
-                "name": "Charging deadline"
-            }
+        "description": "Enter your Frank Energie credentials to reconfigure your account.",
+        "title": "Reconfigure account"
+      },
+      "site": {
+        "data": {
+          "site_reference": "Delivery location"
         },
-        "number": {
-            "consumption_threshold_price": {
-                "name": "Self consumption threshold price"
-            }
+        "description": "Choose the delivery location you want to add.",
+        "title": "Select delivery location"
+      },
+      "user": {
+        "data": {
+          "authentication": "Use Frank Energie account credentials"
         },
-        "select": {
-            "battery_mode": {
-                "name": "Smart battery mode",
-                "state": {
-                    "imbalance_trading": "Imbalance trading",
-                    "self_consumption": "Self-consumption",
-                    "self_consumption_mix": "Self-consumption Plus",
-                    "trading": "Trading"
-                }
-            },
-            "battery_strategy": {
-                "name": "Smart battery strategy",
-                "state": {
-                    "aggressive": "Aggressive",
-                    "balanced": "Standard",
-                    "conservative": "Conservative",
-                    "imbalance_only": "Imbalance only"
-                }
-            },
-            "resolution": {
-                "name": "Resolution",
-                "state": {
-                    "pt15m": "15 minutes",
-                    "pt60m": "60 minutes"
-                },
-                "state_attributes": {
-                    "is_authenticated": {
-                        "name": "Signed in",
-                        "state": {
-                            "false": "No",
-                            "true": "Yes"
-                        }
-                    },
-                    "available_options": {
-                        "name": "Available options",
-                        "state": {
-                            "pt15m": "15 minutes",
-                            "pt60m": "60 minutes"
-                        }
-                    },
-                    "api_resolution": {
-                        "name": "API resolution",
-                        "state": {
-                            "pt15m": "15 minutes",
-                            "pt60m": "60 minutes"
-                        }
-                    },
-                    "active_option": {
-                        "name": "Active option",
-                        "state": {
-                            "pt15m": "15 minutes",
-                            "pt60m": "60 minutes"
-                        }
-                    }
-                }
-            },
-            "enode_charging_mode": {
-                "name": "EV charging mode",
-                "state": {
-                    "smart_charging": "Smart charging",
-                    "boost_charging": "Boost charging"
-                }
-            }
-        },
-        "sensor": {
-            "ean": {
-                "name": "EAN (Energy Account Number)"
-            },
-            "actual_costs_until_last_meter_reading_date": {
-                "name": "Actual monthly cost"
-            },
-            "advanced_payment_amount": {
-                "name": "Advanced payment amount"
-            },
-            "average_costs_per_month": {
-                "name": "Average costs per month"
-            },
-            "average_costs_per_month_previous_year": {
-                "name": "Average costs per month previous year"
-            },
-            "average_costs_per_month_this_year": {
-                "name": "Average costs per month this year"
-            },
-            "average_costs_per_year": {
-                "name": "Average costs per year"
-            },
-            "average_costs_per_year_corrected": {
-                "name": "Average costs per year (corrected)"
-            },
-            "average_electricity_market_price_today": {
-                "name": "Average electricity market price today"
-            },
-            "average_electricity_market_price_tomorrow": {
-                "name": "Average electricity market price tomorrow"
-            },
-            "average_electricity_market_price_upcoming": {
-                "name": "Average electricity market price upcoming"
-            },
-            "average_electricity_price_today_all_in": {
-                "name": "Average electricity price today (All-in)"
-            },
-            "average_electricity_price_today_including_tax": {
-                "name": "Average electricity price today including tax"
-            },
-            "average_electricity_price_today_including_tax_and_markup": {
-                "name": "Average electricity price today including tax and markup"
-            },
-            "average_electricity_price_tomorrow_all_in": {
-                "name": "Average electricity price tomorrow (All-in)"
-            },
-            "average_electricity_price_tomorrow_including_tax": {
-                "name": "Average electricity price tomorrow including tax"
-            },
-            "average_electricity_price_tomorrow_including_tax_and_markup": {
-                "name": "Average electricity price tomorrow including tax and markup"
-            },
-            "average_electricity_price_upcoming_all_in": {
-                "name": "Average electricity price upcoming (All-in)"
-            },
-            "average_electricity_price_upcoming_market": {
-                "name": "Average electricity price (upcoming, market)"
-            },
-            "average_electricity_price_upcoming_market_tax": {
-                "name": "Average electricity price (upcoming, market and tax)"
-            },
-            "average_electricity_price_upcoming_market_tax_markup": {
-                "name": "Average electricity price (upcoming, market, tax and markup)"
-            },
-            "bank_account_number": {
-                "name": "Bankaccount Number"
-            },
-            "contract_price_resolution_state": {
-                "name": "Contract Price Resolution State",
-                "state_attributes": {
-                    "available_options": {
-                        "name": "Contract Price Resolution State",
-                        "state": {
-                            "pt15m": "15 minutes",
-                            "pt60m": "60 minutes"
-                        }
-                    },
-                    "is_change_request_possible": {
-                        "name": "Contract Price Resolution State",
-                        "state": {
-                            "false": "No",
-                            "true": "Yes"
-                        }
-                    },
-                    "upcoming_change": {
-                        "name": "Contract Price Resolution State",
-                        "state": {
-                            "pt15m": "15 minutes",
-                            "pt60m": "60 minutes"
-                        }
-                    },
-                    "upcoming_change_effective_date": {
-                        "name": "Contract Price Resolution State"
-                    }
-                }
-            },
-            "contract_product_name": {
-                "name": "Contract Product Name"
-            },
-            "contract_start_date": {
-                "name": "Contract Start Date"
-            },
-            "costs_electricity_yesterday": {
-                "name": "Costs electricity yesterday"
-            },
-            "costs_gas_yesterday": {
-                "name": "Costs gas yesterday"
-            },
-            "costs_per_day_till_now_this_month": {
-                "name": "Cost per day till now this month"
-            },
-            "costs_previous_year": {
-                "name": "Costs previous year"
-            },
-            "costs_this_year": {
-                "name": "Costs this year"
-            },
-            "country_code": {
-                "name": "Country code"
-            },
-            "current_electricity_marketprice": {
-                "name": "Current electricity market price"
-            },
-            "current_electricity_price": {
-                "name": "Current electricity price (All-in)",
-                "state_attributes": {
-                    "prices": {
-                        "name": "Current electricity price (All-in)"
-                    }
-                }
-            },
-            "current_electricity_price_incl_tax": {
-                "name": "Current electricity price including tax"
-            },
-            "current_electricity_price_incl_tax_markup": {
-                "name": "Current electricity price including tax and markup"
-            },
-            "current_electricity_sourcing_markup": {
-                "name": "Current electricity sourcing markup"
-            },
-            "current_electricity_tax_price": {
-                "name": "Current electricity VAT price"
-            },
-            "delivered_feed_in_yesterday": {
-                "name": "Delivered feed-in yesterday"
-            },
-            "delivery_end_date": {
-                "name": "Delivery end date"
-            },
-            "delivery_site": {
-                "name": "Delivery Site",
-                "state_attributes": {
-                    "city": {
-                        "name": "Delivery Site"
-                    },
-                    "house_number": {
-                        "name": "Delivery Site"
-                    },
-                    "house_number_addition": {
-                        "name": "Delivery Site"
-                    },
-                    "street": {
-                        "name": "Delivery Site"
-                    },
-                    "zip_code": {
-                        "name": "Delivery Site"
-                    }
-                }
-            },
-            "delivery_start_date": {
-                "name": "Delivery start date"
-            },
-            "difference_costs_per_day": {
-                "name": "Difference expected and actual cost per day"
-            },
-            "difference_costs_until_last_meter_reading_date": {
-                "name": "Difference expected and actual monthly cost until now"
-            },
-            "elec_all": {
-                "name": "Average electricity price all hours (All-in)"
-            },
-            "elec_all_max": {
-                "name": "Highest electricity price all hours (All-in)"
-            },
-            "elec_all_min": {
-                "name": "Lowest electricity price all hours (All-in)"
-            },
-            "elec_contract_status": {
-                "name": "Electricity Contract Status",
-                "state": {
-                    "loss": "Stopped",
-                    "switched": "Switched"
-                }
-            },
-            "elec_fixed_kwh": {
-                "name": "Fixed electricity cost kWh"
-            },
-            "elec_hourcount": {
-                "name": "Number of hours with electricity prices loaded"
-            },
-            "elec_market_percent_tax": {
-                "name": "Electricity market percent tax"
-            },
-            "elec_max": {
-                "name": "Highest electricity price today (All-in)"
-            },
-            "elec_min": {
-                "name": "Lowest electricity price today (All-in)"
-            },
-            "elec_nexthour": {
-                "name": "Next hour electricity price (All-in)"
-            },
-            "elec_nexthour_market": {
-                "name": "Next hour electricity market price"
-            },
-            "elec_previoushour": {
-                "name": "Previous hour electricity price (All-in)"
-            },
-            "elec_previoushour_market": {
-                "name": "Previous hour electricity market price"
-            },
-            "elec_tax_only": {
-                "name": "Current electricity tax only"
-            },
-            "elec_tomorrow_max": {
-                "name": "Highest electricity price tomorrow (All-in)"
-            },
-            "elec_tomorrow_min": {
-                "name": "Lowest electricity price tomorrow (All-in)"
-            },
-            "elec_upcoming_max": {
-                "name": "Highest electricity price upcoming hours (All-in)"
-            },
-            "elec_upcoming_min": {
-                "name": "Lowest electricity price upcoming hours (All-in)"
-            },
-            "elec_var_kwh": {
-                "name": "Variable electricity cost kWh"
-            },
-            "expected_costs_per_day_this_month": {
-                "name": "Expected cost per day this month"
-            },
-            "expected_costs_this_month": {
-                "name": "Expected cost this month"
-            },
-            "expected_costs_this_year": {
-                "name": "Expected costs this year"
-            },
-            "expected_costs_until_last_meter_reading_date": {
-                "name": "Expected monthly cost until now"
-            },
-            "first_meter_reading_date": {
-                "name": "First meter reading date"
-            },
-            "friends_count": {
-                "name": "Friends count"
-            },
-            "full_name": {
-                "name": "Full Name"
-            },
-            "gains_feed_in_yesterday": {
-                "name": "Gains feed-in yesterday"
-            },
-            "gas_contract_status": {
-                "name": "Gas Contract Status",
-                "state": {
-                    "loss": "Stopped",
-                    "switched": "Switched"
-                }
-            },
-            "gas_hourcount": {
-                "name": "Number of hours with gas prices loaded"
-            },
-            "gas_market": {
-                "name": "Current gas market price"
-            },
-            "gas_market_percent_tax": {
-                "name": "Gas market percent tax"
-            },
-            "gas_market_upcoming": {
-                "name": "Average gas market price upcoming hours"
-            },
-            "gas_markup": {
-                "name": "Current gas price (All-in)"
-            },
-            "gas_markup_after6am": {
-                "name": "Gas price after 6AM (All-in)"
-            },
-            "gas_markup_before6am": {
-                "name": "Gas price before 6AM (All-in)"
-            },
-            "gas_max": {
-                "name": "Highest gas price today (All-in)"
-            },
-            "gas_min": {
-                "name": "Lowest gas price today (All-in)"
-            },
-            "gas_nexthour_all_in": {
-                "name": "Next hour gas price (All-in)"
-            },
-            "gas_nexthour_market": {
-                "name": "Next hour gas market price"
-            },
-            "gas_previoushour_all_in": {
-                "name": "Previous hour gas price (All-in)"
-            },
-            "gas_previoushour_market": {
-                "name": "Previous hour gas market price"
-            },
-            "gas_price_tomorrow_after6am_allin": {
-                "name": "Gas price tomorrow after 6AM (All-in)"
-            },
-            "gas_price_tomorrow_before6am_allin": {
-                "name": "Gas price tomorrow before 6AM (All-in)"
-            },
-            "gas_sourcing": {
-                "name": "Current gas sourcing price"
-            },
-            "gas_tax": {
-                "name": "Current gas price including tax"
-            },
-            "gas_tax_markup": {
-                "name": "Current gas price including tax and markup"
-            },
-            "gas_tax_only": {
-                "name": "Current gas tax only"
-            },
-            "gas_tax_vat": {
-                "name": "Current gas VAT price"
-            },
-            "gas_today_avg_all_in": {
-                "name": "Average gas price today (All-in)"
-            },
-            "gas_tomorrow_avg_all_in": {
-                "name": "Average gas price tomorrow (All-in)"
-            },
-            "gas_tomorrow_avg_market": {
-                "name": "Average gas market price tomorrow"
-            },
-            "gas_tomorrow_avg_market_tax": {
-                "name": "Average gas market price incl tax tomorrow"
-            },
-            "gas_tomorrow_avg_market_tax_markup": {
-                "name": "Average gas market price incl tax and markup tomorrow"
-            },
-            "gas_tomorrow_max": {
-                "name": "Highest gas price tomorrow (All-in)"
-            },
-            "gas_tomorrow_min": {
-                "name": "Lowest gas price tomorrow (All-in)"
-            },
-            "gas_upcoming_max": {
-                "name": "Highest gas price upcoming hours (All-in)"
-            },
-            "gas_upcoming_min": {
-                "name": "Lowest gas price upcoming hours (All-in)"
-            },
-            "grid_operator": {
-                "name": "Gridoperator"
-            },
-            "invoice_current_period": {
-                "name": "Invoice current period"
-            },
-            "invoice_previous_period": {
-                "name": "Invoice previous period"
-            },
-            "invoice_upcoming_period": {
-                "name": "Invoice upcoming period"
-            },
-            "last_meter_reading_date": {
-                "name": "Last meter reading date"
-            },
-            "meter_type": {
-                "name": "Meter Type",
-                "state": {
-                    "slm": "Smart meter"
-                }
-            },
-            "phone_number": {
-                "name": "Phonenumber"
-            },
-            "preferred_automatic_collection_day": {
-                "name": "Preferred Automatic Collection Day"
-            },
-            "proposition_type": {
-                "name": "Proposition type",
-                "state": {
-                    "dynamic": "Dynamic"
-                }
-            },
-            "pv_operational_status": {
-                "name": "Operational status"
-            },
-            "pv_steering_status": {
-                "name": "Steering status"
-            },
-            "pv_total_bonus": {
-                "name": "Total bonus"
-            },
-            "reference": {
-                "name": "Reference"
-            },
-            "reward_payout_preference": {
-                "name": "Reward payout preference",
-                "state": {
-                    "discount": "Discount",
-                    "trees": "Trees"
-                }
-            },
-            "segments": {
-                "name": "Segments"
-            },
-            "status": {
-                "name": "Status",
-                "state": {
-                    "active": "Active",
-                    "delivery_ended": "Delivery ended",
-                    "inactive": "Inactive",
-                    "in_delivery": "In delivery"
-                }
-            },
-            "total_costs": {
-                "name": "Total costs"
-            },
-            "trees_count": {
-                "name": "Trees count"
-            },
-            "usage_electricity_yesterday": {
-                "name": "Usage electricity yesterday"
-            },
-            "usage_gas_yesterday": {
-                "name": "Usage gas yesterday"
-            },
-            "vehicle_name": {
-                "name": "Vehicle Name"
-            },
-            "costs_electricity_this_month": {
-                "name": "Costs electricity this month"
-            },
-            "elec_lowest_4p": {
-                "name": "Lowest average electricity price (4 periods)"
-            },
-            "elec_lowest_16p": {
-                "name": "Lowest average electricity price (16 periods)"
-            },
-            "refresh_token_expires_at": {
-                "name": "Refresh token expires at"
-            },
-            "site_reference": {
-                "name": "Site Reference"
-            },
-            "token_expires_at": {
-                "name": "Token expires at"
-            },
-            "enode_total_chargers": {
-                "name": "Total Chargers"
-            },
-            "total_charge_capacity": {
-                "name": "Total Charge Capacity"
-            },
-            "total_charge_rate": {
-                "name": "Total Charge Rate"
-            },
-            "charger_brand": {
-                "name": "Brand"
-            },
-            "charger_model": {
-                "name": "Model"
-            },
-            "can_smart_charge": {
-                "name": "Can Smart Charge"
-            },
-            "charge_capacity": {
-                "name": "Charge Capacity"
-            },
-            "is_plugged_in": {
-                "name": "Is Plugged In"
-            },
-            "power_delivery_state": {
-                "name": "Power Delivery State"
-            },
-            "is_reachable": {
-                "name": "Vehicle Reachable"
-            },
-            "is_charging": {
-                "name": "Is Charging"
-            },
-            "charge_rate": {
-                "name": "Charge Rate"
-            },
-            "is_smart_charging_enabled": {
-                "name": "Is Smart Charging Enabled"
-            },
-            "is_solar_charging_enabled": {
-                "name": "Is Solar Charging Enabled"
-            },
-            "total_batteries": {
-                "name": "Total Batteries"
-            },
-            "battery_capacity": {
-                "name": "Battery Capacity"
-            },
-            "battery_level": {
-                "name": "Battery Level"
-            },
-            "charge_limit": {
-                "name": "Charge Limit"
-            },
-            "charge_time_remaining": {
-                "name": "Charge Time Remaining"
-            },
-            "vehicle_range": {
-                "name": "Estimated Range"
-            },
-            "charge_last_updated": {
-                "name": "Charge Last Updated"
-            },
-            "is_fully_charged": {
-                "name": "Fully Charged"
-            },
-            "smart_charging_enabled": {
-                "name": "Smart Charging Enabled"
-            },
-            "solar_charging_enabled": {
-                "name": "Solar Charging Enabled"
-            },
-            "last_seen": {
-                "name": "Last Seen"
-            },
-            "calculated_deadline": {
-                "name": "Calculated Deadline"
-            },
-            "deadline": {
-                "name": "Charging Deadline"
-            },
-            "charge_settings_id": {
-                "name": "Charge Settings ID"
-            },
-            "max_charge_limit": {
-                "name": "Max Charge Limit"
-            },
-            "min_charge_limit": {
-                "name": "Min Charge Limit"
-            },
-            "vehicle_vin": {
-                "name": "VIN"
-            },
-            "interventions_count": {
-                "name": "Number of Interventions"
-            },
-            "intervention_description": {
-                "name": "Intervention Description"
-            },
-            "intervention_title": {
-                "name": "Intervention Title"
-            },
-            "device_id": {
-                "name": "Device ID"
-            },
-            "period_start_date": {
-                "name": "Period Start Date"
-            },
-            "period_end_date": {
-                "name": "Period End Date"
-            },
-            "period_trade_index": {
-                "name": "Period Trade Index"
-            },
-            "period_trading_result": {
-                "name": "Period Trading Result"
-            },
-            "period_total_result": {
-                "name": "Period Total Result"
-            },
-            "period_imbalance_result": {
-                "name": "Period Imbalance Result"
-            },
-            "period_epex_result": {
-                "name": "Period EPEX Result"
-            },
-            "period_frank_slim_bonus": {
-                "name": "Period Frank Slim Bonus"
-            },
-            "all_periods_trading_result": {
-                "name": "All Periods Trading Result"
-            },
-            "total_trading_result": {
-                "name": "Total Trading Result"
-            },
-            "total_capacity": {
-                "name": "Total Battery Capacity"
-            },
-            "total_max_charge_power": {
-                "name": "Total Max Charge Power"
-            },
-            "total_max_discharge_power": {
-                "name": "Total Max Discharge Power"
-            },
-            "total_result": {
-                "name": "Total Result"
-            },
-            "average_state_of_charge": {
-                "name": "Average State of Charge"
-            },
-            "battery_all_total_result": {
-                "name": "Total Result (All Batteries)"
-            }
-        }
+        "description": "Signing in is not required for obtaining energy price data but will add additional sensors specific to your account.",
+        "title": "Do you want to sign in to Frank Energie?"
+      }
+    }
+  },
+  "device": {
+    "frank_energie_batteries": {
+      "name": "Frank Energie - Batteries"
     },
-    "options": {
-        "step": {
-            "user": {
-                "data": {
-                    "password": "Password",
-                    "username": "Username / e-mail"
-                },
-                "title": "Sign in to Frank Energie"
-            }
-        }
+    "frank_energie_chargers": {
+      "name": "Frank Energie - Chargers"
     },
-    "title": "Frank Energie"
+    "frank_energie_costs": {
+      "name": "Frank Energie - Costs"
+    },
+    "frank_energie_gasprices": {
+      "name": "Frank Energie - Gasprices"
+    },
+    "frank_energie_prices": {
+      "name": "Frank Energie - Prices"
+    },
+    "frank_energie_settings": {
+      "name": "Frank Energie - Settings"
+    },
+    "frank_energie_usage": {
+      "name": "Frank Energie - Usage"
+    },
+    "frank_energie_user": {
+      "name": "Frank Energie - User"
+    },
+    "frank_energie_vehicles": {
+      "name": "Frank Energie - Vehicles"
+    },
+    "frank_energie_battery_sessions": {
+      "name": "Frank Energie - Battery Sessions"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "battery_self_consumption_trading_allowed": {
+        "name": "Self consumption trading allowed"
+      },
+      "co2_compensation": {
+        "name": "CO\u2082 compensation"
+      },
+      "disabled_haptic_feedback": {
+        "name": "Haptic feedback disabled"
+      },
+      "smart_feed_in": {
+        "name": "Smart Feed-In"
+      },
+      "smart_hvac": {
+        "name": "Smart HVAC"
+      },
+      "smart_push_notification_price_alerts": {
+        "name": "Smart push notification price alerts"
+      },
+      "smart_pv_systems": {
+        "name": "Smart solar panels",
+        "state_attributes": {
+          "system_count": {
+            "name": "System count"
+          }
+        }
+      },
+      "smartcharging_isactivated": {
+        "name": "Smart Charging",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Available in country",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "needs_subscription": {
+            "name": "Needs subscription",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "provider": {
+            "name": "Provider"
+          },
+          "user_created_at": {
+            "name": "User created at"
+          }
+        }
+      },
+      "smarttrading_isactivated": {
+        "name": "Smart Trading",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Available in country",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "needs_subscription": {
+            "name": "Needs subscription",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "user_created_at": {
+            "name": "User created at"
+          }
+        }
+      }
+    },
+    "button": {
+      "refresh_battery_sessions": {
+        "name": "Refresh Battery Sessions"
+      },
+      "refresh_prices": {
+        "name": "Refresh Prices"
+      }
+    },
+    "datetime": {
+      "charging_deadline": {
+        "name": "Charging deadline"
+      }
+    },
+    "number": {
+      "consumption_threshold_price": {
+        "name": "Self consumption threshold price"
+      }
+    },
+    "select": {
+      "battery_mode": {
+        "name": "Smart battery mode",
+        "state": {
+          "imbalance_trading": "Imbalance trading",
+          "self_consumption": "Self-consumption",
+          "self_consumption_mix": "Self-consumption Plus",
+          "trading": "Trading"
+        }
+      },
+      "battery_strategy": {
+        "name": "Smart battery strategy",
+        "state": {
+          "aggressive": "Aggressive",
+          "balanced": "Standard",
+          "conservative": "Conservative",
+          "imbalance_only": "Imbalance only"
+        }
+      },
+      "resolution": {
+        "name": "Resolution",
+        "state": {
+          "pt15m": "15 minutes",
+          "pt60m": "60 minutes"
+        },
+        "state_attributes": {
+          "is_authenticated": {
+            "name": "Signed in",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "available_options": {
+            "name": "Available options",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          },
+          "api_resolution": {
+            "name": "API resolution",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          },
+          "active_option": {
+            "name": "Active option",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          }
+        }
+      },
+      "enode_charging_mode": {
+        "name": "EV charging mode",
+        "state": {
+          "smart_charging": "Smart charging",
+          "boost_charging": "Boost charging"
+        }
+      }
+    },
+    "sensor": {
+      "ean": {
+        "name": "EAN (Energy Account Number)"
+      },
+      "actual_costs_until_last_meter_reading_date": {
+        "name": "Actual monthly cost"
+      },
+      "advanced_payment_amount": {
+        "name": "Advanced payment amount"
+      },
+      "average_costs_per_month": {
+        "name": "Average costs per month"
+      },
+      "average_costs_per_month_previous_year": {
+        "name": "Average costs per month previous year"
+      },
+      "average_costs_per_month_this_year": {
+        "name": "Average costs per month this year"
+      },
+      "average_costs_per_year": {
+        "name": "Average costs per year"
+      },
+      "average_costs_per_year_corrected": {
+        "name": "Average costs per year (corrected)"
+      },
+      "average_electricity_market_price_today": {
+        "name": "Average electricity market price today"
+      },
+      "average_electricity_market_price_tomorrow": {
+        "name": "Average electricity market price tomorrow"
+      },
+      "average_electricity_market_price_upcoming": {
+        "name": "Average electricity market price upcoming"
+      },
+      "average_electricity_price_today_all_in": {
+        "name": "Average electricity price today (All-in)"
+      },
+      "average_electricity_price_today_including_tax": {
+        "name": "Average electricity price today including tax"
+      },
+      "average_electricity_price_today_including_tax_and_markup": {
+        "name": "Average electricity price today including tax and markup"
+      },
+      "average_electricity_price_tomorrow_all_in": {
+        "name": "Average electricity price tomorrow (All-in)"
+      },
+      "average_electricity_price_tomorrow_including_tax": {
+        "name": "Average electricity price tomorrow including tax"
+      },
+      "average_electricity_price_tomorrow_including_tax_and_markup": {
+        "name": "Average electricity price tomorrow including tax and markup"
+      },
+      "average_electricity_price_upcoming_all_in": {
+        "name": "Average electricity price upcoming (All-in)"
+      },
+      "average_electricity_price_upcoming_market": {
+        "name": "Average electricity price (upcoming, market)"
+      },
+      "average_electricity_price_upcoming_market_tax": {
+        "name": "Average electricity price (upcoming, market and tax)"
+      },
+      "average_electricity_price_upcoming_market_tax_markup": {
+        "name": "Average electricity price (upcoming, market, tax and markup)"
+      },
+      "bank_account_number": {
+        "name": "Bankaccount Number"
+      },
+      "contract_price_resolution_state": {
+        "name": "Contract Price Resolution State",
+        "state_attributes": {
+          "available_options": {
+            "name": "Contract Price Resolution State",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          },
+          "is_change_request_possible": {
+            "name": "Contract Price Resolution State",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "upcoming_change": {
+            "name": "Contract Price Resolution State",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Contract Price Resolution State"
+          }
+        }
+      },
+      "contract_product_name": {
+        "name": "Contract Product Name"
+      },
+      "contract_start_date": {
+        "name": "Contract Start Date"
+      },
+      "costs_electricity_yesterday": {
+        "name": "Costs electricity yesterday"
+      },
+      "costs_gas_yesterday": {
+        "name": "Costs gas yesterday"
+      },
+      "costs_per_day_till_now_this_month": {
+        "name": "Cost per day till now this month"
+      },
+      "costs_previous_year": {
+        "name": "Costs previous year"
+      },
+      "costs_this_year": {
+        "name": "Costs this year"
+      },
+      "country_code": {
+        "name": "Country code"
+      },
+      "current_electricity_marketprice": {
+        "name": "Current electricity market price"
+      },
+      "current_electricity_price": {
+        "name": "Current electricity price (All-in)",
+        "state_attributes": {
+          "prices": {
+            "name": "Current electricity price (All-in)"
+          }
+        }
+      },
+      "current_electricity_price_incl_tax": {
+        "name": "Current electricity price including tax"
+      },
+      "current_electricity_price_incl_tax_markup": {
+        "name": "Current electricity price including tax and markup"
+      },
+      "current_electricity_sourcing_markup": {
+        "name": "Current electricity sourcing markup"
+      },
+      "current_electricity_tax_price": {
+        "name": "Current electricity VAT price"
+      },
+      "delivered_feed_in_yesterday": {
+        "name": "Delivered feed-in yesterday"
+      },
+      "delivery_end_date": {
+        "name": "Delivery end date"
+      },
+      "delivery_site": {
+        "name": "Delivery Site",
+        "state_attributes": {
+          "city": {
+            "name": "Delivery Site"
+          },
+          "house_number": {
+            "name": "Delivery Site"
+          },
+          "house_number_addition": {
+            "name": "Delivery Site"
+          },
+          "street": {
+            "name": "Delivery Site"
+          },
+          "zip_code": {
+            "name": "Delivery Site"
+          }
+        }
+      },
+      "delivery_start_date": {
+        "name": "Delivery start date"
+      },
+      "difference_costs_per_day": {
+        "name": "Difference expected and actual cost per day"
+      },
+      "difference_costs_until_last_meter_reading_date": {
+        "name": "Difference expected and actual monthly cost until now"
+      },
+      "elec_all": {
+        "name": "Average electricity price all hours (All-in)"
+      },
+      "elec_all_max": {
+        "name": "Highest electricity price all hours (All-in)"
+      },
+      "elec_all_min": {
+        "name": "Lowest electricity price all hours (All-in)"
+      },
+      "elec_contract_status": {
+        "name": "Electricity Contract Status",
+        "state": {
+          "loss": "Stopped",
+          "switched": "Switched"
+        }
+      },
+      "elec_fixed_kwh": {
+        "name": "Fixed electricity cost kWh"
+      },
+      "elec_hourcount": {
+        "name": "Number of hours with electricity prices loaded"
+      },
+      "elec_market_percent_tax": {
+        "name": "Electricity market percent tax"
+      },
+      "elec_max": {
+        "name": "Highest electricity price today (All-in)"
+      },
+      "elec_min": {
+        "name": "Lowest electricity price today (All-in)"
+      },
+      "elec_nexthour": {
+        "name": "Next hour electricity price (All-in)"
+      },
+      "elec_nexthour_market": {
+        "name": "Next hour electricity market price"
+      },
+      "elec_previoushour": {
+        "name": "Previous hour electricity price (All-in)"
+      },
+      "elec_previoushour_market": {
+        "name": "Previous hour electricity market price"
+      },
+      "elec_tax_only": {
+        "name": "Current electricity tax only"
+      },
+      "elec_tomorrow_max": {
+        "name": "Highest electricity price tomorrow (All-in)"
+      },
+      "elec_tomorrow_min": {
+        "name": "Lowest electricity price tomorrow (All-in)"
+      },
+      "elec_upcoming_max": {
+        "name": "Highest electricity price upcoming hours (All-in)"
+      },
+      "elec_upcoming_min": {
+        "name": "Lowest electricity price upcoming hours (All-in)"
+      },
+      "elec_var_kwh": {
+        "name": "Variable electricity cost kWh"
+      },
+      "expected_costs_per_day_this_month": {
+        "name": "Expected cost per day this month"
+      },
+      "expected_costs_this_month": {
+        "name": "Expected cost this month"
+      },
+      "expected_costs_this_year": {
+        "name": "Expected costs this year"
+      },
+      "expected_costs_until_last_meter_reading_date": {
+        "name": "Expected monthly cost until now"
+      },
+      "first_meter_reading_date": {
+        "name": "First meter reading date"
+      },
+      "friends_count": {
+        "name": "Friends count"
+      },
+      "full_name": {
+        "name": "Full Name"
+      },
+      "gains_feed_in_yesterday": {
+        "name": "Gains feed-in yesterday"
+      },
+      "gas_contract_status": {
+        "name": "Gas Contract Status",
+        "state": {
+          "loss": "Stopped",
+          "switched": "Switched"
+        }
+      },
+      "gas_hourcount": {
+        "name": "Number of hours with gas prices loaded"
+      },
+      "gas_market": {
+        "name": "Current gas market price"
+      },
+      "gas_market_percent_tax": {
+        "name": "Gas market percent tax"
+      },
+      "gas_market_upcoming": {
+        "name": "Average gas market price upcoming hours"
+      },
+      "gas_markup": {
+        "name": "Current gas price (All-in)"
+      },
+      "gas_markup_after6am": {
+        "name": "Gas price after 6AM (All-in)"
+      },
+      "gas_markup_before6am": {
+        "name": "Gas price before 6AM (All-in)"
+      },
+      "gas_max": {
+        "name": "Highest gas price today (All-in)"
+      },
+      "gas_min": {
+        "name": "Lowest gas price today (All-in)"
+      },
+      "gas_nexthour_all_in": {
+        "name": "Next hour gas price (All-in)"
+      },
+      "gas_nexthour_market": {
+        "name": "Next hour gas market price"
+      },
+      "gas_previoushour_all_in": {
+        "name": "Previous hour gas price (All-in)"
+      },
+      "gas_previoushour_market": {
+        "name": "Previous hour gas market price"
+      },
+      "gas_price_tomorrow_after6am_allin": {
+        "name": "Gas price tomorrow after 6AM (All-in)"
+      },
+      "gas_price_tomorrow_before6am_allin": {
+        "name": "Gas price tomorrow before 6AM (All-in)"
+      },
+      "gas_sourcing": {
+        "name": "Current gas sourcing price"
+      },
+      "gas_tax": {
+        "name": "Current gas price including tax"
+      },
+      "gas_tax_markup": {
+        "name": "Current gas price including tax and markup"
+      },
+      "gas_tax_only": {
+        "name": "Current gas tax only"
+      },
+      "gas_tax_vat": {
+        "name": "Current gas VAT price"
+      },
+      "gas_today_avg_all_in": {
+        "name": "Average gas price today (All-in)"
+      },
+      "gas_tomorrow_avg_all_in": {
+        "name": "Average gas price tomorrow (All-in)"
+      },
+      "gas_tomorrow_avg_market": {
+        "name": "Average gas market price tomorrow"
+      },
+      "gas_tomorrow_avg_market_tax": {
+        "name": "Average gas market price incl tax tomorrow"
+      },
+      "gas_tomorrow_avg_market_tax_markup": {
+        "name": "Average gas market price incl tax and markup tomorrow"
+      },
+      "gas_tomorrow_max": {
+        "name": "Highest gas price tomorrow (All-in)"
+      },
+      "gas_tomorrow_min": {
+        "name": "Lowest gas price tomorrow (All-in)"
+      },
+      "gas_upcoming_max": {
+        "name": "Highest gas price upcoming hours (All-in)"
+      },
+      "gas_upcoming_min": {
+        "name": "Lowest gas price upcoming hours (All-in)"
+      },
+      "grid_operator": {
+        "name": "Gridoperator"
+      },
+      "invoice_current_period": {
+        "name": "Invoice current period"
+      },
+      "invoice_previous_period": {
+        "name": "Invoice previous period"
+      },
+      "invoice_upcoming_period": {
+        "name": "Invoice upcoming period"
+      },
+      "last_meter_reading_date": {
+        "name": "Last meter reading date"
+      },
+      "meter_type": {
+        "name": "Meter Type",
+        "state": {
+          "slm": "Smart meter"
+        }
+      },
+      "phone_number": {
+        "name": "Phonenumber"
+      },
+      "preferred_automatic_collection_day": {
+        "name": "Preferred Automatic Collection Day"
+      },
+      "proposition_type": {
+        "name": "Proposition type",
+        "state": {
+          "dynamic": "Dynamic"
+        }
+      },
+      "pv_operational_status": {
+        "name": "Operational status"
+      },
+      "pv_steering_status": {
+        "name": "Steering status"
+      },
+      "pv_total_bonus": {
+        "name": "Total bonus"
+      },
+      "reference": {
+        "name": "Reference"
+      },
+      "reward_payout_preference": {
+        "name": "Reward payout preference",
+        "state": {
+          "discount": "Discount",
+          "trees": "Trees"
+        }
+      },
+      "segments": {
+        "name": "Segments"
+      },
+      "status": {
+        "name": "Status",
+        "state": {
+          "active": "Active",
+          "delivery_ended": "Delivery ended",
+          "inactive": "Inactive",
+          "in_delivery": "In delivery"
+        }
+      },
+      "total_costs": {
+        "name": "Total costs"
+      },
+      "trees_count": {
+        "name": "Trees count"
+      },
+      "usage_electricity_yesterday": {
+        "name": "Usage electricity yesterday"
+      },
+      "usage_gas_yesterday": {
+        "name": "Usage gas yesterday"
+      },
+      "vehicle_name": {
+        "name": "Vehicle Name"
+      },
+      "costs_electricity_this_month": {
+        "name": "Costs electricity this month"
+      },
+      "elec_lowest_4p": {
+        "name": "Lowest average electricity price (4 periods)"
+      },
+      "elec_lowest_16p": {
+        "name": "Lowest average electricity price (16 periods)"
+      },
+      "refresh_token_expires_at": {
+        "name": "Refresh token expires at"
+      },
+      "site_reference": {
+        "name": "Site Reference"
+      },
+      "token_expires_at": {
+        "name": "Token expires at"
+      },
+      "enode_total_chargers": {
+        "name": "Total Chargers"
+      },
+      "total_charge_capacity": {
+        "name": "Total Charge Capacity"
+      },
+      "total_charge_rate": {
+        "name": "Total Charge Rate"
+      },
+      "charger_brand": {
+        "name": "Brand"
+      },
+      "charger_model": {
+        "name": "Model"
+      },
+      "can_smart_charge": {
+        "name": "Can Smart Charge"
+      },
+      "charge_capacity": {
+        "name": "Charge Capacity"
+      },
+      "is_plugged_in": {
+        "name": "Is Plugged In"
+      },
+      "power_delivery_state": {
+        "name": "Power Delivery State"
+      },
+      "is_reachable": {
+        "name": "Vehicle Reachable"
+      },
+      "is_charging": {
+        "name": "Is Charging"
+      },
+      "charge_rate": {
+        "name": "Charge Rate"
+      },
+      "is_smart_charging_enabled": {
+        "name": "Is Smart Charging Enabled"
+      },
+      "is_solar_charging_enabled": {
+        "name": "Is Solar Charging Enabled"
+      },
+      "total_batteries": {
+        "name": "Total Batteries"
+      },
+      "battery_capacity": {
+        "name": "Battery Capacity"
+      },
+      "battery_level": {
+        "name": "Battery Level"
+      },
+      "charge_limit": {
+        "name": "Charge Limit"
+      },
+      "charge_time_remaining": {
+        "name": "Charge Time Remaining"
+      },
+      "vehicle_range": {
+        "name": "Estimated Range"
+      },
+      "charge_last_updated": {
+        "name": "Charge Last Updated"
+      },
+      "is_fully_charged": {
+        "name": "Fully Charged"
+      },
+      "smart_charging_enabled": {
+        "name": "Smart Charging Enabled"
+      },
+      "solar_charging_enabled": {
+        "name": "Solar Charging Enabled"
+      },
+      "last_seen": {
+        "name": "Last Seen"
+      },
+      "calculated_deadline": {
+        "name": "Calculated Deadline"
+      },
+      "deadline": {
+        "name": "Charging Deadline"
+      },
+      "charge_settings_id": {
+        "name": "Charge Settings ID"
+      },
+      "max_charge_limit": {
+        "name": "Max Charge Limit"
+      },
+      "min_charge_limit": {
+        "name": "Min Charge Limit"
+      },
+      "vehicle_vin": {
+        "name": "VIN"
+      },
+      "interventions_count": {
+        "name": "Number of Interventions"
+      },
+      "intervention_description": {
+        "name": "Intervention Description"
+      },
+      "intervention_title": {
+        "name": "Intervention Title"
+      },
+      "device_id": {
+        "name": "Device ID"
+      },
+      "period_start_date": {
+        "name": "Period Start Date"
+      },
+      "period_end_date": {
+        "name": "Period End Date"
+      },
+      "period_trade_index": {
+        "name": "Period Trade Index"
+      },
+      "period_trading_result": {
+        "name": "Period Trading Result"
+      },
+      "period_total_result": {
+        "name": "Period Total Result"
+      },
+      "period_imbalance_result": {
+        "name": "Period Imbalance Result"
+      },
+      "period_epex_result": {
+        "name": "Period EPEX Result"
+      },
+      "period_frank_slim_bonus": {
+        "name": "Period Frank Slim Bonus"
+      },
+      "all_periods_trading_result": {
+        "name": "All Periods Trading Result"
+      },
+      "total_trading_result": {
+        "name": "Total Trading Result"
+      },
+      "total_capacity": {
+        "name": "Total Battery Capacity"
+      },
+      "total_max_charge_power": {
+        "name": "Total Max Charge Power"
+      },
+      "total_max_discharge_power": {
+        "name": "Total Max Discharge Power"
+      },
+      "total_result": {
+        "name": "Total Result"
+      },
+      "average_state_of_charge": {
+        "name": "Average State of Charge"
+      },
+      "battery_all_total_result": {
+        "name": "Total Result (All Batteries)"
+      },
+      "battery_mode": {
+        "name": "Battery Mode",
+        "state": {
+          "mode_smart": "Smart Mode",
+          "mode_manual": "Manual Mode"
+        }
+      },
+      "battery_imbalance_trading_strategy": {
+        "name": "Imbalance Trading Strategy",
+        "state": {
+          "strategy_balanced": "Balanced",
+          "strategy_max_return": "Maximum Return",
+          "strategy_min_degradation": "Minimum Degradation"
+        }
+      },
+      "battery_status": {
+        "name": "Battery Status",
+        "state": {
+          "status_charging": "Charging",
+          "status_discharging": "Discharging",
+          "status_idle": "Idle",
+          "status_unreliable_data": "Unreliable Data",
+          "status_offline": "Offline",
+          "status_standby": "Standby"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "data": {
+          "password": "Password",
+          "username": "Username / e-mail"
+        },
+        "title": "Sign in to Frank Energie"
+      }
+    }
+  },
+  "title": "Frank Energie"
 }
