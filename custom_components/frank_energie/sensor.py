@@ -4152,7 +4152,6 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
             return {}
 
 
-# class FrankEnergieSensor(CoordinatorEntity, SensorEntity):
 class FrankEnergieSensor(
     CoordinatorEntity[DataUpdateCoordinator[_DataT]],
     SensorEntity,
@@ -4256,25 +4255,27 @@ class FrankEnergieSensor(
         else:
             self._attr_state_class = None
         self._attr_device_class = self.entity_description.device_class
-        # self._attr_unit_of_measurement = (
-        #     self.entity_description.native_unit_of_measurement
-        # )
+
         if hasattr(self.entity_description, "native_unit_of_measurement"):
             self._attr_unit_of_measurement = getattr(
                 self.entity_description, "native_unit_of_measurement", None
             )
         else:
             self._attr_unit_of_measurement = None
-        # if description.translation_key:
-        #    self._attr_name = _(description.translation_key)
+
         self._attr_unique_id = f"{entry.unique_id}.{description.key}"
-        # self._attr_unique_id = f"{entry.unique_id}.{description.key}.{description.service_name}.{description.sensor_type}"
-        # self._attr_unique_id = f"{entry.unique_id}.{description.key}.{entry.entry_id}.{description.service_name}.{description.sensor_type}"
+
         # Do not set extra identifier for default service, backwards compatibility
         device_info_identifiers: set[tuple[str, str]] = (
             {(DOMAIN, f"{entry.entry_id}")}
             if description.service_name == SERVICE_NAME_PRICES
             else {(DOMAIN, f"{entry.entry_id}_{description.service_name}")}
+        )
+
+        user_data = (
+            coordinator.data.get(DATA_USER)
+            if coordinator.data is not None
+            else None
         )
 
         self._attr_device_info = DeviceInfo(
@@ -4283,7 +4284,10 @@ class FrankEnergieSensor(
             translation_key=device_translation_key(description.service_name),
             manufacturer=COMPONENT_TITLE,
             entry_type=DeviceEntryType.SERVICE,
-            configuration_url=API_CONF_URL,
+            configuration_url=(
+                getattr(user_data, "websiteUrl", None)
+                or API_CONF_URL
+            ),
             model=description.service_name,
             sw_version=VERSION,
         )
@@ -4302,7 +4306,6 @@ class FrankEnergieSensor(
             _LOGGER.debug("estimated_feed_in = %s", estimated_feed_in)
             _LOGGER.debug("has connections = %s", hasattr(user_data, "connections"))
             _LOGGER.debug("user connections = %s", user_data.connections)
-            _LOGGER.debug("estimated_feed_in > 0 = %s", estimated_feed_in > 0)
 
             if user_data and connection:
                 estimated_feed_in = int(connection.get("estimatedFeedIn"))
@@ -4310,7 +4313,10 @@ class FrankEnergieSensor(
             _LOGGER.debug(
                 "_attr_entity_registry_enabled_default = %s", estimated_feed_in > 0
             )
-            self._attr_entity_registry_enabled_default = estimated_feed_in > 0
+
+            self._attr_entity_registry_enabled_default = (
+                estimated_feed_in > 0
+            )
 
         super().__init__(coordinator)
 
