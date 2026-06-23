@@ -32,6 +32,10 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 - [Developer Guide](docs/developer.md) - Development standards, testing, and contribution guidelines.
 - [Release Process](docs/release_process.md) - Versioning, release workflow, and HACS publishing.
 
+### ChatGPT Frank Energie Assistant
+
+- [ChatGPT Frank Energie Assistant](https://chatgpt.com/g/g-6a30a8e006b081919967c4c79fd542d7-frank-energie-assistant)
+
 # Services
 
 The Frank Energie integration does not currently register any Home Assistant services.
