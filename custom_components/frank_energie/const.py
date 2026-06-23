@@ -3,7 +3,7 @@ Constants used in the Frank Energie integration.
 """
 
 # const.py
-# date 2026.6.21
+# date 2026.6.24
 
 import logging
 from dataclasses import dataclass
@@ -60,11 +60,13 @@ CONF_AUTH_TOKEN: Final[str] = "auth_token"
 CONF_REFRESH_TOKEN: Final[str] = "refresh_token"
 CONF_SITE: Final[str] = "site_reference"
 CONF_RESOLUTION: Final[str] = "resolution"  # 15-minute price resolution
+CONF_MONTHLY_SUBSCRIPTION_FEE = "monthly_subscription_fee"
 
 # --- Default values for some config constants ---
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
 DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
 DEFAULT_RESOLUTION: Final[str] = "PT15M"
+DEFAULT_MONTHLY_SUBSCRIPTION_FEE: Final[float] = 7.00
 
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
 SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
