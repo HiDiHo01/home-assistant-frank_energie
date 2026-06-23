@@ -1,5 +1,8 @@
 """Number platform for Frank Energie integration."""
 
+# number.py
+# date 2026.6.24
+
 from __future__ import annotations
 
 import logging
@@ -7,15 +10,26 @@ from typing import Final, override
 
 from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CURRENCY_EURO, EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from python_frank_energie.models import SmartBatteryDetails
 
 from . import FrankEnergieEntryData
-from .const import DATA_BATTERY_DETAILS, DOMAIN, UNIT_ELECTRICITY
+from .const import (
+    API_CONF_URL,
+    COMPONENT_TITLE,
+    CONF_MONTHLY_SUBSCRIPTION_FEE,
+    DATA_BATTERY_DETAILS,
+    DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
+    DOMAIN,
+    SERVICE_NAME_COSTS,
+    UNIT_ELECTRICITY,
+)
 from .coordinator import FrankEnergieCoordinator
+from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,13 +37,13 @@ BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = "SELF_CONSUMPTION_MIX"
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     config_entry: ConfigEntry[FrankEnergieEntryData],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie number entities."""
     coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
-    entities: list[FrankEnergieBatteryThresholdNumber] = []
+    entities: list[NumberEntity] = []
 
     if coordinator.api.is_authenticated:
         battery_details = coordinator.data.get(DATA_BATTERY_DETAILS)
@@ -40,6 +54,13 @@ async def async_setup_entry(
                         coordinator, config_entry, battery.smart_battery.id
                     )
                 )
+
+        entities.append(
+            FrankEnergieFixedMonthlyCostsNumber(
+                coordinator,
+                config_entry,
+            )
+        )
 
     if entities:
         async_add_entities(entities)
@@ -140,26 +161,6 @@ class FrankEnergieBatteryThresholdNumber(
         return settings.self_consumption_trading_threshold_price
 
     @override
-    async def old_async_set_native_value(self, value: float) -> None:
-        """Set the threshold price."""
-        _LOGGER.debug(
-            "Setting threshold price for smart battery %s to %s",
-            self._battery_id,
-            value,
-        )
-        success = await self.coordinator.api.smart_battery_update_settings(
-            self._battery_id, {"selfConsumptionTradingThresholdPrice": value}
-        )
-        if success:
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error(
-                "Failed to set threshold price for smart battery %s to %s",
-                self._battery_id,
-                value,
-            )
-
-    @override
     async def async_set_native_value(self, value: float) -> None:
         """Set the threshold price."""
 
@@ -219,3 +220,86 @@ class FrankEnergieBatteryThresholdNumber(
             raise ValueError(message % self._battery_id)
 
         await self.coordinator.async_request_refresh()
+
+
+class FrankEnergieFixedMonthlyCostsNumber(
+    CoordinatorEntity[FrankEnergieCoordinator],
+    NumberEntity,
+):
+    """Fixed monthly subscription costs."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Monthly Subscription Fee"
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 50.0
+    _attr_native_step = 0.01
+    _attr_native_unit_of_measurement = CURRENCY_EURO
+    _attr_suggested_display_precision = 2
+    _attr_translation_key = "monthly_subscription_fee"
+    _attr_icon = "mdi:cash"
+    _attr_entity_category = EntityCategory.CONFIG
+    service_name = SERVICE_NAME_COSTS
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry[FrankEnergieEntryData],
+    ) -> None:
+        """Initialize entity."""
+        super().__init__(coordinator)
+
+        self._entry = entry
+
+        self._attr_unique_id = (
+            f"{entry.entry_id}_monthly_subscription_fee"
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return entity availability."""
+        return True  # always available
+        # return super().available
+
+    @property
+    def native_value(self) -> float:
+        """Return current configured value."""
+        return float(
+            self._entry.options.get(
+                CONF_MONTHLY_SUBSCRIPTION_FEE,
+                DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
+            )
+        )
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={
+                (
+                    DOMAIN,
+                    f"{self._entry.entry_id}_{self.service_name}",
+                )
+            },
+            name=f"{COMPONENT_TITLE} - {self.service_name}",
+            translation_key=device_translation_key(self.service_name),
+            manufacturer=COMPONENT_TITLE,
+            model=self.service_name,
+            configuration_url=API_CONF_URL,
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    async def async_set_native_value(
+        self,
+        value: float,
+    ) -> None:
+        """Persist value."""
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={
+                **self._entry.options,
+                CONF_MONTHLY_SUBSCRIPTION_FEE: value,
+            },
+        )
+
+        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
