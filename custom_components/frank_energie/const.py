@@ -60,13 +60,19 @@ CONF_AUTH_TOKEN: Final[str] = "auth_token"
 CONF_REFRESH_TOKEN: Final[str] = "refresh_token"
 CONF_SITE: Final[str] = "site_reference"
 CONF_RESOLUTION: Final[str] = "resolution"  # 15-minute price resolution
-CONF_MONTHLY_SUBSCRIPTION_FEE = "monthly_subscription_fee"
+CONF_MONTHLY_SUBSCRIPTION_FEE: Final[str] = "monthly_subscription_fee"
+CONF_ENERGY_TAX_ODE: Final[str] = "energy_tax_ode"
+CONF_ENERGY_TAX_REDUCTION: Final[str] = "energy_tax_reduction"
+CONF_NETWORK_CHARGES: Final[str] = "network_charges"
 
 # --- Default values for some config constants ---
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
 DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
 DEFAULT_RESOLUTION: Final[str] = "PT15M"
 DEFAULT_MONTHLY_SUBSCRIPTION_FEE: Final[float] = 7.00
+DEFAULT_ENERGY_TAX_ODE: Final[float] = 34.92
+DEFAULT_ENERGY_TAX_REDUCTION: Final[float] = -52.42
+DEFAULT_NETWORK_CHARGES: Final[float] = 39.87
 
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
 SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
