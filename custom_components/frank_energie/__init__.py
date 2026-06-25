@@ -153,8 +153,13 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 )
                 price_coordinator.promote_tomorrow_prices()
 
-            # Trigger sensor state updates using cached data
-            price_coordinator.async_update_listeners()
+            # Check for 13:00 local Europe/Amsterdam transition to fetch tomorrow's prices
+            if now_local.hour == 13 and now_local.minute == 0:
+                _LOGGER.info("13:00 local time: explicitly triggering price fetch")
+                await price_coordinator.async_request_refresh()
+            else:
+                # Trigger sensor state updates using cached data
+                price_coordinator.async_update_listeners()
 
         if price_coordinator.resolution == "PT15M":
             unsub = async_track_utc_time_change(
