@@ -171,7 +171,7 @@ The default should favor responsiveness while allowing users to reduce API traff
 
 Default refresh interval:
 
-- 30 seconds.
+- 5 minutes (15 minutes if no PV systems are detected).
 
 Includes:
 
@@ -183,7 +183,7 @@ Includes:
 
 Default refresh interval:
 
-- 30 seconds.
+- 5 minutes (15 minutes if no batteries are detected).
 
 Includes:
 
@@ -196,7 +196,7 @@ Includes:
 
 Charging:
 
-- 30 seconds.
+- 2 minutes.
 
 Idle:
 
@@ -311,7 +311,7 @@ Responsible for:
 |---------|---------|---------|
 | Immutable | Electricity prices | Cache until rollover |
 | Daily | Gas prices | Fetch once per day |
-| Realtime | PV, batteries, chargers | 30-60 seconds |
+| Realtime | PV, batteries, chargers | 2-5 minutes |
 | Operational | Vehicle state | Adaptive |
 | Historical | Statistics | Hourly |
 | Configuration | Settings, contracts | Daily |
