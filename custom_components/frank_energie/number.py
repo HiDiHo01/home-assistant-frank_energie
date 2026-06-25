@@ -40,6 +40,7 @@ from .const import (
     DOMAIN,
     SERVICE_NAME_COSTS,
     UNIT_ELECTRICITY,
+    MANUFACTURER_FRANK_ENERGIE,
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import device_translation_key
@@ -47,7 +48,6 @@ from .helpers import device_translation_key
 _LOGGER = logging.getLogger(__name__)
 
 BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = "SELF_CONSUMPTION_MIX"
-MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -609,12 +609,9 @@ class FrankEnergieEnodeChargeLimitNumber(
                 if enode_data
                 else None
             )
-            brand = (
-                item.information.brand
-                if item and item.information
-                else MANUFACTURER_FRANK_ENERGIE
-            )
-            model = item.information.model if item and item.information else "Vehicle"
+            info = item.information if item and getattr(item, "information", None) else None
+            brand = (getattr(info, "brand", None) if info else None) or MANUFACTURER_FRANK_ENERGIE
+            model = (getattr(info, "model", None) if info else None) or "Vehicle"
         else:
             enode_data = coordinator.data.get(DATA_ENODE_CHARGERS)
             item = (
@@ -622,16 +619,9 @@ class FrankEnergieEnodeChargeLimitNumber(
                 if enode_data
                 else None
             )
-            brand = (
-                item.information.get("brand")
-                if item and isinstance(item.information, dict)
-                else MANUFACTURER_FRANK_ENERGIE
-            )
-            model = (
-                item.information.get("model")
-                if item and isinstance(item.information, dict)
-                else "Charger"
-            )
+            info = item.information if item and getattr(item, "information", None) and isinstance(item.information, dict) else {}
+            brand = info.get("brand") or MANUFACTURER_FRANK_ENERGIE
+            model = info.get("model") or "Charger"
 
         name = f"{brand} {model}".strip() if (brand or model) else f"Device {device_id}"
 

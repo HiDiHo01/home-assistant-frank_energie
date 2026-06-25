@@ -20,12 +20,11 @@ from .const import (
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
     DOMAIN,
+    MANUFACTURER_FRANK_ENERGIE,
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import device_translation_key
-
-MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
 
 _LOGGER = logging.getLogger(__name__)
 
