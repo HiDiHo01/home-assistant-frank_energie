@@ -743,7 +743,8 @@
           "status_offline": "Offline",
           "status_standby": "Stand-by",
           "separate_imbalances": "Gescheiden onbalansen",
-          "idle_full": "Inactief (Vol)"
+          "idle_full": "Inactief (Vol)",
+          "discharge_self_consumption": "Ontladen (Zelfconsumptie)"
         }
       }
     },

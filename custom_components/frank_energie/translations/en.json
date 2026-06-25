@@ -909,7 +909,8 @@
           "status_offline": "Offline",
           "status_standby": "Standby",
           "separate_imbalances": "Separate Imbalances",
-          "idle_full": "Idle (Full)"
+          "idle_full": "Idle (Full)",
+          "discharge_self_consumption": "Discharging (Self Consumption)"
         }
       }
     }

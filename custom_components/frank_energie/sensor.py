@@ -4789,6 +4789,7 @@ def _build_single_smart_battery_descriptions(
                         "status_standby",
                         "separate_imbalances",
                         "idle_full",
+                        "discharge_self_consumption",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_summary_lower(
                         data, idx, "last_known_status"
