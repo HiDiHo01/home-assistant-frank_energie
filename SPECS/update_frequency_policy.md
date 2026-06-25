@@ -260,14 +260,25 @@ Responsible for:
 - Gas prices.
 - Price cache management.
 
-### Realtime Energy Coordinator
+### Battery Coordinator
 
 Responsible for:
 
-- PV.
-- Batteries.
-- Chargers.
-- Grid power.
+- Home batteries.
+- Battery sessions.
+
+### Charger Coordinator
+
+Responsible for:
+
+- EV chargers.
+
+### PV Coordinator
+
+Responsible for:
+
+- PV systems.
+- Grid power (Smart feed in).
 
 ### Vehicle Coordinator
 
