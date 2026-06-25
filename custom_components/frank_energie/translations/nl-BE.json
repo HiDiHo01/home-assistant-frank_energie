@@ -657,6 +657,15 @@
             },
             "network_charges": {
                 "name": "Netbeheerkosten"
+            },
+            "min_charge_limit": {
+                "name": "Laadstrategie (Minimaal)"
+            },
+            "max_charge_limit": {
+                "name": "Laadstrategie (Maximaal)"
+            },
+            "initial_charge": {
+                "name": "Startniveau batterij"
             }
         }
     }

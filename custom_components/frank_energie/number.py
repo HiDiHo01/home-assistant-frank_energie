@@ -30,7 +30,10 @@ from .const import (
     CONF_ENERGY_TAX_REDUCTION,
     CONF_MONTHLY_SUBSCRIPTION_FEE,
     CONF_NETWORK_CHARGES,
+    CONF_NETWORK_CHARGES,
     DATA_BATTERY_DETAILS,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DEFAULT_ENERGY_TAX_ODE,
     DEFAULT_ENERGY_TAX_REDUCTION,
     DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
@@ -45,6 +48,7 @@ from .helpers import device_translation_key
 _LOGGER = logging.getLogger(__name__)
 
 BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = "SELF_CONSUMPTION_MIX"
+MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -190,6 +194,19 @@ async def async_setup_entry(
                     description,
                 )
             )
+
+        enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+        if enode_vehicles and enode_vehicles.vehicles:
+            for vehicle in enode_vehicles.vehicles:
+                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, vehicle.id, "minChargeLimit", translation_key="min_charge_limit", is_vehicle=True))
+                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, vehicle.id, "maxChargeLimit", translation_key="max_charge_limit", is_vehicle=True))
+
+        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+        if enode_chargers and enode_chargers.chargers:
+            for charger in enode_chargers.chargers:
+                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, charger.id, "minChargeLimit", translation_key="min_charge_limit", is_vehicle=False))
+                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, charger.id, "maxChargeLimit", translation_key="max_charge_limit", is_vehicle=False))
+                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, charger.id, "initialCharge", translation_key="initial_charge", is_vehicle=False))
 
     if entities:
         async_add_entities(entities)
@@ -513,3 +530,130 @@ class old_FrankEnergieFixedMonthlyCostsNumber(
 
         await self.coordinator.async_request_refresh()
         self.async_write_ha_state()
+
+class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinator], NumberEntity):
+    """Number entity for setting charge limits for an Enode device."""
+
+    _attr_has_entity_name = True
+    _attr_native_max_value = 100
+    _attr_native_step = 5
+    _attr_native_unit_of_measurement = "%"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        device_id: str,
+        target_key: str,
+        translation_key: str,
+        is_vehicle: bool = False,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device_id = device_id
+        self._target_key = target_key
+        self._is_vehicle = is_vehicle
+        self._attr_translation_key = translation_key
+        self._attr_unique_id = f"{DOMAIN}_{device_id}_{translation_key}"
+
+        if target_key == "maxChargeLimit":
+            self._attr_native_min_value = 50
+        else:
+            self._attr_native_min_value = 0
+
+        if is_vehicle:
+            enode_data = coordinator.data.get(DATA_ENODE_VEHICLES)
+            item = next((v for v in enode_data.vehicles if v.id == device_id), None) if enode_data else None
+            brand = item.information.brand if item and item.information else MANUFACTURER_FRANK_ENERGIE
+            model = item.information.model if item and item.information else "Vehicle"
+        else:
+            enode_data = coordinator.data.get(DATA_ENODE_CHARGERS)
+            item = next((c for c in enode_data.chargers if c.id == device_id), None) if enode_data else None
+            brand = item.information.get("brand") if item and isinstance(item.information, dict) else MANUFACTURER_FRANK_ENERGIE
+            model = item.information.get("model") if item and isinstance(item.information, dict) else "Charger"
+
+        name = f"{brand} {model}".strip() if (brand or model) else f"Device {device_id}"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    def _get_item(self):
+        """Return the device details."""
+        if self._is_vehicle:
+            enode_data = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+            return next((v for v in enode_data.vehicles if v.id == self._device_id), None) if enode_data else None
+        else:
+            enode_data = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+            return next((c for c in enode_data.chargers if c.id == self._device_id), None) if enode_data else None
+
+    @property
+    def icon(self) -> str | None:
+        """Return a dynamic icon based on the current value."""
+        value = self.native_value
+        if value is None:
+            return "mdi:battery-unknown"
+            
+        rounded = int(round(value / 10.0) * 10)
+        
+        if rounded == 0:
+            return "mdi:battery-charging-outline"
+        elif rounded == 100:
+            return "mdi:battery-charging-100"
+        
+        return f"mdi:battery-charging-{rounded}"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the target value."""
+        item = self._get_item()
+        if not item or not item.charge_settings:
+            return None
+        
+        if self._target_key == "minChargeLimit":
+            return item.charge_settings.min_charge_limit
+        elif self._target_key == "maxChargeLimit":
+            return item.charge_settings.max_charge_limit
+        elif self._target_key == "initialCharge":
+            return item.charge_settings.initial_charge
+        return None
+
+    @override
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the target value."""
+        item = self._get_item()
+        if not item or not item.charge_settings:
+            raise ValueError("Item or charge settings not found")
+            
+        _LOGGER.debug("Setting %s to %s for %s", self._target_key, value, self._device_id)
+
+        try:
+            if self._is_vehicle:
+                success = await self.coordinator.api.enode_update_vehicle_charge_settings({
+                    "id": item.charge_settings.id,
+                    self._target_key: int(value),
+                })
+            else:
+                success = await self.coordinator.api.enode_update_charger_charge_settings({
+                    "id": item.charge_settings.id,
+                    self._target_key: int(value),
+                })
+        except Exception:
+            _LOGGER.exception("Failed to update %s for %s", self._target_key, self._device_id)
+            raise
+
+        if not success:
+            raise ValueError(f"Failed to update {self._target_key} for {self._device_id}")
+
+        # Optimistically update the local state to prevent the UI slider from jumping back
+        if self._target_key == "minChargeLimit":
+            item.charge_settings.min_charge_limit = int(value)
+        elif self._target_key == "maxChargeLimit":
+            item.charge_settings.max_charge_limit = int(value)
+        elif self._target_key == "initialCharge":
+            item.charge_settings.initial_charge = float(value)
+
+        if self.hass:
+            self.async_write_ha_state()
