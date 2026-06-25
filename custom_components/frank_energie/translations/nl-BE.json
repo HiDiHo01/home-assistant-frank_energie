@@ -383,49 +383,49 @@
         "name": "Prijs resolutie",
         "state_attributes": {
           "available_options": {
-            "name": "Contract Price Resolution State",
+            "name": "Contract prijsresolutie status",
             "state": {
-              "pt15m": "15 minutes",
-              "pt60m": "60 minutes"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           },
           "is_change_request_possible": {
-            "name": "Contract Price Resolution State",
+            "name": "Contract prijsresolutie status",
             "state": {
-              "false": "No",
-              "true": "Yes"
+              "false": "Nee",
+              "true": "Ja"
             }
           },
           "upcoming_change": {
-            "name": "Contract Price Resolution State",
+            "name": "Contract prijsresolutie status",
             "state": {
-              "pt15m": "15 minutes",
-              "pt60m": "60 minutes"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           },
           "upcoming_change_effective_date": {
-            "name": "Contract Price Resolution State"
+            "name": "Contract prijsresolutie status"
           }
         }
       },
       "elec_contract_status": {
         "name": "Elektriciteit contract status",
         "state": {
-          "loss": "Stopped",
-          "switched": "Switched"
+          "loss": "Gestopt",
+          "switched": "Overgestapt"
         }
       },
       "gas_contract_status": {
         "name": "Gas contract status",
         "state": {
-          "loss": "Stopped",
-          "switched": "Switched"
+          "loss": "Gestopt",
+          "switched": "Overgestapt"
         }
       },
       "proposition_type": {
         "name": "Aanbod",
         "state": {
-          "dynamic": "Dynamic"
+          "dynamic": "Dynamisch"
         }
       },
       "delivery_start_date": {
@@ -505,23 +505,23 @@
       "status": {
         "name": "Status",
         "state": {
-          "active": "Active",
-          "delivery_ended": "Delivery ended",
-          "inactive": "Inactive",
-          "in_delivery": "In delivery"
+          "active": "Actief",
+          "delivery_ended": "Levering beëindigd",
+          "inactive": "Inactief",
+          "in_delivery": "In levering"
         }
       },
       "reward_payout_preference": {
         "name": "Beloningsuitbetalingsvoorkeur",
         "state": {
-          "discount": "Discount",
-          "trees": "Trees"
+          "discount": "Korting",
+          "trees": "Bomen"
         }
       },
       "meter_type": {
         "name": "Meter",
         "state": {
-          "slm": "Smart meter"
+          "slm": "Slimme meter"
         }
       },
       "grid_operator": {
@@ -558,163 +558,163 @@
         "name": "EAN (Energy Account Number)"
       },
       "costs_electricity_this_month": {
-        "name": "Costs electricity this month"
+        "name": "Kosten elektriciteit deze maand"
       },
       "elec_lowest_4p": {
-        "name": "Lowest average electricity price (4 periods)"
+        "name": "Laagste gem. elektriciteitsprijs (4 periodes)"
       },
       "elec_lowest_16p": {
-        "name": "Lowest average electricity price (16 periods)"
+        "name": "Laagste gem. elektriciteitsprijs (16 periodes)"
       },
       "enode_total_chargers": {
-        "name": "Total Chargers"
+        "name": "Totaal aantal laadpalen"
       },
       "total_charge_capacity": {
-        "name": "Total Charge Capacity"
+        "name": "Totale laadcapaciteit"
       },
       "total_charge_rate": {
-        "name": "Total Charge Rate"
+        "name": "Totale laadsnelheid"
       },
       "charger_brand": {
-        "name": "Brand"
+        "name": "Merk"
       },
       "charger_model": {
         "name": "Model"
       },
       "can_smart_charge": {
-        "name": "Can Smart Charge"
+        "name": "Kan slim laden"
       },
       "charge_capacity": {
-        "name": "Charge Capacity"
+        "name": "Laadcapaciteit"
       },
       "is_plugged_in": {
-        "name": "Is Plugged In"
+        "name": "Is ingeplugd"
       },
       "power_delivery_state": {
-        "name": "Power Delivery State"
+        "name": "Stroomvoorziening status"
       },
       "is_reachable": {
-        "name": "Vehicle Reachable"
+        "name": "Voertuig bereikbaar"
       },
       "is_charging": {
-        "name": "Is Charging"
+        "name": "Is aan het laden"
       },
       "charge_rate": {
-        "name": "Charge Rate"
+        "name": "Laadsnelheid"
       },
       "is_smart_charging_enabled": {
-        "name": "Is Smart Charging Enabled"
+        "name": "Is slim laden ingeschakeld"
       },
       "is_solar_charging_enabled": {
-        "name": "Is Solar Charging Enabled"
+        "name": "Is laden op zon ingeschakeld"
       },
       "total_batteries": {
-        "name": "Total Batteries"
+        "name": "Totaal aantal batterijen"
       },
       "battery_capacity": {
-        "name": "Battery Capacity"
+        "name": "Batterijcapaciteit"
       },
       "battery_level": {
-        "name": "Battery Level"
+        "name": "Batterijniveau"
       },
       "charge_limit": {
-        "name": "Charge Limit"
+        "name": "Laadlimiet"
       },
       "charge_time_remaining": {
-        "name": "Charge Time Remaining"
+        "name": "Resterende laadtijd"
       },
       "vehicle_range": {
-        "name": "Estimated Range"
+        "name": "Geschat bereik"
       },
       "charge_last_updated": {
-        "name": "Charge Last Updated"
+        "name": "Laden laatst bijgewerkt"
       },
       "is_fully_charged": {
-        "name": "Fully Charged"
+        "name": "Volledig opgeladen"
       },
       "smart_charging_enabled": {
-        "name": "Smart Charging Enabled"
+        "name": "Slim laden ingeschakeld"
       },
       "solar_charging_enabled": {
-        "name": "Solar Charging Enabled"
+        "name": "Laden op zon ingeschakeld"
       },
       "last_seen": {
-        "name": "Last Seen"
+        "name": "Laatst gezien"
       },
       "calculated_deadline": {
-        "name": "Calculated Deadline"
+        "name": "Berekende vertrektijd"
       },
       "deadline": {
-        "name": "Charging Deadline"
+        "name": "Vertrektijd"
       },
       "charge_settings_id": {
-        "name": "Charge Settings ID"
+        "name": "Laadinstellingen ID"
       },
       "max_charge_limit": {
-        "name": "Max Charge Limit"
+        "name": "Max. laadlimiet"
       },
       "min_charge_limit": {
-        "name": "Min Charge Limit"
+        "name": "Min. laadlimiet"
       },
       "vehicle_vin": {
-        "name": "VIN"
+        "name": "Voertuigidentificatienummer (VIN)"
       },
       "interventions_count": {
-        "name": "Number of Interventions"
+        "name": "Aantal interventies"
       },
       "intervention_description": {
-        "name": "Intervention Description"
+        "name": "Interventie omschrijving"
       },
       "intervention_title": {
-        "name": "Intervention Title"
+        "name": "Interventie titel"
       },
       "device_id": {
-        "name": "Device ID"
+        "name": "Apparaat ID"
       },
       "period_start_date": {
-        "name": "Period Start Date"
+        "name": "Periode startdatum"
       },
       "period_end_date": {
-        "name": "Period End Date"
+        "name": "Periode einddatum"
       },
       "period_trade_index": {
-        "name": "Period Trade Index"
+        "name": "Periode handelsindex"
       },
       "period_trading_result": {
-        "name": "Period Trading Result"
+        "name": "Periode handelsresultaat"
       },
       "period_total_result": {
-        "name": "Period Total Result"
+        "name": "Periode totaal resultaat"
       },
       "period_imbalance_result": {
-        "name": "Period Imbalance Result"
+        "name": "Periode onbalans resultaat"
       },
       "period_epex_result": {
-        "name": "Period EPEX Result"
+        "name": "Periode EPEX resultaat"
       },
       "period_frank_slim_bonus": {
-        "name": "Period Frank Slim Bonus"
+        "name": "Periode Frank Slim bonus"
       },
       "all_periods_trading_result": {
-        "name": "All Periods Trading Result"
+        "name": "Alle periodes handelsresultaat"
       },
       "total_trading_result": {
-        "name": "Total Trading Result"
+        "name": "Totaal handelsresultaat"
       },
       "total_capacity": {
-        "name": "Total Battery Capacity"
+        "name": "Totale batterijcapaciteit"
       },
       "total_max_charge_power": {
-        "name": "Total Max Charge Power"
+        "name": "Totaal max laadvermogen"
       },
       "total_max_discharge_power": {
-        "name": "Total Max Discharge Power"
+        "name": "Totaal max ontlaadvermogen"
       },
       "total_result": {
-        "name": "Total Result"
+        "name": "Totaal resultaat"
       },
       "average_state_of_charge": {
-        "name": "Average State of Charge"
+        "name": "Gemiddeld laadniveau"
       },
       "battery_mode": {
         "name": "Battery Mode",
@@ -730,20 +730,20 @@
           "strategy_balanced": "Balanced",
           "strategy_max_return": "Maximum Return",
           "strategy_min_degradation": "Minimum Degradation",
-          "aggressive": "Aggressive"
+          "aggressive": "Agressief"
         }
       },
       "battery_status": {
         "name": "Battery Status",
         "state": {
-          "status_charging": "Charging",
-          "status_discharging": "Discharging",
-          "status_idle": "Idle",
-          "status_unreliable_data": "Unreliable Data",
+          "status_charging": "Aan het laden",
+          "status_discharging": "Aan het ontladen",
+          "status_idle": "Inactief",
+          "status_unreliable_data": "Onbetrouwbare data",
           "status_offline": "Offline",
-          "status_standby": "Standby",
-          "separate_imbalances": "Separate Imbalances",
-          "idle_full": "Idle (Full)"
+          "status_standby": "Stand-by",
+          "separate_imbalances": "Gescheiden onbalansen",
+          "idle_full": "Inactief (Vol)"
         }
       }
     },
@@ -752,24 +752,24 @@
         "name": "Slim laden",
         "state_attributes": {
           "available_in_country": {
-            "name": "Available in country",
+            "name": "Beschikbaar in land",
             "state": {
-              "false": "No",
-              "true": "Yes"
+              "false": "Nee",
+              "true": "Ja"
             }
           },
           "needs_subscription": {
-            "name": "Needs subscription",
+            "name": "Abonnement vereist",
             "state": {
-              "false": "No",
-              "true": "Yes"
+              "false": "Nee",
+              "true": "Ja"
             }
           },
           "provider": {
             "name": "Provider"
           },
           "user_created_at": {
-            "name": "User created at"
+            "name": "Gebruiker aangemaakt op"
           }
         }
       },
@@ -777,21 +777,21 @@
         "name": "Slim handelen",
         "state_attributes": {
           "available_in_country": {
-            "name": "Available in country",
+            "name": "Beschikbaar in land",
             "state": {
-              "false": "No",
-              "true": "Yes"
+              "false": "Nee",
+              "true": "Ja"
             }
           },
           "needs_subscription": {
-            "name": "Needs subscription",
+            "name": "Abonnement vereist",
             "state": {
-              "false": "No",
-              "true": "Yes"
+              "false": "Nee",
+              "true": "Ja"
             }
           },
           "user_created_at": {
-            "name": "User created at"
+            "name": "Gebruiker aangemaakt op"
           }
         }
       },
@@ -802,7 +802,7 @@
         "name": "Slimme zonnepanelen",
         "state_attributes": {
           "system_count": {
-            "name": "System count"
+            "name": "Aantal systemen"
           }
         }
       },
@@ -813,76 +813,76 @@
         "name": "Haptische feedback uitgeschakeld"
       },
       "battery_self_consumption_trading_allowed": {
-        "name": "Self consumption trading allowed"
+        "name": "Zelfconsumptie handelen toegestaan"
       },
       "co2_compensation": {
-        "name": "CO₂ compensation"
+        "name": "CO₂ compensatie"
       },
       "smart_push_notification_price_alerts": {
-        "name": "Smart push notification price alerts"
+        "name": "Slimme pushmeldingen prijsalerts"
       }
     },
     "select": {
       "resolution": {
         "name": "Prijs resolutie",
         "state": {
-          "pt15m": "15 minutes",
-          "pt60m": "60 minutes"
+          "pt15m": "15 minuten",
+          "pt60m": "60 minuten"
         },
         "state_attributes": {
           "is_authenticated": {
-            "name": "Signed in",
+            "name": "Ingelogd",
             "state": {
-              "false": "No",
-              "true": "Yes"
+              "false": "Nee",
+              "true": "Ja"
             }
           },
           "available_options": {
-            "name": "Available options",
+            "name": "Beschikbare opties",
             "state": {
-              "pt15m": "15 minutes",
-              "pt60m": "60 minutes"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           },
           "api_resolution": {
-            "name": "API resolution",
+            "name": "API resolutie",
             "state": {
-              "pt15m": "15 minutes",
-              "pt60m": "60 minutes"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           },
           "active_option": {
-            "name": "Active option",
+            "name": "Actieve optie",
             "state": {
-              "pt15m": "15 minutes",
-              "pt60m": "60 minutes"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           }
         }
       },
       "battery_mode": {
-        "name": "Smart battery mode",
+        "name": "Slimme batterijmodus",
         "state": {
-          "imbalance_trading": "Imbalance trading",
-          "self_consumption": "Self-consumption",
-          "self_consumption_mix": "Self-consumption Plus",
-          "trading": "Trading"
+          "imbalance_trading": "Onbalans handelen",
+          "self_consumption": "Zelfconsumptie",
+          "self_consumption_mix": "Zelfconsumptie Plus",
+          "trading": "Handelen"
         }
       },
       "battery_strategy": {
-        "name": "Smart battery strategy",
+        "name": "Slimme batterijstrategie",
         "state": {
-          "aggressive": "Aggressive",
-          "balanced": "Standard",
-          "conservative": "Conservative",
-          "imbalance_only": "Imbalance only"
+          "aggressive": "Agressief",
+          "balanced": "Standaard",
+          "conservative": "Conservatief",
+          "imbalance_only": "Alleen onbalans"
         }
       },
       "enode_charging_mode": {
-        "name": "EV charging mode",
+        "name": "EV laadmodus",
         "state": {
-          "smart_charging": "Smart charging",
-          "boost_charging": "Boost charging"
+          "smart_charging": "Slim laden",
+          "boost_charging": "Maximaal laden"
         }
       }
     },
@@ -913,7 +913,7 @@
         "name": "Netbeheerkosten"
       },
       "consumption_threshold_price": {
-        "name": "Self consumption threshold price"
+        "name": "Drempelprijs voor zelfconsumptie"
       }
     }
   }
