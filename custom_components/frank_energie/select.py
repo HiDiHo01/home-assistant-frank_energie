@@ -61,7 +61,9 @@ def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
     return entities
 
 
-def _setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry) -> list[SelectEntity]:
+def _setup_enode_entities(
+    hass, vehicle_coordinator, charger_coordinator, entry
+) -> list[SelectEntity]:
     entities = []
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
@@ -76,7 +78,9 @@ def _setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry)
                     ent_reg.async_remove(entity_id)
 
                 entities.append(
-                    FrankEnergieEnodeChargingModeSelect(vehicle_coordinator, entry, vehicle.id)
+                    FrankEnergieEnodeChargingModeSelect(
+                        vehicle_coordinator, entry, vehicle.id
+                    )
                 )
 
     enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
@@ -105,7 +109,9 @@ async def async_setup_entry(
 
     entities: list[SelectEntity] = [FrankEnergieResolutionSelect(price_coordinator)]
     entities.extend(_setup_battery_entities(battery_coordinator, entry))
-    entities.extend(_setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry))
+    entities.extend(
+        _setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry)
+    )
 
     async_add_entities(entities)
 
@@ -469,14 +475,14 @@ class FrankEnergieEnodeChargingModeSelect(
             if is_smart and vehicle.charge_settings.target_time
             else None
         )
-        
+
         charge_settings = build_charge_settings_input(
-            vehicle.id,
-            is_smart_charging_enabled=is_smart,
-            target_time=target_time
+            vehicle.id, is_smart_charging_enabled=is_smart, target_time=target_time
         )
-        
-        success = await self.coordinator.api.enode_update_vehicle_charge_settings(charge_settings)
+
+        success = await self.coordinator.api.enode_update_vehicle_charge_settings(
+            charge_settings
+        )
         if success:
             await self.coordinator.async_request_refresh()
         else:

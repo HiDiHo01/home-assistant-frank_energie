@@ -135,7 +135,6 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.hass = hass
         self.entry = entry
 
-
     async def _schedule_aligned_updates(
         self,
         price_coordinator: FrankEnergiePriceCoordinator,
