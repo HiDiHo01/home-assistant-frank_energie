@@ -26,6 +26,7 @@ from .const import (
     CONF_COORDINATOR,
     DOMAIN,
     SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_ENODE_CHARGERS,
 )
 from .coordinator import (
@@ -186,9 +187,13 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # For backwards compatibility, update the unique ID
         self._update_unique_id()
 
-        # Clean up obsolete umbrella devices ("Smart Batteries", "Chargers") from registry
+        # Clean up obsolete umbrella devices ("Smart Batteries", "Chargers", "Battery Sessions") from registry
         device_registry = dr.async_get(self.hass)
-        for obsolete_service in (SERVICE_NAME_BATTERIES, SERVICE_NAME_ENODE_CHARGERS):
+        for obsolete_service in (
+            SERVICE_NAME_BATTERIES,
+            SERVICE_NAME_BATTERY_SESSIONS,
+            SERVICE_NAME_ENODE_CHARGERS,
+        ):
             if device := device_registry.async_get_device(
                 identifiers={(DOMAIN, f"{self.entry.entry_id}_{obsolete_service}")}
             ):
