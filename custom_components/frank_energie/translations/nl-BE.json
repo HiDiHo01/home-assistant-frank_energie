@@ -643,6 +643,9 @@
             }
         },
         "number": {
+            "consumption_threshold_price": {
+                "name": "Eigen verbruik drempelprijs"
+            },
             "monthly_subscription_fee": {
                 "name": "Maandelijkse abonnementskosten"
             },
