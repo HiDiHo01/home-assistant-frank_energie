@@ -596,7 +596,7 @@ class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinat
         if value is None:
             return "mdi:battery-unknown"
             
-        rounded = int(round(value / 10.0) * 10)
+        rounded = int((value + 5) // 10) * 10
         
         if rounded == 0:
             return "mdi:battery-charging-outline"
