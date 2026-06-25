@@ -143,9 +143,63 @@ async def test_enode_charge_limit_number_action(mock_coordinator):
         mock_coordinator, charger_id, "initialCharge", "initial_charge", False
     )
 
+    # Verify invalid service values are rejected before any coordinator call is made
+    for invalid_val in (-1, 101, 50.9):
+        with pytest.raises(ValueError):
+            await entity.async_set_native_value(invalid_val)
+        mock_coordinator.async_update_enode_charge_settings.assert_not_called()
+
     await entity.async_set_native_value(25.0)
 
     mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
         charger_id, False, {"initialCharge": 25.0}
     )
     assert mock_charger.charge_settings.initial_charge == 25.0
+
+
+@pytest.mark.asyncio
+async def test_enode_charge_limit_validation(mock_coordinator):
+    """Test validation of values set on Enode charge limit entities."""
+    charger_id = "charger_123"
+    mock_charger = MagicMock()
+    mock_charger.id = charger_id
+    mock_charger.charge_settings = MagicMock()
+    mock_charger.charge_settings.initial_charge = 10
+    mock_charger.charge_settings.max_charge_limit = 80
+
+    mock_coordinator.data = {DATA_ENODE_CHARGERS: MagicMock(chargers=[mock_charger])}
+    mock_coordinator.async_update_enode_charge_settings = AsyncMock(return_value=True)
+
+    # Entity for initialCharge
+    initial_charge_entity = FrankEnergieEnodeChargeLimitNumber(
+        mock_coordinator, charger_id, "initialCharge", "initial_charge", False
+    )
+
+    # Test out of bounds (0-100) for initialCharge
+    with pytest.raises(ValueError, match="out of range"):
+        await initial_charge_entity.async_set_native_value(105.0)
+    with pytest.raises(ValueError, match="out of range"):
+        await initial_charge_entity.async_set_native_value(-5.0)
+
+    # Test step mismatch (multiple of 5) for initialCharge
+    with pytest.raises(ValueError, match="must be a multiple of"):
+        await initial_charge_entity.async_set_native_value(23.0)
+
+    # Entity for maxChargeLimit (requires integer, min 50, max 100, step 5)
+    max_limit_entity = FrankEnergieEnodeChargeLimitNumber(
+        mock_coordinator, charger_id, "maxChargeLimit", "max_charge_limit", False
+    )
+
+    # Test out of bounds for maxChargeLimit
+    with pytest.raises(ValueError, match="out of range"):
+        await max_limit_entity.async_set_native_value(45.0)
+
+    # Test step mismatch for float value (82.5 % 5 != 0) before truncation
+    with pytest.raises(ValueError, match="must be a multiple of"):
+        await max_limit_entity.async_set_native_value(82.5)
+
+    # Valid integer setting
+    await max_limit_entity.async_set_native_value(85.0)
+    mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
+        charger_id, False, {"maxChargeLimit": 85}
+    )

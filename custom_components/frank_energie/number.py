@@ -171,79 +171,83 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie number entities."""
-    coordinator: FrankEnergieCoordinator = config_entry.runtime_data.coordinator
+    settings_coordinator = config_entry.runtime_data.settings_coordinator
+    battery_coordinator = config_entry.runtime_data.battery_coordinator
+    vehicle_coordinator = config_entry.runtime_data.vehicle_coordinator
+    charger_coordinator = config_entry.runtime_data.charger_coordinator
     entities: list[NumberEntity] = []
 
-    if coordinator.api.is_authenticated:
-        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS)
+    if battery_coordinator.api.is_authenticated:
+        battery_details = battery_coordinator.data.get(DATA_BATTERY_DETAILS)
         if battery_details:
             for battery in battery_details:
                 entities.append(
                     FrankEnergieBatteryThresholdNumber(
-                        coordinator, config_entry, battery.smart_battery.id
+                        battery_coordinator, config_entry, battery.smart_battery.id
                     )
                 )
 
-        for description in CONFIG_NUMBER_DESCRIPTIONS:
+    for description in CONFIG_NUMBER_DESCRIPTIONS:
+        entities.append(
+            FrankEnergieFixedMonthlyCostsNumber(
+                settings_coordinator,
+                config_entry,
+                description,
+            )
+        )
+
+    enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+    if enode_vehicles and enode_vehicles.vehicles:
+        for vehicle in enode_vehicles.vehicles:
             entities.append(
-                FrankEnergieFixedMonthlyCostsNumber(
-                    coordinator,
-                    config_entry,
-                    description,
+                FrankEnergieEnodeChargeLimitNumber(
+                    vehicle_coordinator,
+                    vehicle.id,
+                    "minChargeLimit",
+                    translation_key="min_charge_limit",
+                    is_vehicle=True,
+                )
+            )
+            entities.append(
+                FrankEnergieEnodeChargeLimitNumber(
+                    vehicle_coordinator,
+                    vehicle.id,
+                    "maxChargeLimit",
+                    translation_key="max_charge_limit",
+                    is_vehicle=True,
                 )
             )
 
-        enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
-        if enode_vehicles and enode_vehicles.vehicles:
-            for vehicle in enode_vehicles.vehicles:
-                entities.append(
-                    FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
-                        vehicle.id,
-                        "minChargeLimit",
-                        translation_key="min_charge_limit",
-                        is_vehicle=True,
-                    )
+    enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+    if enode_chargers and enode_chargers.chargers:
+        for charger in enode_chargers.chargers:
+            entities.append(
+                FrankEnergieEnodeChargeLimitNumber(
+                    charger_coordinator,
+                    charger.id,
+                    "minChargeLimit",
+                    translation_key="min_charge_limit",
+                    is_vehicle=False,
                 )
-                entities.append(
-                    FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
-                        vehicle.id,
-                        "maxChargeLimit",
-                        translation_key="max_charge_limit",
-                        is_vehicle=True,
-                    )
+            )
+            entities.append(
+                FrankEnergieEnodeChargeLimitNumber(
+                    charger_coordinator,
+                    charger.id,
+                    "maxChargeLimit",
+                    translation_key="max_charge_limit",
+                    is_vehicle=False,
                 )
-        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
-        if enode_chargers and enode_chargers.chargers:
-            for charger in enode_chargers.chargers:
-                entities.append(
-                    FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
-                        charger.id,
-                        "minChargeLimit",
-                        translation_key="min_charge_limit",
-                        is_vehicle=False,
-                    )
+            )
+            entities.append(
+                FrankEnergieEnodeChargeLimitNumber(
+                    charger_coordinator,
+                    charger.id,
+                    "initialCharge",
+                    translation_key="initial_charge",
+                    is_vehicle=False,
                 )
-                entities.append(
-                    FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
-                        charger.id,
-                        "maxChargeLimit",
-                        translation_key="max_charge_limit",
-                        is_vehicle=False,
-                    )
-                )
-                entities.append(
-                    FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
-                        charger.id,
-                        "initialCharge",
-                        translation_key="initial_charge",
-                        is_vehicle=False,
-                    )
-                )
+            )
 
     if entities:
         async_add_entities(entities)
@@ -476,7 +480,7 @@ class FrankEnergieFixedMonthlyCostsNumber(
             self._entry,
             options={
                 **self._entry.options,
-                CONF_MONTHLY_SUBSCRIPTION_FEE: value,
+                self.entity_description.key: value,
             },
         )
 
@@ -698,23 +702,26 @@ class FrankEnergieEnodeChargeLimitNumber(
         )
 
         try:
-            val = float(value) if self._target_key == "initialCharge" else int(value)
+            val = float(value)
         except (ValueError, TypeError) as err:
             raise ValueError(f"Invalid value {value} for {self._target_key}") from err
 
-        if self._target_key != "initialCharge":
-            if val < self._attr_native_min_value or val > self._attr_native_max_value:
-                raise ValueError(
-                    f"Value {val} out of range for {self._target_key} "
-                    f"({self._attr_native_min_value}-{self._attr_native_max_value})"
-                )
-            if val % self._attr_native_step != 0:
-                raise ValueError(
-                    f"Value {val} must be a multiple of {self._attr_native_step} for {self._target_key}"
-                )
+        if val < self._attr_native_min_value or val > self._attr_native_max_value:
+            raise ValueError(
+                f"Value {val} out of range for {self._target_key} "
+                f"({self._attr_native_min_value}-{self._attr_native_max_value})"
+            )
+
+        if val % self._attr_native_step != 0:
+            raise ValueError(
+                f"Value {val} must be a multiple of {self._attr_native_step} for {self._target_key}"
+            )
+
+        payload_val = float(val) if self._target_key == "initialCharge" else int(val)
+
         try:
             success = await self.coordinator.async_update_enode_charge_settings(
-                self._device_id, self._is_vehicle, {self._target_key: val}
+                self._device_id, self._is_vehicle, {self._target_key: payload_val}
             )
         except Exception:
             _LOGGER.exception(

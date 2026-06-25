@@ -61,9 +61,11 @@ def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
     return entities
 
 
-def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
+def _setup_enode_entities(
+    hass, vehicle_coordinator, charger_coordinator, entry
+) -> list[SelectEntity]:
     entities = []
-    enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+    enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
         ent_reg = er.async_get(hass)
         for vehicle in enode_vehicles.vehicles:
@@ -76,16 +78,18 @@ def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
                     ent_reg.async_remove(entity_id)
 
                 entities.append(
-                    FrankEnergieEnodeChargingModeSelect(coordinator, entry, vehicle.id)
+                    FrankEnergieEnodeChargingModeSelect(
+                        vehicle_coordinator, entry, vehicle.id
+                    )
                 )
 
-    enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+    enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
     if enode_chargers and getattr(enode_chargers, "chargers", None):
         for charger in enode_chargers.chargers:
             if getattr(charger, "can_smart_charge", False):
                 entities.append(
                     FrankEnergieEnodeChargerChargingModeSelect(
-                        coordinator, entry, charger.id
+                        charger_coordinator, entry, charger.id
                     )
                 )
 
@@ -98,11 +102,16 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie select entities."""
-    coordinator: FrankEnergieCoordinator = entry.runtime_data.coordinator
+    price_coordinator = entry.runtime_data.price_coordinator
+    battery_coordinator = entry.runtime_data.battery_coordinator
+    vehicle_coordinator = entry.runtime_data.vehicle_coordinator
+    charger_coordinator = entry.runtime_data.charger_coordinator
 
-    entities: list[SelectEntity] = [FrankEnergieResolutionSelect(coordinator)]
-    entities.extend(_setup_battery_entities(coordinator, entry))
-    entities.extend(_setup_enode_entities(hass, coordinator, entry))
+    entities: list[SelectEntity] = [FrankEnergieResolutionSelect(price_coordinator)]
+    entities.extend(_setup_battery_entities(battery_coordinator, entry))
+    entities.extend(
+        _setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry)
+    )
 
     async_add_entities(entities)
 
@@ -142,24 +151,23 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
             configuration_url=API_CONF_URL,
             entry_type=DeviceEntryType.SERVICE,
         )
-        # {"identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)}}
 
     @property
     def available(self) -> bool:
         """Return False when a resolution change is not currently possible."""
         if not self.coordinator.api.is_authenticated:
             return True
-        if self.coordinator._resolution_change_pending:
+        if getattr(self.coordinator, "_resolution_change_pending", False):
             return False
-        state = self.coordinator._api_resolution_state
+        state = getattr(self.coordinator, "_api_resolution_state", None)
         if state is None:
             return True  # unknown, allow optimistically
         return state.isChangeRequestPossible
 
     @property
     def extra_state_attributes(self) -> dict:
-        api = self.coordinator.api_resolution
-        state = self.coordinator._api_resolution_state
+        api = getattr(self.coordinator, "api_resolution", None)
+        state = getattr(self.coordinator, "_api_resolution_state", None)
 
         if not self.coordinator.api.is_authenticated:
             return {
@@ -214,9 +222,7 @@ class FrankEnergieBatteryModeSelect(
     _attr_has_entity_name = True
     _attr_icon = "mdi:battery-sync"
     _attr_options = [
-        "self_consumption",
         "self_consumption_mix",
-        "imbalance_trading",
         "trading",
     ]
     _attr_translation_key = "battery_mode"
@@ -233,7 +239,6 @@ class FrankEnergieBatteryModeSelect(
         self._battery_id = battery_id
         self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
 
-        # Device Info registration
         battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
         battery = next(
             (b for b in battery_details if b.smart_battery.id == battery_id), None
@@ -268,7 +273,6 @@ class FrankEnergieBatteryModeSelect(
         if mode:
             mode_lower = mode.lower()
             if mode_lower not in self._attr_options:
-                # Dynamically append option if API returns a new one to prevent crash
                 self._attr_options = self._attr_options + [mode_lower]
             return mode_lower
         return None
@@ -314,7 +318,6 @@ class FrankEnergieBatteryStrategySelect(
         self._battery_id = battery_id
         self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_strategy"
 
-        # Device Info registration
         battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
         battery = next(
             (b for b in battery_details if b.smart_battery.id == battery_id), None
@@ -359,7 +362,6 @@ class FrankEnergieBatteryStrategySelect(
         if strategy:
             strategy_lower = strategy.lower()
             if strategy_lower not in self._attr_options:
-                # Dynamically append option if API returns a new one to prevent crash
                 self._attr_options = self._attr_options + [strategy_lower]
             return strategy_lower
         return None
@@ -402,7 +404,6 @@ class FrankEnergieEnodeChargingModeSelect(
         self._vehicle_id = vehicle_id
         self._attr_unique_id = f"{DOMAIN}_{vehicle_id}_enode_charging_mode"
 
-        # Device Info registration
         enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
         vehicle = (
             next((v for v in enode_vehicles.vehicles if v.id == vehicle_id), None)
@@ -458,8 +459,6 @@ class FrankEnergieEnodeChargingModeSelect(
         if option == self.current_option:
             return
 
-        from .helpers import build_charge_settings_input
-
         vehicle = self._get_vehicle()
         if not vehicle or not vehicle.charge_settings:
             _LOGGER.error(
@@ -469,25 +468,17 @@ class FrankEnergieEnodeChargingModeSelect(
             return
 
         is_smart = option == "smart_charging"
-        input_data = build_charge_settings_input(vehicle.charge_settings)
-        input_data["isSmartChargingEnabled"] = is_smart
 
-        _LOGGER.debug(
-            "Setting EV charging mode for vehicle %s to %s", self._vehicle_id, option
+        success = await self.coordinator.async_update_enode_charge_settings(
+            self._vehicle_id,
+            True,
+            {"isSmartChargingEnabled": is_smart},
         )
-        success = await self.coordinator.api.enode_update_vehicle_charge_settings(
-            input_data
-        )
-
         if success:
-            vehicle.charge_settings.is_smart_charging_enabled = is_smart
-            if self.hass:
-                self.async_write_ha_state()
+            await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(
-                "Failed to set EV charging mode for vehicle %s to %s",
-                self._vehicle_id,
-                option,
+                "Failed to update charge settings for vehicle %s", self._vehicle_id
             )
 
 

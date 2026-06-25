@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import UTC, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -12,6 +13,13 @@ from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import (
     FrankEnergieCoordinator,
     PricesTodayCache,
+    FrankEnergieSettingsCoordinator,
+    FrankEnergiePriceCoordinator,
+    FrankEnergieBatteryCoordinator,
+    FrankEnergieChargerCoordinator,
+    FrankEnergiePVCoordinator,
+    FrankEnergieVehicleCoordinator,
+    FrankEnergieStatisticsCoordinator,
 )
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -186,10 +194,12 @@ async def test_aggregate_data(coordinator):
 @pytest.mark.asyncio
 async def test_adjust_update_interval_inside_window(coordinator):
     """Test update interval adjustment inside the price release window."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    # Price release window is between 11:00 and 13:00 UTC
-    now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
+    # Price release window is between 13:00 and 15:00 local time
+    # On May 27th (summer), 12:00 UTC = 14:00 local time (inside window)
+    now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
 
     coordinator._adjust_update_interval(now_utc)
     # Exactly 300 seconds (5 minutes)
@@ -199,9 +209,11 @@ async def test_adjust_update_interval_inside_window(coordinator):
 @pytest.mark.asyncio
 async def test_adjust_update_interval_outside_window(coordinator):
     """Test update interval adjustment outside the price release window."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=timezone.utc)
+    # On May 27th, 10:00 UTC = 12:00 local time (outside window)
+    now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
 
     coordinator._adjust_update_interval(now_utc)
     # Update interval is disabled (None) outside window
@@ -1167,10 +1179,12 @@ async def test_get_static_data_fallback_to_promoted_prices_when_api_returns_empt
     coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
 
     # Force refetch by setting last_fetch_today date to yesterday
-    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=UTC)
+    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 
     # Perform get static data
-    prices_today, *_ = await coordinator._get_static_data(today, tomorrow, start_date)
+    prices_today, *rest = await coordinator._get_static_data(
+        today, tomorrow, start_date
+    )
 
     # Verify fallback happened
     assert prices_today is cached_prices
@@ -1208,10 +1222,12 @@ async def test_get_static_data_no_fallback_when_cached_prices_belong_to_other_da
     coordinator._fetch_user_data = AsyncMock(return_value=None)
     coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
 
-    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=UTC)
+    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 
     # Perform get static data
-    prices_today, *_ = await coordinator._get_static_data(today, tomorrow, start_date)
+    prices_today, *rest = await coordinator._get_static_data(
+        today, tomorrow, start_date
+    )
 
     # Verify fallback did NOT happen (we get the empty/fetched prices instead of the stale cached ones)
     assert prices_today is empty_prices
@@ -1251,10 +1267,218 @@ async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
     coordinator._fetch_user_data = AsyncMock(return_value=None)
     coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
 
-    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=UTC)
+    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 
     # Perform get static data
-    prices_today, *_ = await coordinator._get_static_data(today, tomorrow, start_date)
+    prices_today, *rest = await coordinator._get_static_data(
+        today, tomorrow, start_date
+    )
 
     # Verify fallback happened
     assert prices_today is cached_prices
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_before_window(
+    mock_frank_energie, mock_config_entry, monkeypatch
+) -> None:
+    """Test that price coordinator update interval is None before local 13:00 when tomorrow's prices are not cached."""
+    # Mock utcnow to 10:00 UTC (12:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    price_coordinator.cached_prices_tomorrow = None
+    price_coordinator._adjust_update_interval(mock_now)
+
+    assert price_coordinator.update_interval is None
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_inside_window(
+    mock_frank_energie, mock_config_entry, monkeypatch
+) -> None:
+    """Test that price coordinator update interval is 5 minutes inside local 13:00 to 15:00 when tomorrow's prices are not cached."""
+    # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    price_coordinator.cached_prices_tomorrow = None
+    price_coordinator._adjust_update_interval(mock_now)
+
+    assert price_coordinator.update_interval == timedelta(minutes=5)
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_skipped_when_cached(
+    mock_frank_energie, mock_config_entry, monkeypatch
+) -> None:
+    """Test that price coordinator update interval is None if tomorrow's prices are already cached."""
+    # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    # Mock cached tomorrow prices as available and fetched today
+    tomorrow_prices = MagicMock()
+    price_coordinator.cached_prices_tomorrow = tomorrow_prices
+    price_coordinator.last_fetch_tomorrow = mock_now
+
+    price_coordinator._adjust_update_interval(mock_now)
+
+    assert price_coordinator.update_interval is None
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_midnight_rollover(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Test that promote_tomorrow_prices correctly promotes tomorrow's prices to today."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    tomorrow_prices = MagicMock()
+    tomorrow_prices.electricity = MagicMock()
+    tomorrow_prices.gas = MagicMock()
+    price_coordinator.cached_prices_tomorrow = tomorrow_prices
+
+    price_coordinator.cached_prices = {
+        DATA_ELECTRICITY: MagicMock(),
+        DATA_GAS: MagicMock(),
+    }
+
+    price_coordinator.promote_tomorrow_prices()
+
+    assert price_coordinator.cached_prices_tomorrow is None
+    assert (
+        price_coordinator.cached_prices[DATA_ELECTRICITY] == tomorrow_prices.electricity
+    )
+    assert price_coordinator.cached_prices[DATA_GAS] == tomorrow_prices.gas
+
+
+@pytest.mark.asyncio
+async def test_sub_coordinators_properties(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Test default properties and intervals of sub-coordinators."""
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(
+        hass, mock_config_entry, mock_frank_energie
+    )
+    price = FrankEnergiePriceCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    battery = FrankEnergieBatteryCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    charger = FrankEnergieChargerCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    pv = FrankEnergiePVCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    vehicle = FrankEnergieVehicleCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    stats = FrankEnergieStatisticsCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+
+    assert settings.update_interval == timedelta(hours=24)
+    assert price.update_interval is None
+    assert battery.update_interval == timedelta(minutes=5)
+    assert charger.update_interval == timedelta(minutes=5)
+    assert pv.update_interval == timedelta(minutes=5)
+    assert vehicle.update_interval == timedelta(minutes=15)
+    assert stats.update_interval == timedelta(hours=1)
+
+
+@pytest.mark.asyncio
+async def test_async_update_enode_charge_settings_optimistic_cache(
+    coordinator, mock_frank_energie, create_mock_vehicle
+) -> None:
+    """Test optimistic cache updates for all mutation fields in async_update_enode_charge_settings."""
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from datetime import datetime
+    from unittest.mock import MagicMock
+
+    vehicle_id = "veh_123"
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        charge_settings_kwargs={
+            "is_smart_charging_enabled": False,
+            "min_charge_limit": 20,
+            "max_charge_limit": 80,
+        },
+    )
+    mock_vehicles = MagicMock()
+    mock_vehicles.vehicles = [mock_vehicle]
+    coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
+
+    # Successful mutation
+    mock_frank_energie.enode_update_vehicle_charge_settings.return_value = True
+
+    dt_str = "2026-05-29T08:30:00+00:00"
+    mutations = {
+        "deadline": dt_str,
+        "isSmartChargingEnabled": True,
+        "isSolarChargingEnabled": True,
+        "minChargeLimit": 30,
+        "maxChargeLimit": 90,
+        "initialCharge": 15.0,
+        "hourMonday": 480,
+        "hourTuesday": 490,
+        "hourWednesday": 500,
+        "hourThursday": 510,
+        "hourFriday": 520,
+        "hourSaturday": 530,
+        "hourSunday": 540,
+    }
+
+    success = await coordinator.async_update_enode_charge_settings(
+        vehicle_id, is_vehicle=True, mutations=mutations
+    )
+
+    assert success is True
+    assert mock_vehicle.charge_settings.deadline == datetime.fromisoformat(dt_str)
+    assert mock_vehicle.charge_settings.is_smart_charging_enabled is True
+    assert mock_vehicle.charge_settings.is_solar_charging_enabled is True
+    assert mock_vehicle.charge_settings.min_charge_limit == 30
+    assert mock_vehicle.charge_settings.max_charge_limit == 90
+    assert mock_vehicle.charge_settings.initial_charge == 15.0
+    assert mock_vehicle.charge_settings.hour_monday == 480
+    assert mock_vehicle.charge_settings.hour_tuesday == 490
+    assert mock_vehicle.charge_settings.hour_wednesday == 500
+    assert mock_vehicle.charge_settings.hour_thursday == 510
+    assert mock_vehicle.charge_settings.hour_friday == 520
+    assert mock_vehicle.charge_settings.hour_saturday == 530
+    assert mock_vehicle.charge_settings.hour_sunday == 540
