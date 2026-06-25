@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 from custom_components.frank_energie.const import (
     DATA_BATTERY_DETAILS,
@@ -129,7 +129,15 @@ async def test_enode_charge_limit_number_action(mock_coordinator):
     mock_charger.charge_settings.initial_charge = 10
 
     mock_coordinator.data = {DATA_ENODE_CHARGERS: MagicMock(chargers=[mock_charger])}
-    mock_coordinator.api.enode_update_charger_charge_settings.return_value = True
+
+    async def mock_update(dev_id, is_veh, mutations):
+        if "initialCharge" in mutations:
+            mock_charger.charge_settings.initial_charge = mutations["initialCharge"]
+        return True
+
+    mock_coordinator.async_update_enode_charge_settings = AsyncMock(
+        side_effect=mock_update
+    )
 
     entity = FrankEnergieEnodeChargeLimitNumber(
         mock_coordinator, charger_id, "initialCharge", "initial_charge", False
@@ -137,7 +145,7 @@ async def test_enode_charge_limit_number_action(mock_coordinator):
 
     await entity.async_set_native_value(25.0)
 
-    mock_coordinator.api.enode_update_charger_charge_settings.assert_called_once_with(
-        {"id": charge_settings_id, "initialCharge": 25}
+    mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
+        charger_id, False, {"initialCharge": 25.0}
     )
     assert mock_charger.charge_settings.initial_charge == 25.0

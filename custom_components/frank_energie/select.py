@@ -13,6 +13,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from python_frank_energie.models import EnodeCharger
+
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
@@ -79,7 +81,6 @@ def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
 
     enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
     if enode_chargers and getattr(enode_chargers, "chargers", None):
-        ent_reg = er.async_get(hass)
         for charger in enode_chargers.chargers:
             if getattr(charger, "can_smart_charge", False):
                 entities.append(
@@ -540,7 +541,8 @@ class FrankEnergieEnodeChargerChargingModeSelect(
             name=name,
         )
 
-    def _get_charger(self):
+    def _get_charger(self) -> EnodeCharger | None:
+        """Return the Enode charger object if it exists."""
         enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
         if not enode_chargers or not getattr(enode_chargers, "chargers", None):
             return None
@@ -569,8 +571,6 @@ class FrankEnergieEnodeChargerChargingModeSelect(
         if option == self.current_option:
             return
 
-        from .helpers import build_charge_settings_input
-
         charger = self._get_charger()
         if not charger or not charger.charge_settings:
             _LOGGER.error(
@@ -580,18 +580,15 @@ class FrankEnergieEnodeChargerChargingModeSelect(
             return
 
         is_smart = option == "smart_charging"
-        input_data = build_charge_settings_input(charger.charge_settings)
-        input_data["isSmartChargingEnabled"] = is_smart
 
         _LOGGER.debug(
             "Setting EV charging mode for charger %s to %s", self._charger_id, option
         )
-        success = await self.coordinator.api.enode_update_charger_charge_settings(
-            input_data
+        success = await self.coordinator.async_update_enode_charge_settings(
+            self._charger_id, False, {"isSmartChargingEnabled": is_smart}
         )
 
         if success:
-            charger.charge_settings.is_smart_charging_enabled = is_smart
             if self.hass:
                 self.async_write_ha_state()
         else:

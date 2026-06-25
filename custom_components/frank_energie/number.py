@@ -703,25 +703,11 @@ class FrankEnergieEnodeChargeLimitNumber(
             "Setting %s to %s for %s", self._target_key, value, self._device_id
         )
 
+        val = float(value) if self._target_key == "initialCharge" else int(value)
         try:
-            if self._is_vehicle:
-                success = (
-                    await self.coordinator.api.enode_update_vehicle_charge_settings(
-                        {
-                            "id": item.charge_settings.id,
-                            self._target_key: int(value),
-                        }
-                    )
-                )
-            else:
-                success = (
-                    await self.coordinator.api.enode_update_charger_charge_settings(
-                        {
-                            "id": item.charge_settings.id,
-                            self._target_key: int(value),
-                        }
-                    )
-                )
+            success = await self.coordinator.async_update_enode_charge_settings(
+                self._device_id, self._is_vehicle, {self._target_key: val}
+            )
         except Exception:
             _LOGGER.exception(
                 "Failed to update %s for %s", self._target_key, self._device_id
@@ -732,14 +718,6 @@ class FrankEnergieEnodeChargeLimitNumber(
             raise ValueError(
                 f"Failed to update {self._target_key} for {self._device_id}"
             )
-
-        # Optimistically update the local state to prevent the UI slider from jumping back
-        if self._target_key == "minChargeLimit":
-            item.charge_settings.min_charge_limit = int(value)
-        elif self._target_key == "maxChargeLimit":
-            item.charge_settings.max_charge_limit = int(value)
-        elif self._target_key == "initialCharge":
-            item.charge_settings.initial_charge = float(value)
 
         if self.hass:
             self.async_write_ha_state()
