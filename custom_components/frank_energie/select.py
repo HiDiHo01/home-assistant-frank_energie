@@ -84,7 +84,9 @@ def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
         for charger in enode_chargers.chargers:
             if getattr(charger, "can_smart_charge", False):
                 entities.append(
-                    FrankEnergieEnodeChargerChargingModeSelect(coordinator, entry, charger.id)
+                    FrankEnergieEnodeChargerChargingModeSelect(
+                        coordinator, entry, charger.id
+                    )
                 )
 
     return entities
@@ -519,7 +521,13 @@ class FrankEnergieEnodeChargerChargingModeSelect(
             else None
         )
 
-        info = charger.information if charger and getattr(charger, "information", None) and isinstance(charger.information, dict) else {}
+        info = (
+            charger.information
+            if charger
+            and getattr(charger, "information", None)
+            and isinstance(charger.information, dict)
+            else {}
+        )
         brand = info.get("brand") or MANUFACTURER_FRANK_ENERGIE
         model = info.get("model") or "Charger"
         name = (

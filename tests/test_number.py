@@ -1,8 +1,15 @@
 import pytest
 from unittest.mock import MagicMock
 
-from custom_components.frank_energie.const import DATA_BATTERY_DETAILS, DATA_ENODE_VEHICLES, DATA_ENODE_CHARGERS
-from custom_components.frank_energie.number import FrankEnergieBatteryThresholdNumber, FrankEnergieEnodeChargeLimitNumber
+from custom_components.frank_energie.const import (
+    DATA_BATTERY_DETAILS,
+    DATA_ENODE_VEHICLES,
+    DATA_ENODE_CHARGERS,
+)
+from custom_components.frank_energie.number import (
+    FrankEnergieBatteryThresholdNumber,
+    FrankEnergieEnodeChargeLimitNumber,
+)
 
 
 def test_battery_threshold_number_properties(mock_coordinator, mock_config_entry):
@@ -94,10 +101,8 @@ def test_enode_charge_limit_number_properties(mock_coordinator):
     mock_vehicle.charge_settings = MagicMock()
     mock_vehicle.charge_settings.min_charge_limit = 20
     mock_vehicle.charge_settings.max_charge_limit = 80
-    
-    mock_coordinator.data = {
-        DATA_ENODE_VEHICLES: MagicMock(vehicles=[mock_vehicle])
-    }
+
+    mock_coordinator.data = {DATA_ENODE_VEHICLES: MagicMock(vehicles=[mock_vehicle])}
 
     entity = FrankEnergieEnodeChargeLimitNumber(
         mock_coordinator, vehicle_id, "maxChargeLimit", "max_charge_limit", True
@@ -122,20 +127,17 @@ async def test_enode_charge_limit_number_action(mock_coordinator):
     mock_charger.charge_settings = MagicMock()
     mock_charger.charge_settings.id = charge_settings_id
     mock_charger.charge_settings.initial_charge = 10
-    
-    mock_coordinator.data = {
-        DATA_ENODE_CHARGERS: MagicMock(chargers=[mock_charger])
-    }
+
+    mock_coordinator.data = {DATA_ENODE_CHARGERS: MagicMock(chargers=[mock_charger])}
     mock_coordinator.api.enode_update_charger_charge_settings.return_value = True
 
     entity = FrankEnergieEnodeChargeLimitNumber(
         mock_coordinator, charger_id, "initialCharge", "initial_charge", False
     )
-    
+
     await entity.async_set_native_value(25.0)
 
     mock_coordinator.api.enode_update_charger_charge_settings.assert_called_once_with(
         {"id": charge_settings_id, "initialCharge": 25}
     )
     assert mock_charger.charge_settings.initial_charge == 25.0
-

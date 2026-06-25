@@ -30,7 +30,6 @@ from .const import (
     CONF_ENERGY_TAX_REDUCTION,
     CONF_MONTHLY_SUBSCRIPTION_FEE,
     CONF_NETWORK_CHARGES,
-    CONF_NETWORK_CHARGES,
     DATA_BATTERY_DETAILS,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
@@ -68,95 +67,90 @@ class FrankEnergieNumberEntityDescription(NumberEntityDescription):
     # mode: NumberMode = NumberMode.BOX
     suggested_display_precision: int | None = None
 
-    value_fn: Callable[
-        [ConfigEntry[FrankEnergieEntryData]],
-        float,
-    ] | None = None
+    value_fn: (
+        Callable[
+            [ConfigEntry[FrankEnergieEntryData]],
+            float,
+        ]
+        | None
+    ) = None
 
 
-MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION = (
-    FrankEnergieNumberEntityDescription(
-        key="monthly_subscription_fee",
-        translation_key="monthly_subscription_fee",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.0,
-        native_max_value=10.0,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_MONTHLY_SUBSCRIPTION_FEE,
-                DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
-            )
-        ),
-    )
+MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION = FrankEnergieNumberEntityDescription(
+    key="monthly_subscription_fee",
+    translation_key="monthly_subscription_fee",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.0,
+    native_max_value=10.0,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_MONTHLY_SUBSCRIPTION_FEE,
+            DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
+        )
+    ),
 )
-ENERGY_TAX_ODE = (
-    FrankEnergieNumberEntityDescription(
-        key="energy_tax_ode",
-        translation_key="energy_tax_ode",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.0,
-        native_max_value=50.0,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_ENERGY_TAX_ODE,
-                DEFAULT_ENERGY_TAX_ODE,
-            )
-        ),
-    )
+ENERGY_TAX_ODE = FrankEnergieNumberEntityDescription(
+    key="energy_tax_ode",
+    translation_key="energy_tax_ode",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.0,
+    native_max_value=50.0,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_ENERGY_TAX_ODE,
+            DEFAULT_ENERGY_TAX_ODE,
+        )
+    ),
 )
-ENERGY_TAX_REDUCTION = (
-    FrankEnergieNumberEntityDescription(
-        key="energy_tax_reduction",
-        translation_key="energy_tax_reduction",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=-100.00,
-        native_max_value=0.00,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_ENERGY_TAX_REDUCTION,
-                DEFAULT_ENERGY_TAX_REDUCTION,
-            )
-        ),
-    )
+ENERGY_TAX_REDUCTION = FrankEnergieNumberEntityDescription(
+    key="energy_tax_reduction",
+    translation_key="energy_tax_reduction",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=-100.00,
+    native_max_value=0.00,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_ENERGY_TAX_REDUCTION,
+            DEFAULT_ENERGY_TAX_REDUCTION,
+        )
+    ),
 )
-NETWORK_CHARGES = (
-    FrankEnergieNumberEntityDescription(
-        key="network_charges",
-        translation_key="network_charges",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.00,
-        native_max_value=50.00,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_NETWORK_CHARGES,
-                DEFAULT_NETWORK_CHARGES,
-            )
-        ),
-    )
+NETWORK_CHARGES = FrankEnergieNumberEntityDescription(
+    key="network_charges",
+    translation_key="network_charges",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.00,
+    native_max_value=50.00,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_NETWORK_CHARGES,
+            DEFAULT_NETWORK_CHARGES,
+        )
+    ),
 )
 
 CONFIG_NUMBER_DESCRIPTIONS: Final = (
@@ -198,15 +192,55 @@ async def async_setup_entry(
         enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
         if enode_vehicles and enode_vehicles.vehicles:
             for vehicle in enode_vehicles.vehicles:
-                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, vehicle.id, "minChargeLimit", translation_key="min_charge_limit", is_vehicle=True))
-                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, vehicle.id, "maxChargeLimit", translation_key="max_charge_limit", is_vehicle=True))
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        vehicle.id,
+                        "minChargeLimit",
+                        translation_key="min_charge_limit",
+                        is_vehicle=True,
+                    )
+                )
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        vehicle.id,
+                        "maxChargeLimit",
+                        translation_key="max_charge_limit",
+                        is_vehicle=True,
+                    )
+                )
 
         enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
         if enode_chargers and enode_chargers.chargers:
             for charger in enode_chargers.chargers:
-                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, charger.id, "minChargeLimit", translation_key="min_charge_limit", is_vehicle=False))
-                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, charger.id, "maxChargeLimit", translation_key="max_charge_limit", is_vehicle=False))
-                entities.append(FrankEnergieEnodeChargeLimitNumber(coordinator, charger.id, "initialCharge", translation_key="initial_charge", is_vehicle=False))
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        charger.id,
+                        "minChargeLimit",
+                        translation_key="min_charge_limit",
+                        is_vehicle=False,
+                    )
+                )
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        charger.id,
+                        "maxChargeLimit",
+                        translation_key="max_charge_limit",
+                        is_vehicle=False,
+                    )
+                )
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        charger.id,
+                        "initialCharge",
+                        translation_key="initial_charge",
+                        is_vehicle=False,
+                    )
+                )
 
     if entities:
         async_add_entities(entities)
@@ -391,9 +425,7 @@ class FrankEnergieFixedMonthlyCostsNumber(
         self._entry = entry
         self.entity_description = description
 
-        self._attr_unique_id = (
-            f"{entry.entry_id}_{self.entity_description.key}"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_description.key}"
 
         self._service_name = self.entity_description.service_name
 
@@ -477,9 +509,7 @@ class old_FrankEnergieFixedMonthlyCostsNumber(
 
         self._entry = entry
 
-        self._attr_unique_id = (
-            f"{entry.entry_id}_monthly_subscription_fee"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_monthly_subscription_fee"
 
     @property
     def available(self) -> bool:
@@ -531,7 +561,10 @@ class old_FrankEnergieFixedMonthlyCostsNumber(
         await self.coordinator.async_request_refresh()
         self.async_write_ha_state()
 
-class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinator], NumberEntity):
+
+class FrankEnergieEnodeChargeLimitNumber(
+    CoordinatorEntity[FrankEnergieCoordinator], NumberEntity
+):
     """Number entity for setting charge limits for an Enode device."""
 
     _attr_has_entity_name = True
@@ -562,14 +595,34 @@ class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinat
 
         if is_vehicle:
             enode_data = coordinator.data.get(DATA_ENODE_VEHICLES)
-            item = next((v for v in enode_data.vehicles if v.id == device_id), None) if enode_data else None
-            brand = item.information.brand if item and item.information else MANUFACTURER_FRANK_ENERGIE
+            item = (
+                next((v for v in enode_data.vehicles if v.id == device_id), None)
+                if enode_data
+                else None
+            )
+            brand = (
+                item.information.brand
+                if item and item.information
+                else MANUFACTURER_FRANK_ENERGIE
+            )
             model = item.information.model if item and item.information else "Vehicle"
         else:
             enode_data = coordinator.data.get(DATA_ENODE_CHARGERS)
-            item = next((c for c in enode_data.chargers if c.id == device_id), None) if enode_data else None
-            brand = item.information.get("brand") if item and isinstance(item.information, dict) else MANUFACTURER_FRANK_ENERGIE
-            model = item.information.get("model") if item and isinstance(item.information, dict) else "Charger"
+            item = (
+                next((c for c in enode_data.chargers if c.id == device_id), None)
+                if enode_data
+                else None
+            )
+            brand = (
+                item.information.get("brand")
+                if item and isinstance(item.information, dict)
+                else MANUFACTURER_FRANK_ENERGIE
+            )
+            model = (
+                item.information.get("model")
+                if item and isinstance(item.information, dict)
+                else "Charger"
+            )
 
         name = f"{brand} {model}".strip() if (brand or model) else f"Device {device_id}"
 
@@ -584,10 +637,18 @@ class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinat
         """Return the device details."""
         if self._is_vehicle:
             enode_data = self.coordinator.data.get(DATA_ENODE_VEHICLES)
-            return next((v for v in enode_data.vehicles if v.id == self._device_id), None) if enode_data else None
+            return (
+                next((v for v in enode_data.vehicles if v.id == self._device_id), None)
+                if enode_data
+                else None
+            )
         else:
             enode_data = self.coordinator.data.get(DATA_ENODE_CHARGERS)
-            return next((c for c in enode_data.chargers if c.id == self._device_id), None) if enode_data else None
+            return (
+                next((c for c in enode_data.chargers if c.id == self._device_id), None)
+                if enode_data
+                else None
+            )
 
     @property
     def icon(self) -> str | None:
@@ -595,14 +656,14 @@ class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinat
         value = self.native_value
         if value is None:
             return "mdi:battery-unknown"
-            
+
         rounded = int((value + 5) // 10) * 10
-        
+
         if rounded == 0:
             return "mdi:battery-charging-outline"
         elif rounded == 100:
             return "mdi:battery-charging-100"
-        
+
         return f"mdi:battery-charging-{rounded}"
 
     @property
@@ -611,7 +672,7 @@ class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinat
         item = self._get_item()
         if not item or not item.charge_settings:
             return None
-        
+
         if self._target_key == "minChargeLimit":
             return item.charge_settings.min_charge_limit
         elif self._target_key == "maxChargeLimit":
@@ -626,26 +687,40 @@ class FrankEnergieEnodeChargeLimitNumber(CoordinatorEntity[FrankEnergieCoordinat
         item = self._get_item()
         if not item or not item.charge_settings:
             raise ValueError("Item or charge settings not found")
-            
-        _LOGGER.debug("Setting %s to %s for %s", self._target_key, value, self._device_id)
+
+        _LOGGER.debug(
+            "Setting %s to %s for %s", self._target_key, value, self._device_id
+        )
 
         try:
             if self._is_vehicle:
-                success = await self.coordinator.api.enode_update_vehicle_charge_settings({
-                    "id": item.charge_settings.id,
-                    self._target_key: int(value),
-                })
+                success = (
+                    await self.coordinator.api.enode_update_vehicle_charge_settings(
+                        {
+                            "id": item.charge_settings.id,
+                            self._target_key: int(value),
+                        }
+                    )
+                )
             else:
-                success = await self.coordinator.api.enode_update_charger_charge_settings({
-                    "id": item.charge_settings.id,
-                    self._target_key: int(value),
-                })
+                success = (
+                    await self.coordinator.api.enode_update_charger_charge_settings(
+                        {
+                            "id": item.charge_settings.id,
+                            self._target_key: int(value),
+                        }
+                    )
+                )
         except Exception:
-            _LOGGER.exception("Failed to update %s for %s", self._target_key, self._device_id)
+            _LOGGER.exception(
+                "Failed to update %s for %s", self._target_key, self._device_id
+            )
             raise
 
         if not success:
-            raise ValueError(f"Failed to update {self._target_key} for {self._device_id}")
+            raise ValueError(
+                f"Failed to update {self._target_key} for {self._device_id}"
+            )
 
         # Optimistically update the local state to prevent the UI slider from jumping back
         if self._target_key == "minChargeLimit":
