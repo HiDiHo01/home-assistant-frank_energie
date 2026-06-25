@@ -210,16 +210,6 @@ async def async_setup_entry(
                         is_vehicle=True,
                     )
                 )
-                entities.append(
-                    FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
-                        vehicle.id,
-                        "initialCharge",
-                        translation_key="initial_charge",
-                        is_vehicle=True,
-                    )
-                )
-
         enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
         if enode_chargers and enode_chargers.chargers:
             for charger in enode_chargers.chargers:
