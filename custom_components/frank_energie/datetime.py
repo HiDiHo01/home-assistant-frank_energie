@@ -33,7 +33,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie datetime entities."""
     runtime_data = config_entry.runtime_data
-    realtime_coordinator = runtime_data.realtime_coordinator
+    charger_coordinator = runtime_data.charger_coordinator
     vehicle_coordinator = runtime_data.vehicle_coordinator
     entities: list[DateTimeEntity] = []
 
@@ -49,13 +49,13 @@ async def async_setup_entry(
                 )
 
     # Wall charger charging deadlines
-    if realtime_coordinator.api.is_authenticated:
-        enode_chargers = realtime_coordinator.data.get(DATA_ENODE_CHARGERS)
+    if charger_coordinator.api.is_authenticated:
+        enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
         if enode_chargers and enode_chargers.chargers:
             for charger in enode_chargers.chargers:
                 entities.append(
                     FrankEnergieChargerDeadlineEntity(
-                        realtime_coordinator, config_entry, charger.id
+                        charger_coordinator, config_entry, charger.id
                     )
                 )
 

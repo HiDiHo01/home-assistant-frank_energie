@@ -4951,7 +4951,9 @@ async def async_setup_entry(
     runtime_data = config_entry.runtime_data
     settings_coordinator = runtime_data.settings_coordinator
     price_coordinator = runtime_data.price_coordinator
-    realtime_coordinator = runtime_data.realtime_coordinator
+    battery_coordinator = runtime_data.battery_coordinator
+    charger_coordinator = runtime_data.charger_coordinator
+    pv_coordinator = runtime_data.pv_coordinator
     vehicle_coordinator = runtime_data.vehicle_coordinator
     statistics_coordinator = runtime_data.statistics_coordinator
 
@@ -4974,20 +4976,19 @@ async def async_setup_entry(
             SERVICE_NAME_USAGE,
         ):
             return statistics_coordinator
-        if description.service_name in (
-            SERVICE_NAME_BATTERIES,
-            SERVICE_NAME_ENODE_CHARGERS,
-            SERVICE_NAME_PV_SYSTEMS,
-            SERVICE_NAME_PV_SUMMARY,
-        ):
-            return realtime_coordinator
+        if description.service_name == SERVICE_NAME_BATTERIES:
+            return battery_coordinator
+        if description.service_name == SERVICE_NAME_ENODE_CHARGERS:
+            return charger_coordinator
+        if description.service_name in (SERVICE_NAME_PV_SYSTEMS, SERVICE_NAME_PV_SUMMARY):
+            return pv_coordinator
         if description.service_name == SERVICE_NAME_ENODE_VEHICLES:
             return vehicle_coordinator
         if description.service_name == SERVICE_NAME_SETTINGS:
             return settings_coordinator
         return price_coordinator
 
-    batteries = realtime_coordinator.data.get(DATA_BATTERIES, [])
+    batteries = battery_coordinator.data.get(DATA_BATTERIES, [])
 
     session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = {}
     entities: list = []
@@ -5098,31 +5099,31 @@ async def async_setup_entry(
     if settings_coordinator.api.is_authenticated and "GAS" not in user_segments:
         await _disable_gas_price_sensors(hass, config_entry)
 
-    if (enode := realtime_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
+    if (enode := charger_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
         for description in STATIC_ENODE_SENSOR_TYPES:
             if (
                 not description.authenticated
-                or realtime_coordinator.api.is_authenticated
+                or charger_coordinator.api.is_authenticated
             ):
                 entities.append(
-                    FrankEnergieSensor(realtime_coordinator, description, config_entry)
+                    FrankEnergieSensor(charger_coordinator, description, config_entry)
                 )
 
         for charger in enode.chargers:
             for description in ENODE_CHARGER_SENSOR_TYPES:
                 if (
                     not description.authenticated
-                    or realtime_coordinator.api.is_authenticated
+                    or charger_coordinator.api.is_authenticated
                 ):
                     entities.append(
-                        EnodeChargerSensor(realtime_coordinator, description, charger)
+                        EnodeChargerSensor(charger_coordinator, description, charger)
                     )
 
     if (
-        batteries := realtime_coordinator.data.get(DATA_BATTERIES)
+        batteries := battery_coordinator.data.get(DATA_BATTERIES)
     ) and batteries.batteries:
         _LOGGER.debug("Setting up smart battery sensors: %s", batteries)
         # SmartBatteries(smart_batteries=[SmartBatteries.SmartBattery(brand='Sessy', capacity=5.2, external_reference='AJM6UPPP', id='cm3sunryl0000tc3nhygweghn', max_charge_power=2.2, max_discharge_power=1.7, provider='SESSY', created_at=datetime.datetime(2024, 11, 22, 14, 41, 47, 853000, tzinfo=datetime.timezone.utc), updated_at=datetime.datetime(2025, 2, 7, 22, 3, 21, 898000, tzinfo=datetime.timezone.utc))])
@@ -5138,9 +5139,9 @@ async def async_setup_entry(
         for description in (
             list(STATIC_BATTERY_SENSOR_TYPES) + aggregated_battery_descriptions
         ):
-            if not description.authenticated or realtime_coordinator.api.is_authenticated:
+            if not description.authenticated or battery_coordinator.api.is_authenticated:
                 entities.append(
-                    FrankEnergieSensor(realtime_coordinator, description, config_entry)
+                    FrankEnergieSensor(charger_coordinator, description, config_entry)
                 )
                 _LOGGER.debug("Added aggregate battery sensor for %s", description.key)
 
@@ -5153,10 +5154,10 @@ async def async_setup_entry(
                 battery, i
             )
             for description in single_battery_descriptions:
-                if not description.authenticated or realtime_coordinator.api.is_authenticated:
+                if not description.authenticated or battery_coordinator.api.is_authenticated:
                     entities.append(
                         FrankEnergieSmartBatterySensor(
-                            realtime_coordinator,
+                            battery_coordinator,
                             description,
                             config_entry,
                             battery.id,
@@ -5217,7 +5218,7 @@ async def async_setup_entry(
 
         entities.extend(enode_vehicle_sensors)
 
-    pv_systems = realtime_coordinator.data.get(DATA_PV_SYSTEMS)
+    pv_systems = pv_coordinator.data.get(DATA_PV_SYSTEMS)
     if pv_systems and pv_systems.systems:
         _LOGGER.debug(
             "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
@@ -5227,13 +5228,13 @@ async def async_setup_entry(
                 entities.extend(
                     [
                         FrankEnergiePvSensor(
-                            realtime_coordinator, system.id, "total_bonus"
+                            pv_coordinator, system.id, "total_bonus"
                         ),
                         FrankEnergiePvSensor(
-                            realtime_coordinator, system.id, "operational_status"
+                            pv_coordinator, system.id, "operational_status"
                         ),
                         FrankEnergiePvSensor(
-                            realtime_coordinator, system.id, "steering_status"
+                            pv_coordinator, system.id, "steering_status"
                         ),
                     ]
                 )

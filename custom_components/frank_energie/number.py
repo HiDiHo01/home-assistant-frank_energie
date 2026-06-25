@@ -170,16 +170,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie number entities."""
     settings_coordinator = config_entry.runtime_data.settings_coordinator
-    realtime_coordinator = config_entry.runtime_data.realtime_coordinator
+    battery_coordinator = config_entry.runtime_data.battery_coordinator
     entities: list[NumberEntity] = []
 
-    if realtime_coordinator.api.is_authenticated:
-        battery_details = realtime_coordinator.data.get(DATA_BATTERY_DETAILS)
+    if battery_coordinator.api.is_authenticated:
+        battery_details = battery_coordinator.data.get(DATA_BATTERY_DETAILS)
         if battery_details:
             for battery in battery_details:
                 entities.append(
                     FrankEnergieBatteryThresholdNumber(
-                        realtime_coordinator, config_entry, battery.smart_battery.id
+                        battery_coordinator, config_entry, battery.smart_battery.id
                     )
                 )
 

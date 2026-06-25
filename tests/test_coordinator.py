@@ -15,7 +15,9 @@ from custom_components.frank_energie.coordinator import (
     PricesTodayCache,
     FrankEnergieSettingsCoordinator,
     FrankEnergiePriceCoordinator,
-    FrankEnergieRealtimeCoordinator,
+    FrankEnergieBatteryCoordinator,
+    FrankEnergieChargerCoordinator,
+    FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
@@ -1393,7 +1395,13 @@ async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry
     price = FrankEnergiePriceCoordinator(
         hass, mock_config_entry, mock_frank_energie, settings
     )
-    realtime = FrankEnergieRealtimeCoordinator(
+    battery = FrankEnergieBatteryCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    charger = FrankEnergieChargerCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    pv = FrankEnergiePVCoordinator(
         hass, mock_config_entry, mock_frank_energie, settings
     )
     vehicle = FrankEnergieVehicleCoordinator(
@@ -1405,6 +1413,8 @@ async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry
 
     assert settings.update_interval == timedelta(hours=24)
     assert price.update_interval is None
-    assert realtime.update_interval == timedelta(seconds=30)
+    assert battery.update_interval == timedelta(minutes=5)
+    assert charger.update_interval == timedelta(minutes=5)
+    assert pv.update_interval == timedelta(minutes=5)
     assert vehicle.update_interval == timedelta(minutes=15)
     assert stats.update_interval == timedelta(hours=1)

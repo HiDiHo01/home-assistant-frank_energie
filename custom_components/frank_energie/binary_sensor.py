@@ -674,14 +674,15 @@ async def async_setup_entry(
 
     runtime_data = config_entry.runtime_data
     settings_coordinator = runtime_data.settings_coordinator
-    realtime_coordinator = runtime_data.realtime_coordinator
+    pv_coordinator = runtime_data.pv_coordinator
+    battery_coordinator = runtime_data.battery_coordinator
 
     entities: list[FrankEnergieBinarySensor] = []
 
     if settings_coordinator.api.is_authenticated:
         for description in BINARY_SENSOR_DESCRIPTIONS:
             if description.key in ("smart_feed_in", "smart_pv_systems"):
-                coord = realtime_coordinator
+                coord = pv_coordinator
             else:
                 coord = settings_coordinator
 
@@ -695,12 +696,12 @@ async def async_setup_entry(
 
         entities.extend(
             FrankEnergieBinarySensor(
-                realtime_coordinator,
+                battery_coordinator,
                 description,
                 config_entry,
             )
             for description in _build_battery_descriptions(
-                realtime_coordinator.data,
+                battery_coordinator.data,
             )
         )
 

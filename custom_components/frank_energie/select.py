@@ -86,11 +86,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up Frank Energie select entities."""
     price_coordinator = entry.runtime_data.price_coordinator
-    realtime_coordinator = entry.runtime_data.realtime_coordinator
+    battery_coordinator = entry.runtime_data.battery_coordinator
     vehicle_coordinator = entry.runtime_data.vehicle_coordinator
 
     entities: list[SelectEntity] = [FrankEnergieResolutionSelect(price_coordinator)]
-    entities.extend(_setup_battery_entities(realtime_coordinator, entry))
+    entities.extend(_setup_battery_entities(battery_coordinator, entry))
     entities.extend(_setup_enode_entities(hass, vehicle_coordinator, entry))
 
     async_add_entities(entities)

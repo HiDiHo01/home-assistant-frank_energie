@@ -26,7 +26,9 @@ from .coordinator import (
     FrankEnergieCoordinator,
     FrankEnergieSettingsCoordinator,
     FrankEnergiePriceCoordinator,
-    FrankEnergieRealtimeCoordinator,
+    FrankEnergieBatteryCoordinator,
+    FrankEnergieChargerCoordinator,
+    FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
@@ -43,7 +45,9 @@ class FrankEnergieEntryData:
     coordinator: FrankEnergieCoordinator
     settings_coordinator: FrankEnergieSettingsCoordinator
     price_coordinator: FrankEnergiePriceCoordinator
-    realtime_coordinator: FrankEnergieRealtimeCoordinator
+    battery_coordinator: FrankEnergieBatteryCoordinator
+    charger_coordinator: FrankEnergieChargerCoordinator
+    pv_coordinator: FrankEnergiePVCoordinator
     vehicle_coordinator: FrankEnergieVehicleCoordinator
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
@@ -191,7 +195,13 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         price_coordinator = FrankEnergiePriceCoordinator(
             self.hass, self.entry, api, settings_coordinator
         )
-        realtime_coordinator = FrankEnergieRealtimeCoordinator(
+        battery_coordinator = FrankEnergieBatteryCoordinator(
+            self.hass, self.entry, api, settings_coordinator
+        )
+        charger_coordinator = FrankEnergieChargerCoordinator(
+            self.hass, self.entry, api, settings_coordinator
+        )
+        pv_coordinator = FrankEnergiePVCoordinator(
             self.hass, self.entry, api, settings_coordinator
         )
         vehicle_coordinator = FrankEnergieVehicleCoordinator(
@@ -209,7 +219,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         await settings_coordinator.async_config_entry_first_refresh()
         await price_coordinator.async_config_entry_first_refresh()
         await statistics_coordinator.async_config_entry_first_refresh()
-        await realtime_coordinator.async_config_entry_first_refresh()
+        await battery_coordinator.async_config_entry_first_refresh()
+        await charger_coordinator.async_config_entry_first_refresh()
+        await pv_coordinator.async_config_entry_first_refresh()
         await vehicle_coordinator.async_config_entry_first_refresh()
 
         # Schedule updates aligned to price slot boundaries for price coordinator
@@ -220,7 +232,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         await self._save_coordinator_to_hass_data(
             settings_coordinator,
             price_coordinator,
-            realtime_coordinator,
+            battery_coordinator,
+            charger_coordinator,
+            pv_coordinator,
             vehicle_coordinator,
             statistics_coordinator,
         )
@@ -386,7 +400,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self,
         settings_coordinator: FrankEnergieSettingsCoordinator,
         price_coordinator: FrankEnergiePriceCoordinator,
-        realtime_coordinator: FrankEnergieRealtimeCoordinator,
+        battery_coordinator: FrankEnergieBatteryCoordinator,
+        charger_coordinator: FrankEnergieChargerCoordinator,
+        pv_coordinator: FrankEnergiePVCoordinator,
         vehicle_coordinator: FrankEnergieVehicleCoordinator,
         statistics_coordinator: FrankEnergieStatisticsCoordinator,
     ) -> None:
@@ -401,7 +417,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             coordinator=price_coordinator,
             settings_coordinator=settings_coordinator,
             price_coordinator=price_coordinator,
-            realtime_coordinator=realtime_coordinator,
+            battery_coordinator=battery_coordinator,
+            charger_coordinator=charger_coordinator,
+            pv_coordinator=pv_coordinator,
             vehicle_coordinator=vehicle_coordinator,
             statistics_coordinator=statistics_coordinator,
         )

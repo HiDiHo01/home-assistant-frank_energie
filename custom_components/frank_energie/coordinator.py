@@ -2360,8 +2360,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         return result
 
 
-class FrankEnergieRealtimeCoordinator(FrankEnergieCoordinator):
-    """Coordinator for realtime PV, battery, and EV charger data."""
+class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
+    """Coordinator for smart battery data."""
 
     def __init__(
         self,
@@ -2370,52 +2370,143 @@ class FrankEnergieRealtimeCoordinator(FrankEnergieCoordinator):
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
-        """Initialize the realtime coordinator."""
+        """Initialize the battery coordinator."""
         super().__init__(hass, config_entry, api)
-        self.name = "Frank Energie realtime coordinator"
+        self.name = "Frank Energie battery coordinator"
         self.settings_coordinator = settings_coordinator
-        self.update_interval = timedelta(seconds=30)
+        self.update_interval = timedelta(minutes=5)
 
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch realtime energy data."""
+        """Fetch battery data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
-            _LOGGER.debug("Skipping realtime fetch during maintenance window")
             if self.data:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
         today = now_utc.date()
         tomorrow = today + timedelta(days=1)
-        yesterday = today - timedelta(days=1)
-        start_date = yesterday
-
-        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
-            self._has_pv_systems = None
-        self.last_fetch_today = now_utc
+        start_date = today - timedelta(days=1)
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
-        is_smart_charging = self._is_smart_charging_enabled(user_data)
         is_smart_trading = self._is_smart_trading_enabled(user_data)
 
         try:
-            (
-                data_enode_chargers,
-                data_smart_batteries,
-                data_pv_systems,
-                data_user_smart_feed_in,
-            ) = await asyncio.gather(
-                self._fetch_enode_chargers(start_date, is_smart_charging),
-                self._fetch_smart_batteries(is_smart_trading),
-                self._fetch_smart_pv_systems(),
-                self._fetch_user_smart_feed_in(),
-            )
-
+            data_smart_batteries = await self._fetch_smart_batteries(is_smart_trading)
+            
             (
                 data_smart_battery_details,
                 data_smart_battery_sessions,
             ) = await self._get_battery_details_and_sessions(
                 data_smart_batteries, start_date, tomorrow
+            )
+
+            if data_smart_batteries and data_smart_batteries.batteries:
+                self.update_interval = timedelta(minutes=5)
+            else:
+                self.update_interval = timedelta(minutes=15)
+
+            result = _empty_data()
+            if self.settings_coordinator.data:
+                result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+            result[DATA_BATTERIES] = data_smart_batteries
+            result[DATA_BATTERY_DETAILS] = data_smart_battery_details
+            result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch battery data: {err}") from err
+
+
+class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
+    """Coordinator for EV charger data."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+    ) -> None:
+        """Initialize the charger coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie charger coordinator"
+        self.settings_coordinator = settings_coordinator
+        self.update_interval = timedelta(minutes=5)
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch charger data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        if self._should_skip_api_calls(now_utc):
+            if self.data:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+
+        start_date = now_utc.date() - timedelta(days=1)
+
+        user_data = self.settings_coordinator.data.get(DATA_USER)
+        is_smart_charging = self._is_smart_charging_enabled(user_data)
+
+        try:
+            data_enode_chargers = await self._fetch_enode_chargers(start_date, is_smart_charging)
+
+            has_active_charger = False
+            if data_enode_chargers and data_enode_chargers.chargers:
+                for charger in data_enode_chargers.chargers:
+                    if charger.charge_state and charger.charge_state.is_charging:
+                        has_active_charger = True
+                        break
+
+            if has_active_charger:
+                self.update_interval = timedelta(minutes=2)
+            else:
+                self.update_interval = timedelta(minutes=5)
+
+            result = _empty_data()
+            if self.settings_coordinator.data:
+                result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+            result[DATA_ENODE_CHARGERS] = data_enode_chargers
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch charger data: {err}") from err
+
+
+class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
+    """Coordinator for smart PV data."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+    ) -> None:
+        """Initialize the PV coordinator."""
+        super().__init__(hass, config_entry, api)
+        self.name = "Frank Energie PV coordinator"
+        self.settings_coordinator = settings_coordinator
+        self.update_interval = timedelta(minutes=5)
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Fetch PV data."""
+        now_utc = datetime.now(ZoneInfo("UTC"))
+        if self._should_skip_api_calls(now_utc):
+            if self.data:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+
+        today = now_utc.date()
+        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
+            self._has_pv_systems = None
+        self.last_fetch_today = now_utc
+
+        try:
+            data_pv_systems, data_user_smart_feed_in = await asyncio.gather(
+                self._fetch_smart_pv_systems(),
+                self._fetch_user_smart_feed_in(),
             )
 
             data_pv_summary = {}
@@ -2429,36 +2520,22 @@ class FrankEnergieRealtimeCoordinator(FrankEnergieCoordinator):
                     if summary:
                         data_pv_summary[system.id] = summary
 
-            has_pv = bool(data_pv_systems and data_pv_systems.systems)
-            has_battery = bool(data_smart_batteries and data_smart_batteries.batteries)
-            has_active_charger = False
-            if data_enode_chargers and data_enode_chargers.chargers:
-                for charger in data_enode_chargers.chargers:
-                    if charger.charge_state and charger.charge_state.is_charging:
-                        has_active_charger = True
-                        break
-
-            if has_pv or has_battery or has_active_charger:
-                self.update_interval = timedelta(seconds=30)
-            else:
+            if data_pv_systems and data_pv_systems.systems:
                 self.update_interval = timedelta(minutes=5)
+            else:
+                self.update_interval = timedelta(minutes=15)
 
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
                 result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
-            result[DATA_ENODE_CHARGERS] = data_enode_chargers
-            result[DATA_BATTERIES] = data_smart_batteries
-            result[DATA_BATTERY_DETAILS] = data_smart_battery_details
-            result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
             result[DATA_PV_SYSTEMS] = data_pv_systems
             result[DATA_PV_SUMMARY] = data_pv_summary
             result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
-            raise UpdateFailed(f"Failed to fetch realtime data: {err}") from err
-
+            raise UpdateFailed(f"Failed to fetch PV data: {err}") from err
 
 class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
     """Coordinator for EV vehicles."""
