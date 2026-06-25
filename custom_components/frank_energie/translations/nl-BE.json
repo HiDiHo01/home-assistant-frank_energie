@@ -528,7 +528,7 @@
         "name": "Netbeheerder"
       },
       "bank_account_number": {
-        "name": "Rekeningrummer"
+        "name": "Rekeningnummer"
       },
       "preferred_automatic_collection_day": {
         "name": "Voorkeur automatische incasso dag"
@@ -552,7 +552,7 @@
         "name": "Refresh-token verloopt"
       },
       "site_reference": {
-        "name": "Lokatie referentie"
+        "name": "Locatiereferentie"
       },
       "ean": {
         "name": "EAN (Energy Account Number)"
