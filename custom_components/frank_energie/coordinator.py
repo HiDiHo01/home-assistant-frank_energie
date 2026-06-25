@@ -1696,7 +1696,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     async def _fetch_prices_with_fallback(
         self, start_date: date, end_date: date, use_fallback: bool = True
-    ) -> MarketPrices:
+    ) -> MarketPrices | None:
         """Fetch prices with fallback to public prices and cached data.
 
         When use_fallback=False (e.g. tomorrow's prices), empty user prices are
@@ -1734,7 +1734,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if user_prices is None:
             if not use_fallback:
                 _LOGGER.debug("No user prices for tomorrow, skipping fallback")
-                return public_prices
+                return None
             _LOGGER.warning(
                 "Failed to fetch user prices, falling back to public prices"
             )
