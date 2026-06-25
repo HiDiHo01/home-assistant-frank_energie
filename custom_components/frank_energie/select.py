@@ -519,16 +519,9 @@ class FrankEnergieEnodeChargerChargingModeSelect(
             else None
         )
 
-        brand = (
-            charger.information.get("brand")
-            if charger and charger.information and isinstance(charger.information, dict)
-            else MANUFACTURER_FRANK_ENERGIE
-        )
-        model = (
-            charger.information.get("model") 
-            if charger and charger.information and isinstance(charger.information, dict) 
-            else "Charger"
-        )
+        info = charger.information if charger and getattr(charger, "information", None) and isinstance(charger.information, dict) else {}
+        brand = info.get("brand") or MANUFACTURER_FRANK_ENERGIE
+        model = info.get("model") or "Charger"
         name = (
             f"{brand} {model}".strip() if (brand or model) else f"Charger {charger_id}"
         )
