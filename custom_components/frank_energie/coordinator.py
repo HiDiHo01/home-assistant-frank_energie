@@ -2835,7 +2835,7 @@ class FrankEnergieBatterySessionCoordinator(
             UpdateFailed: If an error occurs during data fetching.
         """
         try:
-            today = date.today()
+            today = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
             tomorrow = today + timedelta(days=1)
 
             if not self.api.is_authenticated:
