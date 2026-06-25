@@ -5217,30 +5217,30 @@ async def async_setup_entry(
             # Create sensors for each battery session coordinator
             for battery_id, session_coordinator in session_coordinators.items():
                 sessions_data = session_coordinator.data
-                if sessions_data and sessions_data.sessions:
+                if not sessions_data or not getattr(sessions_data, "sessions", None):
+                    _LOGGER.debug(
+                        "No session data found in session coordinator for battery %s (entry %s). Sensors will still be created but report unknown state.",
+                        battery_id,
+                        config_entry.entry_id,
+                    )
+                else:
                     _LOGGER.debug(
                         "Creating battery session sensors for battery: %s",
                         battery_id,
                     )
-                    for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
-                        if (
-                            not description.authenticated
-                            or settings_coordinator.api.is_authenticated
-                        ):
-                            entities.append(
-                                FrankEnergieBatterySessionSensor(
-                                    coordinator=session_coordinator,
-                                    description=description,
-                                    battery_id=battery_id,
-                                    is_total=False,
-                                )
+                for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
+                    if (
+                        not description.authenticated
+                        or settings_coordinator.api.is_authenticated
+                    ):
+                        entities.append(
+                            FrankEnergieBatterySessionSensor(
+                                coordinator=session_coordinator,
+                                description=description,
+                                battery_id=battery_id,
+                                is_total=False,
                             )
-                else:
-                    _LOGGER.debug(
-                        "No session data found in session coordinator for battery %s (entry %s)",
-                        battery_id,
-                        config_entry.entry_id,
-                    )
+                        )
 
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0

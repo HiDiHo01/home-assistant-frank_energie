@@ -61,6 +61,7 @@ from python_frank_energie.models import (
 )
 
 from .const import (
+    TIMEZONE_AMSTERDAM,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
@@ -378,7 +379,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         now_utc = datetime.now(ZoneInfo("UTC"))
-        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         tomorrow = today + timedelta(days=1)
 
         # skip API calls between 00:00 and 01:00 UTC to avoid maintenance window
@@ -548,7 +549,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         now_utc: datetime,
     ) -> MarketPrices | None:
         """Fetch and cache tomorrow's prices if the release window has passed."""
-        tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
         now_local = now_utc.astimezone(tz_amsterdam)
 
         if now_local.hour < 13:
@@ -1929,7 +1930,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # event-driven (e.g. HA restart, button press) outside 13:00–15:00 Europe/Amsterdam local time.
         default_interval = None
 
-        tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
         now_local = now_utc.astimezone(tz_amsterdam)
         local_time = now_local.time()
 
@@ -2346,7 +2347,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
-        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         if (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
@@ -2354,7 +2355,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         ):
             new_interval = None
         else:
-            tz_amsterdam = ZoneInfo("Europe/Amsterdam")
+            tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
             now_local = now_utc.astimezone(tz_amsterdam)
             local_time = now_local.time()
             if local_time < time(13, 0):
@@ -2375,7 +2376,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch price data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
-        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         tomorrow = today + timedelta(days=1)
 
         skip_api_calls = self._should_skip_api_calls(now_utc)
@@ -2511,7 +2512,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         tomorrow = today + timedelta(days=1)
         start_date = today - timedelta(days=1)
 
@@ -2573,7 +2574,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
             raise UpdateFailed("Maintenance window active")
 
         start_date = now_utc.astimezone(
-            ZoneInfo("Europe/Amsterdam")
+            ZoneInfo(TIMEZONE_AMSTERDAM)
         ).date() - timedelta(days=1)
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
@@ -2633,7 +2634,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         if self.last_fetch_today is None or self.last_fetch_today.date() != today:
             self._has_pv_systems = None
         self.last_fetch_today = now_utc
@@ -2762,7 +2763,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         yesterday = today - timedelta(days=1)
         start_date = yesterday
 
@@ -2835,7 +2836,7 @@ class FrankEnergieBatterySessionCoordinator(
             UpdateFailed: If an error occurs during data fetching.
         """
         try:
-            today = date.today()
+            today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
             tomorrow = today + timedelta(days=1)
 
             if not self.api.is_authenticated:
