@@ -609,8 +609,14 @@ class FrankEnergieEnodeChargeLimitNumber(
                 if enode_data
                 else None
             )
-            info = item.information if item and getattr(item, "information", None) else None
-            brand = (getattr(info, "brand", None) if info else None) or MANUFACTURER_FRANK_ENERGIE
+            info = (
+                item.information
+                if item and getattr(item, "information", None)
+                else None
+            )
+            brand = (
+                getattr(info, "brand", None) if info else None
+            ) or MANUFACTURER_FRANK_ENERGIE
             model = (getattr(info, "model", None) if info else None) or "Vehicle"
         else:
             enode_data = coordinator.data.get(DATA_ENODE_CHARGERS)
@@ -619,7 +625,13 @@ class FrankEnergieEnodeChargeLimitNumber(
                 if enode_data
                 else None
             )
-            info = item.information if item and getattr(item, "information", None) and isinstance(item.information, dict) else {}
+            info = (
+                item.information
+                if item
+                and getattr(item, "information", None)
+                and isinstance(item.information, dict)
+                else {}
+            )
             brand = info.get("brand") or MANUFACTURER_FRANK_ENERGIE
             model = info.get("model") or "Charger"
 
