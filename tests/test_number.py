@@ -143,6 +143,12 @@ async def test_enode_charge_limit_number_action(mock_coordinator):
         mock_coordinator, charger_id, "initialCharge", "initial_charge", False
     )
 
+    # Verify invalid service values are rejected before any coordinator call is made
+    for invalid_val in (-1, 101, 50.9):
+        with pytest.raises(ValueError):
+            await entity.async_set_native_value(invalid_val)
+        mock_coordinator.async_update_enode_charge_settings.assert_not_called()
+
     await entity.async_set_native_value(25.0)
 
     mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
