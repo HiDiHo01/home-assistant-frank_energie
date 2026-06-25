@@ -5141,7 +5141,7 @@ async def async_setup_entry(
         ):
             if not description.authenticated or battery_coordinator.api.is_authenticated:
                 entities.append(
-                    FrankEnergieSensor(charger_coordinator, description, config_entry)
+                    FrankEnergieSensor(battery_coordinator, description, config_entry)
                 )
                 _LOGGER.debug("Added aggregate battery sensor for %s", description.key)
 
