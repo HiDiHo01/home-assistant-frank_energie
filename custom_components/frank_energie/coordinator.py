@@ -1780,6 +1780,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         return user_prices
 
     async def _handle_fetch_exceptions(self, ex):
+        if isinstance(ex, (ConfigEntryAuthFailed, AuthRequiredException)):
+            raise ex
         if isinstance(ex, UpdateFailed):
             if (
                 self.data[DATA_ELECTRICITY] is not None
