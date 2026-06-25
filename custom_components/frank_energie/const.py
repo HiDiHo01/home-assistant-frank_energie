@@ -1,7 +1,9 @@
 """
 Constants used in the Frank Energie integration.
 """
+
 # const.py
+# date 2026.6.24
 
 import logging
 from dataclasses import dataclass
@@ -31,7 +33,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2026.6.19"
+VERSION: Final[str] = "2026.6.21"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"
@@ -58,11 +60,19 @@ CONF_AUTH_TOKEN: Final[str] = "auth_token"
 CONF_REFRESH_TOKEN: Final[str] = "refresh_token"
 CONF_SITE: Final[str] = "site_reference"
 CONF_RESOLUTION: Final[str] = "resolution"  # 15-minute price resolution
+CONF_MONTHLY_SUBSCRIPTION_FEE: Final[str] = "monthly_subscription_fee"
+CONF_ENERGY_TAX_ODE: Final[str] = "energy_tax_ode"
+CONF_ENERGY_TAX_REDUCTION: Final[str] = "energy_tax_reduction"
+CONF_NETWORK_CHARGES: Final[str] = "network_charges"
 
 # --- Default values for some config constants ---
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
 DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
 DEFAULT_RESOLUTION: Final[str] = "PT15M"
+DEFAULT_MONTHLY_SUBSCRIPTION_FEE: Final[float] = 7.00
+DEFAULT_ENERGY_TAX_ODE: Final[float] = 34.92
+DEFAULT_ENERGY_TAX_REDUCTION: Final[float] = -52.42
+DEFAULT_NETWORK_CHARGES: Final[float] = 39.87
 
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
 SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
@@ -85,6 +95,8 @@ DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 DATA_PV_SYSTEMS: Final[str] = "smart_pv_systems"
 DATA_PV_SUMMARY: Final[str] = "smart_pv_summary"
 DATA_USER_SMART_FEED_IN: Final[str] = "user_smart_feed_in"
+DATA_TOKEN_EXPIRES_AT: Final[str] = "auth_token_expires_at"
+DATA_REFRESH_TOKEN_EXPIRES_AT: Final[str] = "refresh_token_expires_at"
 
 # --- Attribute Constants ---
 ATTR_FROM_TIME: Final[str] = "from_time"

@@ -56,7 +56,6 @@ _DEPENDENT_PLATFORMS: list[str] = [
     Platform.DATETIME,
     Platform.NUMBER,
     Platform.SELECT,
-    Platform.SWITCH,
 ]
 PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
 
@@ -131,6 +130,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         """Initialize the Frank Energie component."""
         self.hass = hass
         self.entry = entry
+
 
     async def _schedule_aligned_updates(
         self,

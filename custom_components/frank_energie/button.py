@@ -12,7 +12,7 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DOMAIN,
-    SERVICE_NAME_BATTERY_SESSIONS,
+    SERVICE_NAME_BATTERIES,
     SERVICE_NAME_PRICES,
     VERSION,
 )
@@ -61,7 +61,7 @@ async def async_setup_entry(
                 description=FrankEnergieButtonEntityDescription(
                     key="refresh_battery_sessions",
                     name="Refresh Battery Sessions",
-                    service_name=SERVICE_NAME_BATTERY_SESSIONS,
+                    service_name=SERVICE_NAME_BATTERIES,
                 ),
                 entry=entry,
             )
@@ -85,7 +85,7 @@ class FrankEnergieRefreshButton(ButtonEntity):
         entry: ConfigEntry,
     ) -> None:
         self.entity_description = description  # type: ignore[override]
-        self._attr_translation_key = description.key
+        self._attr_translation_key = description.translation_key or description.key
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._coordinator = coordinator
 

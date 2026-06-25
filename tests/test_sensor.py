@@ -532,7 +532,7 @@ def test_contract_sensors_with_connections():
     assert contract_start_sensor.value_fn(data) == expected_date
 
     # Evaluate EleccontractStatus value_fn
-    assert elec_status_sensor.value_fn(data) == "SWITCHED"
+    assert elec_status_sensor.value_fn(data) == "switched"
 
     # Evaluate GascontractStatus value_fn (should be None since segment is ELECTRICITY)
     assert gas_status_sensor.value_fn(data) is None
@@ -544,7 +544,7 @@ def test_contract_sensors_with_connections():
         contractStatus="IN_DELIVERY",
     )
     mock_user.connections = [conn_obj_gas]
-    assert gas_status_sensor.value_fn(data) == "IN_DELIVERY"
+    assert gas_status_sensor.value_fn(data) == "in_delivery"
     assert elec_status_sensor.value_fn(data) is None
 
 
@@ -596,3 +596,56 @@ def test_enode_charger_sensor_properties_and_value(
         coordinator=mock_coordinator, description=rate_desc, charger=mock_charger
     )
     assert sensor_rate.native_value == 11.0
+
+
+def test_calculate_market_percent_tax() -> None:
+    """Test the _calculate_market_percent_tax helper function under various pricing scenarios."""
+    from unittest.mock import MagicMock
+    from custom_components.frank_energie.sensor import _calculate_market_percent_tax
+
+    # Case 1: None/empty inputs
+    assert _calculate_market_percent_tax(None) is None
+
+    # Case 2: Current hour is present and non-zero
+    current_hour = MagicMock()
+    current_hour.market_price = 0.10
+    current_hour.market_price_tax = 0.021
+
+    price_data = MagicMock()
+    price_data.current_hour = current_hour
+    price_data.all = [current_hour]
+
+    assert _calculate_market_percent_tax(price_data) == 21.0
+
+    # Case 3: Current hour has price 0, but other hours are non-zero
+    zero_hour = MagicMock()
+    zero_hour.market_price = 0.0
+    zero_hour.market_price_tax = 0.0
+
+    other_hour = MagicMock()
+    other_hour.market_price = 0.20
+    other_hour.market_price_tax = 0.042
+
+    price_data_fallback = MagicMock()
+    price_data_fallback.current_hour = zero_hour
+    price_data_fallback.all = [zero_hour, other_hour]
+
+    assert _calculate_market_percent_tax(price_data_fallback) == 21.0
+
+    # Case 4: Negative prices (should calculate correctly)
+    negative_hour = MagicMock()
+    negative_hour.market_price = -0.05
+    negative_hour.market_price_tax = -0.0105
+
+    price_data_neg = MagicMock()
+    price_data_neg.current_hour = negative_hour
+    price_data_neg.all = [negative_hour]
+
+    assert _calculate_market_percent_tax(price_data_neg) == 21.0
+
+    # Case 5: All hours are zero
+    price_data_all_zero = MagicMock()
+    price_data_all_zero.current_hour = zero_hour
+    price_data_all_zero.all = [zero_hour, zero_hour]
+
+    assert _calculate_market_percent_tax(price_data_all_zero) == 0.0

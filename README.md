@@ -8,6 +8,40 @@ Middels deze integratie wordt de huidige prijsinformatie van Frank Energie besch
 
 De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuur te schakelen op basis van de huidige energieprijs.
 
+## Documentation
+
+- [Documentation Index](docs/index.md) - Complete documentation overview.
+
+### User Documentation
+
+- [Configuration](docs/configuration.md) - Setup, authentication, site selection, and configuration.
+- [Diagnostics](docs/diagnostics.md) - Collect diagnostics, enable debug logging, and report issues.
+- [Entities](docs/entities.md) - Overview of all entity platforms and features.
+- [Events](docs/events.md) - Home Assistant events fired by the Frank Energie integration.
+- [Examples](docs/examples.md) - Automation examples, notifications, and dashboard ideas.
+- [FAQ](docs/faq.md) - Frequently asked questions and common scenarios.
+- [Smart Battery](docs/smart_battery.md) - Smart Battery features, modes, and configuration.
+- [Smart Charging](docs/smart_charging.md) - Smart Charging features and troubleshooting.
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
+- [Update Frequency](docs/update_frequency.md) - Polling intervals, maintenance windows, and price publication timing.
+- [User Features](docs/user_features.md) - Overview of all supported Frank Energie features.
+
+### Contributor Documentation
+
+- [Architecture](docs/architecture.md) - Integration architecture, coordinator design, and data flow.
+- [Developer Guide](docs/developer.md) - Development standards, testing, and contribution guidelines.
+- [Release Process](docs/release_process.md) - Versioning, release workflow, and HACS publishing.
+
+### ChatGPT Frank Energie Assistant
+
+- [ChatGPT Frank Energie Assistant](https://chatgpt.com/g/g-6a30a8e006b081919967c4c79fd542d7-frank-energie-assistant)
+
+# Services
+
+The Frank Energie integration does not currently register any Home Assistant services.
+
+The integration exposes functionality through entities, events, buttons, selects, and sensors.
+
 ## Installatie
 Plaats de map `frank_energie` uit de map `custom_components` binnen deze repo in de `custom_components` map van je Home Assistant installatie.
 
@@ -57,7 +91,7 @@ Middels [apex-card](https://github.com/RomRider/apexcharts-card) is het mogelijk
 
 #### Voorbeeld 1 - Alle data
 
-![Apex graph voorbeeld 1](/images/48%20uur%20per%20kwartier.png "Voorbeeld 1")
+![Apex graph voorbeeld 1](images/48%20uur%20per%20kwartier.png "Voorbeeld 1")
 
 ```yaml 
 type: custom:apexcharts-card
@@ -138,7 +172,7 @@ apex_config:
 
 #### Voorbeeld 2 - Komende 10 uur
 
-![Apex graph voorbeeld 2](/images/example_2.png "Voorbeeld 2")
+![Apex graph voorbeeld 2](images/example_2.png "Voorbeeld 2")
 
 ```yaml
 type: custom:apexcharts-card
@@ -219,7 +253,7 @@ apex_config:
 ```
 #### Voorbeeld 3 - Vandaag en morgen (conditional)
 
-![Apex graph voorbeeld 3](/images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
+![Apex graph voorbeeld 3](images/02dd4de4d8ec3260b3633d70933be667.png "Voorbeeld 3")
 
 ```
 type: custom:apexcharts-card
@@ -396,7 +430,7 @@ card:
 
 #### Voorbeeld 4 - Kosten per maand dit jaar
 
-![Apex graph voorbeeld 4](/images/kosten%20per%20maand%20dit%20jaar.png "Voorbeeld 4")
+![Apex graph voorbeeld 4](images/kosten%20per%20maand%20dit%20jaar.png "Voorbeeld 4")
 
 ```
 type: custom:apexcharts-card
@@ -474,7 +508,7 @@ experimental:
 
 #### Voorbeeld 5 - Kosten per maand vorig jaar
 
-![Apex graph voorbeeld 5](/images/kosten%20per%20maand%20vorig%20jaar.png "Voorbeeld 5")
+![Apex graph voorbeeld 5](images/kosten%20per%20maand%20vorig%20jaar.png "Voorbeeld 5")
 
 ```
 type: custom:apexcharts-card
@@ -542,7 +576,7 @@ experimental:
 
 #### Voorbeeld 1 - Laagste en hoogste prijs vandaag
 
-![markdown voorbeeld 5](/images/vandaag%20laagste%20hoogste.png "Voorbeeld 1")
+![markdown voorbeeld 5](images/vandaag%20laagste%20hoogste.png "Voorbeeld 1")
 
 ```
 type: markdown

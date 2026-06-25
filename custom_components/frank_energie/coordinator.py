@@ -73,6 +73,8 @@ from .const import (
     DATA_MONTH_SUMMARY,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
+    DATA_REFRESH_TOKEN_EXPIRES_AT,
+    DATA_TOKEN_EXPIRES_AT,
     DATA_USAGE,
     DATA_USER,
     DATA_USER_SITES,
@@ -189,6 +191,8 @@ def _empty_data() -> FrankEnergieData:
         DATA_PV_SUMMARY: None,
         DATA_USER_SMART_FEED_IN: None,
         DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
+        DATA_REFRESH_TOKEN_EXPIRES_AT: None,
+        DATA_TOKEN_EXPIRES_AT: None,
     }
 
 
@@ -422,18 +426,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # ---------------------------------------------------
         _LOGGER.debug(
             "Today electricity periods: %s",
-            len(self.cached_prices_today.prices_today.electricity.all)
-            if self.cached_prices_today
-            and self.cached_prices_today.prices_today
-            and self.cached_prices_today.prices_today.electricity
-            else 0,
+            (
+                len(self.cached_prices_today.prices_today.electricity.all)
+                if self.cached_prices_today
+                and self.cached_prices_today.prices_today
+                and self.cached_prices_today.prices_today.electricity
+                else 0
+            ),
         )
 
         _LOGGER.debug(
             "Tomorrow electricity periods: %s",
-            len(prices_tomorrow.electricity.all)
-            if prices_tomorrow and prices_tomorrow.electricity
-            else 0,
+            (
+                len(prices_tomorrow.electricity.all)
+                if prices_tomorrow and prices_tomorrow.electricity
+                else 0
+            ),
         )
         result = self._aggregate_data(self.cached_prices_today, prices_tomorrow)
         self.cached_prices = result
@@ -607,9 +615,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "[%s][%s] Tomorrow electricity periods: %s",
                 self.config_entry.title,
                 self.site_reference,
-                len(prices_tomorrow.electricity.all)
-                if prices_tomorrow and prices_tomorrow.electricity
-                else 0,
+                (
+                    len(prices_tomorrow.electricity.all)
+                    if prices_tomorrow and prices_tomorrow.electricity
+                    else 0
+                ),
             )
             _LOGGER.debug(
                 "Listeners: %s",
@@ -617,9 +627,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             _LOGGER.debug(
                 "Coordinator electricity periods: %s",
-                len(self.data[DATA_ELECTRICITY].all)
-                if self.data[DATA_ELECTRICITY]
-                else 0,
+                (
+                    len(self.data[DATA_ELECTRICITY].all)
+                    if self.data[DATA_ELECTRICITY]
+                    else 0
+                ),
             )
 
         return self.cached_prices_tomorrow
@@ -889,7 +901,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             user_data = await self.api.user(self.site_reference)
-            if not self._country_code:
+            if user_data is not None:
+                try:
+                    smart_hvac = await self.api.smart_hvac_status()
+                    if smart_hvac:
+                        user_data.smartHvac = smart_hvac
+                except (RequestException, FrankEnergieException, ClientError) as ex:
+                    _LOGGER.debug(
+                        "Smart HVAC feature is not supported or accessible on this account: %s",
+                        ex,
+                    )
+            if not self._country_code and user_data:
                 country_code_raw = user_data.countryCode
                 if isinstance(country_code_raw, str) and country_code_raw:
                     country_code = country_code_raw.upper()
@@ -1505,6 +1527,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> FrankEnergieData:
         """Aggregate today's cache and tomorrow's prices into FrankEnergieData."""
         result: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
+            DATA_TOKEN_EXPIRES_AT: self.api.token_expires_at,
+            DATA_REFRESH_TOKEN_EXPIRES_AT: self.api.refresh_token_expires_at,
             DATA_MONTH_SUMMARY: cache.data_month_summary,
             DATA_INVOICES: cache.data_invoices,
             DATA_USAGE: cache.data_period_usage,
