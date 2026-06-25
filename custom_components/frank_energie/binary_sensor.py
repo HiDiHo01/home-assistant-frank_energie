@@ -679,13 +679,13 @@ async def async_setup_entry(
 
     entities: list[FrankEnergieBinarySensor] = []
 
-    if settings_coordinator.api.is_authenticated:
-        for description in BINARY_SENSOR_DESCRIPTIONS:
-            if description.key in ("smart_feed_in", "smart_pv_systems"):
-                coord = pv_coordinator
-            else:
-                coord = settings_coordinator
+    for description in BINARY_SENSOR_DESCRIPTIONS:
+        if description.key in ("smart_feed_in", "smart_pv_systems"):
+            coord = pv_coordinator
+        else:
+            coord = settings_coordinator
 
+        if coord.api.is_authenticated:
             entities.append(
                 FrankEnergieBinarySensor(
                     coord,
@@ -694,6 +694,7 @@ async def async_setup_entry(
                 )
             )
 
+    if battery_coordinator.api.is_authenticated:
         entities.extend(
             FrankEnergieBinarySensor(
                 battery_coordinator,
