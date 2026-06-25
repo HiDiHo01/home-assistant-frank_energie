@@ -2180,6 +2180,82 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
 
+    async def async_update_enode_charge_settings(
+        self, device_id: str, is_vehicle: bool, mutations: dict[str, Any]
+    ) -> bool:
+        """Serialize charge settings mutations to avoid race conditions.
+
+        The API requires all 13 fields to be present in the mutation payload.
+        By serializing updates through the mutation queue, we ensure that
+        concurrent interactions (e.g. from sliders and selects) read fresh
+        local state and don't overwrite each other with stale values.
+        """
+        success = False
+
+        async def _update() -> None:
+            nonlocal success
+            from .helpers import build_charge_settings_input
+
+            # Fetch freshest local state
+            if is_vehicle:
+                enode_data = self.data.get(DATA_ENODE_VEHICLES)
+                item = (
+                    next((v for v in enode_data.vehicles if v.id == device_id), None)
+                    if enode_data
+                    else None
+                )
+            else:
+                enode_data = self.data.get(DATA_ENODE_CHARGERS)
+                item = (
+                    next((c for c in enode_data.chargers if c.id == device_id), None)
+                    if enode_data
+                    else None
+                )
+
+            if not item or not item.charge_settings:
+                _LOGGER.error(
+                    "Cannot update charge settings: item %s not found or missing settings",
+                    device_id,
+                )
+                return
+
+            # Construct full payload from fresh state
+            input_data = build_charge_settings_input(item.charge_settings)
+
+            # Apply mutations
+            for k, v in mutations.items():
+                input_data[k] = v
+
+            # Send to API
+            try:
+                if is_vehicle:
+                    success = await self.api.enode_update_vehicle_charge_settings(
+                        input_data
+                    )
+                else:
+                    success = await self.api.enode_update_charger_charge_settings(
+                        input_data
+                    )
+            except Exception:
+                _LOGGER.exception("Failed to update charge settings for %s", device_id)
+                success = False
+
+            if success:
+                # Update local cache memory optimistically
+                for k, v in mutations.items():
+                    if k == "minChargeLimit":
+                        item.charge_settings.min_charge_limit = v
+                    elif k == "maxChargeLimit":
+                        item.charge_settings.max_charge_limit = v
+                    elif k == "initialCharge":
+                        item.charge_settings.initial_charge = v
+                    elif k == "isSmartChargingEnabled":
+                        item.charge_settings.is_smart_charging_enabled = v
+                    # other fields if necessary
+
+        await self._mutation_queue.add(_update)
+        return success
+
 
 class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
     """Coordinator for user configuration and site settings."""
@@ -2286,7 +2362,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 connection_id = connection.get("connectionId")
             else:
                 connection_id = getattr(connection, "connectionId", None)
-            
+
             self._connection_id = connection_id
 
         if skip_api_calls:
@@ -2356,9 +2432,15 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         if self.settings_coordinator.data:
             result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-            result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
-            result[DATA_TOKEN_EXPIRES_AT] = self.settings_coordinator.data.get(DATA_TOKEN_EXPIRES_AT)
-            result[DATA_REFRESH_TOKEN_EXPIRES_AT] = self.settings_coordinator.data.get(DATA_REFRESH_TOKEN_EXPIRES_AT)
+            result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                DATA_USER_SITES
+            )
+            result[DATA_TOKEN_EXPIRES_AT] = self.settings_coordinator.data.get(
+                DATA_TOKEN_EXPIRES_AT
+            )
+            result[DATA_REFRESH_TOKEN_EXPIRES_AT] = self.settings_coordinator.data.get(
+                DATA_REFRESH_TOKEN_EXPIRES_AT
+            )
 
         self.cached_prices = result
 
@@ -2403,7 +2485,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
 
         try:
             data_smart_batteries = await self._fetch_smart_batteries(is_smart_trading)
-            
+
             (
                 data_smart_battery_details,
                 data_smart_battery_sessions,
@@ -2419,7 +2501,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                    DATA_USER_SITES
+                )
             result[DATA_BATTERIES] = data_smart_batteries
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
@@ -2459,7 +2543,9 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
         is_smart_charging = self._is_smart_charging_enabled(user_data)
 
         try:
-            data_enode_chargers = await self._fetch_enode_chargers(start_date, is_smart_charging)
+            data_enode_chargers = await self._fetch_enode_chargers(
+                start_date, is_smart_charging
+            )
 
             has_active_charger = False
             if data_enode_chargers and data_enode_chargers.chargers:
@@ -2476,7 +2562,9 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                    DATA_USER_SITES
+                )
             result[DATA_ENODE_CHARGERS] = data_enode_chargers
             return result
         except Exception as err:
@@ -2538,7 +2626,9 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                    DATA_USER_SITES
+                )
             result[DATA_PV_SYSTEMS] = data_pv_systems
             result[DATA_PV_SUMMARY] = data_pv_summary
             result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
@@ -2546,6 +2636,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         except Exception as err:
             await self._handle_fetch_exceptions(err)
             raise UpdateFailed(f"Failed to fetch PV data: {err}") from err
+
 
 class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
     """Coordinator for EV vehicles."""
@@ -2599,7 +2690,9 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                    DATA_USER_SITES
+                )
             result[DATA_ENODE_VEHICLES] = enode_vehicles
             return result
         except Exception as err:
@@ -2645,7 +2738,9 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-                result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+                result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                    DATA_USER_SITES
+                )
             result[DATA_MONTH_SUMMARY] = data_month_summary
             result[DATA_INVOICES] = data_invoices
             result[DATA_USAGE] = data_period_usage
