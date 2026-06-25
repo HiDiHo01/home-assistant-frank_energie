@@ -665,6 +665,10 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         elif sensor_type == "operational_status":
             self._attr_name = "Operational status"
             self._attr_icon = "mdi:information-outline"
+        elif sensor_type == "operational_status_timestamp":
+            self._attr_name = "Last updated"
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
+            self._attr_icon = "mdi:clock-outline"
         elif sensor_type == "steering_status":
             self._attr_name = "Steering status"
             self._attr_icon = "mdi:solar-power"
@@ -683,6 +687,8 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
             return summary.total_bonus
         if self._sensor_type == "operational_status":
             return summary.operational_status
+        if self._sensor_type == "operational_status_timestamp":
+            return summary.operational_status_timestamp
         if self._sensor_type == "steering_status":
             if summary.steering_status is not None:
                 return summary.steering_status
@@ -1542,7 +1548,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=None,
         icon="mdi:clock-digital",
         authenticated=True,
-        service_name=SERVICE_NAME_USER,
+        service_name=SERVICE_NAME_SETTINGS,
         value_fn=lambda data: (
             int(
                 data[DATA_CONTRACT_PRICE_RESOLUTION_STATE]
@@ -5233,6 +5239,9 @@ async def async_setup_entry(
                         ),
                         FrankEnergiePvSensor(
                             pv_coordinator, system.id, "operational_status"
+                        ),
+                        FrankEnergiePvSensor(
+                            pv_coordinator, system.id, "operational_status_timestamp"
                         ),
                         FrankEnergiePvSensor(
                             pv_coordinator, system.id, "steering_status"

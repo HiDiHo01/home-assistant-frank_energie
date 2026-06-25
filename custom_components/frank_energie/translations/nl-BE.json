@@ -542,6 +542,9 @@
       "pv_operational_status": {
         "name": "Operationele status"
       },
+      "pv_operational_status_timestamp": {
+        "name": "Laatst bijgewerkt"
+      },
       "pv_steering_status": {
         "name": "Sturingsstatus"
       },

@@ -221,6 +221,7 @@ def test_no_unused_or_missing_translation_keys():
     dynamic_whitelist = {
         "pv_steering_status",
         "pv_operational_status",
+        "pv_operational_status_timestamp",
         "pv_total_bonus",
     }
 

@@ -671,6 +671,9 @@
       "pv_operational_status": {
         "name": "Operational status"
       },
+      "pv_operational_status_timestamp": {
+        "name": "Last updated"
+      },
       "pv_steering_status": {
         "name": "Steering status"
       },

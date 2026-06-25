@@ -2209,6 +2209,8 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             result[DATA_USER] = data_user
             result[DATA_USER_SITES] = user_sites
+            result[DATA_TOKEN_EXPIRES_AT] = self.api.token_expires_at
+            result[DATA_REFRESH_TOKEN_EXPIRES_AT] = self.api.refresh_token_expires_at
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -2355,6 +2357,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if self.settings_coordinator.data:
             result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
             result[DATA_USER_SITES] = self.settings_coordinator.data.get(DATA_USER_SITES)
+            result[DATA_TOKEN_EXPIRES_AT] = self.settings_coordinator.data.get(DATA_TOKEN_EXPIRES_AT)
+            result[DATA_REFRESH_TOKEN_EXPIRES_AT] = self.settings_coordinator.data.get(DATA_REFRESH_TOKEN_EXPIRES_AT)
 
         self.cached_prices = result
 

@@ -479,7 +479,7 @@ class FrankEnergieFixedMonthlyCostsNumber(
             self._entry,
             options={
                 **self._entry.options,
-                CONF_MONTHLY_SUBSCRIPTION_FEE: value,
+                self.entity_description.key: value,
             },
         )
 
