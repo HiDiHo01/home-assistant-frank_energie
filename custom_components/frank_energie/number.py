@@ -173,6 +173,8 @@ async def async_setup_entry(
     """Set up Frank Energie number entities."""
     settings_coordinator = config_entry.runtime_data.settings_coordinator
     battery_coordinator = config_entry.runtime_data.battery_coordinator
+    vehicle_coordinator = config_entry.runtime_data.vehicle_coordinator
+    charger_coordinator = config_entry.runtime_data.charger_coordinator
     entities: list[NumberEntity] = []
 
     if battery_coordinator.api.is_authenticated:
@@ -194,12 +196,12 @@ async def async_setup_entry(
                 )
             )
 
-        enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+        enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
         if enode_vehicles and enode_vehicles.vehicles:
             for vehicle in enode_vehicles.vehicles:
                 entities.append(
                     FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
+                        vehicle_coordinator,
                         vehicle.id,
                         "minChargeLimit",
                         translation_key="min_charge_limit",
@@ -208,19 +210,19 @@ async def async_setup_entry(
                 )
                 entities.append(
                     FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
+                        vehicle_coordinator,
                         vehicle.id,
                         "maxChargeLimit",
                         translation_key="max_charge_limit",
                         is_vehicle=True,
                     )
                 )
-        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+        enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
         if enode_chargers and enode_chargers.chargers:
             for charger in enode_chargers.chargers:
                 entities.append(
                     FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
+                        charger_coordinator,
                         charger.id,
                         "minChargeLimit",
                         translation_key="min_charge_limit",
@@ -229,7 +231,7 @@ async def async_setup_entry(
                 )
                 entities.append(
                     FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
+                        charger_coordinator,
                         charger.id,
                         "maxChargeLimit",
                         translation_key="max_charge_limit",
@@ -238,7 +240,7 @@ async def async_setup_entry(
                 )
                 entities.append(
                     FrankEnergieEnodeChargeLimitNumber(
-                        coordinator,
+                        charger_coordinator,
                         charger.id,
                         "initialCharge",
                         translation_key="initial_charge",
