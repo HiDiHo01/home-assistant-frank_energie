@@ -1103,7 +1103,7 @@ async def test_coordinator_retry_incomplete_usage_data(
 
 
 @pytest.mark.asyncio
-async def test_promote_tomorrow_prices_updates_all_caches(coordinator):
+async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
     """Test that promote_tomorrow_prices promotes tomorrow's prices to all relevant today caching fields."""
     tomorrow_prices = MagicMock()
     tomorrow_prices.electricity = MagicMock()
@@ -1149,7 +1149,7 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator):
 @pytest.mark.asyncio
 async def test_get_static_data_fallback_to_promoted_prices_when_api_returns_empty(
     coordinator,
-):
+) -> None:
     """Test that _get_static_data falls back to _static_prices_today if the API returns no prices but cached prices are valid for today."""
     from datetime import date
 
@@ -1193,7 +1193,7 @@ async def test_get_static_data_fallback_to_promoted_prices_when_api_returns_empt
 @pytest.mark.asyncio
 async def test_get_static_data_no_fallback_when_cached_prices_belong_to_other_day(
     coordinator,
-):
+) -> None:
     """Test that _get_static_data does NOT fall back if the cached prices are for a different day."""
     from datetime import date
 
@@ -1236,7 +1236,7 @@ async def test_get_static_data_no_fallback_when_cached_prices_belong_to_other_da
 @pytest.mark.asyncio
 async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
     coordinator,
-):
+) -> None:
     """Test that _get_static_data falls back to cached prices when both electricity and gas are valid for today."""
     from datetime import date
 
@@ -1281,7 +1281,7 @@ async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
 @pytest.mark.asyncio
 async def test_price_coordinator_before_window(
     mock_frank_energie, mock_config_entry, monkeypatch
-):
+) -> None:
     """Test that price coordinator update interval is None before local 13:00 when tomorrow's prices are not cached."""
     # Mock utcnow to 10:00 UTC (12:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
@@ -1305,7 +1305,7 @@ async def test_price_coordinator_before_window(
 @pytest.mark.asyncio
 async def test_price_coordinator_inside_window(
     mock_frank_energie, mock_config_entry, monkeypatch
-):
+) -> None:
     """Test that price coordinator update interval is 5 minutes inside local 13:00 to 15:00 when tomorrow's prices are not cached."""
     # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
@@ -1329,7 +1329,7 @@ async def test_price_coordinator_inside_window(
 @pytest.mark.asyncio
 async def test_price_coordinator_skipped_when_cached(
     mock_frank_energie, mock_config_entry, monkeypatch
-):
+) -> None:
     """Test that price coordinator update interval is None if tomorrow's prices are already cached."""
     # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
@@ -1357,7 +1357,7 @@ async def test_price_coordinator_skipped_when_cached(
 @pytest.mark.asyncio
 async def test_price_coordinator_midnight_rollover(
     mock_frank_energie, mock_config_entry
-):
+) -> None:
     """Test that promote_tomorrow_prices correctly promotes tomorrow's prices to today."""
     settings_coordinator = FrankEnergieSettingsCoordinator(
         MagicMock(), mock_config_entry, mock_frank_energie
@@ -1386,7 +1386,7 @@ async def test_price_coordinator_midnight_rollover(
 
 
 @pytest.mark.asyncio
-async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry):
+async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry) -> None:
     """Test default properties and intervals of sub-coordinators."""
     hass = MagicMock()
     settings = FrankEnergieSettingsCoordinator(
@@ -1423,7 +1423,7 @@ async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry
 @pytest.mark.asyncio
 async def test_async_update_enode_charge_settings_optimistic_cache(
     coordinator, mock_frank_energie, create_mock_vehicle
-):
+) -> None:
     """Test optimistic cache updates for all mutation fields in async_update_enode_charge_settings."""
     from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
     from datetime import datetime

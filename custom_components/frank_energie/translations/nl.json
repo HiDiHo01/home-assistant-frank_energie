@@ -736,7 +736,7 @@
         }
       },
       "battery_status": {
-        "name": "Battery Status",
+        "name": "Batterijstatus",
         "state": {
           "status_charging": "Aan het laden",
           "status_discharging": "Aan het ontladen",

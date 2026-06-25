@@ -73,6 +73,7 @@ from .const import (
     DATA_USER_SITES,
     DOMAIN,
     ICON,
+    ICON_CLOCK_OUTLINE,
     PER_UNIT_TO_UNIT,
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_BATTERY_SESSIONS,
@@ -668,7 +669,7 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         elif sensor_type == "operational_status_timestamp":
             self._attr_name = "Last updated"
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
-            self._attr_icon = "mdi:clock-outline"
+            self._attr_icon = ICON_CLOCK_OUTLINE
         elif sensor_type == "steering_status":
             self._attr_name = "Steering status"
             self._attr_icon = "mdi:solar-power"
@@ -1084,7 +1085,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         key="charge_last_updated",
         name="Charge Last Updated",
         device_class=SensorDeviceClass.TIMESTAMP,
-        icon="mdi:clock-outline",
+        icon=ICON_CLOCK_OUTLINE,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: _parse_iso_datetime(
@@ -4840,7 +4841,7 @@ def _build_single_smart_battery_descriptions(
                     name="Last Update",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
-                    icon="mdi:clock-outline",
+                    icon=ICON_CLOCK_OUTLINE,
                     device_class=SensorDeviceClass.TIMESTAMP,
                     value_fn=lambda data, idx=i: _get_battery_summary(
                         data, idx, "last_update"

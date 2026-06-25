@@ -888,14 +888,14 @@
       "battery_mode": {
         "name": "Battery Mode",
         "state": {
-          "self_consumption_mix": "Self Consumption Mix",
+          "self_consumption_mix": "Self-consumption Plus",
           "trading": "Trading"
         }
       },
       "battery_imbalance_trading_strategy": {
         "name": "Imbalance Trading Strategy",
         "state": {
-          "balanced": "Balanced",
+          "balanced": "Standard",
           "conservative": "Conservative",
           "imbalance_only": "Imbalance only",
           "aggressive": "Aggressive"

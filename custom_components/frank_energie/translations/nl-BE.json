@@ -22,7 +22,7 @@
           "username": "Email",
           "password": "Wachtwoord"
         },
-        "description": "Enter your Frank Energie account credentials."
+        "description": "Vul je Frank Energie-accountgegevens in."
       },
       "user": {
         "title": "Wil je inloggen bij Frank Energie?",
@@ -55,16 +55,16 @@
         }
       },
       "import": {
-        "description": "Import an existing configuration for Frank Energie.",
-        "title": "Import configuration"
+        "description": "Importeer een bestaande configuratie voor Frank Energie.",
+        "title": "Configuratie importeren"
       },
       "options": {
-        "description": "Configure the options for Frank Energie.",
-        "title": "Configure options"
+        "description": "Configureer de opties voor Frank Energie.",
+        "title": "Opties configureren"
       },
       "reauth_confirm": {
-        "description": "Re-authentication is required for Frank Energie.",
-        "title": "Re-authentication required"
+        "description": "Her-authenticatie is vereist voor Frank Energie.",
+        "title": "Her-authenticatie vereist"
       }
     }
   },
@@ -736,7 +736,7 @@
         }
       },
       "battery_status": {
-        "name": "Battery Status",
+        "name": "Batterijstatus",
         "state": {
           "status_charging": "Aan het laden",
           "status_discharging": "Aan het ontladen",

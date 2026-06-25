@@ -171,7 +171,7 @@ The default should favor responsiveness while allowing users to reduce API traff
 
 Default refresh interval:
 
-- 5 minutes (15 minutes if no PV systems are detected).
+- 30 seconds (15 minutes if no PV systems are detected).
 
 Includes:
 
@@ -183,7 +183,7 @@ Includes:
 
 Default refresh interval:
 
-- 5 minutes (15 minutes if no batteries are detected).
+- 30 seconds (15 minutes if no batteries are detected).
 
 Includes:
 
@@ -196,11 +196,11 @@ Includes:
 
 Charging:
 
-- 2 minutes.
+- 30 seconds.
 
 Idle:
 
-- 5 minutes.
+- 30 seconds.
 
 ### Electric Vehicles
 
