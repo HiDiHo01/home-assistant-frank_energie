@@ -202,9 +202,7 @@ class FrankEnergieBatteryModeSelect(
     _attr_has_entity_name = True
     _attr_icon = "mdi:battery-sync"
     _attr_options = [
-        "self_consumption",
         "self_consumption_mix",
-        "imbalance_trading",
         "trading",
     ]
     _attr_translation_key = "battery_mode"
