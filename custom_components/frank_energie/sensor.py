@@ -1549,7 +1549,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=None,
         icon="mdi:clock-digital",
         authenticated=True,
-        service_name=SERVICE_NAME_SETTINGS,
+        service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
             int(
                 data[DATA_CONTRACT_PRICE_RESOLUTION_STATE]
