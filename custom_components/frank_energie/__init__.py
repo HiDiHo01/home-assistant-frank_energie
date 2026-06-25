@@ -28,6 +28,7 @@ from .const import (
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_ENODE_CHARGERS,
+    TIMEZONE_AMSTERDAM,
 )
 from .coordinator import (
     FrankEnergieCoordinator,
@@ -151,15 +152,15 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         async def _async_aligned_refresh(
             _: datetime,
         ) -> None:
-            # Check for midnight local Europe/Amsterdam rollover
-            now_local = dt_util.now(ZoneInfo("Europe/Amsterdam"))
+            # Check for midnight local TIMEZONE_AMSTERDAM rollover
+            now_local = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM))
             if now_local.hour == 0 and now_local.minute == 0:
                 _LOGGER.info(
                     "Midnight local time: promoting tomorrow's prices to today"
                 )
                 price_coordinator.promote_tomorrow_prices()
 
-            # Check for 13:00 local Europe/Amsterdam transition to fetch tomorrow's prices
+            # Check for 13:00 local TIMEZONE_AMSTERDAM transition to fetch tomorrow's prices
             if now_local.hour == 13 and now_local.minute == 0:
                 _LOGGER.info("13:00 local time: explicitly triggering price fetch")
                 await price_coordinator.async_request_refresh()
