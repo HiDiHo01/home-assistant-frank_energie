@@ -2195,7 +2195,7 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             _LOGGER.debug("Skipping settings fetch during maintenance window")
-            if self.data:
+            if self.last_update_success:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
@@ -2287,6 +2287,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
+            if not self.last_update_success:
+                raise UpdateFailed("Maintenance window active")
             prices_today = self._static_prices_today
             data_contract_price_resolution_state = (
                 self._static_contract_price_resolution_state
@@ -2382,7 +2384,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         """Fetch battery data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
-            if self.data:
+            if self.last_update_success:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
@@ -2441,7 +2443,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
         """Fetch charger data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
-            if self.data:
+            if self.last_update_success:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
@@ -2496,7 +2498,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         """Fetch PV data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
-            if self.data:
+            if self.last_update_success:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
@@ -2560,7 +2562,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             _LOGGER.debug("Skipping vehicle fetch during maintenance window")
-            if self.data:
+            if self.last_update_success:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
@@ -2620,7 +2622,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             _LOGGER.debug("Skipping statistics fetch during maintenance window")
-            if self.data:
+            if self.last_update_success:
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
@@ -2713,7 +2715,7 @@ class FrankEnergieBatterySessionCoordinator(
             )
 
         except UpdateFailed as ex:
-            if self.data:
+            if self.last_update_success:
                 _LOGGER.warning(str(ex))
                 return self.data
             raise
