@@ -378,7 +378,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         now_utc = datetime.now(ZoneInfo("UTC"))
-        today = now_utc.date()
+        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
         tomorrow = today + timedelta(days=1)
 
         # skip API calls between 00:00 and 01:00 UTC to avoid maintenance window
@@ -2346,7 +2346,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
-        today = now_utc.date()
+        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
         if (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
@@ -2375,7 +2375,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch price data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
-        today = now_utc.date()
+        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
         tomorrow = today + timedelta(days=1)
 
         skip_api_calls = self._should_skip_api_calls(now_utc)
@@ -2511,7 +2511,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        today = now_utc.date()
+        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
         tomorrow = today + timedelta(days=1)
         start_date = today - timedelta(days=1)
 
@@ -2572,7 +2572,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        start_date = now_utc.date() - timedelta(days=1)
+        start_date = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date() - timedelta(days=1)
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
         is_smart_charging = self._is_smart_charging_enabled(user_data)
@@ -2631,7 +2631,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        today = now_utc.date()
+        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
         if self.last_fetch_today is None or self.last_fetch_today.date() != today:
             self._has_pv_systems = None
         self.last_fetch_today = now_utc
@@ -2760,7 +2760,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        today = now_utc.date()
+        today = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date()
         yesterday = today - timedelta(days=1)
         start_date = yesterday
 
