@@ -61,9 +61,9 @@ def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
     return entities
 
 
-def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
+def _setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry) -> list[SelectEntity]:
     entities = []
-    enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+    enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
         ent_reg = er.async_get(hass)
         for vehicle in enode_vehicles.vehicles:
@@ -76,16 +76,16 @@ def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
                     ent_reg.async_remove(entity_id)
 
                 entities.append(
-                    FrankEnergieEnodeChargingModeSelect(coordinator, entry, vehicle.id)
+                    FrankEnergieEnodeChargingModeSelect(vehicle_coordinator, entry, vehicle.id)
                 )
 
-    enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+    enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
     if enode_chargers and getattr(enode_chargers, "chargers", None):
         for charger in enode_chargers.chargers:
             if getattr(charger, "can_smart_charge", False):
                 entities.append(
                     FrankEnergieEnodeChargerChargingModeSelect(
-                        coordinator, entry, charger.id
+                        charger_coordinator, entry, charger.id
                     )
                 )
 
@@ -101,10 +101,11 @@ async def async_setup_entry(
     price_coordinator = entry.runtime_data.price_coordinator
     battery_coordinator = entry.runtime_data.battery_coordinator
     vehicle_coordinator = entry.runtime_data.vehicle_coordinator
+    charger_coordinator = entry.runtime_data.charger_coordinator
 
     entities: list[SelectEntity] = [FrankEnergieResolutionSelect(price_coordinator)]
     entities.extend(_setup_battery_entities(battery_coordinator, entry))
-    entities.extend(_setup_enode_entities(hass, vehicle_coordinator, entry))
+    entities.extend(_setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry))
 
     async_add_entities(entities)
 
