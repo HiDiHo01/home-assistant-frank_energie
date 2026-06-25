@@ -701,6 +701,17 @@ class FrankEnergieEnodeChargeLimitNumber(
             val = float(value) if self._target_key == "initialCharge" else int(value)
         except (ValueError, TypeError) as err:
             raise ValueError(f"Invalid value {value} for {self._target_key}") from err
+
+        if self._target_key != "initialCharge":
+            if val < self._attr_native_min_value or val > self._attr_native_max_value:
+                raise ValueError(
+                    f"Value {val} out of range for {self._target_key} "
+                    f"({self._attr_native_min_value}-{self._attr_native_max_value})"
+                )
+            if val % self._attr_native_step != 0:
+                raise ValueError(
+                    f"Value {val} must be a multiple of {self._attr_native_step} for {self._target_key}"
+                )
         try:
             success = await self.coordinator.async_update_enode_charge_settings(
                 self._device_id, self._is_vehicle, {self._target_key: val}
