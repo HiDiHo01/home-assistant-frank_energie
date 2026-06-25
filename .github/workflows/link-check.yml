@@ -25,8 +25,9 @@ jobs:
           args: >-
             --verbose
             --no-progress
-            --accept 200,429
+            --accept 200,403,429
             --root-dir .
+            --exclude-file .lycheeignore .
             README.md
             docs/**/*.md
         env:
