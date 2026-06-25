@@ -13,18 +13,20 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from python_frank_energie.models import EnodeCharger
+
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
     DOMAIN,
+    MANUFACTURER_FRANK_ENERGIE,
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import device_translation_key
-
-MANUFACTURER_FRANK_ENERGIE = "Frank Energie"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,6 +78,17 @@ def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
                 entities.append(
                     FrankEnergieEnodeChargingModeSelect(coordinator, entry, vehicle.id)
                 )
+
+    enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+    if enode_chargers and getattr(enode_chargers, "chargers", None):
+        for charger in enode_chargers.chargers:
+            if getattr(charger, "can_smart_charge", False):
+                entities.append(
+                    FrankEnergieEnodeChargerChargingModeSelect(
+                        coordinator, entry, charger.id
+                    )
+                )
+
     return entities
 
 
@@ -474,5 +487,113 @@ class FrankEnergieEnodeChargingModeSelect(
             _LOGGER.error(
                 "Failed to set EV charging mode for vehicle %s to %s",
                 self._vehicle_id,
+                option,
+            )
+
+
+class FrankEnergieEnodeChargerChargingModeSelect(
+    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
+):
+    """Select entity for controlling EV charger charging mode."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:ev-station"
+    _attr_options = ["smart_charging", "boost_charging"]
+    _attr_translation_key = "enode_charging_mode"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry,
+        charger_id: str,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator)
+        self._entry = entry
+        self._charger_id = charger_id
+        self._attr_unique_id = f"{DOMAIN}_{charger_id}_enode_charging_mode"
+
+        # Device Info registration
+        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+        charger = (
+            next((c for c in enode_chargers.chargers if c.id == charger_id), None)
+            if enode_chargers and getattr(enode_chargers, "chargers", None)
+            else None
+        )
+
+        info = (
+            charger.information
+            if charger
+            and getattr(charger, "information", None)
+            and isinstance(charger.information, dict)
+            else {}
+        )
+        brand = info.get("brand") or MANUFACTURER_FRANK_ENERGIE
+        model = info.get("model") or "Charger"
+        name = (
+            f"{brand} {model}".strip() if (brand or model) else f"Charger {charger_id}"
+        )
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, charger_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    def _get_charger(self) -> EnodeCharger | None:
+        """Return the Enode charger object if it exists."""
+        enode_chargers = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+        if not enode_chargers or not getattr(enode_chargers, "chargers", None):
+            return None
+        return next(
+            (c for c in enode_chargers.chargers if c.id == self._charger_id), None
+        )
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current charging mode."""
+        charger = self._get_charger()
+        if not charger or not charger.charge_settings:
+            return None
+        return (
+            "smart_charging"
+            if charger.charge_settings.is_smart_charging_enabled
+            else "boost_charging"
+        )
+
+    async def async_select_option(self, option: str) -> None:
+        """Update charging mode via mutation."""
+        if option not in self.options:
+            _LOGGER.error("Invalid charging mode selected: %s", option)
+            return
+
+        if option == self.current_option:
+            return
+
+        charger = self._get_charger()
+        if not charger or not charger.charge_settings:
+            _LOGGER.error(
+                "Cannot change charging mode: charger %s not found or has no charge settings",
+                self._charger_id,
+            )
+            return
+
+        is_smart = option == "smart_charging"
+
+        _LOGGER.debug(
+            "Setting EV charging mode for charger %s to %s", self._charger_id, option
+        )
+        success = await self.coordinator.async_update_enode_charge_settings(
+            self._charger_id, False, {"isSmartChargingEnabled": is_smart}
+        )
+
+        if success:
+            if self.hass:
+                self.async_write_ha_state()
+        else:
+            _LOGGER.error(
+                "Failed to set EV charging mode for charger %s to %s",
+                self._charger_id,
                 option,
             )

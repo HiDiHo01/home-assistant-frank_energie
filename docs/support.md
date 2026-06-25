@@ -19,7 +19,7 @@ Feel like I've helped you out? You can buy me a coffee or become a sponsor!
 Help improve the project by:
 
 - [Submit pull requests](https://github.com/HiDiHo01/home-assistant-frank_energie/pulls)
-- [Report bugs](hhttps://github.com/HiDiHo01/home-assistant-frank_energie/issues)
+- [Report bugs](https://github.com/HiDiHo01/home-assistant-frank_energie/issues)
 - [Suggest features](https://github.com/HiDiHo01/home-assistant-frank_energie/discussions/categories/ideas)
 - Improve documentation
 - [Share examples](https://github.com/HiDiHo01/home-assistant-frank_energie/discussions/categories/show-and-tell)

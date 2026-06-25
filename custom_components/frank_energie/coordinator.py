@@ -2173,6 +2173,82 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         vehicles_list = [EnodeVehicle(**vehicle_dict) for vehicle_dict in data]
         return EnodeVehicles(vehicles=vehicles_list)
 
+    async def async_update_enode_charge_settings(
+        self, device_id: str, is_vehicle: bool, mutations: dict[str, Any]
+    ) -> bool:
+        """Serialize charge settings mutations to avoid race conditions.
+
+        The API requires all 13 fields to be present in the mutation payload.
+        By serializing updates through the mutation queue, we ensure that
+        concurrent interactions (e.g. from sliders and selects) read fresh
+        local state and don't overwrite each other with stale values.
+        """
+        success = False
+
+        async def _update() -> None:
+            nonlocal success
+            from .helpers import build_charge_settings_input
+
+            # Fetch freshest local state
+            if is_vehicle:
+                enode_data = self.data.get(DATA_ENODE_VEHICLES)
+                item = (
+                    next((v for v in enode_data.vehicles if v.id == device_id), None)
+                    if enode_data
+                    else None
+                )
+            else:
+                enode_data = self.data.get(DATA_ENODE_CHARGERS)
+                item = (
+                    next((c for c in enode_data.chargers if c.id == device_id), None)
+                    if enode_data
+                    else None
+                )
+
+            if not item or not item.charge_settings:
+                _LOGGER.error(
+                    "Cannot update charge settings: item %s not found or missing settings",
+                    device_id,
+                )
+                return
+
+            # Construct full payload from fresh state
+            input_data = build_charge_settings_input(item.charge_settings)
+
+            # Apply mutations
+            for k, v in mutations.items():
+                input_data[k] = v
+
+            # Send to API
+            try:
+                if is_vehicle:
+                    success = await self.api.enode_update_vehicle_charge_settings(
+                        input_data
+                    )
+                else:
+                    success = await self.api.enode_update_charger_charge_settings(
+                        input_data
+                    )
+            except Exception:
+                _LOGGER.exception("Failed to update charge settings for %s", device_id)
+                success = False
+
+            if success:
+                # Update local cache memory optimistically
+                for k, v in mutations.items():
+                    if k == "minChargeLimit":
+                        item.charge_settings.min_charge_limit = v
+                    elif k == "maxChargeLimit":
+                        item.charge_settings.max_charge_limit = v
+                    elif k == "initialCharge":
+                        item.charge_settings.initial_charge = v
+                    elif k == "isSmartChargingEnabled":
+                        item.charge_settings.is_smart_charging_enabled = v
+                    # other fields if necessary
+
+        await self._mutation_queue.add(_update)
+        return success
+
 
 class FrankEnergieBatterySessionCoordinator(
     DataUpdateCoordinator[SmartBatterySessions | None]

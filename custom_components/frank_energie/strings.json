@@ -191,6 +191,27 @@
     "number": {
       "consumption_threshold_price": {
         "name": "Self consumption threshold price"
+      },
+      "energy_tax_ode": {
+        "name": "Energy tax (ODE)"
+      },
+      "energy_tax_reduction": {
+        "name": "Energy tax reduction"
+      },
+      "monthly_subscription_fee": {
+        "name": "Monthly subscription fee"
+      },
+      "network_charges": {
+        "name": "Network charges"
+      },
+      "min_charge_limit": {
+        "name": "Minimum charge limit"
+      },
+      "max_charge_limit": {
+        "name": "Maximum charge limit"
+      },
+      "initial_charge": {
+        "name": "Battery start level"
       }
     },
     "select": {

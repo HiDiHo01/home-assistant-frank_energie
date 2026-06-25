@@ -15,7 +15,11 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_EURO, EntityCategory
+from homeassistant.const import (
+    CURRENCY_EURO,
+    PERCENTAGE,
+    EntityCategory,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -31,6 +35,8 @@ from .const import (
     CONF_MONTHLY_SUBSCRIPTION_FEE,
     CONF_NETWORK_CHARGES,
     DATA_BATTERY_DETAILS,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DEFAULT_ENERGY_TAX_ODE,
     DEFAULT_ENERGY_TAX_REDUCTION,
     DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
@@ -38,6 +44,7 @@ from .const import (
     DOMAIN,
     SERVICE_NAME_COSTS,
     UNIT_ELECTRICITY,
+    MANUFACTURER_FRANK_ENERGIE,
 )
 from .coordinator import FrankEnergieCoordinator
 from .helpers import device_translation_key
@@ -64,95 +71,90 @@ class FrankEnergieNumberEntityDescription(NumberEntityDescription):
     # mode: NumberMode = NumberMode.BOX
     suggested_display_precision: int | None = None
 
-    value_fn: Callable[
-        [ConfigEntry[FrankEnergieEntryData]],
-        float,
-    ] | None = None
+    value_fn: (
+        Callable[
+            [ConfigEntry[FrankEnergieEntryData]],
+            float,
+        ]
+        | None
+    ) = None
 
 
-MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION = (
-    FrankEnergieNumberEntityDescription(
-        key="monthly_subscription_fee",
-        translation_key="monthly_subscription_fee",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.0,
-        native_max_value=10.0,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_MONTHLY_SUBSCRIPTION_FEE,
-                DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
-            )
-        ),
-    )
+MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION = FrankEnergieNumberEntityDescription(
+    key="monthly_subscription_fee",
+    translation_key="monthly_subscription_fee",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.0,
+    native_max_value=10.0,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_MONTHLY_SUBSCRIPTION_FEE,
+            DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
+        )
+    ),
 )
-ENERGY_TAX_ODE = (
-    FrankEnergieNumberEntityDescription(
-        key="energy_tax_ode",
-        translation_key="energy_tax_ode",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.0,
-        native_max_value=50.0,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_ENERGY_TAX_ODE,
-                DEFAULT_ENERGY_TAX_ODE,
-            )
-        ),
-    )
+ENERGY_TAX_ODE = FrankEnergieNumberEntityDescription(
+    key="energy_tax_ode",
+    translation_key="energy_tax_ode",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.0,
+    native_max_value=50.0,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_ENERGY_TAX_ODE,
+            DEFAULT_ENERGY_TAX_ODE,
+        )
+    ),
 )
-ENERGY_TAX_REDUCTION = (
-    FrankEnergieNumberEntityDescription(
-        key="energy_tax_reduction",
-        translation_key="energy_tax_reduction",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=-100.00,
-        native_max_value=0.00,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_ENERGY_TAX_REDUCTION,
-                DEFAULT_ENERGY_TAX_REDUCTION,
-            )
-        ),
-    )
+ENERGY_TAX_REDUCTION = FrankEnergieNumberEntityDescription(
+    key="energy_tax_reduction",
+    translation_key="energy_tax_reduction",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=-100.00,
+    native_max_value=0.00,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_ENERGY_TAX_REDUCTION,
+            DEFAULT_ENERGY_TAX_REDUCTION,
+        )
+    ),
 )
-NETWORK_CHARGES = (
-    FrankEnergieNumberEntityDescription(
-        key="network_charges",
-        translation_key="network_charges",
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.00,
-        native_max_value=50.00,
-        native_step=0.01,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_NETWORK_CHARGES,
-                DEFAULT_NETWORK_CHARGES,
-            )
-        ),
-    )
+NETWORK_CHARGES = FrankEnergieNumberEntityDescription(
+    key="network_charges",
+    translation_key="network_charges",
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.00,
+    native_max_value=50.00,
+    native_step=0.01,
+    native_unit_of_measurement=CURRENCY_EURO,
+    suggested_display_precision=2,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_NETWORK_CHARGES,
+            DEFAULT_NETWORK_CHARGES,
+        )
+    ),
 )
 
 CONFIG_NUMBER_DESCRIPTIONS: Final = (
@@ -190,6 +192,58 @@ async def async_setup_entry(
                     description,
                 )
             )
+
+        enode_vehicles = coordinator.data.get(DATA_ENODE_VEHICLES)
+        if enode_vehicles and enode_vehicles.vehicles:
+            for vehicle in enode_vehicles.vehicles:
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        vehicle.id,
+                        "minChargeLimit",
+                        translation_key="min_charge_limit",
+                        is_vehicle=True,
+                    )
+                )
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        vehicle.id,
+                        "maxChargeLimit",
+                        translation_key="max_charge_limit",
+                        is_vehicle=True,
+                    )
+                )
+        enode_chargers = coordinator.data.get(DATA_ENODE_CHARGERS)
+        if enode_chargers and enode_chargers.chargers:
+            for charger in enode_chargers.chargers:
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        charger.id,
+                        "minChargeLimit",
+                        translation_key="min_charge_limit",
+                        is_vehicle=False,
+                    )
+                )
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        charger.id,
+                        "maxChargeLimit",
+                        translation_key="max_charge_limit",
+                        is_vehicle=False,
+                    )
+                )
+                entities.append(
+                    FrankEnergieEnodeChargeLimitNumber(
+                        coordinator,
+                        charger.id,
+                        "initialCharge",
+                        translation_key="initial_charge",
+                        is_vehicle=False,
+                    )
+                )
 
     if entities:
         async_add_entities(entities)
@@ -374,9 +428,7 @@ class FrankEnergieFixedMonthlyCostsNumber(
         self._entry = entry
         self.entity_description = description
 
-        self._attr_unique_id = (
-            f"{entry.entry_id}_{self.entity_description.key}"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_description.key}"
 
         self._service_name = self.entity_description.service_name
 
@@ -460,9 +512,7 @@ class old_FrankEnergieFixedMonthlyCostsNumber(
 
         self._entry = entry
 
-        self._attr_unique_id = (
-            f"{entry.entry_id}_monthly_subscription_fee"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_monthly_subscription_fee"
 
     @property
     def available(self) -> bool:
@@ -513,3 +563,169 @@ class old_FrankEnergieFixedMonthlyCostsNumber(
 
         await self.coordinator.async_request_refresh()
         self.async_write_ha_state()
+
+
+class FrankEnergieEnodeChargeLimitNumber(
+    CoordinatorEntity[FrankEnergieCoordinator], NumberEntity
+):
+    """Number entity for setting charge limits for an Enode device."""
+
+    _attr_has_entity_name = True
+    _attr_native_max_value = 100
+    _attr_native_step = 5
+    _attr_native_unit_of_measurement = PERCENTAGE
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        device_id: str,
+        target_key: str,
+        translation_key: str,
+        is_vehicle: bool = False,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device_id = device_id
+        self._target_key = target_key
+        self._is_vehicle = is_vehicle
+        self._attr_translation_key = translation_key
+        self._attr_unique_id = f"{DOMAIN}_{device_id}_{translation_key}"
+
+        if target_key == "maxChargeLimit":
+            self._attr_native_min_value = 50
+        else:
+            self._attr_native_min_value = 0
+
+        if is_vehicle:
+            enode_data = coordinator.data.get(DATA_ENODE_VEHICLES)
+            item = (
+                next((v for v in enode_data.vehicles if v.id == device_id), None)
+                if enode_data
+                else None
+            )
+            info = (
+                item.information
+                if item and getattr(item, "information", None)
+                else None
+            )
+            brand = (
+                getattr(info, "brand", None) if info else None
+            ) or MANUFACTURER_FRANK_ENERGIE
+            model = (getattr(info, "model", None) if info else None) or "Vehicle"
+        else:
+            enode_data = coordinator.data.get(DATA_ENODE_CHARGERS)
+            item = (
+                next((c for c in enode_data.chargers if c.id == device_id), None)
+                if enode_data
+                else None
+            )
+            info = (
+                item.information
+                if item
+                and getattr(item, "information", None)
+                and isinstance(item.information, dict)
+                else {}
+            )
+            brand = info.get("brand") or MANUFACTURER_FRANK_ENERGIE
+            model = info.get("model") or "Charger"
+
+        name = f"{brand} {model}".strip() if (brand or model) else f"Device {device_id}"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            manufacturer=brand,
+            model=model,
+            name=name,
+        )
+
+    def _get_item(self):
+        """Return the device details."""
+        if self._is_vehicle:
+            enode_data = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+            return (
+                next((v for v in enode_data.vehicles if v.id == self._device_id), None)
+                if enode_data
+                else None
+            )
+        else:
+            enode_data = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+            return (
+                next((c for c in enode_data.chargers if c.id == self._device_id), None)
+                if enode_data
+                else None
+            )
+
+    @property
+    def icon(self) -> str | None:
+        """Return a dynamic icon based on the current value."""
+        value = self.native_value
+        if value is None:
+            return "mdi:battery-unknown"
+
+        rounded = int((value + 5) // 10) * 10
+
+        if rounded == 0:
+            return "mdi:battery-charging-outline"
+        elif rounded == 100:
+            return "mdi:battery-charging-100"
+
+        return f"mdi:battery-charging-{rounded}"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the target value."""
+        item = self._get_item()
+        if not item or not item.charge_settings:
+            return None
+
+        if self._target_key == "minChargeLimit":
+            return item.charge_settings.min_charge_limit
+        elif self._target_key == "maxChargeLimit":
+            return item.charge_settings.max_charge_limit
+        elif self._target_key == "initialCharge":
+            return item.charge_settings.initial_charge
+        return None
+
+    @override
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the target value."""
+        item = self._get_item()
+        if not item or not item.charge_settings:
+            raise ValueError("Item or charge settings not found")
+
+        _LOGGER.debug(
+            "Setting %s to %s for %s", self._target_key, value, self._device_id
+        )
+
+        try:
+            val = float(value) if self._target_key == "initialCharge" else int(value)
+        except (ValueError, TypeError) as err:
+            raise ValueError(f"Invalid value {value} for {self._target_key}") from err
+
+        if self._target_key != "initialCharge":
+            if val < self._attr_native_min_value or val > self._attr_native_max_value:
+                raise ValueError(
+                    f"Value {val} out of range for {self._target_key} "
+                    f"({self._attr_native_min_value}-{self._attr_native_max_value})"
+                )
+            if val % self._attr_native_step != 0:
+                raise ValueError(
+                    f"Value {val} must be a multiple of {self._attr_native_step} for {self._target_key}"
+                )
+        try:
+            success = await self.coordinator.async_update_enode_charge_settings(
+                self._device_id, self._is_vehicle, {self._target_key: val}
+            )
+        except Exception:
+            _LOGGER.exception(
+                "Failed to update %s for %s", self._target_key, self._device_id
+            )
+            raise
+
+        if not success:
+            raise ValueError(
+                f"Failed to update {self._target_key} for {self._device_id}"
+            )
+
+        if self.hass:
+            self.async_write_ha_state()
