@@ -15,7 +15,11 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_EURO, EntityCategory
+from homeassistant.const import (
+    CURRENCY_EURO,
+    PERCENTAGE,
+    EntityCategory,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -569,7 +573,7 @@ class FrankEnergieEnodeChargeLimitNumber(
     _attr_has_entity_name = True
     _attr_native_max_value = 100
     _attr_native_step = 5
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
 
     def __init__(
         self,
@@ -693,7 +697,10 @@ class FrankEnergieEnodeChargeLimitNumber(
             "Setting %s to %s for %s", self._target_key, value, self._device_id
         )
 
-        val = float(value) if self._target_key == "initialCharge" else int(value)
+        try:
+            val = float(value) if self._target_key == "initialCharge" else int(value)
+        except (ValueError, TypeError) as err:
+            raise ValueError(f"Invalid value {value} for {self._target_key}") from err
         try:
             success = await self.coordinator.async_update_enode_charge_settings(
                 self._device_id, self._is_vehicle, {self._target_key: val}
