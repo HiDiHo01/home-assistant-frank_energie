@@ -1418,3 +1418,65 @@ async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry
     assert pv.update_interval == timedelta(minutes=5)
     assert vehicle.update_interval == timedelta(minutes=15)
     assert stats.update_interval == timedelta(hours=1)
+
+
+@pytest.mark.asyncio
+async def test_async_update_enode_charge_settings_optimistic_cache(
+    coordinator, mock_frank_energie, create_mock_vehicle
+):
+    """Test optimistic cache updates for all mutation fields in async_update_enode_charge_settings."""
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from datetime import datetime
+    from unittest.mock import MagicMock
+
+    vehicle_id = "veh_123"
+    mock_vehicle = create_mock_vehicle(
+        vehicle_id=vehicle_id,
+        charge_settings_kwargs={
+            "is_smart_charging_enabled": False,
+            "min_charge_limit": 20,
+            "max_charge_limit": 80,
+        },
+    )
+    mock_vehicles = MagicMock()
+    mock_vehicles.vehicles = [mock_vehicle]
+    coordinator.data = {DATA_ENODE_VEHICLES: mock_vehicles}
+
+    # Successful mutation
+    mock_frank_energie.enode_update_vehicle_charge_settings.return_value = True
+
+    dt_str = "2026-05-29T08:30:00+00:00"
+    mutations = {
+        "deadline": dt_str,
+        "isSmartChargingEnabled": True,
+        "isSolarChargingEnabled": True,
+        "minChargeLimit": 30,
+        "maxChargeLimit": 90,
+        "initialCharge": 15.0,
+        "hourMonday": 480,
+        "hourTuesday": 490,
+        "hourWednesday": 500,
+        "hourThursday": 510,
+        "hourFriday": 520,
+        "hourSaturday": 530,
+        "hourSunday": 540,
+    }
+
+    success = await coordinator.async_update_enode_charge_settings(
+        vehicle_id, is_vehicle=True, mutations=mutations
+    )
+
+    assert success is True
+    assert mock_vehicle.charge_settings.deadline == datetime.fromisoformat(dt_str)
+    assert mock_vehicle.charge_settings.is_smart_charging_enabled is True
+    assert mock_vehicle.charge_settings.is_solar_charging_enabled is True
+    assert mock_vehicle.charge_settings.min_charge_limit == 30
+    assert mock_vehicle.charge_settings.max_charge_limit == 90
+    assert mock_vehicle.charge_settings.initial_charge == 15.0
+    assert mock_vehicle.charge_settings.hour_monday == 480
+    assert mock_vehicle.charge_settings.hour_tuesday == 490
+    assert mock_vehicle.charge_settings.hour_wednesday == 500
+    assert mock_vehicle.charge_settings.hour_thursday == 510
+    assert mock_vehicle.charge_settings.hour_friday == 520
+    assert mock_vehicle.charge_settings.hour_saturday == 530
+    assert mock_vehicle.charge_settings.hour_sunday == 540

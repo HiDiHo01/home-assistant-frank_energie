@@ -2242,16 +2242,26 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             if success:
                 # Update local cache memory optimistically
+                key_map = {
+                    "deadline": "deadline",
+                    "isSmartChargingEnabled": "is_smart_charging_enabled",
+                    "isSolarChargingEnabled": "is_solar_charging_enabled",
+                    "minChargeLimit": "min_charge_limit",
+                    "maxChargeLimit": "max_charge_limit",
+                    "initialCharge": "initial_charge",
+                    "hourMonday": "hour_monday",
+                    "hourTuesday": "hour_tuesday",
+                    "hourWednesday": "hour_wednesday",
+                    "hourThursday": "hour_thursday",
+                    "hourFriday": "hour_friday",
+                    "hourSaturday": "hour_saturday",
+                    "hourSunday": "hour_sunday",
+                }
                 for k, v in mutations.items():
-                    if k == "minChargeLimit":
-                        item.charge_settings.min_charge_limit = v
-                    elif k == "maxChargeLimit":
-                        item.charge_settings.max_charge_limit = v
-                    elif k == "initialCharge":
-                        item.charge_settings.initial_charge = v
-                    elif k == "isSmartChargingEnabled":
-                        item.charge_settings.is_smart_charging_enabled = v
-                    # other fields if necessary
+                    if attr := key_map.get(k):
+                        if attr == "deadline" and isinstance(v, str):
+                            v = datetime.fromisoformat(v)
+                        setattr(item.charge_settings, attr, v)
 
         await self._mutation_queue.add(_update)
         return success
