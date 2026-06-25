@@ -14,6 +14,7 @@ from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
@@ -21,7 +22,12 @@ from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import AuthException
 from python_frank_energie.models import UserSites
 
-from .const import CONF_COORDINATOR, DOMAIN
+from .const import (
+    CONF_COORDINATOR,
+    DOMAIN,
+    SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_ENODE_CHARGERS,
+)
 from .coordinator import (
     FrankEnergieCoordinator,
     FrankEnergieSettingsCoordinator,
@@ -179,6 +185,15 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         # For backwards compatibility, update the unique ID
         self._update_unique_id()
+
+        # Clean up obsolete umbrella devices ("Smart Batteries", "Chargers") from registry
+        device_registry = dr.async_get(self.hass)
+        for obsolete_service in (SERVICE_NAME_BATTERIES, SERVICE_NAME_ENODE_CHARGERS):
+            if device := device_registry.async_get_device(
+                identifiers={(DOMAIN, f"{self.entry.entry_id}_{obsolete_service}")}
+            ):
+                device_registry.async_remove_device(device.id)
+                _LOGGER.debug("Removed obsolete umbrella device: %s", obsolete_service)
 
         # Create API and Coordinators
         _LOGGER.debug("Creating Frank Energie API instance")
