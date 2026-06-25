@@ -90,6 +90,29 @@ _LOG_AUTH_TOKENS_EXPIRED: Final = (
     "Authentication tokens expired, trying to renew them (%s)"
 )
 
+
+def _get_token_expires_at(api: Any) -> datetime | None:
+    """Safely get token expiration timestamp for backward compatibility."""
+    if hasattr(api, "token_expires_at"):
+        return api.token_expires_at
+    if hasattr(api, "_auth") and api._auth and hasattr(api._auth, "expires_at"):
+        return api._auth.expires_at
+    return None
+
+
+def _get_refresh_token_expires_at(api: Any) -> datetime | None:
+    """Safely get refresh token expiration timestamp for backward compatibility."""
+    if hasattr(api, "refresh_token_expires_at"):
+        return api.refresh_token_expires_at
+    if (
+        hasattr(api, "_auth")
+        and api._auth
+        and hasattr(api._auth, "refresh_token_expires_at")
+    ):
+        return api._auth.refresh_token_expires_at
+    return None
+
+
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
     # Python 3.14-3.16
     try:
@@ -1527,8 +1550,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> FrankEnergieData:
         """Aggregate today's cache and tomorrow's prices into FrankEnergieData."""
         result: FrankEnergieData = {  # type: ignore[typeddict-unknown-key]
-            DATA_TOKEN_EXPIRES_AT: self.api.token_expires_at,
-            DATA_REFRESH_TOKEN_EXPIRES_AT: self.api.refresh_token_expires_at,
+            DATA_TOKEN_EXPIRES_AT: _get_token_expires_at(self.api),
+            DATA_REFRESH_TOKEN_EXPIRES_AT: _get_refresh_token_expires_at(self.api),
             DATA_MONTH_SUMMARY: cache.data_month_summary,
             DATA_INVOICES: cache.data_invoices,
             DATA_USAGE: cache.data_period_usage,
@@ -2295,8 +2318,10 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             result[DATA_USER] = data_user
             result[DATA_USER_SITES] = user_sites
-            result[DATA_TOKEN_EXPIRES_AT] = self.api.token_expires_at
-            result[DATA_REFRESH_TOKEN_EXPIRES_AT] = self.api.refresh_token_expires_at
+            result[DATA_TOKEN_EXPIRES_AT] = _get_token_expires_at(self.api)
+            result[DATA_REFRESH_TOKEN_EXPIRES_AT] = _get_refresh_token_expires_at(
+                self.api
+            )
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

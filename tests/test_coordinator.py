@@ -1386,7 +1386,9 @@ async def test_price_coordinator_midnight_rollover(
 
 
 @pytest.mark.asyncio
-async def test_sub_coordinators_properties(mock_frank_energie, mock_config_entry) -> None:
+async def test_sub_coordinators_properties(
+    mock_frank_energie, mock_config_entry
+) -> None:
     """Test default properties and intervals of sub-coordinators."""
     hass = MagicMock()
     settings = FrankEnergieSettingsCoordinator(
