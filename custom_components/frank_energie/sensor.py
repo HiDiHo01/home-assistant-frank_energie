@@ -5032,6 +5032,8 @@ async def async_setup_entry(
             return vehicle_coordinator
         if description.service_name == SERVICE_NAME_SETTINGS:
             return settings_coordinator
+        if description.service_name == SERVICE_NAME_USER:
+            return settings_coordinator
         return price_coordinator
 
     batteries = battery_coordinator.data.get(DATA_BATTERIES, [])
@@ -5068,19 +5070,9 @@ async def async_setup_entry(
         settings_coordinator.data.get(DATA_USER_SITES), "segments", []
     )
 
-    user_data = None
+    user_data: object = None
     if settings_coordinator.api.is_authenticated:
-        if DATA_USER in settings_coordinator.data:
-            user_data = settings_coordinator.data.get(DATA_USER, {})
-            _LOGGER.debug("user_data: %s", user_data)
-        if isinstance(user_data, object) and hasattr(user_data, "connections"):
-            connections = user_data.connections
-            first_connection = connections[0]
-            if isinstance(first_connection, dict):
-                estimated_feed_in = first_connection.get("estimatedFeedIn")
-            else:
-                estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
-            _LOGGER.debug("estimated_feed_in1: %s", estimated_feed_in)
+        user_data = settings_coordinator.data.get(DATA_USER)
 
     connections: list[dict] = []
     first_connection = None
@@ -5234,13 +5226,14 @@ async def async_setup_entry(
                             not description.authenticated
                             or settings_coordinator.api.is_authenticated
                         ):
-                            sensor = FrankEnergieBatterySessionSensor(
-                                coordinator=session_coordinator,
-                                description=description,
-                                battery_id=battery_id,
-                                is_total=False,
+                            entities.append(
+                                FrankEnergieBatterySessionSensor(
+                                    coordinator=session_coordinator,
+                                    description=description,
+                                    battery_id=battery_id,
+                                    is_total=False,
+                                )
                             )
-                        entities.append(sensor)
                 else:
                     _LOGGER.debug(
                         "No session data found in session coordinator for battery %s (entry %s)",

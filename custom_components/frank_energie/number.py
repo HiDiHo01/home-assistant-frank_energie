@@ -187,14 +187,14 @@ async def async_setup_entry(
                     )
                 )
 
-        for description in CONFIG_NUMBER_DESCRIPTIONS:
-            entities.append(
-                FrankEnergieFixedMonthlyCostsNumber(
-                    settings_coordinator,
-                    config_entry,
-                    description,
-                )
+    for description in CONFIG_NUMBER_DESCRIPTIONS:
+        entities.append(
+            FrankEnergieFixedMonthlyCostsNumber(
+                settings_coordinator,
+                config_entry,
+                description,
             )
+        )
 
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:

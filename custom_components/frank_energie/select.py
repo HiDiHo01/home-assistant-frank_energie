@@ -459,8 +459,6 @@ class FrankEnergieEnodeChargingModeSelect(
         if option == self.current_option:
             return
 
-        from .helpers import build_charge_settings_input
-
         vehicle = self._get_vehicle()
         if not vehicle or not vehicle.charge_settings:
             _LOGGER.error(
@@ -470,18 +468,11 @@ class FrankEnergieEnodeChargingModeSelect(
             return
 
         is_smart = option == "smart_charging"
-        target_time = (
-            vehicle.charge_settings.target_time
-            if is_smart and vehicle.charge_settings.target_time
-            else None
-        )
 
-        charge_settings = build_charge_settings_input(
-            vehicle.id, is_smart_charging_enabled=is_smart, target_time=target_time
-        )
-
-        success = await self.coordinator.api.enode_update_vehicle_charge_settings(
-            charge_settings
+        success = await self.coordinator.async_update_enode_charge_settings(
+            self._vehicle_id,
+            True,
+            {"isSmartChargingEnabled": is_smart},
         )
         if success:
             await self.coordinator.async_request_refresh()

@@ -160,20 +160,16 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 # Trigger sensor state updates using cached data
                 price_coordinator.async_update_listeners()
 
-        if price_coordinator.resolution == "PT15M":
-            unsub = async_track_utc_time_change(
-                self.hass,
-                _async_aligned_refresh,
-                minute=[0, 15, 30, 45],
-                second=0,
-            )
-        else:
-            unsub = async_track_utc_time_change(
-                self.hass,
-                _async_aligned_refresh,
-                minute=0,
-                second=0,
-            )
+            # Skip non-hour ticks dynamically when resolution is hourly
+            if price_coordinator.resolution != "PT15M" and now_local.minute != 0:
+                return
+
+        unsub = async_track_utc_time_change(
+            self.hass,
+            _async_aligned_refresh,
+            minute=[0, 15, 30, 45],
+            second=0,
+        )
 
         self.entry.async_on_unload(unsub)
 
