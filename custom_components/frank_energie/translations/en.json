@@ -193,7 +193,7 @@
         "name": "Self consumption threshold price"
       },
       "energy_tax_ode": {
-        "name": "Energy tax ODE"
+        "name": "Energy tax (ODE)"
       },
       "energy_tax_reduction": {
         "name": "Energy tax reduction"
@@ -203,6 +203,15 @@
       },
       "network_charges": {
         "name": "Network charges"
+      },
+      "min_charge_limit": {
+        "name": "Minimum charge limit"
+      },
+      "max_charge_limit": {
+        "name": "Maximum charge limit"
+      },
+      "initial_charge": {
+        "name": "Battery start level"
       }
     },
     "select": {

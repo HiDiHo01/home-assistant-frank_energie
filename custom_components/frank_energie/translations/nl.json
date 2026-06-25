@@ -914,6 +914,15 @@
       },
       "consumption_threshold_price": {
         "name": "Drempelprijs voor zelfconsumptie"
+      },
+      "min_charge_limit": {
+        "name": "Laadstrategie (Minimaal)"
+      },
+      "max_charge_limit": {
+        "name": "Laadstrategie (Maximaal)"
+      },
+      "initial_charge": {
+        "name": "Startniveau batterij"
       }
     }
   }
