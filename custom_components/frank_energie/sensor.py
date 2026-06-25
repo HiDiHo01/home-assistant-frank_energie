@@ -4334,16 +4334,24 @@ class FrankEnergieSensor(
         # Zet enabled_default op False bij feed-in sensor zonder waarde
         if hasattr(description, "is_feed_in") and description.is_feed_in:
             user_data = entry.runtime_data.settings_coordinator.data.get(DATA_USER)
-            if user_data and hasattr(user_data, "connections") and user_data.connections:
+            if (
+                user_data
+                and hasattr(user_data, "connections")
+                and user_data.connections
+            ):
                 connection = user_data.connections[0]
                 if isinstance(connection, dict):
                     estimated_feed_in = int(connection.get("estimatedFeedIn") or 0)
                 else:
-                    estimated_feed_in = int(getattr(connection, "estimatedFeedIn", 0) or 0)
+                    estimated_feed_in = int(
+                        getattr(connection, "estimatedFeedIn", 0) or 0
+                    )
                 _LOGGER.debug("estimated_feed_in = %s", estimated_feed_in)
                 self._attr_entity_registry_enabled_default = estimated_feed_in > 0
             else:
-                _LOGGER.debug("No connections found or user_data is None; setting enabled_default to False")
+                _LOGGER.debug(
+                    "No connections found or user_data is None; setting enabled_default to False"
+                )
                 self._attr_entity_registry_enabled_default = False
 
         super().__init__(coordinator)
@@ -4732,7 +4740,10 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery",
                     device_class=SensorDeviceClass.ENUM,
-                    options=["mode_smart", "mode_manual", "self_consumption_mix"],
+                    options=[
+                        "self_consumption_mix",
+                        "trading",
+                    ],
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
                         data, idx, "battery_mode"
                     ),
@@ -4747,9 +4758,9 @@ def _build_single_smart_battery_descriptions(
                     icon="mdi:chart-line",
                     device_class=SensorDeviceClass.ENUM,
                     options=[
-                        "strategy_balanced",
-                        "strategy_max_return",
-                        "strategy_min_degradation",
+                        "balanced",
+                        "conservative",
+                        "imbalance_only",
                         "aggressive",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
@@ -4796,6 +4807,22 @@ def _build_single_smart_battery_descriptions(
                         "separate_imbalances",
                         "idle_full",
                         "discharge_self_consumption",
+                        "discharge_imbalance",
+                        "charge_imbalance",
+                        "discharge_intraday",
+                        "charge_intraday",
+                        "idle_intraday",
+                        "discharge_congestion",
+                        "charge_congestion",
+                        "discharge_self_consumption_mixed",
+                        "idle_congestion",
+                        "idle_empty",
+                        "idle_fifteen_percent",
+                        "idle_fifteen_percentage",
+                        "charge_self_consumption",
+                        "charge_self_consumption_mixed",
+                        "status_maintenance",
+                        "status_error",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_summary_lower(
                         data, idx, "last_known_status"
@@ -4987,7 +5014,10 @@ async def async_setup_entry(
             return battery_coordinator
         if description.service_name == SERVICE_NAME_ENODE_CHARGERS:
             return charger_coordinator
-        if description.service_name in (SERVICE_NAME_PV_SYSTEMS, SERVICE_NAME_PV_SUMMARY):
+        if description.service_name in (
+            SERVICE_NAME_PV_SYSTEMS,
+            SERVICE_NAME_PV_SUMMARY,
+        ):
             return pv_coordinator
         if description.service_name == SERVICE_NAME_ENODE_VEHICLES:
             return vehicle_coordinator
@@ -5146,7 +5176,10 @@ async def async_setup_entry(
         for description in (
             list(STATIC_BATTERY_SENSOR_TYPES) + aggregated_battery_descriptions
         ):
-            if not description.authenticated or battery_coordinator.api.is_authenticated:
+            if (
+                not description.authenticated
+                or battery_coordinator.api.is_authenticated
+            ):
                 entities.append(
                     FrankEnergieSensor(battery_coordinator, description, config_entry)
                 )
@@ -5161,7 +5194,10 @@ async def async_setup_entry(
                 battery, i
             )
             for description in single_battery_descriptions:
-                if not description.authenticated or battery_coordinator.api.is_authenticated:
+                if (
+                    not description.authenticated
+                    or battery_coordinator.api.is_authenticated
+                ):
                     entities.append(
                         FrankEnergieSmartBatterySensor(
                             battery_coordinator,
@@ -5203,8 +5239,6 @@ async def async_setup_entry(
                         config_entry.entry_id,
                     )
 
-
-
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
     _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
@@ -5234,9 +5268,7 @@ async def async_setup_entry(
             if system:
                 entities.extend(
                     [
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "total_bonus"
-                        ),
+                        FrankEnergiePvSensor(pv_coordinator, system.id, "total_bonus"),
                         FrankEnergiePvSensor(
                             pv_coordinator, system.id, "operational_status"
                         ),

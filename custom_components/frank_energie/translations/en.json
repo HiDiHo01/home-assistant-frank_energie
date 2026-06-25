@@ -888,17 +888,16 @@
       "battery_mode": {
         "name": "Battery Mode",
         "state": {
-          "mode_smart": "Smart Mode",
-          "mode_manual": "Manual Mode",
-          "self_consumption_mix": "Self Consumption Mix"
+          "self_consumption_mix": "Self Consumption Mix",
+          "trading": "Trading"
         }
       },
       "battery_imbalance_trading_strategy": {
         "name": "Imbalance Trading Strategy",
         "state": {
-          "strategy_balanced": "Balanced",
-          "strategy_max_return": "Maximum Return",
-          "strategy_min_degradation": "Minimum Degradation",
+          "balanced": "Balanced",
+          "conservative": "Conservative",
+          "imbalance_only": "Imbalance only",
           "aggressive": "Aggressive"
         }
       },
@@ -913,7 +912,23 @@
           "status_standby": "Standby",
           "separate_imbalances": "Separate Imbalances",
           "idle_full": "Idle (Full)",
-          "discharge_self_consumption": "Discharging (Self Consumption)"
+          "discharge_self_consumption": "Discharging (Self Consumption)",
+          "discharge_imbalance": "Discharging (Imbalance)",
+          "charge_imbalance": "Charging (Imbalance)",
+          "discharge_intraday": "Discharging (Intraday)",
+          "charge_intraday": "Charging (Intraday)",
+          "idle_intraday": "Idle (Intraday)",
+          "discharge_congestion": "Discharging (Congestion)",
+          "charge_congestion": "Charging (Congestion)",
+          "discharge_self_consumption_mixed": "Discharging (Self Consumption Mixed)",
+          "idle_congestion": "Idle (Congestion)",
+          "idle_empty": "Idle (Empty)",
+          "idle_fifteen_percent": "Idle (15%)",
+          "idle_fifteen_percentage": "Idle (15%)",
+          "charge_self_consumption": "Charging (Self Consumption)",
+          "charge_self_consumption_mixed": "Charging (Self Consumption Mixed)",
+          "status_maintenance": "Maintenance",
+          "status_error": "Error"
         }
       }
     }

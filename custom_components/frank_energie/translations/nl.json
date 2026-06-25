@@ -720,19 +720,18 @@
         "name": "Gemiddeld laadniveau"
       },
       "battery_mode": {
-        "name": "Battery Mode",
+        "name": "Batterijmodus",
         "state": {
-          "mode_smart": "Smart Mode",
-          "mode_manual": "Manual Mode",
-          "self_consumption_mix": "Self Consumption Mix"
+          "self_consumption_mix": "Zelfconsumptie Mix",
+          "trading": "Handelen"
         }
       },
       "battery_imbalance_trading_strategy": {
-        "name": "Imbalance Trading Strategy",
+        "name": "Onbalans handelsstrategie",
         "state": {
-          "strategy_balanced": "Balanced",
-          "strategy_max_return": "Maximum Return",
-          "strategy_min_degradation": "Minimum Degradation",
+          "balanced": "Standaard",
+          "conservative": "Conservatief",
+          "imbalance_only": "Alleen onbalans",
           "aggressive": "Agressief"
         }
       },
@@ -747,7 +746,23 @@
           "status_standby": "Stand-by",
           "separate_imbalances": "Gescheiden onbalansen",
           "idle_full": "Inactief (Vol)",
-          "discharge_self_consumption": "Ontladen (Zelfconsumptie)"
+          "discharge_self_consumption": "Ontladen (Zelfconsumptie)",
+          "discharge_imbalance": "Ontladen (Onbalans)",
+          "charge_imbalance": "Laden (Onbalans)",
+          "discharge_intraday": "Ontladen (Intraday)",
+          "charge_intraday": "Laden (Intraday)",
+          "idle_intraday": "Inactief (Intraday)",
+          "discharge_congestion": "Ontladen (Congestie)",
+          "charge_congestion": "Laden (Congestie)",
+          "discharge_self_consumption_mixed": "Ontladen (Zelfconsumptie Gemengd)",
+          "idle_congestion": "Inactief (Congestie)",
+          "idle_empty": "Inactief (Leeg)",
+          "idle_fifteen_percent": "Inactief (15%)",
+          "idle_fifteen_percentage": "Inactief (15%)",
+          "charge_self_consumption": "Laden (Zelfconsumptie)",
+          "charge_self_consumption_mixed": "Laden (Zelfconsumptie Gemengd)",
+          "status_maintenance": "Onderhoud",
+          "status_error": "Fout"
         }
       }
     },
