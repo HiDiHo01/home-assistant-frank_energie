@@ -2282,6 +2282,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 connection_id = connection.get("connectionId")
             else:
                 connection_id = getattr(connection, "connectionId", None)
+            
+            self._connection_id = connection_id
 
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
