@@ -78,10 +78,10 @@
       "name": "Frank Energie - Costs"
     },
     "frank_energie_gasprices": {
-      "name": "Frank Energie - Gasprices"
+      "name": "Frank Energie - Gas Prices"
     },
     "frank_energie_prices": {
-      "name": "Frank Energie - Prices"
+      "name": "Frank Energie - Electricity Prices"
     },
     "frank_energie_settings": {
       "name": "Frank Energie - Settings"
