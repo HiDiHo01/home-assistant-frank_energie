@@ -4781,10 +4781,17 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery-high",
                     device_class=SensorDeviceClass.BATTERY,
+                    suggested_display_precision=0,
                     native_unit_of_measurement="%",
                     value_fn=lambda data, idx=i: (
-                        _get_battery_summary(data, idx, "last_known_state_of_charge")
-                        if _get_battery_summary_lower(data, idx, "last_known_status")
+                        round(val)
+                        if (
+                            val := _get_battery_summary(
+                                data, idx, "last_known_state_of_charge"
+                            )
+                        )
+                        is not None
+                        and _get_battery_summary_lower(data, idx, "last_known_status")
                         != "status_unreliable_data"
                         else None
                     ),
@@ -4878,7 +4885,7 @@ def _get_total_result(data: Any) -> float | None:
     return sum((b.summary.total_result or 0) for b in bats if b.summary) or None
 
 
-def _get_average_state_of_charge(data: Any) -> float | None:
+def _get_average_state_of_charge(data: Any) -> int | None:
     valid_bats = [
         b
         for b in _get_batteries_from_data(data)
@@ -4887,8 +4894,10 @@ def _get_average_state_of_charge(data: Any) -> float | None:
         != "status_unreliable_data"
     ]
     return (
-        sum((b.summary.last_known_state_of_charge or 0) for b in valid_bats)
-        / len(valid_bats)
+        round(
+            sum((b.summary.last_known_state_of_charge or 0) for b in valid_bats)
+            / len(valid_bats)
+        )
         if valid_bats
         else None
     )
