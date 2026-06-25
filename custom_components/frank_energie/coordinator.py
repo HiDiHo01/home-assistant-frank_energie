@@ -2572,7 +2572,9 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
                 return self.data
             raise UpdateFailed("Maintenance window active")
 
-        start_date = now_utc.astimezone(ZoneInfo("Europe/Amsterdam")).date() - timedelta(days=1)
+        start_date = now_utc.astimezone(
+            ZoneInfo("Europe/Amsterdam")
+        ).date() - timedelta(days=1)
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
         is_smart_charging = self._is_smart_charging_enabled(user_data)
