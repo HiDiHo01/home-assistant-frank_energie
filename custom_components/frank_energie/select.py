@@ -83,12 +83,6 @@ def _setup_enode_entities(hass, coordinator, entry) -> list[SelectEntity]:
         ent_reg = er.async_get(hass)
         for charger in enode_chargers.chargers:
             if getattr(charger, "can_smart_charge", False):
-                old_unique_id = f"{DOMAIN}_{charger.id}_enode_smart_charging"
-                if entity_id := ent_reg.async_get_entity_id(
-                    "switch", DOMAIN, old_unique_id
-                ):
-                    ent_reg.async_remove(entity_id)
-
                 entities.append(
                     FrankEnergieEnodeChargerChargingModeSelect(coordinator, entry, charger.id)
                 )
