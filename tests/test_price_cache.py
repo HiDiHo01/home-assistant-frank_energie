@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from homeassistant.core import HomeAssistant
 from python_frank_energie.models import (
     MarketPrices,
@@ -78,9 +78,50 @@ async def test_resolution_state_serialization():
     serialized = _resolution_state_to_dict(state)
     deserialized = _dict_to_resolution_state(serialized)
 
+    # Serialized dict should contain ISO strings / None for date-like fields
+    assert serialized["changeRequestEffectiveDate"] == "2026-07-01"
+    assert "upcomingChange" in serialized
+    assert serialized["upcomingChange"] is None
+    assert "upcomingChangeEffectiveDate" in serialized
+    assert serialized["upcomingChangeEffectiveDate"] is None
+
+    # Deserialized object should preserve values and types
     assert deserialized.active_option == "PT15M"
     assert deserialized.is_change_request_possible is True
     assert deserialized.change_request_effective_date == date(2026, 7, 1)
+    assert deserialized.upcoming_change is None
+    assert deserialized.upcoming_change_effective_date is None
+
+
+@pytest.mark.asyncio
+async def test_resolution_state_serialization_from_date_types():
+    """ContractPriceResolutionState serializes date/datetime fields to ISO strings and round-trips None."""
+    change_request_date = date(2026, 7, 1)
+    upcoming_change_dt = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    state = ContractPriceResolutionState(
+        active_option="PT15M",
+        available_options=["PT15M", "PT1H"],
+        change_request_effective_date=change_request_date,
+        is_change_request_possible=True,
+        upcoming_change=upcoming_change_dt,
+        upcoming_change_effective_date=None,
+    )
+
+    serialized = _resolution_state_to_dict(state)
+
+    # Date / datetime instances should be converted to ISO 8601 strings
+    assert serialized["changeRequestEffectiveDate"] == "2026-07-01"
+    assert serialized["upcomingChange"] == upcoming_change_dt.isoformat()
+    # None should be preserved as None
+    assert serialized["upcomingChangeEffectiveDate"] is None
+
+    deserialized = _dict_to_resolution_state(serialized)
+
+    # Round-trip should preserve values and types
+    assert deserialized.change_request_effective_date == change_request_date
+    assert deserialized.upcoming_change == upcoming_change_dt
+    assert deserialized.upcoming_change_effective_date is None
 
 
 @pytest.mark.asyncio

@@ -31,6 +31,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
     AuthException,
@@ -187,7 +188,12 @@ def _resolution_state_to_dict(state: ContractPriceResolutionState) -> dict[str, 
 
 def _dict_to_resolution_state(data: dict[str, Any]) -> ContractPriceResolutionState:
     """Reconstruct ContractPriceResolutionState from dict."""
-    return ContractPriceResolutionState.from_dict(data)
+    state = ContractPriceResolutionState.from_dict(data)
+    if isinstance(state.upcoming_change, str):
+        parsed = dt_util.parse_datetime(state.upcoming_change)
+        if parsed:
+            state.upcoming_change = parsed
+    return state
 
 
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
@@ -2448,9 +2454,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     )
 
                 if last_fetch_today_str := cached_data.get("last_fetch_today"):
-                    self.last_fetch_today = datetime.fromisoformat(last_fetch_today_str)
+                    self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
                 if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
-                    self.last_fetch_tomorrow = datetime.fromisoformat(
+                    self.last_fetch_tomorrow = dt_util.parse_datetime(
                         last_fetch_tomorrow_str
                     )
         except Exception as err:
