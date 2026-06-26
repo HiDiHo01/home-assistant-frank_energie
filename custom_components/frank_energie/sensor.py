@@ -1553,22 +1553,22 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             int(
                 data[DATA_CONTRACT_PRICE_RESOLUTION_STATE]
-                .activeOption.replace("PT", "")
+                .active_option.replace("PT", "")
                 .replace("M", "")
             )
             if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
-            and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].activeOption
+            and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
             else None
         ),
         attr_fn=lambda data: (
             {
                 key: value
                 for key, value in {
-                    "available_options": state.availableOptions,
-                    "change_request_effective_date": state.changeRequestEffectiveDate,
-                    "is_change_request_possible": state.isChangeRequestPossible,
-                    "upcoming_change": state.upcomingChange,
-                    "upcoming_change_effective_date": state.upcomingChangeEffectiveDate,
+                    "available_options": state.available_options,
+                    "change_request_effective_date": state.change_request_effective_date,
+                    "is_change_request_possible": state.is_change_request_possible,
+                    "upcoming_change": state.upcoming_change,
+                    "upcoming_change_effective_date": state.upcoming_change_effective_date,
                 }.items()
                 if value is not None
             }
