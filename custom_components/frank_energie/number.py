@@ -146,7 +146,6 @@ ENERGY_TAX_REDUCTION = FrankEnergieNumberEntityDescription(
 NETWORK_CHARGES = FrankEnergieNumberEntityDescription(
     key="network_charges",
     translation_key="network_charges",
-    option_key=CONF_EXPORT_ELECTRICITY_FEE,
     option_key=CONF_NETWORK_CHARGES,
     service_name=SERVICE_NAME_COSTS,
     native_min_value=0.00,
