@@ -381,12 +381,16 @@
       },
       "contract_price_resolution_state": {
         "name": "Prijs resolutie",
+        "state": {
+          "pt15m": "15 minuten",
+          "pt60m": "60 minuten"
+        },
         "state_attributes": {
           "available_options": {
             "name": "Beschikbare opties",
             "state": {
-              "PT15M": "15 minuten",
-              "PT60M": "60 minuten"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           },
           "is_change_request_possible": {
@@ -399,8 +403,8 @@
           "upcoming_change": {
             "name": "Gekozen resolutie",
             "state": {
-              "PT15M": "15 minuten",
-              "PT60M": "60 minuten"
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
             }
           },
           "upcoming_change_effective_date": {
@@ -594,7 +598,18 @@
         "name": "Is ingeplugd"
       },
       "power_delivery_state": {
-        "name": "Stroomvoorziening status"
+        "name": "Stroomvoorziening status",
+        "state": {
+          "unplugged": "Niet gekoppeld",
+          "plugged_in_charging": "Gekoppeld, laadt op",
+          "plugged_in_not_charging": "Gekoppeld, laadt niet op",
+          "plugged_in_finished": "Gekoppeld, laden voltooid",
+          "unknown": "Onbekend",
+          "error": "Fout"
+        }
+      },
+      "charger_is_reachable": {
+        "name": "Lader bereikbaar"
       },
       "is_reachable": {
         "name": "Voertuig bereikbaar"
@@ -752,6 +767,9 @@
           "discharge_intraday": "Ontladen (Intraday)",
           "charge_intraday": "Laden (Intraday)",
           "idle_intraday": "Inactief (Intraday)",
+          "charge_epex": "Laden (EPEX)",
+          "discharge_epex": "Ontladen (EPEX)",
+          "idle_epex": "Inactief (EPEX)",
           "discharge_congestion": "Ontladen (Congestie)",
           "charge_congestion": "Laden (Congestie)",
           "discharge_self_consumption_mixed": "Ontladen (Zelfconsumptie Gemengd)",
@@ -919,6 +937,9 @@
       }
     },
     "number": {
+      "export_electricity_fee": {
+        "name": "Terugleverkosten elektriciteit"
+      },
       "monthly_subscription_fee": {
         "name": "Vaste leveringskosten"
       },

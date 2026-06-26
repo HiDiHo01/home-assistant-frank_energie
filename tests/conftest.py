@@ -141,6 +141,7 @@ def mock_coordinator():
     coordinator.data = {}
     coordinator.api = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
+    coordinator.async_update_enode_charge_settings = AsyncMock()
     return coordinator
 
 

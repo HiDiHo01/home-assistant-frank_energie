@@ -86,63 +86,67 @@ async def test_sensors(
     # Check the state of all sensors which are enabled by default
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_all_in"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).state
         == "0.15"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_market_price"
+            "sensor.frank_energie_electricity_prices_current_electricity_market_price"
         ).state
         == "0.105"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_including_tax"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
         ).state
         == "0.1125"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.23"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_market_price").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_market_price"
+        ).state
         == "0.861"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_gasprices_current_gas_price_including_tax"
+            "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
         ).state
         == "0.9225"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_gasprices_lowest_gas_price_today_all_in"
+            "sensor.frank_energie_gas_prices_lowest_gas_price_today_all_in"
         ).state
         == "1.23"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_gasprices_highest_gas_price_today_all_in"
+            "sensor.frank_energie_gas_prices_highest_gas_price_today_all_in"
         ).state
         == "1.75"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_lowest_electricity_price_today_all_in"
+            "sensor.frank_energie_electricity_prices_lowest_electricity_price_today_all_in"
         ).state
         == "0.15"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_highest_electricity_price_today_all_in"
+            "sensor.frank_energie_electricity_prices_highest_electricity_price_today_all_in"
         ).state
         == "0.5"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_average_electricity_price_today_all_in"
+            "sensor.frank_energie_electricity_prices_average_electricity_price_today_all_in"
         ).state
         == "0.20625"
     )
@@ -150,34 +154,34 @@ async def test_sensors(
     # Check the default values of these sensors which are enabled by default
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_vat_price"
+            "sensor.frank_energie_electricity_prices_current_electricity_vat_price"
         ).state
         == "0.0075"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_sourcing_markup"
+            "sensor.frank_energie_electricity_prices_current_electricity_sourcing_markup"
         ).state
         == "0.015"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_tax_only"
+            "sensor.frank_energie_electricity_prices_current_electricity_tax_only"
         ).state
         == "0.0225"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_vat_price").state
+        hass.states.get("sensor.frank_energie_gas_prices_current_gas_vat_price").state
         == "0.1845"
     )
     assert (
         hass.states.get(
-            "sensor.frank_energie_gasprices_current_gas_sourcing_price"
+            "sensor.frank_energie_gas_prices_current_gas_sourcing_price"
         ).state
         == "0.123"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_tax_only").state
+        hass.states.get("sensor.frank_energie_gas_prices_current_gas_tax_only").state
         == "0.0615"
     )
 
@@ -211,12 +215,14 @@ async def test_sensors_get_data_of_current_hour(
     # Check the state at 5:15
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_all_in"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).state
         == "0.3"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.75"
     )
 
@@ -227,12 +233,14 @@ async def test_sensors_get_data_of_current_hour(
 
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_all_in"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).state
         == "0.15"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.23"
     )
 
@@ -261,12 +269,14 @@ async def test_sensors_no_data_for_tomorrow(
     # Check the state at 5:15
     assert (
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_all_in"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).state
         == "0.3"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gasprices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.23"
     )
 
@@ -302,7 +312,7 @@ async def test_sensors_hour_price_attr(
     price_attr = [
         a["price"]
         for a in hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_all_in"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).attributes["prices"]
     ]
     assert price_attr == price_generator(0.25, 0.05) + price_generator(0.3, 0.02)
@@ -311,7 +321,7 @@ async def test_sensors_hour_price_attr(
     price_attr = [
         a["price"]
         for a in hass.states.get(
-            "sensor.frank_energie_gasprices_current_gas_price_all_in"
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
         ).attributes["prices"]
     ]
     assert price_attr == [1.75] * 6 + [1.23] * 24 + [0.75] * 18
@@ -319,22 +329,22 @@ async def test_sensors_hour_price_attr(
     # For the other sensors just check if the prices attribute is there
     assert 48 == len(
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_market_price"
+            "sensor.frank_energie_electricity_prices_current_electricity_market_price"
         ).attributes["prices"]
     )
     assert 48 == len(
         hass.states.get(
-            "sensor.frank_energie_prices_current_electricity_price_including_tax"
+            "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
         ).attributes["prices"]
     )
     assert 48 == len(
         hass.states.get(
-            "sensor.frank_energie_gasprices_current_gas_market_price"
+            "sensor.frank_energie_gas_prices_current_gas_market_price"
         ).attributes["prices"]
     )
     assert 48 == len(
         hass.states.get(
-            "sensor.frank_energie_gasprices_current_gas_price_including_tax"
+            "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
         ).attributes["prices"]
     )
 

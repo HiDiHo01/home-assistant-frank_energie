@@ -189,6 +189,9 @@
       }
     },
     "number": {
+      "export_electricity_fee": {
+        "name": "Export electricity fee"
+      },
       "consumption_threshold_price": {
         "name": "Self consumption threshold price"
       },
@@ -346,7 +349,11 @@
         "name": "Bankaccount Number"
       },
       "contract_price_resolution_state": {
-        "name": "Contract Price Resolution State",
+        "name": "Price Resolution",
+        "state": {
+          "pt15m": "15 minutes",
+          "pt60m": "60 minutes"
+        },
         "state_attributes": {
           "available_options": {
             "name": "Contract Price Resolution State",
@@ -760,7 +767,18 @@
         "name": "Is Plugged In"
       },
       "power_delivery_state": {
-        "name": "Power Delivery State"
+        "name": "Power Delivery State",
+        "state": {
+          "unplugged": "Unplugged",
+          "plugged_in_charging": "Plugged In: Charging",
+          "plugged_in_not_charging": "Plugged In: Not Charging",
+          "plugged_in_finished": "Plugged In: Finished",
+          "unknown": "Unknown",
+          "error": "Error"
+        }
+      },
+      "charger_is_reachable": {
+        "name": "Charger Reachable"
       },
       "is_reachable": {
         "name": "Vehicle Reachable"
@@ -918,6 +936,9 @@
           "discharge_intraday": "Discharging (Intraday)",
           "charge_intraday": "Charging (Intraday)",
           "idle_intraday": "Idle (Intraday)",
+          "charge_epex": "Charging (EPEX)",
+          "discharge_epex": "Discharging (EPEX)",
+          "idle_epex": "Idle (EPEX)",
           "discharge_congestion": "Discharging (Congestion)",
           "charge_congestion": "Charging (Congestion)",
           "discharge_self_consumption_mixed": "Discharging (Self Consumption Mixed)",

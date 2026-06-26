@@ -353,7 +353,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
     def __init__(
         self,
         key: str,
-        name: str,
+        name: str | None = None,
         device_class: SensorDeviceClass | BinarySensorDeviceClass | None = None,
         state_class: SensorStateClass | None = None,
         native_unit_of_measurement: str | None = None,
@@ -863,16 +863,27 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="power_delivery_state",
-        name="Power Delivery State",
+        translation_key="power_delivery_state",
         icon="mdi:flash",
         authenticated=True,
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "unplugged",
+            "plugged_in_charging",
+            "plugged_in_not_charging",
+            "plugged_in_finished",
+            "unknown",
+            "error",
+        ],
         value_fn=lambda charger: (
-            charger.charge_state.power_delivery_state if charger.charge_state else None
+            charger.charge_state.power_delivery_state.lower().replace(":", "_")
+            if charger.charge_state and charger.charge_state.power_delivery_state
+            else None
         ),
     ),
     ChargerSensorDescription(
         key="is_reachable",
-        name="Is Reachable",
+        translation_key="charger_is_reachable",
         icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: charger.is_reachable,
@@ -987,7 +998,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="is_reachable",
-        name="Vehicle Reachable",
+        translation_key="is_reachable",
         icon="mdi:car-connected",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1120,12 +1131,24 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="power_delivery_state",
-        name="Power Delivery State",
+        translation_key="power_delivery_state",
         icon="mdi:transmission-tower",
         authenticated=True,
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "unplugged",
+            "plugged_in_charging",
+            "plugged_in_not_charging",
+            "plugged_in_finished",
+            "unknown",
+            "error",
+        ],
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            data.get("chargeState", {}).get("powerDeliveryState")
+            data.get("chargeState", {})
+            .get("powerDeliveryState")
+            .lower()
+            .replace(":", "_")
             if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
             else None
         ),
@@ -1544,18 +1567,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="contract_price_resolution_state",
         name="Contract Price Resolution State",
         translation_key="contract_price_resolution_state",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        device_class=SensorDeviceClass.DURATION,
+        device_class=SensorDeviceClass.ENUM,
         state_class=None,
         icon="mdi:clock-digital",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
+        options=["pt15m", "pt60m"],
         value_fn=lambda data: (
-            int(
-                data[DATA_CONTRACT_PRICE_RESOLUTION_STATE]
-                .active_option.replace("PT", "")
-                .replace("M", "")
-            )
+            data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
             if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
             and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
             else None
@@ -1564,10 +1583,16 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             {
                 key: value
                 for key, value in {
-                    "available_options": state.available_options,
+                    "available_options": [
+                        opt.lower() for opt in state.available_options
+                    ]
+                    if state.available_options
+                    else None,
                     "change_request_effective_date": state.change_request_effective_date,
                     "is_change_request_possible": state.is_change_request_possible,
-                    "upcoming_change": state.upcoming_change,
+                    "upcoming_change": state.upcoming_change.lower()
+                    if state.upcoming_change
+                    else None,
                     "upcoming_change_effective_date": state.upcoming_change_effective_date,
                 }.items()
                 if value is not None
@@ -4820,6 +4845,9 @@ def _build_single_smart_battery_descriptions(
                         "discharge_intraday",
                         "charge_intraday",
                         "idle_intraday",
+                        "charge_epex",
+                        "discharge_epex",
+                        "idle_epex",
                         "discharge_congestion",
                         "charge_congestion",
                         "discharge_self_consumption_mixed",
