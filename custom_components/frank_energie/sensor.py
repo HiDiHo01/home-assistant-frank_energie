@@ -353,7 +353,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
     def __init__(
         self,
         key: str,
-        name: str,
+        name: str | None = None,
         device_class: SensorDeviceClass | BinarySensorDeviceClass | None = None,
         state_class: SensorStateClass | None = None,
         native_unit_of_measurement: str | None = None,
@@ -998,7 +998,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="is_reachable",
-        name=None,
         translation_key="is_reachable",
         icon="mdi:car-connected",
         authenticated=True,
@@ -1132,7 +1131,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="power_delivery_state",
-        name=None,
         translation_key="power_delivery_state",
         icon="mdi:transmission-tower",
         authenticated=True,
@@ -1589,10 +1587,16 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             {
                 key: value
                 for key, value in {
-                    "available_options": state.available_options,
+                    "available_options": [
+                        opt.lower() for opt in state.available_options
+                    ]
+                    if state.available_options
+                    else None,
                     "change_request_effective_date": state.change_request_effective_date,
                     "is_change_request_possible": state.is_change_request_possible,
-                    "upcoming_change": state.upcoming_change,
+                    "upcoming_change": state.upcoming_change.lower()
+                    if state.upcoming_change
+                    else None,
                     "upcoming_change_effective_date": state.upcoming_change_effective_date,
                 }.items()
                 if value is not None
