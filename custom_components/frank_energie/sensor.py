@@ -1147,7 +1147,10 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         ],
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            data.get("chargeState", {}).get("powerDeliveryState").lower().replace(":", "_")
+            data.get("chargeState", {})
+            .get("powerDeliveryState")
+            .lower()
+            .replace(":", "_")
             if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
             else None
         ),
