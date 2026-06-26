@@ -26,10 +26,12 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
     AuthException,
@@ -61,6 +63,7 @@ from python_frank_energie.models import (
 )
 
 from .const import (
+    DOMAIN,
     TIMEZONE_AMSTERDAM,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
@@ -112,6 +115,85 @@ def _get_refresh_token_expires_at(api: Any) -> datetime | None:
     ):
         return api._auth.refresh_token_expires_at
     return None
+
+
+def _price_to_dict(price: Price) -> dict[str, Any]:
+    """Convert Price to dict."""
+    return {
+        "from": price.date_from.isoformat() if price.date_from else None,
+        "till": price.date_till.isoformat() if price.date_till else None,
+        "marketPrice": price.market_price,
+        "marketPriceTax": price.market_price_tax,
+        "sourcingMarkupPrice": price.sourcing_markup_price,
+        "energyTaxPrice": price.energy_tax_price,
+        "perUnit": price.per_unit,
+    }
+
+
+def _market_prices_to_dict(market_prices: MarketPrices) -> dict[str, Any]:
+    """Convert MarketPrices to serializable dict."""
+    return {
+        "electricity": [_price_to_dict(p) for p in market_prices.electricity.all]
+        if market_prices.electricity
+        else [],
+        "gas": [_price_to_dict(p) for p in market_prices.gas.all]
+        if market_prices.gas
+        else [],
+        "energy_country": market_prices.energy_country,
+        "energy_type": market_prices.energy_type,
+    }
+
+
+def _dict_to_market_prices(data: dict[str, Any]) -> MarketPrices:
+    """Reconstruct MarketPrices from serialized dict."""
+    elec_prices = data.get("electricity", [])
+    gas_prices = data.get("gas", [])
+    country = data.get("energy_country", "NL")
+    energy_type = data.get("energy_type")
+
+    electricity = PriceData(prices=elec_prices, energy_type="electricity")
+    gas = PriceData(prices=gas_prices, energy_type="gas")
+
+    return MarketPrices(
+        electricity=electricity,
+        gas=gas,
+        energy_country=country,
+        energy_type=energy_type,
+    )
+
+
+def _resolution_state_to_dict(state: ContractPriceResolutionState) -> dict[str, Any]:
+    """Convert ContractPriceResolutionState to serializable dict."""
+    return {
+        "activeOption": state.active_option,
+        "availableOptions": state.available_options,
+        "changeRequestEffectiveDate": (
+            state.change_request_effective_date.isoformat()
+            if isinstance(state.change_request_effective_date, (date, datetime))
+            else state.change_request_effective_date
+        ),
+        "isChangeRequestPossible": state.is_change_request_possible,
+        "upcomingChange": (
+            state.upcoming_change.isoformat()
+            if isinstance(state.upcoming_change, (date, datetime))
+            else state.upcoming_change
+        ),
+        "upcomingChangeEffectiveDate": (
+            state.upcoming_change_effective_date.isoformat()
+            if isinstance(state.upcoming_change_effective_date, (date, datetime))
+            else state.upcoming_change_effective_date
+        ),
+    }
+
+
+def _dict_to_resolution_state(data: dict[str, Any]) -> ContractPriceResolutionState:
+    """Reconstruct ContractPriceResolutionState from dict."""
+    state = ContractPriceResolutionState.from_dict(data)
+    if isinstance(state.upcoming_change, str):
+        parsed = dt_util.parse_datetime(state.upcoming_change)
+        if parsed:
+            state.upcoming_change = parsed
+    return state
 
 
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
@@ -2344,6 +2426,45 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self.name = "Frank Energie price coordinator"
         self.settings_coordinator = settings_coordinator
         self.update_interval = None
+        self.store = Store(
+            hass,
+            1,
+            f"{DOMAIN}_prices_{config_entry.entry_id}",
+        )
+
+    async def async_config_entry_first_refresh(self) -> None:
+        """Load cached prices and then perform first refresh."""
+        try:
+            cached_data = await self.store.async_load()
+            if cached_data:
+                _LOGGER.debug("Loading cached prices from disk")
+                if prices_today_dict := cached_data.get("prices_today"):
+                    self._static_prices_today = _dict_to_market_prices(
+                        prices_today_dict
+                    )
+                if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
+                    self.cached_prices_tomorrow = _dict_to_market_prices(
+                        prices_tomorrow_dict
+                    )
+                if resolution_state_dict := cached_data.get(
+                    "contract_price_resolution_state"
+                ):
+                    self._static_contract_price_resolution_state = (
+                        _dict_to_resolution_state(resolution_state_dict)
+                    )
+
+                if last_fetch_today_str := cached_data.get("last_fetch_today"):
+                    self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
+                if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
+                    self.last_fetch_tomorrow = dt_util.parse_datetime(
+                        last_fetch_tomorrow_str
+                    )
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to load cached prices from disk: %s", err, exc_info=True
+            )
+
+        await super().async_config_entry_first_refresh()
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
@@ -2484,6 +2605,34 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self._maybe_fire_lowest_price_event(prices_today, today, now_utc)
         self._maybe_fire_lowest_4p_event(prices_today, today, now_utc)
         self._maybe_fire_lowest_16p_event(prices_today, today, now_utc)
+
+        if not skip_api_calls:
+            try:
+                await self.store.async_save(
+                    {
+                        "prices_today": _market_prices_to_dict(prices_today)
+                        if prices_today
+                        else None,
+                        "prices_tomorrow": _market_prices_to_dict(prices_tomorrow)
+                        if prices_tomorrow
+                        else None,
+                        "contract_price_resolution_state": _resolution_state_to_dict(
+                            data_contract_price_resolution_state
+                        )
+                        if data_contract_price_resolution_state
+                        else None,
+                        "last_fetch_today": self.last_fetch_today.isoformat()
+                        if self.last_fetch_today
+                        else None,
+                        "last_fetch_tomorrow": self.last_fetch_tomorrow.isoformat()
+                        if self.last_fetch_tomorrow
+                        else None,
+                    }
+                )
+            except Exception as err:
+                _LOGGER.warning(
+                    "Failed to save prices to disk cache: %s", err, exc_info=True
+                )
 
         return result
 
