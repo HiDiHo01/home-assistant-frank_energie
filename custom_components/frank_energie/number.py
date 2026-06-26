@@ -24,7 +24,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from python_frank_energie.models import SmartBatteryDetails
+from python_frank_energie.models import EnodeVehicle, EnodeCharger, SmartBatteryDetails
 
 from . import FrankEnergieEntryData
 from .const import (
@@ -32,6 +32,7 @@ from .const import (
     COMPONENT_TITLE,
     CONF_ENERGY_TAX_ODE,
     CONF_ENERGY_TAX_REDUCTION,
+    CONF_EXPORT_ELECTRICITY_FEE,
     CONF_MONTHLY_SUBSCRIPTION_FEE,
     CONF_NETWORK_CHARGES,
     DATA_BATTERY_DETAILS,
@@ -39,6 +40,7 @@ from .const import (
     DATA_ENODE_VEHICLES,
     DEFAULT_ENERGY_TAX_ODE,
     DEFAULT_ENERGY_TAX_REDUCTION,
+    DEFAULT_EXPORT_ELECTRICITY_FEE,
     DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
     DEFAULT_NETWORK_CHARGES,
     DOMAIN,
@@ -156,12 +158,35 @@ NETWORK_CHARGES = FrankEnergieNumberEntityDescription(
         )
     ),
 )
+EXPORT_ELECTRICITY_FEE = (
+    FrankEnergieNumberEntityDescription(
+        key="export_electricity_fee",
+        translation_key="export_electricity_fee",
+        option_key=CONF_EXPORT_ELECTRICITY_FEE,
+        service_name=SERVICE_NAME_COSTS,
+        native_min_value=0.00,
+        native_max_value=50.00,
+        native_step=0.000001,
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=6,
+        icon="mdi:cash",
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+        value_fn=lambda entry: float(
+            entry.options.get(
+                CONF_EXPORT_ELECTRICITY_FEE,
+                DEFAULT_EXPORT_ELECTRICITY_FEE,
+            )
+        ),
+    )
+)
 
 CONFIG_NUMBER_DESCRIPTIONS: Final = (
     MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION,
     ENERGY_TAX_ODE,
     ENERGY_TAX_REDUCTION,
     NETWORK_CHARGES,
+    EXPORT_ELECTRICITY_FEE,
 )
 
 
@@ -488,87 +513,6 @@ class FrankEnergieFixedMonthlyCostsNumber(
         self.async_write_ha_state()
 
 
-class old_FrankEnergieFixedMonthlyCostsNumber(
-    CoordinatorEntity[FrankEnergieCoordinator],
-    NumberEntity,
-):
-    """Fixed monthly subscription costs."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Monthly Subscription Fee"
-    _attr_native_min_value = 0.0
-    _attr_native_max_value = 50.0
-    _attr_native_step = 0.01
-    _attr_native_unit_of_measurement = CURRENCY_EURO
-    _attr_suggested_display_precision = 2
-    _attr_translation_key = "monthly_subscription_fee"
-    _attr_icon = "mdi:cash"
-    _attr_entity_category = EntityCategory.CONFIG
-    service_name = SERVICE_NAME_COSTS
-
-    def __init__(
-        self,
-        coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry[FrankEnergieEntryData],
-    ) -> None:
-        """Initialize entity."""
-        super().__init__(coordinator)
-
-        self._entry = entry
-
-        self._attr_unique_id = f"{entry.entry_id}_monthly_subscription_fee"
-
-    @property
-    def available(self) -> bool:
-        """Return entity availability."""
-        return True  # always available
-        # return super().available
-
-    @property
-    def native_value(self) -> float:
-        """Return current configured value."""
-        return float(
-            self._entry.options.get(
-                CONF_MONTHLY_SUBSCRIPTION_FEE,
-                DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
-            )
-        )
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        return DeviceInfo(
-            identifiers={
-                (
-                    DOMAIN,
-                    f"{self._entry.entry_id}_{self.service_name}",
-                )
-            },
-            name=f"{COMPONENT_TITLE} - {self.service_name}",
-            translation_key=device_translation_key(self.service_name),
-            manufacturer=COMPONENT_TITLE,
-            model=self.service_name,
-            configuration_url=API_CONF_URL,
-            entry_type=DeviceEntryType.SERVICE,
-        )
-
-    async def async_set_native_value(
-        self,
-        value: float,
-    ) -> None:
-        """Persist value."""
-        self.hass.config_entries.async_update_entry(
-            self._entry,
-            options={
-                **self._entry.options,
-                CONF_MONTHLY_SUBSCRIPTION_FEE: value,
-            },
-        )
-
-        await self.coordinator.async_request_refresh()
-        self.async_write_ha_state()
-
-
 class FrankEnergieEnodeChargeLimitNumber(
     CoordinatorEntity[FrankEnergieCoordinator], NumberEntity
 ):
@@ -642,7 +586,9 @@ class FrankEnergieEnodeChargeLimitNumber(
             name=name,
         )
 
-    def _get_item(self):
+    def _get_item(
+        self,
+    ) -> EnodeVehicle | EnodeCharger | None:
         """Return the device details."""
         if self._is_vehicle:
             enode_data = self.coordinator.data.get(DATA_ENODE_VEHICLES)
