@@ -349,7 +349,11 @@
         "name": "Bankaccount Number"
       },
       "contract_price_resolution_state": {
-        "name": "Contract Price Resolution State",
+        "name": "Price Resolution",
+        "state": {
+          "pt15m": "15 minutes",
+          "pt60m": "60 minutes"
+        },
         "state_attributes": {
           "available_options": {
             "name": "Contract Price Resolution State",

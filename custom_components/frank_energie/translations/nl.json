@@ -381,6 +381,10 @@
       },
       "contract_price_resolution_state": {
         "name": "Prijs resolutie",
+        "state": {
+          "pt15m": "15 minuten",
+          "pt60m": "60 minuten"
+        },
         "state_attributes": {
           "available_options": {
             "name": "Beschikbare opties",

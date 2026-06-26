@@ -1567,18 +1567,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="contract_price_resolution_state",
         name="Contract Price Resolution State",
         translation_key="contract_price_resolution_state",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        device_class=SensorDeviceClass.DURATION,
+        device_class=SensorDeviceClass.ENUM,
         state_class=None,
         icon="mdi:clock-digital",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
+        options=["pt15m", "pt60m"],
         value_fn=lambda data: (
-            int(
-                data[DATA_CONTRACT_PRICE_RESOLUTION_STATE]
-                .active_option.replace("PT", "")
-                .replace("M", "")
-            )
+            data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
             if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
             and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
             else None
