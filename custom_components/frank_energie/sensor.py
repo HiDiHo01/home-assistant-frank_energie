@@ -867,9 +867,18 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         icon="mdi:flash",
         authenticated=True,
         device_class=SensorDeviceClass.ENUM,
-        options=["unplugged", "plugged_in:charging", "plugged_in:not_charging", "plugged_in:finished", "unknown", "error"],
+        options=[
+            "unplugged",
+            "plugged_in:charging",
+            "plugged_in:not_charging",
+            "plugged_in:finished",
+            "unknown",
+            "error",
+        ],
         value_fn=lambda charger: (
-            charger.charge_state.power_delivery_state.lower() if charger.charge_state and charger.charge_state.power_delivery_state else None
+            charger.charge_state.power_delivery_state.lower()
+            if charger.charge_state and charger.charge_state.power_delivery_state
+            else None
         ),
     ),
     ChargerSensorDescription(
@@ -1128,7 +1137,14 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         icon="mdi:transmission-tower",
         authenticated=True,
         device_class=SensorDeviceClass.ENUM,
-        options=["unplugged", "plugged_in:charging", "plugged_in:not_charging", "plugged_in:finished", "unknown", "error"],
+        options=[
+            "unplugged",
+            "plugged_in:charging",
+            "plugged_in:not_charging",
+            "plugged_in:finished",
+            "unknown",
+            "error",
+        ],
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
             data.get("chargeState", {}).get("powerDeliveryState").lower()

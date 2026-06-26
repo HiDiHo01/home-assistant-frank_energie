@@ -103,11 +103,15 @@ async def test_sensors(
         == "0.1125"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.23"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_market_price").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_market_price"
+        ).state
         == "0.861"
     )
     assert (
@@ -216,7 +220,9 @@ async def test_sensors_get_data_of_current_hour(
         == "0.3"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.75"
     )
 
@@ -232,7 +238,9 @@ async def test_sensors_get_data_of_current_hour(
         == "0.15"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.23"
     )
 
@@ -266,7 +274,9 @@ async def test_sensors_no_data_for_tomorrow(
         == "0.3"
     )
     assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_price_all_in").state
+        hass.states.get(
+            "sensor.frank_energie_gas_prices_current_gas_price_all_in"
+        ).state
         == "1.23"
     )
 
