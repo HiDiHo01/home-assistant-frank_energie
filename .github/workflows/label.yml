@@ -5,10 +5,12 @@
 # file with configuration.  For more information, see:
 # https://github.com/actions/labeler
 
-name: PR Labeler
+name: PR and Issue Labeler
 on:
+  issues:
+    types: [opened, edited]
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [edited, closed, opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -26,6 +28,33 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const item = context.payload.issue || context.payload.pull_request;
+            const title = item.title.toLowerCase();
+
+            const labels = [];
+
+            if (title.includes("deps")) labels.push("dependencies");
+            if (title.includes("chore")) labels.push("chore");
+            if (title.includes("fix")) labels.push("fixed");
+            if (title.includes("feat")) labels.push("feature");
+            if (title.includes("enode")) labels.push("enode");
+            if (title.includes("graphql")) labels.push("graphql");
+            if (title.includes("price")) labels.push("prices");
+            if (title.includes("sensor")) labels.push("sensor");
+            if (title.includes("number")) labels.push("number");
+            if (title.includes("breaking")) labels.push("breaking-change");
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: item.number,
+                labels,
+              });
+            }
       - name: Apply labels
         uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 #v6
         with:
