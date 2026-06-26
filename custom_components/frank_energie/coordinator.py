@@ -2460,7 +2460,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                         last_fetch_tomorrow_str
                     )
         except Exception as err:
-            _LOGGER.warning("Failed to load cached prices from disk: %s", err)
+            _LOGGER.warning(
+                "Failed to load cached prices from disk: %s", err, exc_info=True
+            )
 
         await super().async_config_entry_first_refresh()
 
@@ -2628,7 +2630,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     }
                 )
             except Exception as err:
-                _LOGGER.warning("Failed to save prices to disk cache: %s", err)
+                _LOGGER.warning(
+                    "Failed to save prices to disk cache: %s", err, exc_info=True
+                )
 
         return result
 
