@@ -383,28 +383,28 @@
         "name": "Prijs resolutie",
         "state_attributes": {
           "available_options": {
-            "name": "Contract prijsresolutie status",
+            "name": "Beschikbare opties",
             "state": {
-              "pt15m": "15 minuten",
-              "pt60m": "60 minuten"
+              "PT15M": "15 minuten",
+              "PT60M": "60 minuten"
             }
           },
           "is_change_request_possible": {
-            "name": "Contract prijsresolutie status",
+            "name": "Is veranderen mogelijk",
             "state": {
               "false": "Nee",
               "true": "Ja"
             }
           },
           "upcoming_change": {
-            "name": "Contract prijsresolutie status",
+            "name": "Gekozen resolutie",
             "state": {
-              "pt15m": "15 minuten",
-              "pt60m": "60 minuten"
+              "PT15M": "15 minuten",
+              "PT60M": "60 minuten"
             }
           },
           "upcoming_change_effective_date": {
-            "name": "Contract prijsresolutie status"
+            "name": "Verandering gaat in op"
           }
         }
       },
