@@ -869,14 +869,14 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=[
             "unplugged",
-            "plugged_in:charging",
-            "plugged_in:not_charging",
-            "plugged_in:finished",
+            "plugged_in_charging",
+            "plugged_in_not_charging",
+            "plugged_in_finished",
             "unknown",
             "error",
         ],
         value_fn=lambda charger: (
-            charger.charge_state.power_delivery_state.lower()
+            charger.charge_state.power_delivery_state.lower().replace(":", "_")
             if charger.charge_state and charger.charge_state.power_delivery_state
             else None
         ),
@@ -1139,15 +1139,15 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         device_class=SensorDeviceClass.ENUM,
         options=[
             "unplugged",
-            "plugged_in:charging",
-            "plugged_in:not_charging",
-            "plugged_in:finished",
+            "plugged_in_charging",
+            "plugged_in_not_charging",
+            "plugged_in_finished",
             "unknown",
             "error",
         ],
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            data.get("chargeState", {}).get("powerDeliveryState").lower()
+            data.get("chargeState", {}).get("powerDeliveryState").lower().replace(":", "_")
             if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
             else None
         ),

@@ -766,9 +766,9 @@
         "name": "Power Delivery State",
         "state": {
           "unplugged": "Unplugged",
-          "plugged_in:charging": "Plugged In: Charging",
-          "plugged_in:not_charging": "Plugged In: Not Charging",
-          "plugged_in:finished": "Plugged In: Finished",
+          "plugged_in_charging": "Plugged In: Charging",
+          "plugged_in_not_charging": "Plugged In: Not Charging",
+          "plugged_in_finished": "Plugged In: Finished",
           "unknown": "Unknown",
           "error": "Error"
         }

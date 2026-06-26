@@ -597,9 +597,9 @@
         "name": "Stroomvoorziening status",
         "state": {
           "unplugged": "Niet gekoppeld",
-          "plugged_in:charging": "Gekoppeld, laadt op",
-          "plugged_in:not_charging": "Gekoppeld, laadt niet op",
-          "plugged_in:finished": "Gekoppeld, laden voltooid",
+          "plugged_in_charging": "Gekoppeld, laadt op",
+          "plugged_in_not_charging": "Gekoppeld, laadt niet op",
+          "plugged_in_finished": "Gekoppeld, laden voltooid",
           "unknown": "Onbekend",
           "error": "Fout"
         }
