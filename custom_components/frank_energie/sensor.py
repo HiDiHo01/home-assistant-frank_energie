@@ -863,16 +863,18 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="power_delivery_state",
-        name="Power Delivery State",
+        translation_key="power_delivery_state",
         icon="mdi:flash",
         authenticated=True,
+        device_class=SensorDeviceClass.ENUM,
+        options=["unplugged", "plugged_in:charging", "plugged_in:not_charging", "plugged_in:finished", "unknown", "error"],
         value_fn=lambda charger: (
-            charger.charge_state.power_delivery_state if charger.charge_state else None
+            charger.charge_state.power_delivery_state.lower() if charger.charge_state and charger.charge_state.power_delivery_state else None
         ),
     ),
     ChargerSensorDescription(
         key="is_reachable",
-        name="Is Reachable",
+        translation_key="charger_is_reachable",
         icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: charger.is_reachable,
@@ -987,7 +989,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="is_reachable",
-        name="Vehicle Reachable",
+        name=None,
+        translation_key="is_reachable",
         icon="mdi:car-connected",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1120,12 +1123,15 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="power_delivery_state",
-        name="Power Delivery State",
+        name=None,
+        translation_key="power_delivery_state",
         icon="mdi:transmission-tower",
         authenticated=True,
+        device_class=SensorDeviceClass.ENUM,
+        options=["unplugged", "plugged_in:charging", "plugged_in:not_charging", "plugged_in:finished", "unknown", "error"],
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
-            data.get("chargeState", {}).get("powerDeliveryState")
+            data.get("chargeState", {}).get("powerDeliveryState").lower()
             if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
             else None
         ),

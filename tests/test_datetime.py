@@ -65,29 +65,13 @@ async def test_vehicle_deadline_set_value(
         mock_coordinator, mock_config_entry, vehicle_id
     )
 
-    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = True
+    mock_coordinator.async_update_enode_charge_settings.return_value = True
 
     new_deadline = datetime(2026, 5, 29, 8, 30, tzinfo=timezone.utc)
     await entity.async_set_value(new_deadline)
 
-    expected_payload = {
-        "id": "set_123",
-        "deadline": new_deadline.isoformat(),
-        "isSmartChargingEnabled": True,
-        "isSolarChargingEnabled": False,
-        "minChargeLimit": 20,
-        "maxChargeLimit": 80,
-        "hourMonday": 420,
-        "hourTuesday": 420,
-        "hourWednesday": 420,
-        "hourThursday": 420,
-        "hourFriday": 420,
-        "hourSaturday": 420,
-        "hourSunday": 420,
-    }
-
-    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once_with(
-        expected_payload
+    mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
+        vehicle_id, True, {"deadline": new_deadline.isoformat()}
     )
     mock_coordinator.async_request_refresh.assert_called_once()
 
@@ -157,29 +141,13 @@ async def test_charger_deadline_set_value(
         mock_coordinator, mock_config_entry, charger_id
     )
 
-    mock_coordinator.api.enode_update_charger_charge_settings.return_value = True
+    mock_coordinator.async_update_enode_charge_settings.return_value = True
 
     new_deadline = datetime(2026, 5, 29, 7, 0, tzinfo=timezone.utc)
     await entity.async_set_value(new_deadline)
 
-    expected_payload = {
-        "id": "set_456",
-        "deadline": new_deadline.isoformat(),
-        "isSmartChargingEnabled": False,
-        "isSolarChargingEnabled": True,
-        "minChargeLimit": 10,
-        "maxChargeLimit": 90,
-        "hourMonday": 480,
-        "hourTuesday": 480,
-        "hourWednesday": 480,
-        "hourThursday": 480,
-        "hourFriday": 480,
-        "hourSaturday": 480,
-        "hourSunday": 480,
-    }
-
-    mock_coordinator.api.enode_update_charger_charge_settings.assert_called_once_with(
-        expected_payload
+    mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
+        charger_id, False, {"deadline": new_deadline.isoformat()}
     )
     mock_coordinator.async_request_refresh.assert_called_once()
 
@@ -205,12 +173,12 @@ async def test_vehicle_deadline_set_value_failure(
         mock_coordinator, mock_config_entry, vehicle_id
     )
 
-    mock_coordinator.api.enode_update_vehicle_charge_settings.return_value = False
+    mock_coordinator.async_update_enode_charge_settings.return_value = False
 
     new_deadline = datetime(2026, 5, 29, 7, 0, tzinfo=timezone.utc)
     await entity.async_set_value(new_deadline)
 
-    mock_coordinator.api.enode_update_vehicle_charge_settings.assert_called_once()
+    mock_coordinator.async_update_enode_charge_settings.assert_called_once()
     mock_coordinator.async_request_refresh.assert_not_called()
 
 
@@ -247,10 +215,10 @@ async def test_charger_deadline_set_value_failure(
         mock_coordinator, mock_config_entry, charger_id
     )
 
-    mock_coordinator.api.enode_update_charger_charge_settings.return_value = False
+    mock_coordinator.async_update_enode_charge_settings.return_value = False
 
     new_deadline = datetime(2026, 5, 29, 7, 0, tzinfo=timezone.utc)
     await entity.async_set_value(new_deadline)
 
-    mock_coordinator.api.enode_update_charger_charge_settings.assert_called_once()
+    mock_coordinator.async_update_enode_charge_settings.assert_called_once()
     mock_coordinator.async_request_refresh.assert_not_called()

@@ -189,6 +189,9 @@
       }
     },
     "number": {
+      "export_electricity_fee": {
+        "name": "Export electricity fee"
+      },
       "consumption_threshold_price": {
         "name": "Self consumption threshold price"
       },
@@ -760,7 +763,18 @@
         "name": "Is Plugged In"
       },
       "power_delivery_state": {
-        "name": "Power Delivery State"
+        "name": "Power Delivery State",
+        "state": {
+          "unplugged": "Unplugged",
+          "plugged_in:charging": "Plugged In: Charging",
+          "plugged_in:not_charging": "Plugged In: Not Charging",
+          "plugged_in:finished": "Plugged In: Finished",
+          "unknown": "Unknown",
+          "error": "Error"
+        }
+      },
+      "charger_is_reachable": {
+        "name": "Charger Reachable"
       },
       "is_reachable": {
         "name": "Vehicle Reachable"

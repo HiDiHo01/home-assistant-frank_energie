@@ -594,7 +594,18 @@
         "name": "Is ingeplugd"
       },
       "power_delivery_state": {
-        "name": "Stroomvoorziening status"
+        "name": "Stroomvoorziening status",
+        "state": {
+          "unplugged": "Niet gekoppeld",
+          "plugged_in:charging": "Gekoppeld, laadt op",
+          "plugged_in:not_charging": "Gekoppeld, laadt niet op",
+          "plugged_in:finished": "Gekoppeld, laden voltooid",
+          "unknown": "Onbekend",
+          "error": "Fout"
+        }
+      },
+      "charger_is_reachable": {
+        "name": "Lader bereikbaar"
       },
       "is_reachable": {
         "name": "Voertuig bereikbaar"
@@ -919,6 +930,9 @@
       }
     },
     "number": {
+      "export_electricity_fee": {
+        "name": "Terugleverkosten elektriciteit"
+      },
       "monthly_subscription_fee": {
         "name": "Vaste leveringskosten"
       },
