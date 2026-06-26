@@ -62,7 +62,8 @@ class FrankEnergieNumberEntityDescription(NumberEntityDescription):
 
     # key: str
     # translation_key: str = ""
-    service_name: str = ""
+    service_name: Final[str] = ""
+    option_key: str = ""
 
     # native_min_value: float = 0
     # native_max_value: float = 10
@@ -85,6 +86,7 @@ class FrankEnergieNumberEntityDescription(NumberEntityDescription):
 MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION = FrankEnergieNumberEntityDescription(
     key="monthly_subscription_fee",
     translation_key="monthly_subscription_fee",
+    option_key=CONF_MONTHLY_SUBSCRIPTION_FEE,
     service_name=SERVICE_NAME_COSTS,
     native_min_value=0.0,
     native_max_value=10.0,
@@ -104,6 +106,7 @@ MONTHLY_SUBSCRIPTION_FEE_DESCRIPTION = FrankEnergieNumberEntityDescription(
 ENERGY_TAX_ODE = FrankEnergieNumberEntityDescription(
     key="energy_tax_ode",
     translation_key="energy_tax_ode",
+    option_key=CONF_ENERGY_TAX_ODE,
     service_name=SERVICE_NAME_COSTS,
     native_min_value=0.0,
     native_max_value=50.0,
@@ -123,6 +126,7 @@ ENERGY_TAX_ODE = FrankEnergieNumberEntityDescription(
 ENERGY_TAX_REDUCTION = FrankEnergieNumberEntityDescription(
     key="energy_tax_reduction",
     translation_key="energy_tax_reduction",
+    option_key=CONF_ENERGY_TAX_REDUCTION,
     service_name=SERVICE_NAME_COSTS,
     native_min_value=-100.00,
     native_max_value=0.00,
@@ -142,6 +146,8 @@ ENERGY_TAX_REDUCTION = FrankEnergieNumberEntityDescription(
 NETWORK_CHARGES = FrankEnergieNumberEntityDescription(
     key="network_charges",
     translation_key="network_charges",
+    option_key=CONF_EXPORT_ELECTRICITY_FEE,
+    option_key=CONF_NETWORK_CHARGES,
     service_name=SERVICE_NAME_COSTS,
     native_min_value=0.00,
     native_max_value=50.00,
@@ -505,7 +511,7 @@ class FrankEnergieFixedMonthlyCostsNumber(
             self._entry,
             options={
                 **self._entry.options,
-                self.entity_description.key: value,
+                self.entity_description.option_key: value,
             },
         )
 
