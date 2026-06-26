@@ -132,12 +132,12 @@ def _price_to_dict(price: Price) -> dict[str, Any]:
 def _market_prices_to_dict(market_prices: MarketPrices) -> dict[str, Any]:
     """Convert MarketPrices to serializable dict."""
     return {
-        "electricity": [
-            _price_to_dict(p) for p in market_prices.electricity.all
-        ] if market_prices.electricity else [],
-        "gas": [
-            _price_to_dict(p) for p in market_prices.gas.all
-        ] if market_prices.gas else [],
+        "electricity": [_price_to_dict(p) for p in market_prices.electricity.all]
+        if market_prices.electricity
+        else [],
+        "gas": [_price_to_dict(p) for p in market_prices.gas.all]
+        if market_prices.gas
+        else [],
         "energy_country": market_prices.energy_country,
         "energy_type": market_prices.energy_type,
     }
@@ -2433,16 +2433,26 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             if cached_data:
                 _LOGGER.debug("Loading cached prices from disk")
                 if prices_today_dict := cached_data.get("prices_today"):
-                    self._static_prices_today = _dict_to_market_prices(prices_today_dict)
+                    self._static_prices_today = _dict_to_market_prices(
+                        prices_today_dict
+                    )
                 if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
-                    self.cached_prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
-                if resolution_state_dict := cached_data.get("contract_price_resolution_state"):
-                    self._static_contract_price_resolution_state = _dict_to_resolution_state(resolution_state_dict)
+                    self.cached_prices_tomorrow = _dict_to_market_prices(
+                        prices_tomorrow_dict
+                    )
+                if resolution_state_dict := cached_data.get(
+                    "contract_price_resolution_state"
+                ):
+                    self._static_contract_price_resolution_state = (
+                        _dict_to_resolution_state(resolution_state_dict)
+                    )
 
                 if last_fetch_today_str := cached_data.get("last_fetch_today"):
                     self.last_fetch_today = datetime.fromisoformat(last_fetch_today_str)
                 if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
-                    self.last_fetch_tomorrow = datetime.fromisoformat(last_fetch_tomorrow_str)
+                    self.last_fetch_tomorrow = datetime.fromisoformat(
+                        last_fetch_tomorrow_str
+                    )
         except Exception as err:
             _LOGGER.warning("Failed to load cached prices from disk: %s", err)
 
@@ -2590,13 +2600,27 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         if not skip_api_calls:
             try:
-                await self.store.async_save({
-                    "prices_today": _market_prices_to_dict(prices_today) if prices_today else None,
-                    "prices_tomorrow": _market_prices_to_dict(prices_tomorrow) if prices_tomorrow else None,
-                    "contract_price_resolution_state": _resolution_state_to_dict(data_contract_price_resolution_state) if data_contract_price_resolution_state else None,
-                    "last_fetch_today": self.last_fetch_today.isoformat() if self.last_fetch_today else None,
-                    "last_fetch_tomorrow": self.last_fetch_tomorrow.isoformat() if self.last_fetch_tomorrow else None,
-                })
+                await self.store.async_save(
+                    {
+                        "prices_today": _market_prices_to_dict(prices_today)
+                        if prices_today
+                        else None,
+                        "prices_tomorrow": _market_prices_to_dict(prices_tomorrow)
+                        if prices_tomorrow
+                        else None,
+                        "contract_price_resolution_state": _resolution_state_to_dict(
+                            data_contract_price_resolution_state
+                        )
+                        if data_contract_price_resolution_state
+                        else None,
+                        "last_fetch_today": self.last_fetch_today.isoformat()
+                        if self.last_fetch_today
+                        else None,
+                        "last_fetch_tomorrow": self.last_fetch_tomorrow.isoformat()
+                        if self.last_fetch_tomorrow
+                        else None,
+                    }
+                )
             except Exception as err:
                 _LOGGER.warning("Failed to save prices to disk cache: %s", err)
 

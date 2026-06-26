@@ -163,27 +163,25 @@ NETWORK_CHARGES = FrankEnergieNumberEntityDescription(
         )
     ),
 )
-EXPORT_ELECTRICITY_FEE = (
-    FrankEnergieNumberEntityDescription(
-        key="export_electricity_fee",
-        translation_key="export_electricity_fee",
-        option_key=CONF_EXPORT_ELECTRICITY_FEE,
-        service_name=SERVICE_NAME_COSTS,
-        native_min_value=0.00,
-        native_max_value=50.00,
-        native_step=0.000001,
-        native_unit_of_measurement=UNIT_ELECTRICITY,
-        suggested_display_precision=6,
-        icon="mdi:cash",
-        mode=NumberMode.BOX,
-        entity_category=EntityCategory.CONFIG,
-        value_fn=lambda entry: float(
-            entry.options.get(
-                CONF_EXPORT_ELECTRICITY_FEE,
-                DEFAULT_EXPORT_ELECTRICITY_FEE,
-            )
-        ),
-    )
+EXPORT_ELECTRICITY_FEE = FrankEnergieNumberEntityDescription(
+    key="export_electricity_fee",
+    translation_key="export_electricity_fee",
+    option_key=CONF_EXPORT_ELECTRICITY_FEE,
+    service_name=SERVICE_NAME_COSTS,
+    native_min_value=0.00,
+    native_max_value=50.00,
+    native_step=0.000001,
+    native_unit_of_measurement=UNIT_ELECTRICITY,
+    suggested_display_precision=6,
+    icon="mdi:cash",
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    value_fn=lambda entry: float(
+        entry.options.get(
+            CONF_EXPORT_ELECTRICITY_FEE,
+            DEFAULT_EXPORT_ELECTRICITY_FEE,
+        )
+    ),
 )
 
 CONFIG_NUMBER_DESCRIPTIONS: Final = (
