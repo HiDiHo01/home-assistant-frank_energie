@@ -1281,8 +1281,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
         try:
+            # Override start_date to fetch Month-To-Date sessions for period totals, ensuring we include yesterday
+            today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+            mtd_start = min(today.replace(day=1), today - timedelta(days=1))
             sessions = await self.api.smart_battery_sessions(
-                battery.id, start_date, tomorrow
+                battery.id, mtd_start, tomorrow
             )
             if sessions and isinstance(sessions.sessions, list):
                 _LOGGER.debug(
@@ -2998,8 +3001,10 @@ class FrankEnergieBatterySessionCoordinator(
                 "Fetching smart battery sessions for device %s", self.device_id
             )
 
+            # Fetch Month-To-Date sessions for period totals, ensuring we always include yesterday
+            mtd_start = min(today.replace(day=1), today - timedelta(days=1))
             return await self.api.smart_battery_sessions(
-                self.device_id, today, tomorrow
+                self.device_id, mtd_start, tomorrow
             )
 
         except UpdateFailed as ex:

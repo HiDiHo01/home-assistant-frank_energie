@@ -720,7 +720,7 @@
         "name": "Periode Frank Slim bonus"
       },
       "daily_trading_result": {
-        "name": "Dagelijks handelsresultaat"
+        "name": "Handelsresultaat van gisteren"
       },
       "total_trading_result": {
         "name": "Totaal handelsresultaat"

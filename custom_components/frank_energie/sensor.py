@@ -1541,8 +1541,13 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            getattr(data, "period_trading_result", None)
-            if data and getattr(data, "period_trading_result", None) is not None
+            getattr(data, "period_trading_result")
+            if data and getattr(data, "period_trading_result", None)
+            else sum(
+                getattr(session, "result", 0)
+                for session in (getattr(data, "sessions", None) or [])
+            )
+            if data
             else None
         ),
     ),
@@ -1556,8 +1561,14 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         suggested_display_precision=2,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            getattr(data, "period_total_result", None)
-            if data and getattr(data, "period_total_result", None) is not None
+            getattr(data, "period_total_result")
+            if data and getattr(data, "period_total_result", None)
+            else (
+                (getattr(data, "period_epex_result", 0) or 0)
+                + (getattr(data, "period_imbalance_result", 0) or 0)
+                + (getattr(data, "period_frank_slim", 0) or 0)
+            )
+            if data
             else None
         ),
         attr_fn=lambda data: (
@@ -1632,7 +1643,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="daily_trading_result",
-        name="Daily Trading Result",
+        name="Yesterday's Trading Result",
         icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
@@ -1642,6 +1653,12 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
             sum(
                 getattr(session, "result", 0)
                 for session in (getattr(data, "sessions", None) or [])
+                if getattr(session, "date", None)
+                and _format_battery_date(session.date).date()
+                == (
+                    datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+                    - timedelta(days=1)
+                )
             )
             if data
             else None
