@@ -656,8 +656,8 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         self._attr_unique_id = f"{DOMAIN}_{system_id}_{sensor_type}"
         self._attr_translation_key = f"pv_{sensor_type}"
 
-        if sensor_type == "total_bonus":
-            self._attr_name = "Total bonus"
+        if sensor_type in ["total_bonus", "total_result"]:
+            self._attr_name = sensor_type.replace("_", " ").capitalize()
             self._attr_native_unit_of_measurement = CURRENCY_EURO
             self._attr_device_class = SensorDeviceClass.MONETARY
             self._attr_state_class = SensorStateClass.TOTAL
@@ -686,6 +686,8 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
 
         if self._sensor_type == "total_bonus":
             return summary.total_bonus
+        if self._sensor_type == "total_result":
+            return summary.total_result
         if self._sensor_type == "operational_status":
             return summary.operational_status
         if self._sensor_type == "operational_status_timestamp":
@@ -1531,7 +1533,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="all_periods_trading_result",
-        name="All Periods Trading Result",
+        name="Daily Trading Result",
         icon="mdi:currency-eur",
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
@@ -4839,6 +4841,7 @@ def _build_single_smart_battery_descriptions(
                         "status_standby",
                         "separate_imbalances",
                         "idle_full",
+                        "idle_price",
                         "discharge_self_consumption",
                         "discharge_imbalance",
                         "charge_imbalance",
@@ -5300,6 +5303,7 @@ async def async_setup_entry(
                 entities.extend(
                     [
                         FrankEnergiePvSensor(pv_coordinator, system.id, "total_bonus"),
+                        FrankEnergiePvSensor(pv_coordinator, system.id, "total_result"),
                         FrankEnergiePvSensor(
                             pv_coordinator, system.id, "operational_status"
                         ),

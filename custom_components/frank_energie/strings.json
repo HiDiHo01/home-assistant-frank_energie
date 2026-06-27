@@ -687,6 +687,9 @@
       "pv_total_bonus": {
         "name": "Total bonus"
       },
+      "pv_total_result": {
+        "name": "Total result"
+      },
       "reference": {
         "name": "Reference"
       },
@@ -883,7 +886,7 @@
         "name": "Period Frank Slim Bonus"
       },
       "all_periods_trading_result": {
-        "name": "All Periods Trading Result"
+        "name": "Daily Trading Result"
       },
       "total_trading_result": {
         "name": "Total Trading Result"
@@ -930,6 +933,7 @@
           "status_standby": "Standby",
           "separate_imbalances": "Separate Imbalances",
           "idle_full": "Idle (Full)",
+          "idle_price": "Idle (Price)",
           "discharge_self_consumption": "Discharging (Self Consumption)",
           "discharge_imbalance": "Discharging (Imbalance)",
           "charge_imbalance": "Charging (Imbalance)",

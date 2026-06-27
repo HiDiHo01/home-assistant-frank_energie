@@ -543,6 +543,9 @@
       "pv_total_bonus": {
         "name": "Totale bonus"
       },
+      "pv_total_result": {
+        "name": "Totaal resultaat"
+      },
       "pv_operational_status": {
         "name": "Operationele status"
       },
@@ -714,7 +717,7 @@
         "name": "Periode Frank Slim bonus"
       },
       "all_periods_trading_result": {
-        "name": "Alle periodes handelsresultaat"
+        "name": "Dagelijks handelsresultaat"
       },
       "total_trading_result": {
         "name": "Totaal handelsresultaat"
@@ -761,6 +764,7 @@
           "status_standby": "Stand-by",
           "separate_imbalances": "Gescheiden onbalansen",
           "idle_full": "Inactief (Vol)",
+          "idle_price": "Inactief (Prijs)",
           "discharge_self_consumption": "Ontladen (Zelfconsumptie)",
           "discharge_imbalance": "Ontladen (Onbalans)",
           "charge_imbalance": "Laden (Onbalans)",
