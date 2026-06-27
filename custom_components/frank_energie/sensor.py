@@ -763,9 +763,7 @@ class FrankEnergiePvPanelGroupSensor(
         self._attr_translation_key = "pv_panel_group"
         self._attr_translation_placeholders = {"position": str(position)}
         self._attr_icon = "mdi:solar-panel"
-        self._attr_device_class = SensorDeviceClass.POWER
         self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
