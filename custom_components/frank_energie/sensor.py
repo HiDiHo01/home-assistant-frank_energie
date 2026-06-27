@@ -1494,11 +1494,11 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         native_unit_of_measurement=None,
         entity_category=None,
         state_class=None,
-        device_class=SensorDeviceClass.TIMESTAMP,
+        device_class=SensorDeviceClass.DATE,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            _format_battery_date(getattr(data, "period_start_date", None))
-            if data
+            _format_battery_date(getattr(data, "period_start_date", None)).date()
+            if data and _format_battery_date(getattr(data, "period_start_date", None))
             else None
         ),
     ),
@@ -1509,10 +1509,12 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         native_unit_of_measurement=None,
         entity_category=None,
         state_class=None,
-        device_class=SensorDeviceClass.TIMESTAMP,
+        device_class=SensorDeviceClass.DATE,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            _format_battery_date(data.period_end_date) if data else None
+            _format_battery_date(getattr(data, "period_end_date", None)).date()
+            if data and _format_battery_date(getattr(data, "period_end_date", None))
+            else None
         ),
     ),
     FrankEnergieEntityDescription(
