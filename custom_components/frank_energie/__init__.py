@@ -247,25 +247,31 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             statistics_coordinator,
         )
 
-        # Perform the initial refresh sequentially for sub-coordinators in dependency order
-        _LOGGER.debug("Performing initial refresh for sub-coordinators")
-        await settings_coordinator.async_config_entry_first_refresh()
-        await price_coordinator.async_config_entry_first_refresh()
-        await statistics_coordinator.async_config_entry_first_refresh()
-        await battery_coordinator.async_config_entry_first_refresh()
-        await charger_coordinator.async_config_entry_first_refresh()
-        await pv_coordinator.async_config_entry_first_refresh()
-        await vehicle_coordinator.async_config_entry_first_refresh()
+        try:
+            # Perform the initial refresh sequentially for sub-coordinators in dependency order
+            _LOGGER.debug("Performing initial refresh for sub-coordinators")
+            await settings_coordinator.async_config_entry_first_refresh()
+            await price_coordinator.async_config_entry_first_refresh()
+            await statistics_coordinator.async_config_entry_first_refresh()
+            await battery_coordinator.async_config_entry_first_refresh()
+            await charger_coordinator.async_config_entry_first_refresh()
+            await pv_coordinator.async_config_entry_first_refresh()
+            await vehicle_coordinator.async_config_entry_first_refresh()
 
-        # Schedule updates aligned to price slot boundaries for price coordinator
-        _LOGGER.debug("Scheduling aligned updates for price coordinator")
-        await self._schedule_aligned_updates(price_coordinator)
+            # Schedule updates aligned to price slot boundaries for price coordinator
+            _LOGGER.debug("Scheduling aligned updates for price coordinator")
+            await self._schedule_aligned_updates(price_coordinator)
 
-        # Forward entry setups to platforms
-        _LOGGER.debug("Forwarding entry setups to platforms")
-        await self._async_forward_entry_setups()
-        _LOGGER.debug("Finished forwarding entry setups to platforms")
-        return True
+            # Forward entry setups to platforms
+            _LOGGER.debug("Forwarding entry setups to platforms")
+            await self._async_forward_entry_setups()
+            _LOGGER.debug("Finished forwarding entry setups to platforms")
+            return True
+        except Exception:
+            if DOMAIN in self.hass.data:
+                self.hass.data[DOMAIN].pop(self.entry.entry_id, None)
+            self.entry.runtime_data = None
+            raise
 
     def _update_unique_id(self) -> None:
         """Update the unique ID of the config entry."""
