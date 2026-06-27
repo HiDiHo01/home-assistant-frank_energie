@@ -81,6 +81,38 @@ DEFAULT_EXPORT_ELECTRICITY_FEE: Final[float] = -0.035090
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
 SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
 
+SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
+    "status_charging",
+    "status_discharging",
+    "status_idle",
+    "status_unreliable_data",
+    "status_offline",
+    "status_standby",
+    "separate_imbalances",
+    "idle_full",
+    "idle_price",
+    "discharge_self_consumption",
+    "discharge_imbalance",
+    "charge_imbalance",
+    "discharge_intraday",
+    "charge_intraday",
+    "idle_intraday",
+    "charge_epex",
+    "discharge_epex",
+    "idle_epex",
+    "discharge_congestion",
+    "charge_congestion",
+    "discharge_self_consumption_mixed",
+    "idle_congestion",
+    "idle_empty",
+    "idle_fifteen_percent",
+    "idle_fifteen_percentage",
+    "charge_self_consumption",
+    "charge_self_consumption_mixed",
+    "status_maintenance",
+    "status_error",
+)
+
 # --- Data Fields ---
 DATA_CONTRACT_PRICE_RESOLUTION_STATE: Final[str] = "contract_price_resolution_state"
 DATA_ELECTRICITY: Final[str] = "electricity"

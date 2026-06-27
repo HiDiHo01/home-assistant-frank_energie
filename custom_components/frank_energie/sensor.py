@@ -90,6 +90,7 @@ from .const import (
     SERVICE_NAME_SETTINGS,
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
+    SMART_BATTERY_STATUSES,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS,
@@ -625,22 +626,61 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
+PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
+    FrankEnergieEntityDescription(
+        key="total_bonus",
+        name="Total bonus",
+        icon="mdi:currency-eur",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
+    ),
+    FrankEnergieEntityDescription(
+        key="total_result",
+        name="Total result",
+        icon="mdi:currency-eur",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
+    ),
+    FrankEnergieEntityDescription(
+        key="operational_status",
+        name="Operational status",
+        icon="mdi:information-outline",
+    ),
+    FrankEnergieEntityDescription(
+        key="operational_status_timestamp",
+        name="Last updated",
+        icon=ICON_CLOCK_OUTLINE,
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+    FrankEnergieEntityDescription(
+        key="steering_status",
+        name="Steering status",
+        icon="mdi:solar-power",
+    ),
+)
+
+
 class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEntity):
     """Representation of a Frank Energie Smart PV sensor."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
+    entity_description: FrankEnergieEntityDescription
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         system_id: str,
-        sensor_type: str,  # "total_bonus", "operational_status", "steering_status"
+        description: FrankEnergieEntityDescription,
     ) -> None:
         """Initialize the PV sensor."""
         super().__init__(coordinator)
+        self.entity_description = description
         self._system_id = system_id
-        self._sensor_type = sensor_type
 
         # Get PV system metadata (brand, model, name, serial_number)
         metadata = coordinator.get_pv_system_metadata(system_id)
@@ -653,26 +693,8 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
             serial_number=metadata["serial_number"],
         )
 
-        self._attr_unique_id = f"{DOMAIN}_{system_id}_{sensor_type}"
-        self._attr_translation_key = f"pv_{sensor_type}"
-
-        if sensor_type in ["total_bonus", "total_result"]:
-            self._attr_name = sensor_type.replace("_", " ").capitalize()
-            self._attr_native_unit_of_measurement = CURRENCY_EURO
-            self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_state_class = SensorStateClass.TOTAL
-            self._attr_icon = "mdi:currency-eur"
-            self._attr_suggested_display_precision = 2
-        elif sensor_type == "operational_status":
-            self._attr_name = "Operational status"
-            self._attr_icon = "mdi:information-outline"
-        elif sensor_type == "operational_status_timestamp":
-            self._attr_name = "Last updated"
-            self._attr_device_class = SensorDeviceClass.TIMESTAMP
-            self._attr_icon = ICON_CLOCK_OUTLINE
-        elif sensor_type == "steering_status":
-            self._attr_name = "Steering status"
-            self._attr_icon = "mdi:solar-power"
+        self._attr_unique_id = f"{DOMAIN}_{system_id}_{description.key}"
+        self._attr_translation_key = f"pv_{description.key}"
 
     @property
     def native_value(self) -> StateType:
@@ -681,18 +703,30 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         if not summary_dict:
             return None
         summary = summary_dict.get(self._system_id)
+
+        key = self.entity_description.key
+
         if not summary:
+            if key == "steering_status":
+                systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
+                if systems_obj and systems_obj.systems:
+                    pv_system = next(
+                        (s for s in systems_obj.systems if s.id == self._system_id),
+                        None,
+                    )
+                    if pv_system:
+                        return pv_system.steering_status
             return None
 
-        if self._sensor_type == "total_bonus":
+        if key == "total_bonus":
             return summary.total_bonus
-        if self._sensor_type == "total_result":
+        if key == "total_result":
             return summary.total_result
-        if self._sensor_type == "operational_status":
+        if key == "operational_status":
             return summary.operational_status
-        if self._sensor_type == "operational_status_timestamp":
+        if key == "operational_status_timestamp":
             return summary.operational_status_timestamp
-        if self._sensor_type == "steering_status":
+        if key == "steering_status":
             if summary.steering_status is not None:
                 return summary.steering_status
             systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
@@ -4907,37 +4941,7 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery-clock",
                     device_class=SensorDeviceClass.ENUM,
-                    options=[
-                        "status_charging",
-                        "status_discharging",
-                        "status_idle",
-                        "status_unreliable_data",
-                        "status_offline",
-                        "status_standby",
-                        "separate_imbalances",
-                        "idle_full",
-                        "idle_price",
-                        "discharge_self_consumption",
-                        "discharge_imbalance",
-                        "charge_imbalance",
-                        "discharge_intraday",
-                        "charge_intraday",
-                        "idle_intraday",
-                        "charge_epex",
-                        "discharge_epex",
-                        "idle_epex",
-                        "discharge_congestion",
-                        "charge_congestion",
-                        "discharge_self_consumption_mixed",
-                        "idle_congestion",
-                        "idle_empty",
-                        "idle_fifteen_percent",
-                        "idle_fifteen_percentage",
-                        "charge_self_consumption",
-                        "charge_self_consumption_mixed",
-                        "status_maintenance",
-                        "status_error",
-                    ],
+                    options=list(SMART_BATTERY_STATUSES),
                     value_fn=lambda data, idx=i: _get_battery_summary_lower(
                         data, idx, "last_known_status"
                     ),
@@ -5377,16 +5381,9 @@ async def async_setup_entry(
             if system:
                 entities.extend(
                     [
-                        FrankEnergiePvSensor(pv_coordinator, system.id, "total_bonus"),
-                        FrankEnergiePvSensor(pv_coordinator, system.id, "total_result"),
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "operational_status"
-                        ),
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "operational_status_timestamp"
-                        ),
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "steering_status"
+                        *(
+                            FrankEnergiePvSensor(pv_coordinator, system.id, description)
+                            for description in PV_SENSORS
                         ),
                     ]
                 )
