@@ -684,8 +684,14 @@
       "pv_steering_status": {
         "name": "Steering status"
       },
+      "pv_panel_group": {
+        "name": "Panel Group {position}"
+      },
       "pv_total_bonus": {
         "name": "Total bonus"
+      },
+      "pv_total_result": {
+        "name": "Total result"
       },
       "reference": {
         "name": "Reference"
@@ -882,8 +888,8 @@
       "period_frank_slim_bonus": {
         "name": "Period Frank Slim Bonus"
       },
-      "all_periods_trading_result": {
-        "name": "All Periods Trading Result"
+      "daily_trading_result": {
+        "name": "Yesterday's Trading Result"
       },
       "total_trading_result": {
         "name": "Total Trading Result"
@@ -930,6 +936,7 @@
           "status_standby": "Standby",
           "separate_imbalances": "Separate Imbalances",
           "idle_full": "Idle (Full)",
+          "idle_price": "Idle (Price)",
           "discharge_self_consumption": "Discharging (Self Consumption)",
           "discharge_imbalance": "Discharging (Imbalance)",
           "charge_imbalance": "Charging (Imbalance)",
