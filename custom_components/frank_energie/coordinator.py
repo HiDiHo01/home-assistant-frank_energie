@@ -384,7 +384,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # Reset to None daily so PV ownership is re-probed in case of new installation.
         self._has_pv_systems: bool | None = None
 
-
     @staticmethod
     def _get_shared_auth_lock(api: FrankEnergie) -> asyncio.Lock:
         """Return an auth lock shared by coordinators using the same API client."""
@@ -1079,7 +1078,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             # resolution_state is already a ContractPriceResolutionState dataclass.
             # Keep API state in coordinator data; explicit user commands own persistent options.
-            if self.config_entry.options.get("resolution") != resolution_state.activeOption:
+            if (
+                self.config_entry.options.get("resolution")
+                != resolution_state.activeOption
+            ):
                 _LOGGER.debug(
                     "API resolution differs from configured option (api=%s, option=%s)",
                     resolution_state.activeOption,
@@ -1624,7 +1626,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
-
 
     def _combine_price_data(self, today_data: Any, tomorrow_data: Any) -> Any:
         """Combine price data without mutating cached API model instances."""
@@ -2217,10 +2218,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Effective price resolution used for API queries."""
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
-            
+
         if self._api_resolution_state and not self._resolution_change_pending:
             return self._api_resolution_state.activeOption
-            
+
         return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
     @property
