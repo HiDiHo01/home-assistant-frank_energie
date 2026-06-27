@@ -630,36 +630,41 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="total_bonus",
         name="Total bonus",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
+        value_fn=lambda summary: summary.total_bonus,
     ),
     FrankEnergieEntityDescription(
         key="total_result",
         name="Total result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
+        value_fn=lambda summary: summary.total_result,
     ),
     FrankEnergieEntityDescription(
         key="operational_status",
         name="Operational status",
         icon="mdi:information-outline",
+        value_fn=lambda summary: summary.operational_status,
     ),
     FrankEnergieEntityDescription(
         key="operational_status_timestamp",
         name="Last updated",
         icon=ICON_CLOCK_OUTLINE,
         device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda summary: summary.operational_status_timestamp,
     ),
     FrankEnergieEntityDescription(
         key="steering_status",
         name="Steering status",
         icon="mdi:solar-power",
+        value_fn=lambda summary: summary.steering_status,
     ),
 )
 
@@ -700,35 +705,13 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
         summary_dict = self.coordinator.data.get(DATA_PV_SUMMARY)
-        if not summary_dict:
-            return None
-        summary = summary_dict.get(self._system_id)
+        summary = summary_dict.get(self._system_id) if summary_dict else None
 
         key = self.entity_description.key
 
-        if not summary:
-            if key == "steering_status":
-                systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
-                if systems_obj and systems_obj.systems:
-                    pv_system = next(
-                        (s for s in systems_obj.systems if s.id == self._system_id),
-                        None,
-                    )
-                    if pv_system:
-                        return pv_system.steering_status
-            return None
-
-        if key == "total_bonus":
-            return summary.total_bonus
-        if key == "total_result":
-            return summary.total_result
-        if key == "operational_status":
-            return summary.operational_status
-        if key == "operational_status_timestamp":
-            return summary.operational_status_timestamp
-        if key == "steering_status":
-            if summary.steering_status is not None:
-                return summary.steering_status
+        if key == "steering_status" and (
+            not summary or summary.steering_status is None
+        ):
             systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
             if systems_obj and systems_obj.systems:
                 pv_system = next(
@@ -737,6 +720,9 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
                 if pv_system:
                     return pv_system.steering_status
             return None
+
+        if summary and self.entity_description.value_fn:
+            return self.entity_description.value_fn(summary)
 
         return None
 
@@ -1546,7 +1532,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_trading_result",
         name="Period Trading Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         entity_category=None,
@@ -1561,7 +1547,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_total_result",
         name="Period Total Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
@@ -1601,7 +1587,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_imbalance_result",
         name="Period Imbalance Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
@@ -1616,7 +1602,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_epex_result",
         name="Period EPEX Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
@@ -1631,7 +1617,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_frank_slim_bonus",
         name="Period Frank Slim Bonus",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
@@ -1645,7 +1631,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="all_periods_trading_result",
         name="Daily Trading Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
@@ -1662,7 +1648,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="total_trading_result",
         name="Total Trading Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
@@ -4967,7 +4953,7 @@ def _build_single_smart_battery_descriptions(
                     device_class=SensorDeviceClass.MONETARY,
                     native_unit_of_measurement=CURRENCY_EURO,
                     suggested_display_precision=2,
-                    icon="mdi:currency-eur",
+                    icon=ICON,
                     value_fn=lambda data, idx=i: _get_battery_summary(
                         data, idx, "total_result"
                     ),
@@ -5074,7 +5060,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 device_class=SensorDeviceClass.MONETARY,
                 native_unit_of_measurement=CURRENCY_EURO,
                 suggested_display_precision=2,
-                icon="mdi:currency-eur",
+                icon=ICON,
                 value_fn=_get_total_result,
             ),
             FrankEnergieEntityDescription(
