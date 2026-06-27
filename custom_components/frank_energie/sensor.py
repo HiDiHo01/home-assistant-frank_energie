@@ -1471,6 +1471,31 @@ def _calculate_market_percent_tax(price_data: object | None) -> float | None:
     return None
 
 
+def _get_period_trading_result(data: object | None) -> float | None:
+    """Calculate the period trading result."""
+    if not data:
+        return None
+    if getattr(data, "period_trading_result", None):
+        return getattr(data, "period_trading_result")
+    
+    sessions = getattr(data, "sessions", None) or []
+    return sum(getattr(session, "result", 0) for session in sessions)
+
+
+def _get_period_total_result(data: object | None) -> float | None:
+    """Calculate the period total result."""
+    if not data:
+        return None
+    if getattr(data, "period_total_result", None):
+        return getattr(data, "period_total_result")
+    
+    return (
+        (getattr(data, "period_epex_result", 0) or 0)
+        + (getattr(data, "period_imbalance_result", 0) or 0)
+        + (getattr(data, "period_frank_slim", 0) or 0)
+    )
+
+
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     tuple[FrankEnergieEntityDescription, ...]
 ] = (
@@ -1538,16 +1563,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         entity_category=None,
         state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_trading_result")
-            if data and getattr(data, "period_trading_result", None)
-            else sum(
-                getattr(session, "result", 0)
-                for session in (getattr(data, "sessions", None) or [])
-            )
-            if data
-            else None
-        ),
+        value_fn=_get_period_trading_result,
     ),
     FrankEnergieEntityDescription(
         key="period_total_result",
@@ -1558,17 +1574,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_total_result")
-            if data and getattr(data, "period_total_result", None)
-            else (
-                (getattr(data, "period_epex_result", 0) or 0)
-                + (getattr(data, "period_imbalance_result", 0) or 0)
-                + (getattr(data, "period_frank_slim", 0) or 0)
-            )
-            if data
-            else None
-        ),
+        value_fn=_get_period_total_result,
         attr_fn=lambda data: (
             {
                 "device_id": getattr(data, "device_id", None),
