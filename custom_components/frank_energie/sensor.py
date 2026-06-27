@@ -90,6 +90,7 @@ from .const import (
     SERVICE_NAME_SETTINGS,
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
+    SMART_BATTERY_STATUSES,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS,
@@ -625,22 +626,66 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
+PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
+    FrankEnergieEntityDescription(
+        key="total_bonus",
+        name="Total bonus",
+        icon=ICON,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
+        value_fn=lambda summary: summary.total_bonus,
+    ),
+    FrankEnergieEntityDescription(
+        key="total_result",
+        name="Total result",
+        icon=ICON,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
+        value_fn=lambda summary: summary.total_result,
+    ),
+    FrankEnergieEntityDescription(
+        key="operational_status",
+        name="Operational status",
+        icon="mdi:information-outline",
+        value_fn=lambda summary: summary.operational_status,
+    ),
+    FrankEnergieEntityDescription(
+        key="operational_status_timestamp",
+        name="Last updated",
+        icon=ICON_CLOCK_OUTLINE,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda summary: summary.operational_status_timestamp,
+    ),
+    FrankEnergieEntityDescription(
+        key="steering_status",
+        name="Steering status",
+        icon="mdi:solar-power",
+        value_fn=lambda summary: summary.steering_status,
+    ),
+)
+
+
 class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEntity):
     """Representation of a Frank Energie Smart PV sensor."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
+    entity_description: FrankEnergieEntityDescription
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         system_id: str,
-        sensor_type: str,  # "total_bonus", "operational_status", "steering_status"
+        description: FrankEnergieEntityDescription,
     ) -> None:
         """Initialize the PV sensor."""
         super().__init__(coordinator)
+        self.entity_description = description
         self._system_id = system_id
-        self._sensor_type = sensor_type
 
         # Get PV system metadata (brand, model, name, serial_number)
         metadata = coordinator.get_pv_system_metadata(system_id)
@@ -653,46 +698,20 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
             serial_number=metadata["serial_number"],
         )
 
-        self._attr_unique_id = f"{DOMAIN}_{system_id}_{sensor_type}"
-        self._attr_translation_key = f"pv_{sensor_type}"
-
-        if sensor_type == "total_bonus":
-            self._attr_name = "Total bonus"
-            self._attr_native_unit_of_measurement = CURRENCY_EURO
-            self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_state_class = SensorStateClass.TOTAL
-            self._attr_icon = "mdi:currency-eur"
-            self._attr_suggested_display_precision = 2
-        elif sensor_type == "operational_status":
-            self._attr_name = "Operational status"
-            self._attr_icon = "mdi:information-outline"
-        elif sensor_type == "operational_status_timestamp":
-            self._attr_name = "Last updated"
-            self._attr_device_class = SensorDeviceClass.TIMESTAMP
-            self._attr_icon = ICON_CLOCK_OUTLINE
-        elif sensor_type == "steering_status":
-            self._attr_name = "Steering status"
-            self._attr_icon = "mdi:solar-power"
+        self._attr_unique_id = f"{DOMAIN}_{system_id}_{description.key}"
+        self._attr_translation_key = f"pv_{description.key}"
 
     @property
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
         summary_dict = self.coordinator.data.get(DATA_PV_SUMMARY)
-        if not summary_dict:
-            return None
-        summary = summary_dict.get(self._system_id)
-        if not summary:
-            return None
+        summary = summary_dict.get(self._system_id) if summary_dict else None
 
-        if self._sensor_type == "total_bonus":
-            return summary.total_bonus
-        if self._sensor_type == "operational_status":
-            return summary.operational_status
-        if self._sensor_type == "operational_status_timestamp":
-            return summary.operational_status_timestamp
-        if self._sensor_type == "steering_status":
-            if summary.steering_status is not None:
-                return summary.steering_status
+        key = self.entity_description.key
+
+        if key == "steering_status" and (
+            not summary or summary.steering_status is None
+        ):
             systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
             if systems_obj and systems_obj.systems:
                 pv_system = next(
@@ -702,7 +721,85 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
                     return pv_system.steering_status
             return None
 
+        if summary and self.entity_description.value_fn:
+            return self.entity_description.value_fn(summary)
+
         return None
+
+
+class FrankEnergiePvPanelGroupSensor(
+    CoordinatorEntity[FrankEnergieCoordinator], SensorEntity
+):
+    """Representation of a Frank Energie Smart PV panel group (dakvlak) sensor."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        system_id: str,
+        panel_group_id: str,
+        position: int | str,
+    ) -> None:
+        """Initialize the PV panel group sensor."""
+        super().__init__(coordinator)
+        self._system_id = system_id
+        self._panel_group_id = panel_group_id
+
+        # Get PV system metadata to link to the same device
+        metadata = coordinator.get_pv_system_metadata(system_id)
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, system_id)},
+            name=metadata["display_name"],
+            manufacturer=metadata["brand"],
+            model=metadata["model"],
+            serial_number=metadata["serial_number"],
+        )
+
+        # Make the unique id distinct for each panel group
+        self._attr_unique_id = f"{DOMAIN}_{system_id}_panel_group_{panel_group_id}"
+        self._attr_translation_key = "pv_panel_group"
+        self._attr_translation_placeholders = {"position": str(position)}
+        self._attr_icon = "mdi:solar-panel"
+        self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def _panel_group(self):
+        systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
+        if systems_obj and systems_obj.systems:
+            pv_system = next(
+                (s for s in systems_obj.systems if s.id == self._system_id), None
+            )
+            if pv_system and pv_system.panel_groups:
+                return next(
+                    (g for g in pv_system.panel_groups if g.id == self._panel_group_id),
+                    None,
+                )
+        return None
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the state of the sensor (capacity_kwp)."""
+        group = self._panel_group
+        return group.capacity_kwp if group else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the extra state attributes."""
+        group = self._panel_group
+        if not group:
+            return {}
+
+        return {
+            "azimuth": group.azimuth,
+            "tilt": group.tilt,
+            "capacity_kwp": group.capacity_kwp,
+            "panel_count": group.panel_count,
+            "position": group.position,
+        }
 
 
 def format_user_name(data: dict) -> str | None:
@@ -1374,6 +1471,31 @@ def _calculate_market_percent_tax(price_data: object | None) -> float | None:
     return None
 
 
+def _get_period_trading_result(data: object | None) -> float | None:
+    """Calculate the period trading result."""
+    if not data:
+        return None
+    if getattr(data, "period_trading_result", None):
+        return getattr(data, "period_trading_result")
+
+    sessions = getattr(data, "sessions", None) or []
+    return sum(getattr(session, "result", 0) for session in sessions)
+
+
+def _get_period_total_result(data: object | None) -> float | None:
+    """Calculate the period total result."""
+    if not data:
+        return None
+    if getattr(data, "period_total_result", None):
+        return getattr(data, "period_total_result")
+
+    return (
+        (getattr(data, "period_epex_result", 0) or 0)
+        + (getattr(data, "period_imbalance_result", 0) or 0)
+        + (getattr(data, "period_frank_slim", 0) or 0)
+    )
+
+
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     tuple[FrankEnergieEntityDescription, ...]
 ] = (
@@ -1395,11 +1517,11 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         native_unit_of_measurement=None,
         entity_category=None,
         state_class=None,
-        device_class=SensorDeviceClass.TIMESTAMP,
+        device_class=SensorDeviceClass.DATE,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            _format_battery_date(getattr(data, "period_start_date", None))
-            if data
+            _format_battery_date(getattr(data, "period_start_date", None)).date()
+            if data and _format_battery_date(getattr(data, "period_start_date", None))
             else None
         ),
     ),
@@ -1410,10 +1532,12 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         native_unit_of_measurement=None,
         entity_category=None,
         state_class=None,
-        device_class=SensorDeviceClass.TIMESTAMP,
+        device_class=SensorDeviceClass.DATE,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            _format_battery_date(data.period_end_date) if data else None
+            _format_battery_date(getattr(data, "period_end_date", None)).date()
+            if data and _format_battery_date(getattr(data, "period_end_date", None))
+            else None
         ),
     ),
     FrankEnergieEntityDescription(
@@ -1433,32 +1557,24 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_trading_result",
         name="Period Trading Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         entity_category=None,
         state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_trading_result", None)
-            if data and getattr(data, "period_trading_result", None) is not None
-            else None
-        ),
+        value_fn=_get_period_trading_result,
     ),
     FrankEnergieEntityDescription(
         key="period_total_result",
         name="Period Total Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_total_result", None)
-            if data and getattr(data, "period_total_result", None) is not None
-            else None
-        ),
+        value_fn=_get_period_total_result,
         attr_fn=lambda data: (
             {
                 "device_id": getattr(data, "device_id", None),
@@ -1488,7 +1604,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_imbalance_result",
         name="Period Imbalance Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
@@ -1503,7 +1619,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_epex_result",
         name="Period EPEX Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
@@ -1518,7 +1634,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="period_frank_slim_bonus",
         name="Period Frank Slim Bonus",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
@@ -1530,9 +1646,9 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         ),
     ),
     FrankEnergieEntityDescription(
-        key="all_periods_trading_result",
-        name="All Periods Trading Result",
-        icon="mdi:currency-eur",
+        key="daily_trading_result",
+        name="Yesterday's Trading Result",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
@@ -1541,6 +1657,12 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
             sum(
                 getattr(session, "result", 0)
                 for session in (getattr(data, "sessions", None) or [])
+                if getattr(session, "date", None)
+                and _format_battery_date(session.date).date()
+                == (
+                    datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+                    - timedelta(days=1)
+                )
             )
             if data
             else None
@@ -1549,7 +1671,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     FrankEnergieEntityDescription(
         key="total_trading_result",
         name="Total Trading Result",
-        icon="mdi:currency-eur",
+        icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         state_class="measurement",
@@ -4830,36 +4952,7 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery-clock",
                     device_class=SensorDeviceClass.ENUM,
-                    options=[
-                        "status_charging",
-                        "status_discharging",
-                        "status_idle",
-                        "status_unreliable_data",
-                        "status_offline",
-                        "status_standby",
-                        "separate_imbalances",
-                        "idle_full",
-                        "discharge_self_consumption",
-                        "discharge_imbalance",
-                        "charge_imbalance",
-                        "discharge_intraday",
-                        "charge_intraday",
-                        "idle_intraday",
-                        "charge_epex",
-                        "discharge_epex",
-                        "idle_epex",
-                        "discharge_congestion",
-                        "charge_congestion",
-                        "discharge_self_consumption_mixed",
-                        "idle_congestion",
-                        "idle_empty",
-                        "idle_fifteen_percent",
-                        "idle_fifteen_percentage",
-                        "charge_self_consumption",
-                        "charge_self_consumption_mixed",
-                        "status_maintenance",
-                        "status_error",
-                    ],
+                    options=list(SMART_BATTERY_STATUSES),
                     value_fn=lambda data, idx=i: _get_battery_summary_lower(
                         data, idx, "last_known_status"
                     ),
@@ -4883,7 +4976,7 @@ def _build_single_smart_battery_descriptions(
                     device_class=SensorDeviceClass.MONETARY,
                     native_unit_of_measurement=CURRENCY_EURO,
                     suggested_display_precision=2,
-                    icon="mdi:currency-eur",
+                    icon=ICON,
                     value_fn=lambda data, idx=i: _get_battery_summary(
                         data, idx, "total_result"
                     ),
@@ -4990,7 +5083,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 device_class=SensorDeviceClass.MONETARY,
                 native_unit_of_measurement=CURRENCY_EURO,
                 suggested_display_precision=2,
-                icon="mdi:currency-eur",
+                icon=ICON,
                 value_fn=_get_total_result,
             ),
             FrankEnergieEntityDescription(
@@ -5299,18 +5392,20 @@ async def async_setup_entry(
             if system:
                 entities.extend(
                     [
-                        FrankEnergiePvSensor(pv_coordinator, system.id, "total_bonus"),
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "operational_status"
-                        ),
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "operational_status_timestamp"
-                        ),
-                        FrankEnergiePvSensor(
-                            pv_coordinator, system.id, "steering_status"
+                        *(
+                            FrankEnergiePvSensor(pv_coordinator, system.id, description)
+                            for description in PV_SENSORS
                         ),
                     ]
                 )
+                if system.panel_groups:
+                    for group in system.panel_groups:
+                        if group and group.id:
+                            entities.append(
+                                FrankEnergiePvPanelGroupSensor(
+                                    pv_coordinator, system.id, group.id, group.position
+                                )
+                            )
 
     try:
         async_add_entities(entities, update_before_add=True)
