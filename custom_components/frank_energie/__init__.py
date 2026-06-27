@@ -235,6 +235,18 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # Awaiting the site reference selection using settings coordinator
         await self._select_site_reference(settings_coordinator)
 
+        # Make runtime data available before refreshes, so diagnostics, services,
+        # and error paths can resolve the coordinators during setup.
+        await self._save_coordinator_to_hass_data(
+            settings_coordinator,
+            price_coordinator,
+            battery_coordinator,
+            charger_coordinator,
+            pv_coordinator,
+            vehicle_coordinator,
+            statistics_coordinator,
+        )
+
         # Perform the initial refresh sequentially for sub-coordinators in dependency order
         _LOGGER.debug("Performing initial refresh for sub-coordinators")
         await settings_coordinator.async_config_entry_first_refresh()
@@ -248,17 +260,6 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # Schedule updates aligned to price slot boundaries for price coordinator
         _LOGGER.debug("Scheduling aligned updates for price coordinator")
         await self._schedule_aligned_updates(price_coordinator)
-
-        # Save the coordinators to Home Assistant data
-        await self._save_coordinator_to_hass_data(
-            settings_coordinator,
-            price_coordinator,
-            battery_coordinator,
-            charger_coordinator,
-            pv_coordinator,
-            vehicle_coordinator,
-            statistics_coordinator,
-        )
 
         # Forward entry setups to platforms
         _LOGGER.debug("Forwarding entry setups to platforms")
