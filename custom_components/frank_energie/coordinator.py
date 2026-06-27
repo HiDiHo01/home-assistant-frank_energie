@@ -1675,17 +1675,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 result[DATA_GAS] = cache.prices_today.gas
 
         if prices_tomorrow is not None:
-            if (
-                result[DATA_ELECTRICITY] is not None
-                and prices_tomorrow.electricity is not None
-            ):
-                result[DATA_ELECTRICITY] = self._combine_price_data(
-                    result[DATA_ELECTRICITY], prices_tomorrow.electricity
-                )
-            if result[DATA_GAS] is not None and prices_tomorrow.gas is not None:
-                result[DATA_GAS] = self._combine_price_data(
-                    result[DATA_GAS], prices_tomorrow.gas
-                )
+            result[DATA_ELECTRICITY] = self._combine_price_data(
+                result[DATA_ELECTRICITY], prices_tomorrow.electricity
+            )
+            result[DATA_GAS] = self._combine_price_data(
+                result[DATA_GAS], prices_tomorrow.gas
+            )
 
         return result
 
@@ -1978,9 +1973,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         )
                     except Exception as login_ex:
                         _LOGGER.exception(
-                            "Unexpected error during silent re-login: %s. Proceeding to reauth flow",
+                            "Unexpected error during silent re-login: %s. Retrying later.",
                             login_ex,
                         )
+                        raise UpdateFailed(
+                            f"Unexpected error during silent re-login: {login_ex}"
+                        ) from login_ex
 
                 _LOGGER.exception(
                     "Failed to renew token: %s. Starting user reauth flow", ex
