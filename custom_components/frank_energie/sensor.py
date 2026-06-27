@@ -707,7 +707,9 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         return None
 
 
-class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEntity):
+class FrankEnergiePvPanelGroupSensor(
+    CoordinatorEntity[FrankEnergieCoordinator], SensorEntity
+):
     """Representation of a Frank Energie Smart PV panel group (dakvlak) sensor."""
 
     _attr_should_poll = False
@@ -726,7 +728,7 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
 
         # Get PV system metadata to link to the same device
         metadata = coordinator.get_pv_system_metadata(system_id)
-        
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, system_id)},
             name=metadata["display_name"],
@@ -734,7 +736,7 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
             model=metadata["model"],
             serial_number=metadata["serial_number"],
         )
-        
+
         # Make the unique id distinct for each panel group
         self._attr_unique_id = f"{DOMAIN}_{system_id}_panel_group_{panel_group_id}"
         self._attr_translation_key = "pv_panel_group"
@@ -753,7 +755,8 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
             )
             if pv_system and pv_system.panel_groups:
                 return next(
-                    (g for g in pv_system.panel_groups if g.id == self._panel_group_id), None
+                    (g for g in pv_system.panel_groups if g.id == self._panel_group_id),
+                    None,
                 )
         return None
 
@@ -769,7 +772,7 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
         group = self._panel_group
         if not group:
             return {}
-        
+
         return {
             "azimuth": group.azimuth,
             "tilt": group.tilt,
