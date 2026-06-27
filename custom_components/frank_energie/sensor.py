@@ -728,7 +728,7 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
         metadata = coordinator.get_pv_system_metadata(system_id)
         
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"pv_{system_id}")},
+            identifiers={(DOMAIN, system_id)},
             name=metadata["display_name"],
             manufacturer=metadata["brand"],
             model=metadata["model"],
@@ -738,9 +738,9 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
         # Make the unique id distinct for each panel group
         self._attr_unique_id = f"{DOMAIN}_{system_id}_panel_group_{panel_group_id}"
         self._attr_translation_key = "pv_panel_group"
-        self._attr_device_class = SensorDeviceClass.ENERGY
-        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_device_class = SensorDeviceClass.POWER
+        self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
@@ -758,9 +758,9 @@ class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator],
 
     @property
     def native_value(self) -> StateType:
-        """Return the state of the sensor (annual yield)."""
+        """Return the state of the sensor (capacity_kwp)."""
         group = self._panel_group
-        return group.annual_kwh if group else None
+        return group.capacity_kwp if group else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
