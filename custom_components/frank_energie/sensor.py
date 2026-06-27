@@ -1477,7 +1477,7 @@ def _get_period_trading_result(data: object | None) -> float | None:
         return None
     if getattr(data, "period_trading_result", None):
         return getattr(data, "period_trading_result")
-    
+
     sessions = getattr(data, "sessions", None) or []
     return sum(getattr(session, "result", 0) for session in sessions)
 
@@ -1488,7 +1488,7 @@ def _get_period_total_result(data: object | None) -> float | None:
         return None
     if getattr(data, "period_total_result", None):
         return getattr(data, "period_total_result")
-    
+
     return (
         (getattr(data, "period_epex_result", 0) or 0)
         + (getattr(data, "period_imbalance_result", 0) or 0)
