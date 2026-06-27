@@ -888,7 +888,7 @@
       "period_frank_slim_bonus": {
         "name": "Period Frank Slim Bonus"
       },
-      "all_periods_trading_result": {
+      "daily_trading_result": {
         "name": "Daily Trading Result"
       },
       "total_trading_result": {

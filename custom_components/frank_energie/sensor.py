@@ -1629,7 +1629,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         ),
     ),
     FrankEnergieEntityDescription(
-        key="all_periods_trading_result",
+        key="daily_trading_result",
         name="Daily Trading Result",
         icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
