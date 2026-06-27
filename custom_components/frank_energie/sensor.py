@@ -754,6 +754,7 @@ class FrankEnergiePvPanelGroupSensor(
         coordinator: FrankEnergieCoordinator,
         system_id: str,
         panel_group_id: str,
+        position: int | str,
     ) -> None:
         """Initialize the PV panel group sensor."""
         super().__init__(coordinator)
@@ -774,6 +775,7 @@ class FrankEnergiePvPanelGroupSensor(
         # Make the unique id distinct for each panel group
         self._attr_unique_id = f"{DOMAIN}_{system_id}_panel_group_{panel_group_id}"
         self._attr_translation_key = "pv_panel_group"
+        self._attr_translation_placeholders = {"position": str(position)}
         self._attr_icon = "mdi:solar-panel"
         self._attr_device_class = SensorDeviceClass.POWER
         self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
@@ -5392,7 +5394,7 @@ async def async_setup_entry(
                         if group and group.id:
                             entities.append(
                                 FrankEnergiePvPanelGroupSensor(
-                                    pv_coordinator, system.id, group.id
+                                    pv_coordinator, system.id, group.id, group.position
                                 )
                             )
 
