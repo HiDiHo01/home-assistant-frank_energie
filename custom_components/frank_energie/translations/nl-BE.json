@@ -540,6 +540,9 @@
       "vehicle_name": {
         "name": "Naam voertuig"
       },
+      "pv_panel_group": {
+        "name": "Dakvlak"
+      },
       "pv_total_bonus": {
         "name": "Totale bonus"
       },

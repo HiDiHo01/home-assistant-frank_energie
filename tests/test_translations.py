@@ -224,6 +224,7 @@ def test_no_unused_or_missing_translation_keys():
         "pv_operational_status_timestamp",
         "pv_total_bonus",
         "pv_total_result",
+        "pv_panel_group",
     }
 
     # Verify that all translation keys in strings.json are used in the codebase

@@ -707,6 +707,77 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         return None
 
 
+class FrankEnergiePvPanelGroupSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEntity):
+    """Representation of a Frank Energie Smart PV panel group (dakvlak) sensor."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        system_id: str,
+        panel_group_id: str,
+    ) -> None:
+        """Initialize the PV panel group sensor."""
+        super().__init__(coordinator)
+        self._system_id = system_id
+        self._panel_group_id = panel_group_id
+
+        # Get PV system metadata to link to the same device
+        metadata = coordinator.get_pv_system_metadata(system_id)
+        
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"pv_{system_id}")},
+            name=metadata["display_name"],
+            manufacturer=metadata["brand"],
+            model=metadata["model"],
+            serial_number=metadata["serial_number"],
+        )
+        
+        # Make the unique id distinct for each panel group
+        self._attr_unique_id = f"{DOMAIN}_{system_id}_panel_group_{panel_group_id}"
+        self._attr_translation_key = "pv_panel_group"
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def _panel_group(self):
+        systems_obj = self.coordinator.data.get(DATA_PV_SYSTEMS)
+        if systems_obj and systems_obj.systems:
+            pv_system = next(
+                (s for s in systems_obj.systems if s.id == self._system_id), None
+            )
+            if pv_system and pv_system.panel_groups:
+                return next(
+                    (g for g in pv_system.panel_groups if g.id == self._panel_group_id), None
+                )
+        return None
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the state of the sensor (annual yield)."""
+        group = self._panel_group
+        return group.annual_kwh if group else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the extra state attributes."""
+        group = self._panel_group
+        if not group:
+            return {}
+        
+        return {
+            "azimuth": group.azimuth,
+            "tilt": group.tilt,
+            "capacity_kwp": group.capacity_kwp,
+            "panel_count": group.panel_count,
+            "position": group.position,
+        }
+
+
 def format_user_name(data: dict) -> str | None:
     """
     Formats the user's name from provided data by concatenating the first and last name.
@@ -5315,6 +5386,14 @@ async def async_setup_entry(
                         ),
                     ]
                 )
+                if system.panel_groups:
+                    for group in system.panel_groups:
+                        if group and group.id:
+                            entities.append(
+                                FrankEnergiePvPanelGroupSensor(
+                                    pv_coordinator, system.id, group.id
+                                )
+                            )
 
     try:
         async_add_entities(entities, update_before_add=True)

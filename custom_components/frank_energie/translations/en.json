@@ -684,6 +684,9 @@
       "pv_steering_status": {
         "name": "Steering status"
       },
+      "pv_panel_group": {
+        "name": "Panel Group"
+      },
       "pv_total_bonus": {
         "name": "Total bonus"
       },
