@@ -2214,6 +2214,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Effective price resolution used for API queries."""
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
+            
+        if self._api_resolution_state and not self._resolution_change_pending:
+            return self._api_resolution_state.activeOption
+            
         return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
     @property
