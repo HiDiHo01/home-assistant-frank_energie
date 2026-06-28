@@ -6,6 +6,7 @@ Fetching the latest data from Frank Energie and updating the states."""
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 
 # import secrets
@@ -328,6 +329,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             config_entry=config_entry,
         )
         self._mutation_queue = MutationQueue()
+        self._auth_lock = self._get_shared_auth_lock(api)
         self.hass = hass
         self.config_entry = config_entry
         self.api = api
@@ -381,6 +383,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # None = not yet checked; True/False = confirmed this session.
         # Reset to None daily so PV ownership is re-probed in case of new installation.
         self._has_pv_systems: bool | None = None
+
+    @staticmethod
+    def _get_shared_auth_lock(api: FrankEnergie) -> asyncio.Lock:
+        """Return an auth lock shared by coordinators using the same API client."""
+        lock = getattr(api, "_frank_energie_auth_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            setattr(api, "_frank_energie_auth_lock", lock)
+        return lock
 
     @property
     def old_site_reference(self) -> str | None:
@@ -1065,15 +1076,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 False  # change has been processed by API, reset pending flag
             )
 
-            # resolution_state is already a ContractPriceResolutionState dataclass
+            # resolution_state is already a ContractPriceResolutionState dataclass.
+            # Keep API state in coordinator data; explicit user commands own persistent options.
             if (
                 self.config_entry.options.get("resolution")
                 != resolution_state.activeOption
             ):
-                options = dict(self.config_entry.options)
-                options["resolution"] = resolution_state.activeOption
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, options=options
+                _LOGGER.debug(
+                    "API resolution differs from configured option (api=%s, option=%s)",
+                    resolution_state.activeOption,
+                    self.config_entry.options.get("resolution"),
                 )
 
             _LOGGER.debug(
@@ -1168,20 +1180,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return vehicles
         except Exception as err:
             self._handle_dynamic_fetch_error("enode vehicles", err)
-            return None
-
-    async def old_fetch_smart_pv_systems(self) -> SmartPvSystems | None:
-        """Fetch Smart PV systems from the API."""
-        if not self.api.is_authenticated:
-            return None
-        try:
-            return await self.api.smart_pv_systems()
-        except (AuthException, AuthRequiredException):
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Failed to fetch smart PV systems: %s", err)
             return None
 
     async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
@@ -1629,6 +1627,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
 
+    def _combine_price_data(self, today_data: Any, tomorrow_data: Any) -> Any:
+        """Combine price data without mutating cached API model instances."""
+        if today_data is None:
+            return tomorrow_data
+        if tomorrow_data is None:
+            return today_data
+
+        try:
+            combined = copy.copy(today_data)
+            combined += tomorrow_data
+            return combined
+        except TypeError:
+            return today_data + tomorrow_data
+
     def _aggregate_data(
         self,
         cache: PricesTodayCache,
@@ -1663,13 +1675,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 result[DATA_GAS] = cache.prices_today.gas
 
         if prices_tomorrow is not None:
-            if (
-                result[DATA_ELECTRICITY] is not None
-                and prices_tomorrow.electricity is not None
-            ):
-                result[DATA_ELECTRICITY] += prices_tomorrow.electricity
-            if result[DATA_GAS] is not None and prices_tomorrow.gas is not None:
-                result[DATA_GAS] += prices_tomorrow.gas
+            result[DATA_ELECTRICITY] = self._combine_price_data(
+                result[DATA_ELECTRICITY], prices_tomorrow.electricity
+            )
+            result[DATA_GAS] = self._combine_price_data(
+                result[DATA_GAS], prices_tomorrow.gas
+            )
 
         return result
 
@@ -1888,18 +1899,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._cached_prices = user_prices
         return user_prices
 
-    async def _handle_fetch_exceptions(self, ex):
+    async def _handle_fetch_exceptions(self, ex: Exception) -> None:
+        """Normalize fetch exceptions for DataUpdateCoordinator callers."""
         if isinstance(ex, (ConfigEntryAuthFailed, AuthRequiredException)):
             raise ex
         if isinstance(ex, UpdateFailed):
-            if (
-                self.data[DATA_ELECTRICITY] is not None
-                and self.data[DATA_ELECTRICITY].get_future_prices()
-                and self.data[DATA_GAS] is not None
-                and self.data[DATA_GAS].get_future_prices()
-            ):
-                _LOGGER.warning(str(ex))
-                return self.data
             raise ex
         if isinstance(ex, RequestException) and str(ex).startswith("user-error:"):
             raise ConfigEntryAuthFailed from ex
@@ -1909,74 +1913,77 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             raise UpdateFailed(ex) from ex
 
     async def _try_renew_token(self) -> None:
-        """Try to renew authentication token."""
+        """Try to renew authentication token with shared-client serialization."""
 
-        try:
-            updated_tokens = await self.api.renew_token()
-            updated_data = {
-                **self.config_entry.data,
-                CONF_ACCESS_TOKEN: updated_tokens.authToken,
-                CONF_TOKEN: updated_tokens.refreshToken,
-            }
-            # Clean up old plaintext credentials in data if any
-            updated_data.pop(CONF_USERNAME, None)
-            updated_data.pop(CONF_PASSWORD, None)
+        async with self._auth_lock:
+            try:
+                updated_tokens = await self.api.renew_token()
+                updated_data = {
+                    **self.config_entry.data,
+                    CONF_ACCESS_TOKEN: updated_tokens.authToken,
+                    CONF_TOKEN: updated_tokens.refreshToken,
+                }
+                # Clean up old plaintext credentials in data if any
+                updated_data.pop(CONF_USERNAME, None)
+                updated_data.pop(CONF_PASSWORD, None)
 
-            # Update the config entry with the new tokens
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=updated_data
-            )
+                # Update the config entry with the new tokens
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=updated_data
+                )
 
-            _LOGGER.debug("Successfully renewed token")
+                _LOGGER.debug("Successfully renewed token")
 
-        except AuthException as ex:
-            _LOGGER.debug(
-                "Token renewal failed, attempting silent re-login using stored credentials"
-            )
-            username = self.config_entry.options.get(
-                CONF_USERNAME
-            ) or self.config_entry.data.get(CONF_USERNAME)
-            password = self.config_entry.options.get(
-                CONF_PASSWORD
-            ) or self.config_entry.data.get(CONF_PASSWORD)
+            except AuthException as ex:
+                _LOGGER.debug(
+                    "Token renewal failed, attempting silent re-login using stored credentials"
+                )
+                username = self.config_entry.options.get(
+                    CONF_USERNAME
+                ) or self.config_entry.data.get(CONF_USERNAME)
+                password = self.config_entry.options.get(
+                    CONF_PASSWORD
+                ) or self.config_entry.data.get(CONF_PASSWORD)
 
-            if username and password:
-                try:
-                    decrypted_password = decrypt_password(self.hass, password)
-                    if not decrypted_password:
-                        raise AuthException("Decrypted password is empty")
-                    auth = await self.api.login(username, decrypted_password)
-                    updated_data = {
-                        **self.config_entry.data,
-                        CONF_ACCESS_TOKEN: auth.authToken,
-                        CONF_TOKEN: auth.refreshToken,
-                    }
-                    updated_data.pop(CONF_USERNAME, None)
-                    updated_data.pop(CONF_PASSWORD, None)
+                if username and password:
+                    try:
+                        decrypted_password = decrypt_password(self.hass, password)
+                        if not decrypted_password:
+                            raise AuthException("Decrypted password is empty")
+                        auth = await self.api.login(username, decrypted_password)
+                        updated_data = {
+                            **self.config_entry.data,
+                            CONF_ACCESS_TOKEN: auth.authToken,
+                            CONF_TOKEN: auth.refreshToken,
+                        }
+                        updated_data.pop(CONF_USERNAME, None)
+                        updated_data.pop(CONF_PASSWORD, None)
 
-                    self.hass.config_entries.async_update_entry(
-                        self.config_entry, data=updated_data
-                    )
-                    _LOGGER.info(
-                        "Successfully re-authenticated silently using stored credentials"
-                    )
-                    return
-                except (AuthException, FrankEnergieException) as login_ex:
-                    _LOGGER.warning(
-                        "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
-                        login_ex,
-                    )
-                except Exception as login_ex:
-                    _LOGGER.exception(
-                        "Unexpected error during silent re-login: %s. Proceeding to reauth flow",
-                        login_ex,
-                    )
+                        self.hass.config_entries.async_update_entry(
+                            self.config_entry, data=updated_data
+                        )
+                        _LOGGER.info(
+                            "Successfully re-authenticated silently using stored credentials"
+                        )
+                        return
+                    except (AuthException, FrankEnergieException) as login_ex:
+                        _LOGGER.warning(
+                            "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
+                            login_ex,
+                        )
+                    except Exception as login_ex:
+                        _LOGGER.exception(
+                            "Unexpected error during silent re-login: %s. Retrying later.",
+                            login_ex,
+                        )
+                        raise UpdateFailed(
+                            f"Unexpected error during silent re-login: {login_ex}"
+                        ) from login_ex
 
-            _LOGGER.exception(
-                "Failed to renew token: %s. Starting user reauth flow", ex
-            )
-            # Consider setting the coordinator to an error state or handling the error appropriately
-            raise ConfigEntryAuthFailed from ex
+                _LOGGER.exception(
+                    "Failed to renew token: %s. Starting user reauth flow", ex
+                )
+                raise ConfigEntryAuthFailed from ex
 
     async def _fetch_authenticated[T](
         self,
@@ -2204,76 +2211,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         await self._mutation_queue.add(_mutation)
         await self.async_request_refresh()
 
-    async def old_async_set_resolution(self, value: str) -> None:
-        """Update resolution safely via mutation queue."""
-        if not self.api.is_authenticated:
-            # Not authenticated — save to options only, no API call
-            if self.config_entry is not None:
-                _LOGGER.warning(  # use warning so it's visible in logs
-                    "Resolution saved to options (not authenticated): %s -> options=%s",
-                    value,
-                    self.config_entry.options,
-                )
-            if self.config_entry is not None:
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "resolution": value},
-                )
-                await self.async_request_refresh()
-                _LOGGER.debug(
-                    "Resolution saved to options (not authenticated): %s", value
-                )
-            return
-
-        if not self._connection_id:
-            _LOGGER.warning(
-                "Cannot set resolution via API: connection_id not available"
-            )
-            return
-
-        if (
-            self._api_resolution_state is not None
-            and not self._api_resolution_state.isChangeRequestPossible
-        ):
-            _LOGGER.warning(
-                "Cannot set resolution via API: isChangeRequestPossible=False"
-            )
-            return
-
-        async def _mutation() -> None:
-            result = await self.api.contract_price_resolution_request_change(
-                self._connection_id,
-                cast(Resolution, value),
-            )
-
-            if result is None or not result.success:
-                raise UpdateFailed(
-                    "Resolution change request failed: %s"
-                    % (result.reason if result else "no response")
-                )
-
-            _LOGGER.info(
-                "Resolution change accepted (effective: %s)",
-                result.data.effectiveDate if result.data else "unknown",
-            )
-
-            if self.config_entry is None:
-                return
-
-            if self.config_entry.options.get("resolution") != value:
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "resolution": value},
-                )
-
-        await self._mutation_queue.add(_mutation)
-        await self.async_request_refresh()
-
     @property
     def resolution(self) -> str:
         """Effective price resolution used for API queries."""
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
+
+        if self._api_resolution_state and not self._resolution_change_pending:
+            return self._api_resolution_state.activeOption
+
         return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
     @property
@@ -2549,7 +2495,22 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     self._today_prices_logged = True
                 except Exception as err:
                     await self._handle_fetch_exceptions(err)
-                    raise UpdateFailed(f"Failed to fetch today prices: {err}") from err
+                    if (
+                        self._static_prices_today is not None
+                        and self._static_prices_today.electricity is not None
+                        and self._static_prices_today.electricity.current is not None
+                        and self._static_prices_today.gas is not None
+                        and self._static_prices_today.gas.current is not None
+                    ):
+                        _LOGGER.warning(
+                            "Failed to fetch today prices, falling back to cached data: %s",
+                            err,
+                        )
+                        prices_today = self._static_prices_today
+                    else:
+                        raise UpdateFailed(
+                            f"Failed to fetch today prices: {err}"
+                        ) from err
             else:
                 prices_today = self._static_prices_today
 
