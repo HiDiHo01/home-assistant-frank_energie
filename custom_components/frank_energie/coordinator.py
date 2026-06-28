@@ -2495,7 +2495,22 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     self._today_prices_logged = True
                 except Exception as err:
                     await self._handle_fetch_exceptions(err)
-                    raise UpdateFailed(f"Failed to fetch today prices: {err}") from err
+                    if (
+                        self._static_prices_today is not None
+                        and self._static_prices_today.electricity is not None
+                        and self._static_prices_today.electricity.current is not None
+                        and self._static_prices_today.gas is not None
+                        and self._static_prices_today.gas.current is not None
+                    ):
+                        _LOGGER.warning(
+                            "Failed to fetch today prices, falling back to cached data: %s",
+                            err,
+                        )
+                        prices_today = self._static_prices_today
+                    else:
+                        raise UpdateFailed(
+                            f"Failed to fetch today prices: {err}"
+                        ) from err
             else:
                 prices_today = self._static_prices_today
 
