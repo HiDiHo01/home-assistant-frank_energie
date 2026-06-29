@@ -1561,7 +1561,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         entity_category=None,
-        state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=_get_period_trading_result,
     ),
@@ -1637,7 +1636,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
-        state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
             getattr(data, "period_frank_slim", None)
@@ -1651,18 +1649,20 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
-        state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
-            sum(
-                getattr(session, "result", 0)
-                for session in (getattr(data, "sessions", None) or [])
-                if getattr(session, "date", None)
-                and _format_battery_date(session.date).date()
-                == (
-                    datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
-                    - timedelta(days=1)
-                )
+            round(
+                sum(
+                    getattr(session, "result", 0)
+                    for session in (getattr(data, "sessions", None) or [])
+                    if getattr(session, "date", None)
+                    and _format_battery_date(session.date).date()
+                    == (
+                        datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+                        - timedelta(days=1)
+                    )
+                ),
+                5,
             )
             if data
             else None
@@ -1674,7 +1674,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         icon=ICON,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
-        state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
             getattr(data, "sessions")[-1].cumulative_result

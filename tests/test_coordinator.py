@@ -1139,11 +1139,17 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
 
     # Assertions
     assert coordinator.cached_prices_tomorrow is None
-    assert coordinator._static_prices_today is tomorrow_prices
-    assert coordinator._cached_prices is tomorrow_prices
-    assert coordinator.cached_prices_today.prices_today is tomorrow_prices
-    assert coordinator.cached_prices[DATA_ELECTRICITY] is tomorrow_prices.electricity
-    assert coordinator.cached_prices[DATA_GAS] is tomorrow_prices.gas
+    # The new behavior preserves the combined electricity/gas from cached_prices
+    assert (
+        coordinator._static_prices_today.electricity
+        is coordinator.cached_prices[DATA_ELECTRICITY]
+    )
+    assert coordinator._static_prices_today.gas is coordinator.cached_prices[DATA_GAS]
+    assert (
+        coordinator._static_prices_today.energy_country
+        is tomorrow_prices.energy_country
+    )
+    assert coordinator._static_prices_today.energy_type is tomorrow_prices.energy_type
 
 
 @pytest.mark.asyncio
@@ -1376,13 +1382,16 @@ async def test_price_coordinator_midnight_rollover(
         DATA_GAS: MagicMock(),
     }
 
+    original_electricity = price_coordinator.cached_prices[DATA_ELECTRICITY]
+    original_gas = price_coordinator.cached_prices[DATA_GAS]
+
     price_coordinator.promote_tomorrow_prices()
 
     assert price_coordinator.cached_prices_tomorrow is None
-    assert (
-        price_coordinator.cached_prices[DATA_ELECTRICITY] == tomorrow_prices.electricity
-    )
-    assert price_coordinator.cached_prices[DATA_GAS] == tomorrow_prices.gas
+    assert price_coordinator.cached_prices[DATA_ELECTRICITY] is original_electricity
+    assert price_coordinator.cached_prices[DATA_GAS] is original_gas
+    assert price_coordinator._static_prices_today.electricity is original_electricity
+    assert price_coordinator._static_prices_today.gas is original_gas
 
 
 @pytest.mark.asyncio

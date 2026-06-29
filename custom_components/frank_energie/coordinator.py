@@ -1722,15 +1722,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
             return
 
+        # Keep the combined data (yesterday + today) to prevent historical sensors
+        # from becoming None at exactly 0:00.
         updated_data = source_data.copy()
 
-        updated_data[DATA_ELECTRICITY] = prices_tomorrow.electricity
-        updated_data[DATA_GAS] = prices_tomorrow.gas
+        combined_market_prices = MarketPrices(
+            electricity=source_data.get(DATA_ELECTRICITY),
+            gas=source_data.get(DATA_GAS),
+            energy_country=prices_tomorrow.energy_country,
+            energy_type=prices_tomorrow.energy_type,
+        )
 
         self.cached_prices_tomorrow = None
         self.cached_prices = updated_data
         self.data = updated_data
-        self._update_today_prices(prices_tomorrow)
+        self._update_today_prices(combined_market_prices)
 
         self.async_update_listeners()
 
@@ -2381,25 +2387,31 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             f"{DOMAIN}_prices_{config_entry.entry_id}",
         )
 
-    async def async_config_entry_first_refresh(self) -> None:
-        """Load cached prices and then perform first refresh."""
+    async def _async_setup(self) -> None:
+        """Load cached prices into data before first refresh."""
         try:
             cached_data = await self.store.async_load()
             if cached_data:
-                _LOGGER.debug("Loading cached prices from disk")
+                _LOGGER.debug("Loading cached prices from disk into coordinator data")
+
+                prices_today = None
+                prices_tomorrow = None
+                data_contract_price_resolution_state = None
+
                 if prices_today_dict := cached_data.get("prices_today"):
-                    self._static_prices_today = _dict_to_market_prices(
-                        prices_today_dict
-                    )
+                    prices_today = _dict_to_market_prices(prices_today_dict)
+                    self._static_prices_today = prices_today
                 if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
-                    self.cached_prices_tomorrow = _dict_to_market_prices(
-                        prices_tomorrow_dict
-                    )
+                    prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
+                    self.cached_prices_tomorrow = prices_tomorrow
                 if resolution_state_dict := cached_data.get(
                     "contract_price_resolution_state"
                 ):
+                    data_contract_price_resolution_state = _dict_to_resolution_state(
+                        resolution_state_dict
+                    )
                     self._static_contract_price_resolution_state = (
-                        _dict_to_resolution_state(resolution_state_dict)
+                        data_contract_price_resolution_state
                     )
 
                 if last_fetch_today_str := cached_data.get("last_fetch_today"):
@@ -2408,12 +2420,42 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     self.last_fetch_tomorrow = dt_util.parse_datetime(
                         last_fetch_tomorrow_str
                     )
+
+                cache = PricesTodayCache(
+                    prices_today=prices_today,
+                    data_month_summary=None,
+                    data_invoices=None,
+                    data_user=None,
+                    user_sites=None,
+                    data_period_usage=None,
+                    data_enode_chargers=None,
+                    data_smart_batteries=None,
+                    data_smart_battery_details=[],
+                    data_smart_battery_sessions=[],
+                    data_enode_vehicles=None,
+                    data_pv_systems=None,
+                    data_pv_summary=None,
+                    data_user_smart_feed_in=None,
+                    data_contract_price_resolution_state=data_contract_price_resolution_state,
+                )
+
+                self.data = self._aggregate_data(cache, prices_tomorrow)
+                self.cached_prices = self.data
+
         except Exception as err:
             _LOGGER.warning(
                 "Failed to load cached prices from disk: %s", err, exc_info=True
             )
 
-        await super().async_config_entry_first_refresh()
+    async def async_config_entry_first_refresh(self) -> None:
+        """Perform first refresh."""
+        await self._async_setup()
+
+        if not self.data:
+            _LOGGER.debug("No valid cache found, performing initial API fetch")
+            await super().async_config_entry_first_refresh()
+        else:
+            _LOGGER.debug("Valid cache loaded, skipping initial API fetch")
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
