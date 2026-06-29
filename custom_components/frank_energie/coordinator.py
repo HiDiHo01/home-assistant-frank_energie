@@ -2449,7 +2449,13 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
-        await super().async_config_entry_first_refresh()
+        await self._async_setup()
+        
+        if not self.data:
+            _LOGGER.debug("No valid cache found, performing initial API fetch")
+            await super().async_config_entry_first_refresh()
+        else:
+            _LOGGER.debug("Valid cache loaded, skipping initial API fetch")
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
