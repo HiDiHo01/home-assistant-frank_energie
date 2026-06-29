@@ -2450,7 +2450,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
         await self._async_setup()
-        
+
         if not self.data:
             _LOGGER.debug("No valid cache found, performing initial API fetch")
             await super().async_config_entry_first_refresh()
