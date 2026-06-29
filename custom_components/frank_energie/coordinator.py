@@ -2393,7 +2393,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             cached_data = await self.store.async_load()
             if cached_data:
                 _LOGGER.debug("Loading cached prices from disk into coordinator data")
-                
+
                 prices_today = None
                 prices_tomorrow = None
                 data_contract_price_resolution_state = None

@@ -1140,9 +1140,15 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
     # Assertions
     assert coordinator.cached_prices_tomorrow is None
     # The new behavior preserves the combined electricity/gas from cached_prices
-    assert coordinator._static_prices_today.electricity is coordinator.cached_prices[DATA_ELECTRICITY]
+    assert (
+        coordinator._static_prices_today.electricity
+        is coordinator.cached_prices[DATA_ELECTRICITY]
+    )
     assert coordinator._static_prices_today.gas is coordinator.cached_prices[DATA_GAS]
-    assert coordinator._static_prices_today.energy_country is tomorrow_prices.energy_country
+    assert (
+        coordinator._static_prices_today.energy_country
+        is tomorrow_prices.energy_country
+    )
     assert coordinator._static_prices_today.energy_type is tomorrow_prices.energy_type
 
 
