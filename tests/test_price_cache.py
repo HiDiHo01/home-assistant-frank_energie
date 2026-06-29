@@ -175,6 +175,9 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
         hass, mock_config_entry, mock_api, settings_coordinator
     )
 
+    # Call _async_setup to load the cached data
+    await price_coordinator._async_setup()
+
     # We patch super().async_config_entry_first_refresh to avoid actual update call
     with patch(
         "homeassistant.helpers.update_coordinator.DataUpdateCoordinator.async_config_entry_first_refresh",
