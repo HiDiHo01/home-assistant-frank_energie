@@ -79,7 +79,7 @@
           "interval_prices": "Ophaalinterval - Prijzen (15-120 minuten, standaard: 60)",
           "interval_statistics": "Ophaalinterval - Statistieken (15-1440 minuten, standaard: 60)",
           "interval_batteries": "Ophaalinterval - Batterijen (5-60 minuten, standaard: 5)",
-          "interval_battery_sessions": "Ophaalinterval - Batterijsessies (5-1440 minuten, standaard: 15)",
+          "interval_battery_sessions": "Ophaalinterval - Batterijsessies (5-1440 minuten, standaard: 60)",
           "interval_chargers": "Ophaalinterval - Opladers (5-60 minuten, standaard: 5)",
           "interval_vehicles": "Ophaalinterval - Voertuigen (5-60 minuten, standaard: 15)",
           "interval_pv": "Ophaalinterval - PV (5-60 minuten, standaard: 5)"
