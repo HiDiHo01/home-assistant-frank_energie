@@ -75,6 +75,7 @@ from .const import (
     ICON,
     ICON_CLOCK_OUTLINE,
     PER_UNIT_TO_UNIT,
+    POWER_DELIVERY_STATES,
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_COSTS,
@@ -964,15 +965,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         icon="mdi:flash",
         authenticated=True,
         device_class=SensorDeviceClass.ENUM,
-        options=[
-            "unplugged",
-            "plugged_in_charging",
-            "plugged_in_not_charging",
-            "plugged_in_finished",
-            "plugged_in_no_power",
-            "unknown",
-            "error",
-        ],
+        options=list(POWER_DELIVERY_STATES),
         value_fn=lambda charger: (
             charger.charge_state.power_delivery_state.lower().replace(":", "_")
             if charger.charge_state and charger.charge_state.power_delivery_state
@@ -1233,15 +1226,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         icon="mdi:transmission-tower",
         authenticated=True,
         device_class=SensorDeviceClass.ENUM,
-        options=[
-            "unplugged",
-            "plugged_in_charging",
-            "plugged_in_not_charging",
-            "plugged_in_finished",
-            "plugged_in_no_power",
-            "unknown",
-            "error",
-        ],
+        options=list(POWER_DELIVERY_STATES),
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
             data.get("chargeState", {})

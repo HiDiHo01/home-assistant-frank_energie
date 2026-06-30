@@ -116,6 +116,16 @@ SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "idle_smart_home",
 )
 
+POWER_DELIVERY_STATES: Final[tuple[str, ...]] = (
+    "unplugged",
+    "plugged_in_charging",
+    "plugged_in_not_charging",
+    "plugged_in_finished",
+    "plugged_in_no_power",
+    "unknown",
+    "error",
+)
+
 # --- Data Fields ---
 DATA_CONTRACT_PRICE_RESOLUTION_STATE: Final[str] = "contract_price_resolution_state"
 DATA_ELECTRICITY: Final[str] = "electricity"
