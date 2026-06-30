@@ -942,7 +942,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 ): NumberSelector(
                     NumberSelectorConfig(
-                        min=15, max=1440, mode=NumberSelectorMode.SLIDER
+                        min=5, max=1440, mode=NumberSelectorMode.SLIDER
                     )
                 ),
                 vol.Required(
