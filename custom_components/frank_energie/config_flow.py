@@ -803,46 +803,59 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 options = {
                     CONF_USERNAME: user_input[CONF_USERNAME],
                     CONF_PASSWORD: encrypted_password,
-                    CONF_INTERVAL_SETTINGS: user_input.get(
-                        CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
+                    CONF_INTERVAL_SETTINGS: int(
+                        user_input.get(
+                            CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
+                        )
                     ),
-                    CONF_INTERVAL_PRICES: user_input.get(
-                        CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES
+                    CONF_INTERVAL_PRICES: int(
+                        user_input.get(CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES)
                     ),
-                    CONF_INTERVAL_STATISTICS: user_input.get(
-                        CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
+                    CONF_INTERVAL_STATISTICS: int(
+                        user_input.get(
+                            CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
+                        )
                     ),
-                    CONF_INTERVAL_BATTERIES: user_input.get(
-                        CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
+                    CONF_INTERVAL_BATTERIES: int(
+                        user_input.get(
+                            CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
+                        )
                     ),
-                    CONF_INTERVAL_BATTERY_SESSIONS: user_input.get(
-                        CONF_INTERVAL_BATTERY_SESSIONS,
-                        DEFAULT_INTERVAL_BATTERY_SESSIONS,
+                    CONF_INTERVAL_BATTERY_SESSIONS: int(
+                        user_input.get(
+                            CONF_INTERVAL_BATTERY_SESSIONS,
+                            DEFAULT_INTERVAL_BATTERY_SESSIONS,
+                        )
                     ),
-                    CONF_INTERVAL_CHARGERS: user_input.get(
-                        CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
+                    CONF_INTERVAL_CHARGERS: int(
+                        user_input.get(
+                            CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
+                        )
                     ),
-                    CONF_INTERVAL_VEHICLES: user_input.get(
-                        CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
+                    CONF_INTERVAL_VEHICLES: int(
+                        user_input.get(
+                            CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
+                        )
                     ),
-                    CONF_INTERVAL_PV: user_input.get(
-                        CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV
+                    CONF_INTERVAL_PV: int(
+                        user_input.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV)
                     ),
                 }
 
                 # Log explicitly changed timings
+                defaults = {
+                    CONF_INTERVAL_SETTINGS: DEFAULT_INTERVAL_SETTINGS,
+                    CONF_INTERVAL_PRICES: DEFAULT_INTERVAL_PRICES,
+                    CONF_INTERVAL_STATISTICS: DEFAULT_INTERVAL_STATISTICS,
+                    CONF_INTERVAL_BATTERIES: DEFAULT_INTERVAL_BATTERIES,
+                    CONF_INTERVAL_BATTERY_SESSIONS: DEFAULT_INTERVAL_BATTERY_SESSIONS,
+                    CONF_INTERVAL_CHARGERS: DEFAULT_INTERVAL_CHARGERS,
+                    CONF_INTERVAL_VEHICLES: DEFAULT_INTERVAL_VEHICLES,
+                    CONF_INTERVAL_PV: DEFAULT_INTERVAL_PV,
+                }
                 changes = []
-                for key in (
-                    CONF_INTERVAL_SETTINGS,
-                    CONF_INTERVAL_PRICES,
-                    CONF_INTERVAL_STATISTICS,
-                    CONF_INTERVAL_BATTERIES,
-                    CONF_INTERVAL_BATTERY_SESSIONS,
-                    CONF_INTERVAL_CHARGERS,
-                    CONF_INTERVAL_VEHICLES,
-                    CONF_INTERVAL_PV,
-                ):
-                    old_val = entry.options.get(key)
+                for key, default_val in defaults.items():
+                    old_val = entry.options.get(key, default_val)
                     new_val = options.get(key)
                     if old_val != new_val:
                         changes.append(f"{key}: {old_val} -> {new_val}")
