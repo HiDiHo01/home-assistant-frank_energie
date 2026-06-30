@@ -1471,6 +1471,16 @@ def _calculate_market_percent_tax(price_data: object | None) -> float | None:
     return None
 
 
+def _safe_session_result_sum(sessions: Any) -> float:
+    """Safely sum session results, explicitly handling None values."""
+    total = 0.0
+    for session in sessions:
+        res = getattr(session, "result", None)
+        if res is not None:
+            total += res
+    return total
+
+
 def _get_period_trading_result(data: object | None) -> float | None:
     """Calculate the period trading result."""
     if not data:
@@ -1479,7 +1489,7 @@ def _get_period_trading_result(data: object | None) -> float | None:
         return getattr(data, "period_trading_result")
 
     sessions = getattr(data, "sessions", None) or []
-    return sum(getattr(session, "result", 0) for session in sessions)
+    return _safe_session_result_sum(sessions)
 
 
 def _get_period_total_result(data: object | None) -> float | None:
@@ -1652,8 +1662,8 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: (
             round(
-                sum(
-                    getattr(session, "result", 0)
+                _safe_session_result_sum(
+                    session
                     for session in (getattr(data, "sessions", None) or [])
                     if getattr(session, "date", None)
                     and _format_battery_date(session.date).date()

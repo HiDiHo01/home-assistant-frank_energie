@@ -111,6 +111,9 @@ SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "charge_self_consumption_mixed",
     "status_maintenance",
     "status_error",
+    "discharge_smart_home",
+    "charge_smart_home",
+    "idle_smart_home",
 )
 
 # --- Data Fields ---
