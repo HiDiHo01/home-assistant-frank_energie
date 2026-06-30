@@ -659,3 +659,34 @@ def test_calculate_market_percent_tax() -> None:
     price_data_all_zero.all = [zero_hour, zero_hour]
 
     assert _calculate_market_percent_tax(price_data_all_zero) == 0.0
+
+
+def test_safe_session_result_sum():
+    """Test that _safe_session_result_sum handles None and values correctly."""
+    from custom_components.frank_energie.sensor import _safe_session_result_sum
+
+    class DummySession:
+        def __init__(self, result):
+            self.result = result
+
+    # Test with normal values
+    sessions = [DummySession(1.5), DummySession(2.5)]
+    assert _safe_session_result_sum(sessions) == 4.0
+
+    # Test with None values
+    sessions = [DummySession(1.5), DummySession(None), DummySession(2.5)]
+    assert _safe_session_result_sum(sessions) == 4.0
+
+    # Test with 0.0 values
+    sessions = [DummySession(0.0), DummySession(0)]
+    assert _safe_session_result_sum(sessions) == 0.0
+
+    # Test with missing result attribute (should default to None safely)
+    class MissingResultSession:
+        pass
+
+    sessions = [DummySession(1.5), MissingResultSession()]
+    assert _safe_session_result_sum(sessions) == 1.5
+
+    # Test empty
+    assert _safe_session_result_sum([]) == 0.0
