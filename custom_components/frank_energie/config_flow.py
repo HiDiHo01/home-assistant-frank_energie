@@ -866,6 +866,11 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                         ", ".join(changes),
                     )
 
+                _LOGGER.debug(
+                    "Current Frank Energie polling intervals: %s",
+                    ", ".join(f"{key}: {options.get(key)}" for key in defaults),
+                )
+
                 # Update tokens in data
                 updated_data = {
                     **entry.data,
