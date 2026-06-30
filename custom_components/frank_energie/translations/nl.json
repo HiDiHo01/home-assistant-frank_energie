@@ -787,7 +787,10 @@
           "charge_self_consumption": "Laden (Zelfconsumptie)",
           "charge_self_consumption_mixed": "Laden (Zelfconsumptie Gemengd)",
           "status_maintenance": "Onderhoud",
-          "status_error": "Fout"
+          "status_error": "Fout",
+          "discharge_smart_home": "Ontladen (Smart Home)",
+          "charge_smart_home": "Laden (Smart Home)",
+          "idle_smart_home": "Inactief (Smart Home)"
         }
       }
     },

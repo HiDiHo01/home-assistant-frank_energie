@@ -956,7 +956,10 @@
           "charge_self_consumption": "Charging (Self Consumption)",
           "charge_self_consumption_mixed": "Charging (Self Consumption Mixed)",
           "status_maintenance": "Maintenance",
-          "status_error": "Error"
+          "status_error": "Error",
+          "discharge_smart_home": "Discharging (Smart Home)",
+          "charge_smart_home": "Charging (Smart Home)",
+          "idle_smart_home": "Idle (Smart Home)"
         }
       }
     }

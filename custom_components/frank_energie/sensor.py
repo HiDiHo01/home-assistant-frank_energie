@@ -1479,7 +1479,7 @@ def _get_period_trading_result(data: object | None) -> float | None:
         return getattr(data, "period_trading_result")
 
     sessions = getattr(data, "sessions", None) or []
-    return sum(getattr(session, "result", 0) for session in sessions)
+    return sum((getattr(session, "result", None) or 0.0) for session in sessions)
 
 
 def _get_period_total_result(data: object | None) -> float | None:
@@ -1653,7 +1653,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         value_fn=lambda data: (
             round(
                 sum(
-                    getattr(session, "result", 0)
+                    (getattr(session, "result", None) or 0.0)
                     for session in (getattr(data, "sessions", None) or [])
                     if getattr(session, "date", None)
                     and _format_battery_date(session.date).date()
