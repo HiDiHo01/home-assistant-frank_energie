@@ -21,6 +21,9 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
 )
 from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import AuthException, ConnectionException
@@ -877,53 +880,75 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(CONF_USERNAME, default=current_username): str,
                 # Leave password blank to avoid exposing it in the UI
                 vol.Optional(CONF_PASSWORD, default=""): str,
-                vol.Optional(
+                vol.Required(
                     CONF_INTERVAL_SETTINGS,
                     default=entry.options.get(
                         CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=72)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
                     CONF_INTERVAL_PRICES,
                     default=entry.options.get(
                         CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=15, max=120)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=15, max=120, mode=NumberSelectorMode.SLIDER
+                    )
+                ),
+                vol.Required(
                     CONF_INTERVAL_STATISTICS,
                     default=entry.options.get(
                         CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=15, max=1440, mode=NumberSelectorMode.SLIDER
+                    )
+                ),
+                vol.Required(
                     CONF_INTERVAL_BATTERIES,
                     default=entry.options.get(
                         CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
                     CONF_INTERVAL_BATTERY_SESSIONS,
                     default=entry.options.get(
                         CONF_INTERVAL_BATTERY_SESSIONS,
                         DEFAULT_INTERVAL_BATTERY_SESSIONS,
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=15, max=1440, mode=NumberSelectorMode.SLIDER
+                    )
+                ),
+                vol.Required(
                     CONF_INTERVAL_CHARGERS,
                     default=entry.options.get(
                         CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
                     CONF_INTERVAL_VEHICLES,
                     default=entry.options.get(
                         CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
-                vol.Optional(
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
                     CONF_INTERVAL_PV,
                     default=entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
             }
         )
 
