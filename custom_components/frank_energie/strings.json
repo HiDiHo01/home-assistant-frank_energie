@@ -970,7 +970,14 @@
       "user": {
         "data": {
           "password": "Password",
-          "username": "Username / e-mail"
+          "username": "Username / e-mail",
+          "interval_settings": "Polling Interval - Settings (1-72 hours, default: 24)",
+          "interval_statistics": "Polling Interval - Statistics (15-1440 minutes, default: 60)",
+          "interval_batteries": "Polling Interval - Batteries (5-60 minutes, default: 5)",
+          "interval_battery_sessions": "Polling Interval - Battery Sessions (5-1440 minutes, default: 60)",
+          "interval_chargers": "Polling Interval - Chargers (5-60 minutes, default: 5)",
+          "interval_vehicles": "Polling Interval - Vehicles (5-60 minutes, default: 15)",
+          "interval_pv": "Polling Interval - PV (5-60 minutes, default: 5)"
         },
         "title": "Sign in to Frank Energie"
       }

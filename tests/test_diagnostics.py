@@ -19,20 +19,20 @@ from custom_components.frank_energie.diagnostics import (
 
 
 @dataclass
-class TestDataclass:
+class MockDataclass:
     """Test dataclass."""
 
     name: str
     value: int
 
 
-class TestEnum(Enum):
+class MockEnum(Enum):
     """Test enum."""
 
     VALUE = "test"
 
 
-class TestObject:
+class MockObject:
     """Test object."""
 
     def __init__(self) -> None:
@@ -87,7 +87,7 @@ def test_serialize_time() -> None:
 
 def test_serialize_enum() -> None:
     """Test enum serialization."""
-    assert _serialize(TestEnum.VALUE) == "test"
+    assert _serialize(MockEnum.VALUE) == "test"
 
 
 def test_serialize_uuid() -> None:
@@ -123,7 +123,7 @@ def test_serialize_frozenset() -> None:
 
 def test_serialize_dataclass() -> None:
     """Test dataclass serialization."""
-    value = TestDataclass(
+    value = MockDataclass(
         name="test",
         value=123,
     )
@@ -136,7 +136,7 @@ def test_serialize_dataclass() -> None:
 
 def test_serialize_object() -> None:
     """Test generic object serialization."""
-    assert _serialize(TestObject()) == {
+    assert _serialize(MockObject()) == {
         "public": "value",
     }
 

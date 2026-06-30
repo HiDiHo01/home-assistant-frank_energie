@@ -21,11 +21,31 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
 )
 from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import AuthException, ConnectionException
 
-from .const import CONF_SITE, DOMAIN
+from .const import (
+    CONF_SITE,
+    DOMAIN,
+    CONF_INTERVAL_SETTINGS,
+    CONF_INTERVAL_STATISTICS,
+    CONF_INTERVAL_BATTERIES,
+    CONF_INTERVAL_BATTERY_SESSIONS,
+    CONF_INTERVAL_CHARGERS,
+    CONF_INTERVAL_VEHICLES,
+    CONF_INTERVAL_PV,
+    DEFAULT_INTERVAL_SETTINGS,
+    DEFAULT_INTERVAL_STATISTICS,
+    DEFAULT_INTERVAL_BATTERIES,
+    DEFAULT_INTERVAL_BATTERY_SESSIONS,
+    DEFAULT_INTERVAL_CHARGERS,
+    DEFAULT_INTERVAL_VEHICLES,
+    DEFAULT_INTERVAL_PV,
+)
 from .helpers import decrypt_password, encrypt_password
 
 _LOGGER = logging.getLogger(__name__)
@@ -747,6 +767,79 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         return await self.async_step_user(user_input)
 
+    def _get_password_to_validate(
+        self, user_input: dict[str, Any], current_password: str
+    ) -> str:
+        """Resolve the password to use for validation."""
+        password_to_validate = user_input.get(CONF_PASSWORD)
+        if not password_to_validate and current_password:
+            try:
+                return decrypt_password(self.hass, current_password)
+            except Exception:
+                pass
+        return password_to_validate or ""
+
+    def _build_options_and_log_changes(
+        self, user_input: dict[str, Any], encrypted_password: str
+    ) -> dict[str, Any]:
+        """Build the new options dictionary and log any changes in polling intervals."""
+        entry = self.config_entry
+        options = {
+            CONF_USERNAME: user_input[CONF_USERNAME],
+            CONF_PASSWORD: encrypted_password,
+            CONF_INTERVAL_SETTINGS: int(
+                user_input.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS)
+            ),
+            CONF_INTERVAL_STATISTICS: int(
+                user_input.get(CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS)
+            ),
+            CONF_INTERVAL_BATTERIES: int(
+                user_input.get(CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES)
+            ),
+            CONF_INTERVAL_BATTERY_SESSIONS: int(
+                user_input.get(
+                    CONF_INTERVAL_BATTERY_SESSIONS, DEFAULT_INTERVAL_BATTERY_SESSIONS
+                )
+            ),
+            CONF_INTERVAL_CHARGERS: int(
+                user_input.get(CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS)
+            ),
+            CONF_INTERVAL_VEHICLES: int(
+                user_input.get(CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES)
+            ),
+            CONF_INTERVAL_PV: int(
+                user_input.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV)
+            ),
+        }
+
+        defaults = {
+            CONF_INTERVAL_SETTINGS: DEFAULT_INTERVAL_SETTINGS,
+            CONF_INTERVAL_STATISTICS: DEFAULT_INTERVAL_STATISTICS,
+            CONF_INTERVAL_BATTERIES: DEFAULT_INTERVAL_BATTERIES,
+            CONF_INTERVAL_BATTERY_SESSIONS: DEFAULT_INTERVAL_BATTERY_SESSIONS,
+            CONF_INTERVAL_CHARGERS: DEFAULT_INTERVAL_CHARGERS,
+            CONF_INTERVAL_VEHICLES: DEFAULT_INTERVAL_VEHICLES,
+            CONF_INTERVAL_PV: DEFAULT_INTERVAL_PV,
+        }
+        changes = []
+        for key, default_val in defaults.items():
+            old_val = entry.options.get(key, default_val)
+            new_val = options.get(key)
+            if old_val != new_val:
+                changes.append(f"{key}: {old_val} -> {new_val}")
+
+        if changes:
+            _LOGGER.debug(
+                "Frank Energie polling intervals updated: %s",
+                ", ".join(changes),
+            )
+
+        _LOGGER.debug(
+            "Current Frank Energie polling intervals: %s",
+            ", ".join(f"{key}: {options.get(key)}" for key in defaults),
+        )
+        return options
+
     async def async_step_user(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -763,12 +856,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
-            password_to_validate = user_input.get(CONF_PASSWORD)
-            if not password_to_validate and current_password:
-                try:
-                    password_to_validate = decrypt_password(self.hass, current_password)
-                except Exception:
-                    pass
+            password_to_validate = self._get_password_to_validate(
+                user_input, current_password
+            )
 
             try:
                 async with FrankEnergie() as api:
@@ -778,10 +868,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
                 # Encrypt password before storing in options
                 encrypted_password = encrypt_password(self.hass, password_to_validate)
-                options = {
-                    CONF_USERNAME: user_input[CONF_USERNAME],
-                    CONF_PASSWORD: encrypted_password,
-                }
+                options = self._build_options_and_log_changes(
+                    user_input, encrypted_password
+                )
 
                 # Update tokens in data
                 updated_data = {
@@ -810,6 +899,65 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(CONF_USERNAME, default=current_username): str,
                 # Leave password blank to avoid exposing it in the UI
                 vol.Optional(CONF_PASSWORD, default=""): str,
+                vol.Required(
+                    CONF_INTERVAL_SETTINGS,
+                    default=entry.options.get(
+                        CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
+                    CONF_INTERVAL_STATISTICS,
+                    default=entry.options.get(
+                        CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=15, max=1440, mode=NumberSelectorMode.SLIDER
+                    )
+                ),
+                vol.Required(
+                    CONF_INTERVAL_BATTERIES,
+                    default=entry.options.get(
+                        CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
+                    CONF_INTERVAL_BATTERY_SESSIONS,
+                    default=entry.options.get(
+                        CONF_INTERVAL_BATTERY_SESSIONS,
+                        DEFAULT_INTERVAL_BATTERY_SESSIONS,
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=5, max=1440, mode=NumberSelectorMode.SLIDER
+                    )
+                ),
+                vol.Required(
+                    CONF_INTERVAL_CHARGERS,
+                    default=entry.options.get(
+                        CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
+                    CONF_INTERVAL_VEHICLES,
+                    default=entry.options.get(
+                        CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
+                vol.Required(
+                    CONF_INTERVAL_PV,
+                    default=entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+                ),
             }
         )
 

@@ -67,6 +67,13 @@ CONF_ENERGY_TAX_ODE: Final[str] = "energy_tax_ode"
 CONF_ENERGY_TAX_REDUCTION: Final[str] = "energy_tax_reduction"
 CONF_NETWORK_CHARGES: Final[str] = "network_charges"
 CONF_EXPORT_ELECTRICITY_FEE: Final[str] = "export_electricity_fee"
+CONF_INTERVAL_SETTINGS: Final[str] = "interval_settings"
+CONF_INTERVAL_STATISTICS: Final[str] = "interval_statistics"
+CONF_INTERVAL_BATTERIES: Final[str] = "interval_batteries"
+CONF_INTERVAL_BATTERY_SESSIONS: Final[str] = "interval_battery_sessions"
+CONF_INTERVAL_CHARGERS: Final[str] = "interval_chargers"
+CONF_INTERVAL_VEHICLES: Final[str] = "interval_vehicles"
+CONF_INTERVAL_PV: Final[str] = "interval_pv"
 
 # --- Default values for some config constants ---
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
@@ -77,6 +84,15 @@ DEFAULT_ENERGY_TAX_ODE: Final[float] = 34.92
 DEFAULT_ENERGY_TAX_REDUCTION: Final[float] = -52.42
 DEFAULT_NETWORK_CHARGES: Final[float] = 39.87
 DEFAULT_EXPORT_ELECTRICITY_FEE: Final[float] = -0.035090
+
+DEFAULT_INTERVAL_SETTINGS: Final[int] = 24  # Hours
+DEFAULT_INTERVAL_PRICES: Final[int] = 60
+DEFAULT_INTERVAL_STATISTICS: Final[int] = 60
+DEFAULT_INTERVAL_BATTERIES: Final[int] = 5
+DEFAULT_INTERVAL_BATTERY_SESSIONS: Final[int] = 60
+DEFAULT_INTERVAL_CHARGERS: Final[int] = 5
+DEFAULT_INTERVAL_VEHICLES: Final[int] = 15
+DEFAULT_INTERVAL_PV: Final[int] = 5
 
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
 SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
