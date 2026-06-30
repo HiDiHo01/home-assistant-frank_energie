@@ -779,6 +779,7 @@
           "plugged_in_charging": "Plugged In: Charging",
           "plugged_in_not_charging": "Plugged In: Not Charging",
           "plugged_in_finished": "Plugged In: Finished",
+          "plugged_in_no_power": "Plugged In: No Power",
           "unknown": "Unknown",
           "error": "Error"
         }
