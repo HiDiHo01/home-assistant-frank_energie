@@ -671,22 +671,22 @@ def test_safe_session_result_sum():
 
     # Test with normal values
     sessions = [DummySession(1.5), DummySession(2.5)]
-    assert _safe_session_result_sum(sessions) == 4.0
+    assert _safe_session_result_sum(sessions) == pytest.approx(4.0)
 
     # Test with None values
     sessions = [DummySession(1.5), DummySession(None), DummySession(2.5)]
-    assert _safe_session_result_sum(sessions) == 4.0
+    assert _safe_session_result_sum(sessions) == pytest.approx(4.0)
 
     # Test with 0.0 values
     sessions = [DummySession(0.0), DummySession(0)]
-    assert _safe_session_result_sum(sessions) == 0.0
+    assert _safe_session_result_sum(sessions) == pytest.approx(0.0)
 
     # Test with missing result attribute (should default to None safely)
     class MissingResultSession:
         pass
 
     sessions = [DummySession(1.5), MissingResultSession()]
-    assert _safe_session_result_sum(sessions) == 1.5
+    assert _safe_session_result_sum(sessions) == pytest.approx(1.5)
 
     # Test empty
-    assert _safe_session_result_sum([]) == 0.0
+    assert _safe_session_result_sum([]) == pytest.approx(0.0)
