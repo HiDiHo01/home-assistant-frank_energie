@@ -970,7 +970,15 @@
       "user": {
         "data": {
           "password": "Password",
-          "username": "Username / e-mail"
+          "username": "Username / e-mail",
+          "interval_settings": "Settings Polling Interval (hours)",
+          "interval_prices": "Prices Polling Interval (minutes)",
+          "interval_statistics": "Statistics Polling Interval (minutes)",
+          "interval_batteries": "Batteries Polling Interval (minutes)",
+          "interval_battery_sessions": "Battery Sessions Polling Interval (minutes)",
+          "interval_chargers": "Chargers Polling Interval (minutes)",
+          "interval_vehicles": "Vehicles Polling Interval (minutes)",
+          "interval_pv": "PV Polling Interval (minutes)"
         },
         "title": "Sign in to Frank Energie"
       }

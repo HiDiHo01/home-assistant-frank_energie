@@ -827,6 +827,29 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 }
 
+                # Log explicitly changed timings
+                changes = []
+                for key in (
+                    CONF_INTERVAL_SETTINGS,
+                    CONF_INTERVAL_PRICES,
+                    CONF_INTERVAL_STATISTICS,
+                    CONF_INTERVAL_BATTERIES,
+                    CONF_INTERVAL_BATTERY_SESSIONS,
+                    CONF_INTERVAL_CHARGERS,
+                    CONF_INTERVAL_VEHICLES,
+                    CONF_INTERVAL_PV,
+                ):
+                    old_val = entry.options.get(key)
+                    new_val = options.get(key)
+                    if old_val != new_val:
+                        changes.append(f"{key}: {old_val} -> {new_val}")
+
+                if changes:
+                    _LOGGER.debug(
+                        "Frank Energie polling intervals updated: %s",
+                        ", ".join(changes),
+                    )
+
                 # Update tokens in data
                 updated_data = {
                     **entry.data,

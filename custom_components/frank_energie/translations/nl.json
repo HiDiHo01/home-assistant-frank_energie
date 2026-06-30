@@ -74,7 +74,15 @@
         "title": "Inloggen bij Frank Energie",
         "data": {
           "username": "Email",
-          "password": "Wachtwoord"
+          "password": "Wachtwoord",
+          "interval_settings": "Instellingen Ophaalinterval (uur)",
+          "interval_prices": "Prijzen Ophaalinterval (minuten)",
+          "interval_statistics": "Statistieken Ophaalinterval (minuten)",
+          "interval_batteries": "Batterijen Ophaalinterval (minuten)",
+          "interval_battery_sessions": "Batterijsessies Ophaalinterval (minuten)",
+          "interval_chargers": "Opladers Ophaalinterval (minuten)",
+          "interval_vehicles": "Voertuigen Ophaalinterval (minuten)",
+          "interval_pv": "PV Ophaalinterval (minuten)"
         }
       }
     }
