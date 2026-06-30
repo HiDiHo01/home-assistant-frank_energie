@@ -76,7 +76,6 @@
           "username": "Email",
           "password": "Wachtwoord",
           "interval_settings": "Ophaalinterval - Instellingen (1-72 uur, standaard: 24)",
-          "interval_prices": "Ophaalinterval - Prijzen (15-120 minuten, standaard: 60)",
           "interval_statistics": "Ophaalinterval - Statistieken (15-1440 minuten, standaard: 60)",
           "interval_batteries": "Ophaalinterval - Batterijen (5-60 minuten, standaard: 5)",
           "interval_battery_sessions": "Ophaalinterval - Batterijsessies (5-1440 minuten, standaard: 60)",

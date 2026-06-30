@@ -32,7 +32,6 @@ from .const import (
     CONF_SITE,
     DOMAIN,
     CONF_INTERVAL_SETTINGS,
-    CONF_INTERVAL_PRICES,
     CONF_INTERVAL_STATISTICS,
     CONF_INTERVAL_BATTERIES,
     CONF_INTERVAL_BATTERY_SESSIONS,
@@ -792,9 +791,6 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             CONF_INTERVAL_SETTINGS: int(
                 user_input.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS)
             ),
-            CONF_INTERVAL_PRICES: int(
-                user_input.get(CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES)
-            ),
             CONF_INTERVAL_STATISTICS: int(
                 user_input.get(CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS)
             ),
@@ -819,7 +815,6 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
         defaults = {
             CONF_INTERVAL_SETTINGS: DEFAULT_INTERVAL_SETTINGS,
-            CONF_INTERVAL_PRICES: DEFAULT_INTERVAL_PRICES,
             CONF_INTERVAL_STATISTICS: DEFAULT_INTERVAL_STATISTICS,
             CONF_INTERVAL_BATTERIES: DEFAULT_INTERVAL_BATTERIES,
             CONF_INTERVAL_BATTERY_SESSIONS: DEFAULT_INTERVAL_BATTERY_SESSIONS,
@@ -912,16 +907,6 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 ): NumberSelector(
                     NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
-                ),
-                vol.Required(
-                    CONF_INTERVAL_PRICES,
-                    default=entry.options.get(
-                        CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES
-                    ),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=15, max=120, mode=NumberSelectorMode.SLIDER
-                    )
                 ),
                 vol.Required(
                     CONF_INTERVAL_STATISTICS,

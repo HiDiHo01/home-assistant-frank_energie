@@ -87,7 +87,6 @@ from .const import (
     DEFAULT_RESOLUTION,
     EVENT_FRANK_ENERGIE,
     CONF_INTERVAL_SETTINGS,
-    CONF_INTERVAL_PRICES,
     CONF_INTERVAL_STATISTICS,
     CONF_INTERVAL_BATTERIES,
     CONF_INTERVAL_BATTERY_SESSIONS,
@@ -2499,11 +2498,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             elif time(15, 0) <= local_time < time(18, 0):
                 new_interval = timedelta(minutes=15)
             else:
-                new_interval = timedelta(
-                    minutes=self.config_entry.options.get(
-                        CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES
-                    )
-                )
+                new_interval = timedelta(minutes=DEFAULT_INTERVAL_PRICES)
 
         if self.update_interval != new_interval:
             _LOGGER.debug(
