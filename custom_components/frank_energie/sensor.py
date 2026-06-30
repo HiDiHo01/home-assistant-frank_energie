@@ -235,6 +235,13 @@ class FrankEnergieBaseSensor(
             "Expected str | int | float | datetime | None."
         )
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
+        await super().async_will_remove_from_hass()
+        if getattr(self, "_unsub_update", None):
+            self._unsub_update()
+            self._unsub_update = None
+
     @property
     def extra_state_attributes(self) -> dict[str, object]:  # type: ignore[override]
         """Return sensor attributes from coordinator data."""
@@ -469,6 +476,13 @@ class FrankEnergieBatterySessionSensor(
             )
             return None
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
+        await super().async_will_remove_from_hass()
+        if getattr(self, "_unsub_update", None):
+            self._unsub_update()
+            self._unsub_update = None
+
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         if not self.coordinator.data:
@@ -567,6 +581,13 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
         if not latest_vehicle_data:
             return None
         return self.entity_description.value_fn(latest_vehicle_data)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
+        await super().async_will_remove_from_hass()
+        if getattr(self, "_unsub_update", None):
+            self._unsub_update()
+            self._unsub_update = None
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
@@ -4551,6 +4572,13 @@ class FrankEnergieSensor(
             return
 
         self.async_schedule_update_ha_state(True)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
+        await super().async_will_remove_from_hass()
+        if getattr(self, "_unsub_update", None):
+            self._unsub_update()
+            self._unsub_update = None
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
