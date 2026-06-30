@@ -18,6 +18,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -25,7 +28,26 @@ from homeassistant.helpers.selector import (
 from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import AuthException, ConnectionException
 
-from .const import CONF_SITE, DOMAIN
+from .const import (
+    CONF_SITE,
+    DOMAIN,
+    CONF_INTERVAL_SETTINGS,
+    CONF_INTERVAL_PRICES,
+    CONF_INTERVAL_STATISTICS,
+    CONF_INTERVAL_BATTERIES,
+    CONF_INTERVAL_BATTERY_SESSIONS,
+    CONF_INTERVAL_CHARGERS,
+    CONF_INTERVAL_VEHICLES,
+    CONF_INTERVAL_PV,
+    DEFAULT_INTERVAL_SETTINGS,
+    DEFAULT_INTERVAL_PRICES,
+    DEFAULT_INTERVAL_STATISTICS,
+    DEFAULT_INTERVAL_BATTERIES,
+    DEFAULT_INTERVAL_BATTERY_SESSIONS,
+    DEFAULT_INTERVAL_CHARGERS,
+    DEFAULT_INTERVAL_VEHICLES,
+    DEFAULT_INTERVAL_PV,
+)
 from .helpers import decrypt_password, encrypt_password
 
 _LOGGER = logging.getLogger(__name__)
@@ -781,6 +803,14 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 options = {
                     CONF_USERNAME: user_input[CONF_USERNAME],
                     CONF_PASSWORD: encrypted_password,
+                    CONF_INTERVAL_SETTINGS: user_input.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS),
+                    CONF_INTERVAL_PRICES: user_input.get(CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES),
+                    CONF_INTERVAL_STATISTICS: user_input.get(CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS),
+                    CONF_INTERVAL_BATTERIES: user_input.get(CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES),
+                    CONF_INTERVAL_BATTERY_SESSIONS: user_input.get(CONF_INTERVAL_BATTERY_SESSIONS, DEFAULT_INTERVAL_BATTERY_SESSIONS),
+                    CONF_INTERVAL_CHARGERS: user_input.get(CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS),
+                    CONF_INTERVAL_VEHICLES: user_input.get(CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES),
+                    CONF_INTERVAL_PV: user_input.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV),
                 }
 
                 # Update tokens in data
@@ -810,6 +840,38 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(CONF_USERNAME, default=current_username): str,
                 # Leave password blank to avoid exposing it in the UI
                 vol.Optional(CONF_PASSWORD, default=""): str,
+                vol.Optional(
+                    CONF_INTERVAL_SETTINGS, 
+                    default=entry.options.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS)
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=72)),
+                vol.Optional(
+                    CONF_INTERVAL_PRICES, 
+                    default=entry.options.get(CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES)
+                ): vol.All(vol.Coerce(int), vol.Range(min=15, max=120)),
+                vol.Optional(
+                    CONF_INTERVAL_STATISTICS, 
+                    default=entry.options.get(CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS)
+                ): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
+                vol.Optional(
+                    CONF_INTERVAL_BATTERIES, 
+                    default=entry.options.get(CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES)
+                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                vol.Optional(
+                    CONF_INTERVAL_BATTERY_SESSIONS, 
+                    default=entry.options.get(CONF_INTERVAL_BATTERY_SESSIONS, DEFAULT_INTERVAL_BATTERY_SESSIONS)
+                ): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
+                vol.Optional(
+                    CONF_INTERVAL_CHARGERS, 
+                    default=entry.options.get(CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS)
+                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                vol.Optional(
+                    CONF_INTERVAL_VEHICLES, 
+                    default=entry.options.get(CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES)
+                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                vol.Optional(
+                    CONF_INTERVAL_PV, 
+                    default=entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV)
+                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
             }
         )
 

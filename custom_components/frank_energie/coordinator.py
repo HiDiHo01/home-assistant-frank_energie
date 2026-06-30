@@ -86,6 +86,22 @@ from .const import (
     DATA_USER_SMART_FEED_IN,
     DEFAULT_RESOLUTION,
     EVENT_FRANK_ENERGIE,
+    CONF_INTERVAL_SETTINGS,
+    CONF_INTERVAL_PRICES,
+    CONF_INTERVAL_STATISTICS,
+    CONF_INTERVAL_BATTERIES,
+    CONF_INTERVAL_BATTERY_SESSIONS,
+    CONF_INTERVAL_CHARGERS,
+    CONF_INTERVAL_VEHICLES,
+    CONF_INTERVAL_PV,
+    DEFAULT_INTERVAL_SETTINGS,
+    DEFAULT_INTERVAL_PRICES,
+    DEFAULT_INTERVAL_STATISTICS,
+    DEFAULT_INTERVAL_BATTERIES,
+    DEFAULT_INTERVAL_BATTERY_SESSIONS,
+    DEFAULT_INTERVAL_CHARGERS,
+    DEFAULT_INTERVAL_VEHICLES,
+    DEFAULT_INTERVAL_PV,
 )
 from .helpers import decrypt_password
 from .mutation_queue import MutationQueue
@@ -2337,7 +2353,7 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
         """Initialize the settings coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie settings coordinator"
-        self.update_interval = timedelta(hours=24)
+        self.update_interval = timedelta(hours=config_entry.options.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS))
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch settings data."""
@@ -2387,7 +2403,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             f"{DOMAIN}_prices_{config_entry.entry_id}",
         )
 
-    async def _async_setup(self) -> None:
+    async def _async_setup(self) -> bool:
         """Load cached prices into data before first refresh."""
         try:
             cached_data = await self.store.async_load()
@@ -2441,17 +2457,19 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
                 self.data = self._aggregate_data(cache, prices_tomorrow)
                 self.cached_prices = self.data
+                return True
 
         except Exception as err:
             _LOGGER.warning(
                 "Failed to load cached prices from disk: %s", err, exc_info=True
             )
+        return False
 
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
-        await self._async_setup()
+        cached_data_loaded = await self._async_setup()
 
-        if not self.data:
+        if not cached_data_loaded:
             _LOGGER.debug("No valid cache found, performing initial API fetch")
             await super().async_config_entry_first_refresh()
         else:
@@ -2477,7 +2495,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             elif time(15, 0) <= local_time < time(18, 0):
                 new_interval = timedelta(minutes=15)
             else:
-                new_interval = timedelta(minutes=30)
+                new_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_PRICES, DEFAULT_INTERVAL_PRICES))
 
         if self.update_interval != new_interval:
             _LOGGER.debug(
@@ -2657,7 +2675,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie battery coordinator"
         self.settings_coordinator = settings_coordinator
-        self.update_interval = timedelta(minutes=5)
+        self.update_interval = timedelta(minutes=config_entry.options.get(CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES))
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch battery data."""
@@ -2685,9 +2703,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             )
 
             if data_smart_batteries and data_smart_batteries.batteries:
-                self.update_interval = timedelta(minutes=5)
+                self.update_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES))
             else:
-                self.update_interval = timedelta(minutes=15)
+                self.update_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_BATTERIES, 15))
 
             result = _empty_data()
             if self.settings_coordinator.data:
@@ -2718,7 +2736,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie charger coordinator"
         self.settings_coordinator = settings_coordinator
-        self.update_interval = timedelta(minutes=5)
+        self.update_interval = timedelta(minutes=config_entry.options.get(CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS))
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch charger data."""
@@ -2750,7 +2768,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
             if has_active_charger:
                 self.update_interval = timedelta(minutes=2)
             else:
-                self.update_interval = timedelta(minutes=5)
+                self.update_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS))
 
             result = _empty_data()
             if self.settings_coordinator.data:
@@ -2779,7 +2797,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie PV coordinator"
         self.settings_coordinator = settings_coordinator
-        self.update_interval = timedelta(minutes=5)
+        self.update_interval = timedelta(minutes=config_entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV))
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch PV data."""
@@ -2812,9 +2830,9 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
                         data_pv_summary[system.id] = summary
 
             if data_pv_systems and data_pv_systems.systems:
-                self.update_interval = timedelta(minutes=5)
+                self.update_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV))
             else:
-                self.update_interval = timedelta(minutes=15)
+                self.update_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_PV, 15))
 
             result = _empty_data()
             if self.settings_coordinator.data:
@@ -2845,7 +2863,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie vehicle coordinator"
         self.settings_coordinator = settings_coordinator
-        self.update_interval = timedelta(minutes=15)
+        self.update_interval = timedelta(minutes=config_entry.options.get(CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES))
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch vehicle data."""
@@ -2878,7 +2896,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
             if is_active:
                 self.update_interval = timedelta(minutes=1)
             else:
-                self.update_interval = timedelta(minutes=15)
+                self.update_interval = timedelta(minutes=self.config_entry.options.get(CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES))
 
             result = _empty_data()
             if self.settings_coordinator.data:
@@ -2907,7 +2925,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie statistics coordinator"
         self.settings_coordinator = settings_coordinator
-        self.update_interval = timedelta(hours=1)
+        self.update_interval = timedelta(minutes=config_entry.options.get(CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS))
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch historical statistics data."""
@@ -2976,7 +2994,7 @@ class FrankEnergieBatterySessionCoordinator(
             hass,
             _LOGGER,
             name="Frank Energie Battery Sessions",
-            update_interval=timedelta(minutes=60),
+            update_interval=timedelta(minutes=config_entry.options.get(CONF_INTERVAL_BATTERY_SESSIONS, DEFAULT_INTERVAL_BATTERY_SESSIONS)),
             config_entry=config_entry,
         )
 
