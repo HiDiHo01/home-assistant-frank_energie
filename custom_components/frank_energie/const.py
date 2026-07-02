@@ -79,10 +79,11 @@ CONF_INTERVAL_PV: Final[str] = "interval_pv"
 DEFAULT_REFRESH_INTERVAL: Final[int] = 900  # 15 minutes
 DEFAULT_ROUND: Final[int] = 3  # Default display round value for prices
 DEFAULT_RESOLUTION: Final[str] = "PT15M"
-DEFAULT_MONTHLY_SUBSCRIPTION_FEE: Final[float] = 7.00
+DEFAULT_MONTHLY_SUBSCRIPTION_FEE: Final[float] = 7.25
 DEFAULT_ENERGY_TAX_ODE: Final[float] = 34.92
 DEFAULT_ENERGY_TAX_REDUCTION: Final[float] = -52.42
 DEFAULT_NETWORK_CHARGES: Final[float] = 39.87
+DEFAULT_IMPORT_ELECTRICITY_FEE: Final[float] = 0.0182
 DEFAULT_EXPORT_ELECTRICITY_FEE: Final[float] = -0.035090
 
 DEFAULT_INTERVAL_SETTINGS: Final[int] = 24  # Hours
