@@ -1627,28 +1627,41 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             await self._try_renew_token()
             raise UpdateFailed(ex) from ex
 
-    async def _fetch_tomorrow_data(self, tomorrow: date):
+    async def _fetch_tomorrow_data(
+        self,
+        tomorrow: date,
+    ) -> PriceData | None:
         """Fetch tomorrow's data after 13:00 UTC."""
         try:
             _LOGGER.debug("Fetching Frank Energie data for tomorrow")
+    
             return await self._fetch_prices_with_fallback(
-                tomorrow, tomorrow + timedelta(days=1), use_fallback=False
+                tomorrow,
+                tomorrow + timedelta(days=1),
+                use_fallback=False,
             )
+    
         except RequestException as err:
             if "No marketprices found" in str(err):
-                LOGGER.debug(
-                    "Tomorrow prices not available yet for %s",
+                _LOGGER.debug(
+                    "Tomorrow prices are not available yet for %s",
                     tomorrow,
                 )
                 return None
+    
             raise
+    
         except UpdateFailed as err:
-            _LOGGER.debug("Error fetching Frank Energie data for tomorrow (%s)", err)
+            _LOGGER.debug(
+                "Error fetching Frank Energie data for tomorrow (%s)",
+                err,
+            )
             return None
-        except AuthException as ex:
-            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
+    
+        except AuthException as err:
+            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, err)
             await self._try_renew_token()
-            raise UpdateFailed(ex) from ex
+            raise UpdateFailed(err) from err
 
     def _combine_price_data(self, today_data: Any, tomorrow_data: Any) -> Any:
         """Combine price data without mutating cached API model instances."""
