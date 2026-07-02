@@ -1642,6 +1642,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 use_fallback=False,
             )
 
+        # NoMarketPricesAvailableException not needed here?
         except NoMarketPricesAvailableException:
             _LOGGER.debug(
                 "Tomorrow prices are not available yet for %s",
@@ -1818,38 +1819,69 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             if country_code == "BE":
                 return await self.api.be_prices(start_date, end_date)
-            return await self.api.prices(start_date, end_date, self.resolution)
+    
+            return await self.api.prices(
+                start_date,
+                end_date,
+                self.resolution,
+            )
+    
+        except NoMarketPricesAvailableException:
+            _LOGGER.debug(
+                "No market prices available yet for %s (%s - %s)",
+                country_code,
+                start_date,
+                end_date,
+            )
+            return None
+    
         except NetworkError as err:
             _LOGGER.warning("Failed to fetch public prices: %s", err)
             return None
 
     async def _fetch_user_prices_for_range(
-        self, start_date: date, end_date: date, default_country: str
+        self,
+        start_date: date,
+        end_date: date,
+        default_country: str,
     ) -> MarketPrices | None:
         """Fetch user-specific prices for a given date range."""
         if not self.api.is_authenticated:
             return None
-
+    
         site_reference = self.site_reference
         if site_reference is None:
             _LOGGER.debug(
                 "Skipping user prices fetch because site_reference is not set"
             )
             return None
-
+    
         user_country = self._user_country or default_country
-
+    
         _LOGGER.debug(
             "Fetching user prices for site_reference=%s country=%s resolution=%s",
             site_reference,
             user_country,
             self.resolution,
         )
-
+    
         try:
             return await self.api.user_prices(
-                site_reference, user_country, start_date, end_date
+                site_reference,
+                user_country,
+                start_date,
+                end_date,
             )
+    
+        except NoMarketPricesAvailableException:
+            _LOGGER.debug(
+                "No user market prices available yet for %s (%s - %s)",
+                user_country,
+                start_date,
+                end_date,
+            )
+            return None
+    
         except NetworkError as err:
             _LOGGER.warning("Failed to fetch user prices: %s", err)
             return None
