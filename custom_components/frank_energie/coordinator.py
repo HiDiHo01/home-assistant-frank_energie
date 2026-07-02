@@ -1634,6 +1634,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return await self._fetch_prices_with_fallback(
                 tomorrow, tomorrow + timedelta(days=1), use_fallback=False
             )
+        except RequestException as err:
+            if "No marketprices found" in str(err):
+                LOGGER.debug(
+                    "Tomorrow prices not available yet for %s",
+                    tomorrow,
+                )
+                return None
+            raise
         except UpdateFailed as err:
             _LOGGER.debug("Error fetching Frank Energie data for tomorrow (%s)", err)
             return None
