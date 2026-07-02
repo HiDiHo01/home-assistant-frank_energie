@@ -37,6 +37,7 @@ from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
     AuthException,
     AuthRequiredException,
+    NoMarketPricesAvailableException,
     FrankEnergieException,
     NetworkError,
     RequestException,
@@ -1630,7 +1631,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_tomorrow_data(
         self,
         tomorrow: date,
-    ) -> PriceData | None:
+    ) -> MarketPrices | None:
         """Fetch tomorrow's data after 13:00 UTC."""
         try:
             _LOGGER.debug("Fetching Frank Energie data for tomorrow")
@@ -1640,17 +1641,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 tomorrow + timedelta(days=1),
                 use_fallback=False,
             )
-    
-        except RequestException as err:
-            if "No marketprices found" in str(err):
-                _LOGGER.debug(
-                    "Tomorrow prices are not available yet for %s",
-                    tomorrow,
-                )
-                return None
-    
-            raise
-    
+
+        except NoMarketPricesAvailableException:
+            _LOGGER.debug(
+                "Tomorrow prices are not available yet for %s",
+                tomorrow,
+            )
+            return None
+        
         except UpdateFailed as err:
             _LOGGER.debug(
                 "Error fetching Frank Energie data for tomorrow (%s)",
