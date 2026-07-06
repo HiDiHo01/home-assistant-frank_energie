@@ -13,7 +13,7 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v7
-      - uses: anthropics/claude-code-action@a92e7c70a4da9793dc164451d829089dc057a464
+      - uses: anthropics/claude-code-action@558b1d6cab4085c7753fe402c10bef0fbb92ac7a
         with:
           trigger_phrase: "@claude"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
