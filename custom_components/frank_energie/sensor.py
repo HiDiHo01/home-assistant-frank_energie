@@ -673,7 +673,9 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
         key="operational_status",
         name="Operational status",
         icon="mdi:information-outline",
-        value_fn=lambda summary: summary.operational_status,
+        device_class=SensorDeviceClass.ENUM,
+        options=["on", "off", "operational", "no_connection", "error", "unknown"],
+        value_fn=lambda summary: str(summary.operational_status).lower(),
     ),
     FrankEnergieEntityDescription(
         key="operational_status_timestamp",
@@ -686,7 +688,9 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
         key="steering_status",
         name="Steering status",
         icon="mdi:solar-power",
-        value_fn=lambda summary: summary.steering_status,
+        device_class=SensorDeviceClass.ENUM,
+        options=["active", "steering", "no_steering", "unknown"],
+        value_fn=lambda summary: str(summary.steering_status).lower(),
     ),
 )
 

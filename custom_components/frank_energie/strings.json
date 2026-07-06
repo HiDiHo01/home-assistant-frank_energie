@@ -676,13 +676,27 @@
         }
       },
       "pv_operational_status": {
-        "name": "Operational status"
+        "name": "Operational status",
+        "state": {
+          "on": "ON",
+          "off": "OFF",
+          "operational": "Operational",
+          "no_connection": "No connection",
+          "error": "Error",
+          "unknown": "Unknown"
+        }
       },
       "pv_operational_status_timestamp": {
         "name": "Last updated"
       },
       "pv_steering_status": {
-        "name": "Steering status"
+        "name": "Steering status",
+        "state": {
+          "active": "Active",
+          "steering": "Steering",
+          "no_steering": "No steering",
+          "unknown": "Unknown"
+        }
       },
       "pv_panel_group": {
         "name": "Panel Group {position}"

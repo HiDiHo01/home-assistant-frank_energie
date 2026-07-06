@@ -557,13 +557,27 @@
         "name": "Totaal resultaat"
       },
       "pv_operational_status": {
-        "name": "Operationele status"
+        "name": "Operationele status",
+        "state": {
+          "on": "AAN",
+          "off": "UIT",
+          "operational": "Operationeel",
+          "no_connection": "Geen verbinding",
+          "error": "Fout",
+          "unknown": "Onbekend"
+        }
       },
       "pv_operational_status_timestamp": {
         "name": "Laatst bijgewerkt"
       },
       "pv_steering_status": {
-        "name": "Sturingsstatus"
+        "name": "Sturingsstatus",
+        "state": {
+          "active": "Actief",
+          "steering": "Sturing",
+          "no_steering": "Geen sturing",
+          "unknown": "Onbekend"
+        }
       },
       "token_expires_at": {
         "name": "Token verloopt"
