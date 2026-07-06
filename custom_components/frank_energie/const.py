@@ -98,6 +98,17 @@ DEFAULT_INTERVAL_PV: Final[int] = 5
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
 SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
 
+SERVICE_STATUSES: Final[tuple[str, ...]] = (
+    "active",
+    "delivery_ended",
+    "inactive",
+    "in_delivery",
+    "ready",
+    "switched",
+    "loss",
+    "unknown",
+)
+
 SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "status_charging",
     "status_discharging",
@@ -131,6 +142,7 @@ SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "discharge_smart_home",
     "charge_smart_home",
     "idle_smart_home",
+    "unknown",
 )
 
 POWER_DELIVERY_STATES: Final[tuple[str, ...]] = (

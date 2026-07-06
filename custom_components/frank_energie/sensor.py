@@ -92,6 +92,7 @@ from .const import (
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
     SMART_BATTERY_STATUSES,
+    SERVICE_STATUSES,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS,
@@ -671,9 +672,12 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="operational_status",
+        translation_key="pv_operational_status",
         name="Operational status",
         icon="mdi:information-outline",
-        value_fn=lambda summary: summary.operational_status,
+        device_class=SensorDeviceClass.ENUM,
+        options=["on", "off", "operational", "no_connection", "error", "unknown"],
+        value_fn=lambda summary: str(summary.operational_status).lower(),
     ),
     FrankEnergieEntityDescription(
         key="operational_status_timestamp",
@@ -684,9 +688,12 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="steering_status",
+        translation_key="pv_steering_status",
         name="Steering status",
         icon="mdi:solar-power",
-        value_fn=lambda summary: summary.steering_status,
+        device_class=SensorDeviceClass.ENUM,
+        options=["active", "steering", "no_steering", "unknown"],
+        value_fn=lambda summary: str(summary.steering_status).lower(),
     ),
 )
 
@@ -3761,7 +3768,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         name="Status",
         translation_key="status",
         device_class=SensorDeviceClass.ENUM,
-        options=["active", "delivery_ended", "inactive", "in_delivery"],
+        options=list(SERVICE_STATUSES),
         icon="mdi:connection",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -4046,7 +4053,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         name="Electricity Contract Status",
         translation_key="elec_contract_status",
         device_class=SensorDeviceClass.ENUM,
-        options=["loss", "switched"],
+        options=list(SERVICE_STATUSES),
         icon="mdi:file-document-outline",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -4073,7 +4080,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         name="Gas Contract Status",
         translation_key="gas_contract_status",
         device_class=SensorDeviceClass.ENUM,
-        options=["loss", "switched"],
+        options=list(SERVICE_STATUSES),
         icon="mdi:file-document-outline",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -4921,8 +4928,11 @@ def _build_single_smart_battery_descriptions(
                     icon="mdi:battery",
                     device_class=SensorDeviceClass.ENUM,
                     options=[
+                        "imbalance_trading",
+                        "self_consumption",
                         "self_consumption_mix",
                         "trading",
+                        "unknown",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
                         data, idx, "battery_mode"
@@ -4942,6 +4952,7 @@ def _build_single_smart_battery_descriptions(
                         "conservative",
                         "imbalance_only",
                         "aggressive",
+                        "unknown",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
                         data, idx, "imbalance_trading_strategy"

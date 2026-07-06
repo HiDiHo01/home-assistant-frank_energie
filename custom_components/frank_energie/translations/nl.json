@@ -422,15 +422,27 @@
       "elec_contract_status": {
         "name": "Elektriciteit contract status",
         "state": {
-          "loss": "Gestopt",
-          "switched": "Overgestapt"
+          "active": "Actief",
+          "delivery_ended": "Levering beëindigd",
+          "inactive": "Inactief",
+          "in_delivery": "In levering",
+          "ready": "Klaar",
+          "switched": "Omgeschakeld",
+          "loss": "Verlies",
+          "unknown": "Onbekend"
         }
       },
       "gas_contract_status": {
         "name": "Gas contract status",
         "state": {
-          "loss": "Gestopt",
-          "switched": "Overgestapt"
+          "active": "Actief",
+          "delivery_ended": "Levering beëindigd",
+          "inactive": "Inactief",
+          "in_delivery": "In levering",
+          "ready": "Klaar",
+          "switched": "Omgeschakeld",
+          "loss": "Verlies",
+          "unknown": "Onbekend"
         }
       },
       "proposition_type": {
@@ -519,7 +531,11 @@
           "active": "Actief",
           "delivery_ended": "Levering beëindigd",
           "inactive": "Inactief",
-          "in_delivery": "In levering"
+          "in_delivery": "In levering",
+          "ready": "Klaar",
+          "switched": "Omgeschakeld",
+          "loss": "Verlies",
+          "unknown": "Onbekend"
         }
       },
       "reward_payout_preference": {
@@ -557,13 +573,27 @@
         "name": "Totaal resultaat"
       },
       "pv_operational_status": {
-        "name": "Operationele status"
+        "name": "Operationele status",
+        "state": {
+          "on": "Aan",
+          "off": "Uit",
+          "operational": "Operationeel",
+          "no_connection": "Geen verbinding",
+          "error": "Fout",
+          "unknown": "Onbekend"
+        }
       },
       "pv_operational_status_timestamp": {
         "name": "Laatst bijgewerkt"
       },
       "pv_steering_status": {
-        "name": "Sturingsstatus"
+        "name": "Sturingsstatus",
+        "state": {
+          "active": "Actief",
+          "steering": "Sturend",
+          "no_steering": "Niet sturend",
+          "unknown": "Onbekend"
+        }
       },
       "token_expires_at": {
         "name": "Token verloopt"
@@ -752,7 +782,10 @@
         "name": "Batterijmodus",
         "state": {
           "self_consumption_mix": "Zelfconsumptie Mix",
-          "trading": "Handelen"
+          "trading": "Handelen",
+          "imbalance_trading": "Imbalance trading",
+          "self_consumption": "Self-consumption",
+          "unknown": "Unknown"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -761,7 +794,8 @@
           "balanced": "Standaard",
           "conservative": "Conservatief",
           "imbalance_only": "Alleen onbalans",
-          "aggressive": "Agressief"
+          "aggressive": "Agressief",
+          "unknown": "Unknown"
         }
       },
       "battery_status": {
@@ -798,7 +832,8 @@
           "status_error": "Fout",
           "discharge_smart_home": "Ontladen (Smart Home)",
           "charge_smart_home": "Laden (Smart Home)",
-          "idle_smart_home": "Inactief (Smart Home)"
+          "idle_smart_home": "Inactief (Smart Home)",
+          "unknown": "Onbekend"
         }
       }
     },
@@ -921,7 +956,8 @@
           "imbalance_trading": "Onbalans handelen",
           "self_consumption": "Zelfconsumptie",
           "self_consumption_mix": "Zelfconsumptie Plus",
-          "trading": "Handelen"
+          "trading": "Handelen",
+          "unknown": "Unknown"
         }
       },
       "battery_strategy": {
@@ -930,7 +966,8 @@
           "aggressive": "Agressief",
           "balanced": "Standaard",
           "conservative": "Conservatief",
-          "imbalance_only": "Alleen onbalans"
+          "imbalance_only": "Alleen onbalans",
+          "unknown": "Unknown"
         }
       },
       "enode_charging_mode": {

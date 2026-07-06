@@ -224,7 +224,8 @@
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
-          "trading": "Trading"
+          "trading": "Trading",
+          "unknown": "Unknown"
         }
       },
       "battery_strategy": {
@@ -233,7 +234,8 @@
           "aggressive": "Aggressive",
           "balanced": "Standard",
           "conservative": "Conservative",
-          "imbalance_only": "Imbalance only"
+          "imbalance_only": "Imbalance only",
+          "unknown": "Unknown"
         }
       },
       "resolution": {
@@ -475,8 +477,14 @@
       "elec_contract_status": {
         "name": "Electricity Contract Status",
         "state": {
-          "loss": "Stopped",
-          "switched": "Switched"
+          "active": "Active",
+          "delivery_ended": "Delivery ended",
+          "inactive": "Inactive",
+          "in_delivery": "In delivery",
+          "ready": "Ready",
+          "switched": "Switched",
+          "loss": "Loss",
+          "unknown": "Unknown"
         }
       },
       "elec_fixed_kwh": {
@@ -551,8 +559,14 @@
       "gas_contract_status": {
         "name": "Gas Contract Status",
         "state": {
-          "loss": "Stopped",
-          "switched": "Switched"
+          "active": "Active",
+          "delivery_ended": "Delivery ended",
+          "inactive": "Inactive",
+          "in_delivery": "In delivery",
+          "ready": "Ready",
+          "switched": "Switched",
+          "loss": "Loss",
+          "unknown": "Unknown"
         }
       },
       "gas_hourcount": {
@@ -676,13 +690,27 @@
         }
       },
       "pv_operational_status": {
-        "name": "Operational status"
+        "name": "Operational status",
+        "state": {
+          "on": "ON",
+          "off": "OFF",
+          "operational": "Operational",
+          "no_connection": "No connection",
+          "error": "Error",
+          "unknown": "Unknown"
+        }
       },
       "pv_operational_status_timestamp": {
         "name": "Last updated"
       },
       "pv_steering_status": {
-        "name": "Steering status"
+        "name": "Steering status",
+        "state": {
+          "active": "Active",
+          "steering": "Steering",
+          "no_steering": "No steering",
+          "unknown": "Unknown"
+        }
       },
       "pv_panel_group": {
         "name": "Panel Group {position}"
@@ -712,7 +740,11 @@
           "active": "Active",
           "delivery_ended": "Delivery ended",
           "inactive": "Inactive",
-          "in_delivery": "In delivery"
+          "in_delivery": "In delivery",
+          "ready": "Ready",
+          "switched": "Switched",
+          "loss": "Loss",
+          "unknown": "Unknown"
         }
       },
       "total_costs": {
@@ -913,8 +945,11 @@
       "battery_mode": {
         "name": "Battery Mode",
         "state": {
+          "imbalance_trading": "Imbalance trading",
+          "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
-          "trading": "Trading"
+          "trading": "Trading",
+          "unknown": "Unknown"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -923,7 +958,8 @@
           "balanced": "Standard",
           "conservative": "Conservative",
           "imbalance_only": "Imbalance only",
-          "aggressive": "Aggressive"
+          "aggressive": "Aggressive",
+          "unknown": "Unknown"
         }
       },
       "battery_status": {
@@ -960,7 +996,8 @@
           "status_error": "Error",
           "discharge_smart_home": "Discharging (Smart Home)",
           "charge_smart_home": "Charging (Smart Home)",
-          "idle_smart_home": "Idle (Smart Home)"
+          "idle_smart_home": "Idle (Smart Home)",
+          "unknown": "Unknown"
         }
       }
     }

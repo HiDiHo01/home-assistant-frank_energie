@@ -1,3 +1,4 @@
+from python_frank_energie.domain import SmartBatteryMode
 import pytest
 from unittest.mock import MagicMock
 
@@ -16,7 +17,9 @@ def test_battery_mode_select_properties(mock_coordinator, mock_config_entry):
     mock_battery.smart_battery.id = battery_id
     mock_battery.smart_battery.brand = "Sessy"
     mock_battery.smart_battery.settings = MagicMock()
-    mock_battery.smart_battery.settings.battery_mode = "SELF_CONSUMPTION_MIX"
+    mock_battery.smart_battery.settings.battery_mode = (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
 
@@ -36,7 +39,9 @@ async def test_battery_mode_select_action(mock_coordinator, mock_config_entry):
     mock_battery.smart_battery = MagicMock()
     mock_battery.smart_battery.id = battery_id
     mock_battery.smart_battery.settings = MagicMock()
-    mock_battery.smart_battery.settings.battery_mode = "SELF_CONSUMPTION_MIX"
+    mock_battery.smart_battery.settings.battery_mode = (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
     mock_coordinator.api.smart_battery_update_settings.return_value = True
@@ -61,7 +66,7 @@ def test_battery_strategy_select_properties(mock_coordinator, mock_config_entry)
     mock_battery.smart_battery.brand = "Sessy"
     mock_battery.smart_battery.settings = MagicMock()
     mock_battery.smart_battery.settings.imbalance_trading_strategy = "AGGRESSIVE"
-    mock_battery.smart_battery.settings.battery_mode = "TRADING"
+    mock_battery.smart_battery.settings.battery_mode = SmartBatteryMode.TRADING
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
 
@@ -81,7 +86,7 @@ async def test_battery_strategy_select_action(mock_coordinator, mock_config_entr
     mock_battery.smart_battery.id = battery_id
     mock_battery.smart_battery.settings = MagicMock()
     mock_battery.smart_battery.settings.imbalance_trading_strategy = "BALANCED"
-    mock_battery.smart_battery.settings.battery_mode = "TRADING"
+    mock_battery.smart_battery.settings.battery_mode = SmartBatteryMode.TRADING
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
     mock_coordinator.api.smart_battery_update_settings.return_value = True
@@ -104,7 +109,9 @@ def test_battery_strategy_select_availability(mock_coordinator, mock_config_entr
     mock_battery.smart_battery = MagicMock()
     mock_battery.smart_battery.id = battery_id
     mock_battery.smart_battery.settings = MagicMock()
-    mock_battery.smart_battery.settings.battery_mode = "SELF_CONSUMPTION_MIX"
+    mock_battery.smart_battery.settings.battery_mode = (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
 
     entity = FrankEnergieBatteryStrategySelect(
         mock_coordinator, mock_config_entry, battery_id
@@ -119,5 +126,5 @@ def test_battery_strategy_select_availability(mock_coordinator, mock_config_entr
     assert entity.available is False
 
     # Available when battery mode is TRADING
-    mock_battery.smart_battery.settings.battery_mode = "TRADING"
+    mock_battery.smart_battery.settings.battery_mode = SmartBatteryMode.TRADING
     assert entity.available is True

@@ -13,6 +13,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from python_frank_energie.domain import SmartBatteryMode
 from python_frank_energie.models import EnodeCharger
 
 from .const import (
@@ -350,7 +351,7 @@ class FrankEnergieBatteryStrategySelect(
         battery = self._get_battery()
         if not battery or not battery.smart_battery.settings:
             return False
-        return battery.smart_battery.settings.battery_mode == "TRADING"
+        return battery.smart_battery.settings.battery_mode == SmartBatteryMode.TRADING
 
     @property
     def current_option(self) -> str | None:

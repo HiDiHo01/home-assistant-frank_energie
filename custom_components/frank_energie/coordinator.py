@@ -1635,7 +1635,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Fetch tomorrow's data after 13:00 UTC."""
         try:
             _LOGGER.debug("Fetching Frank Energie data for tomorrow")
-    
+
             return await self._fetch_prices_with_fallback(
                 tomorrow,
                 tomorrow + timedelta(days=1),
@@ -1649,14 +1649,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 tomorrow,
             )
             return None
-        
+
         except UpdateFailed as err:
             _LOGGER.debug(
                 "Error fetching Frank Energie data for tomorrow (%s)",
                 err,
             )
             return None
-    
+
         except AuthException as err:
             _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, err)
             await self._try_renew_token()
@@ -1819,13 +1819,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             if country_code == "BE":
                 return await self.api.be_prices(start_date, end_date)
-    
+
             return await self.api.prices(
                 start_date,
                 end_date,
                 self.resolution,
             )
-    
+
         except NoMarketPricesAvailableException:
             _LOGGER.debug(
                 "No market prices available yet for %s (%s - %s)",
@@ -1834,7 +1834,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 end_date,
             )
             return None
-    
+
         except NetworkError as err:
             _LOGGER.warning("Failed to fetch public prices: %s", err)
             return None
@@ -1848,23 +1848,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Fetch user-specific prices for a given date range."""
         if not self.api.is_authenticated:
             return None
-    
+
         site_reference = self.site_reference
         if site_reference is None:
             _LOGGER.debug(
                 "Skipping user prices fetch because site_reference is not set"
             )
             return None
-    
+
         user_country = self._user_country or default_country
-    
+
         _LOGGER.debug(
             "Fetching user prices for site_reference=%s country=%s resolution=%s",
             site_reference,
             user_country,
             self.resolution,
         )
-    
+
         try:
             return await self.api.user_prices(
                 site_reference,
@@ -1872,7 +1872,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 start_date,
                 end_date,
             )
-    
+
         except NoMarketPricesAvailableException:
             _LOGGER.debug(
                 "No user market prices available yet for %s (%s - %s)",
@@ -1881,7 +1881,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 end_date,
             )
             return None
-    
+
         except NetworkError as err:
             _LOGGER.warning("Failed to fetch user prices: %s", err)
             return None

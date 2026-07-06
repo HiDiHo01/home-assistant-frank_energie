@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from python_frank_energie.domain import SmartBatteryMode
 from python_frank_energie.models import EnodeVehicle, EnodeCharger, SmartBatteryDetails
 
 from . import FrankEnergieEntryData
@@ -52,8 +53,6 @@ from .coordinator import FrankEnergieCoordinator
 from .helpers import device_translation_key
 
 _LOGGER = logging.getLogger(__name__)
-
-BATTERY_MODE_SELF_CONSUMPTION_MIX: Final = "SELF_CONSUMPTION_MIX"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -358,7 +357,7 @@ class FrankEnergieBatteryThresholdNumber(
         if settings is None:
             return False
 
-        return settings.battery_mode == BATTERY_MODE_SELF_CONSUMPTION_MIX
+        return settings.battery_mode == SmartBatteryMode.SELF_CONSUMPTION_MIX
 
     @property
     def native_value(self) -> float | None:
