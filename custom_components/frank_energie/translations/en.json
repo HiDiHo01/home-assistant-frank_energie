@@ -477,8 +477,14 @@
       "elec_contract_status": {
         "name": "Electricity Contract Status",
         "state": {
-          "loss": "Stopped",
-          "switched": "Switched"
+          "active": "Active",
+          "delivery_ended": "Delivery ended",
+          "inactive": "Inactive",
+          "in_delivery": "In delivery",
+          "ready": "Ready",
+          "switched": "Switched",
+          "loss": "Loss",
+          "unknown": "Unknown"
         }
       },
       "elec_fixed_kwh": {
@@ -553,8 +559,14 @@
       "gas_contract_status": {
         "name": "Gas Contract Status",
         "state": {
-          "loss": "Stopped",
-          "switched": "Switched"
+          "active": "Active",
+          "delivery_ended": "Delivery ended",
+          "inactive": "Inactive",
+          "in_delivery": "In delivery",
+          "ready": "Ready",
+          "switched": "Switched",
+          "loss": "Loss",
+          "unknown": "Unknown"
         }
       },
       "gas_hourcount": {
@@ -728,7 +740,11 @@
           "active": "Active",
           "delivery_ended": "Delivery ended",
           "inactive": "Inactive",
-          "in_delivery": "In delivery"
+          "in_delivery": "In delivery",
+          "ready": "Ready",
+          "switched": "Switched",
+          "loss": "Loss",
+          "unknown": "Unknown"
         }
       },
       "total_costs": {
@@ -980,7 +996,8 @@
           "status_error": "Error",
           "discharge_smart_home": "Discharging (Smart Home)",
           "charge_smart_home": "Charging (Smart Home)",
-          "idle_smart_home": "Idle (Smart Home)"
+          "idle_smart_home": "Idle (Smart Home)",
+          "unknown": "Unknown"
         }
       }
     }

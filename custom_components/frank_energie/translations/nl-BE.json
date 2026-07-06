@@ -422,15 +422,27 @@
       "elec_contract_status": {
         "name": "Elektriciteit contract status",
         "state": {
-          "loss": "Gestopt",
-          "switched": "Overgestapt"
+          "active": "Actief",
+          "delivery_ended": "Levering beëindigd",
+          "inactive": "Inactief",
+          "in_delivery": "In levering",
+          "ready": "Klaar",
+          "switched": "Omgeschakeld",
+          "loss": "Verlies",
+          "unknown": "Onbekend"
         }
       },
       "gas_contract_status": {
         "name": "Gas contract status",
         "state": {
-          "loss": "Gestopt",
-          "switched": "Overgestapt"
+          "active": "Actief",
+          "delivery_ended": "Levering beëindigd",
+          "inactive": "Inactief",
+          "in_delivery": "In levering",
+          "ready": "Klaar",
+          "switched": "Omgeschakeld",
+          "loss": "Verlies",
+          "unknown": "Onbekend"
         }
       },
       "proposition_type": {
@@ -519,7 +531,11 @@
           "active": "Actief",
           "delivery_ended": "Levering beëindigd",
           "inactive": "Inactief",
-          "in_delivery": "In levering"
+          "in_delivery": "In levering",
+          "ready": "Klaar",
+          "switched": "Omgeschakeld",
+          "loss": "Verlies",
+          "unknown": "Onbekend"
         }
       },
       "reward_payout_preference": {
@@ -816,7 +832,8 @@
           "status_error": "Fout",
           "discharge_smart_home": "Ontladen (Smart Home)",
           "charge_smart_home": "Laden (Smart Home)",
-          "idle_smart_home": "Inactief (Smart Home)"
+          "idle_smart_home": "Inactief (Smart Home)",
+          "unknown": "Onbekend"
         }
       }
     },

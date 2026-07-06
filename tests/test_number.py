@@ -1,3 +1,4 @@
+from python_frank_energie.domain import SmartBatteryMode
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
@@ -21,7 +22,9 @@ def test_battery_threshold_number_properties(mock_coordinator, mock_config_entry
     mock_battery.smart_battery.brand = "Sessy"
     mock_battery.smart_battery.settings = MagicMock()
     mock_battery.smart_battery.settings.self_consumption_trading_threshold_price = 0.25
-    mock_battery.smart_battery.settings.battery_mode = "SELF_CONSUMPTION_MIX"
+    mock_battery.smart_battery.settings.battery_mode = (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
 
@@ -47,7 +50,9 @@ async def test_battery_threshold_number_action(mock_coordinator, mock_config_ent
     mock_battery.smart_battery.id = battery_id
     mock_battery.smart_battery.settings = MagicMock()
     mock_battery.smart_battery.settings.self_consumption_trading_threshold_price = 0.25
-    mock_battery.smart_battery.settings.battery_mode = "SELF_CONSUMPTION_MIX"
+    mock_battery.smart_battery.settings.battery_mode = (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
     mock_coordinator.api.smart_battery_update_settings.return_value = True
@@ -81,12 +86,14 @@ def test_battery_threshold_number_availability(mock_coordinator, mock_config_ent
     assert entity.available is False
 
     # Unavailable when battery mode is not SELF_CONSUMPTION_MIX
-    mock_battery.smart_battery.settings.battery_mode = "TRADING"
+    mock_battery.smart_battery.settings.battery_mode = SmartBatteryMode.TRADING
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
     assert entity.available is False
 
     # Available when battery mode is SELF_CONSUMPTION_MIX
-    mock_battery.smart_battery.settings.battery_mode = "SELF_CONSUMPTION_MIX"
+    mock_battery.smart_battery.settings.battery_mode = (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
     assert entity.available is True
 
 
