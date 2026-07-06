@@ -224,7 +224,8 @@
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
-          "trading": "Trading"
+          "trading": "Trading",
+          "unknown": "Unknown"
         }
       },
       "battery_strategy": {
@@ -233,7 +234,8 @@
           "aggressive": "Aggressive",
           "balanced": "Standard",
           "conservative": "Conservative",
-          "imbalance_only": "Imbalance only"
+          "imbalance_only": "Imbalance only",
+          "unknown": "Unknown"
         }
       },
       "resolution": {
@@ -927,8 +929,11 @@
       "battery_mode": {
         "name": "Battery Mode",
         "state": {
+          "imbalance_trading": "Imbalance trading",
+          "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
-          "trading": "Trading"
+          "trading": "Trading",
+          "unknown": "Unknown"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -937,7 +942,8 @@
           "balanced": "Standard",
           "conservative": "Conservative",
           "imbalance_only": "Imbalance only",
-          "aggressive": "Aggressive"
+          "aggressive": "Aggressive",
+          "unknown": "Unknown"
         }
       },
       "battery_status": {

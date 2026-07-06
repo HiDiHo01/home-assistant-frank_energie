@@ -559,8 +559,8 @@
       "pv_operational_status": {
         "name": "Operationele status",
         "state": {
-          "on": "AAN",
-          "off": "UIT",
+          "on": "Aan",
+          "off": "Uit",
           "operational": "Operationeel",
           "no_connection": "Geen verbinding",
           "error": "Fout",
@@ -574,8 +574,8 @@
         "name": "Sturingsstatus",
         "state": {
           "active": "Actief",
-          "steering": "Sturing",
-          "no_steering": "Geen sturing",
+          "steering": "Sturend",
+          "no_steering": "Niet sturend",
           "unknown": "Onbekend"
         }
       },
@@ -766,7 +766,10 @@
         "name": "Batterijmodus",
         "state": {
           "self_consumption_mix": "Zelfconsumptie Mix",
-          "trading": "Handelen"
+          "trading": "Handelen",
+          "imbalance_trading": "Imbalance trading",
+          "self_consumption": "Self-consumption",
+          "unknown": "Unknown"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -775,7 +778,8 @@
           "balanced": "Standaard",
           "conservative": "Conservatief",
           "imbalance_only": "Alleen onbalans",
-          "aggressive": "Agressief"
+          "aggressive": "Agressief",
+          "unknown": "Unknown"
         }
       },
       "battery_status": {
@@ -935,7 +939,8 @@
           "imbalance_trading": "Onbalans handelen",
           "self_consumption": "Zelfconsumptie",
           "self_consumption_mix": "Zelfconsumptie Plus",
-          "trading": "Handelen"
+          "trading": "Handelen",
+          "unknown": "Unknown"
         }
       },
       "battery_strategy": {
@@ -944,7 +949,8 @@
           "aggressive": "Agressief",
           "balanced": "Standaard",
           "conservative": "Conservatief",
-          "imbalance_only": "Alleen onbalans"
+          "imbalance_only": "Alleen onbalans",
+          "unknown": "Unknown"
         }
       },
       "enode_charging_mode": {

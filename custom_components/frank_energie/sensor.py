@@ -671,6 +671,7 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="operational_status",
+        translation_key="pv_operational_status",
         name="Operational status",
         icon="mdi:information-outline",
         device_class=SensorDeviceClass.ENUM,
@@ -686,6 +687,7 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="steering_status",
+        translation_key="pv_steering_status",
         name="Steering status",
         icon="mdi:solar-power",
         device_class=SensorDeviceClass.ENUM,
@@ -4925,8 +4927,11 @@ def _build_single_smart_battery_descriptions(
                     icon="mdi:battery",
                     device_class=SensorDeviceClass.ENUM,
                     options=[
+                        "imbalance_trading",
+                        "self_consumption",
                         "self_consumption_mix",
                         "trading",
+                        "unknown",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
                         data, idx, "battery_mode"
@@ -4946,6 +4951,7 @@ def _build_single_smart_battery_descriptions(
                         "conservative",
                         "imbalance_only",
                         "aggressive",
+                        "unknown",
                     ],
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
                         data, idx, "imbalance_trading_strategy"
