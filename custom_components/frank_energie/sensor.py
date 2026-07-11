@@ -1648,7 +1648,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
                 "period_start_date": getattr(data, "period_start_date", None),
                 "period_end_date": getattr(data, "period_end_date", None),
                 "period_trade_index": _get_period_trade_index(data),
-                "period_trading_result": getattr(data, "period_trading_result", None),
+                "period_trading_result": _get_period_trading_result(data),
                 "period_total_result": _get_period_total_result(data),
                 "period_imbalance_result": _get_period_imbalance_result(data),
                 "period_epex_result": _get_period_epex_result(data),
