@@ -1744,6 +1744,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
             if data and getattr(data, "sessions", None)
             else None
         ),
+        entity_registry_enabled_default=False,
     ),
 )
 
