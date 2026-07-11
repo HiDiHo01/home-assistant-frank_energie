@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final
 
 from cryptography.fernet import Fernet  # type: ignore[import]
 from homeassistant.core import HomeAssistant
+from typing import Any
 
 from .const import (
     DOMAIN,
@@ -46,6 +47,24 @@ def resolve_gas_unit(per_unit: str | None) -> str:
         return UNIT_GAS_NL
 
     return unit
+
+
+def get_connection_id(connections: list[Any]) -> str | None:
+    """Extract a valid connectionId from a list of connection objects.
+
+    Supports both legacy dict structures and newer python-frank-energie
+    Connection models to ensure robust parsing across API versions.
+    """
+    for connection in connections:
+        if isinstance(connection, dict):
+            cid = connection.get("connectionId")
+        else:
+            cid = getattr(connection, "connectionId", None)
+
+        if cid:
+            return str(cid)
+
+    return None
 
 
 def build_charge_settings_input(

@@ -103,7 +103,7 @@ from .const import (
     DEFAULT_INTERVAL_VEHICLES,
     DEFAULT_INTERVAL_PV,
 )
-from .helpers import decrypt_password
+from .helpers import decrypt_password, get_connection_id
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
@@ -1051,9 +1051,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     if country_code in {"NL", "BE"}:
                         self._country_code = country_code
             if not self._connection_id and user_data and user_data.connections:
-                connection = user_data.connections[0]
-
-                if connection_id := connection.get("connectionId"):
+                if connection_id := get_connection_id(user_data.connections):
                     self._connection_id = connection_id
 
             return user_data
@@ -2198,14 +2196,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
-        if not self.api.is_authenticated:
+        if not self.api.is_authenticated or not self._connection_id:
             if self.config_entry is not None:
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     options={**self.config_entry.options, "resolution": value},
                 )
                 _LOGGER.debug(
-                    "Resolution saved to options (not authenticated): %s -> options=%s",
+                    "Resolution saved to options (API sync bypassed): %s -> options=%s",
                     value,
                     self.config_entry.options,
                 )
@@ -2215,12 +2213,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 self.cached_prices_tomorrow = None
                 self.last_fetch_tomorrow = None
                 await self.async_request_refresh()
-            return
 
-        if not self._connection_id:
-            _LOGGER.warning(
-                "Cannot set resolution via API: connection_id not available"
-            )
+            if self.api.is_authenticated and not self._connection_id:
+                _LOGGER.warning(
+                    "Resolution updated locally but could not sync with API: connection_id not available"
+                )
             return
 
         if (
@@ -2577,11 +2574,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         connection_id = None
         user_data = self.settings_coordinator.data.get(DATA_USER)
         if user_data and user_data.connections:
-            connection = user_data.connections[0]
-            if isinstance(connection, dict):
-                connection_id = connection.get("connectionId")
-            else:
-                connection_id = getattr(connection, "connectionId", None)
+            if cid := get_connection_id(user_data.connections):
+                connection_id = cid
 
             self._connection_id = connection_id
 

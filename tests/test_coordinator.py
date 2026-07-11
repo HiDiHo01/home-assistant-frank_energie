@@ -711,13 +711,17 @@ class TestAsyncSetResolution:
     """Tests for the new async_set_resolution method."""
 
     @pytest.mark.asyncio
-    async def test_raises_update_failed_when_no_connection_id(self, coordinator):
-        """Must return early without raising when _connection_id is None."""
+    async def test_updates_locally_when_no_connection_id(self, coordinator):
+        """Must bypass API sync and update locally when _connection_id is None."""
         coordinator._connection_id = None
         coordinator.async_request_refresh = AsyncMock()
 
         await coordinator.async_set_resolution("PT15M")
-        coordinator.async_request_refresh.assert_not_called()
+        coordinator.async_request_refresh.assert_awaited_once()
+        coordinator.hass.config_entries.async_update_entry.assert_called_once_with(
+            coordinator.config_entry,
+            options={**coordinator.config_entry.options, "resolution": "PT15M"},
+        )
 
     @pytest.mark.asyncio
     async def test_raises_update_failed_when_api_returns_none(
@@ -841,15 +845,6 @@ class TestAsyncSetResolution:
 
         await coordinator.async_set_resolution("PT15M")
         coordinator.async_request_refresh.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_refresh_not_called_when_connection_id_is_none(self, coordinator):
-        """async_request_refresh must NOT be called when _connection_id is None."""
-        coordinator._connection_id = None
-        coordinator.async_request_refresh = AsyncMock()
-
-        await coordinator.async_set_resolution("PT15M")
-        coordinator.async_request_refresh.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_error_message_contains_reason_when_result_fails(
