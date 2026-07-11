@@ -1622,7 +1622,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_trading_result",
-        name="Period Trading Result",
+        name="Period Total Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1634,7 +1634,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_total_result",
-        name="Period Total Result",
+        name="Period Total to Settle",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1668,7 +1668,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_imbalance_result",
-        name="Period Imbalance Result",
+        name="Period Trading Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1679,7 +1679,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_epex_result",
-        name="Period EPEX Result",
+        name="Period EPEX Correction",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
