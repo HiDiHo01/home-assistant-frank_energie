@@ -1529,9 +1529,8 @@ def _get_period_imbalance_result(data: object | None) -> float | None:
     """Calculate the period imbalance result."""
     if not data:
         return None
-    imbalance = getattr(data, "period_imbalance_result", None)
-    if imbalance is not None:
-        return imbalance
+    if getattr(data, "period_imbalance_result", None):
+        return getattr(data, "period_imbalance_result")
 
     trading_result = _get_period_trading_result(data)
     if trading_result is None:
@@ -1555,9 +1554,8 @@ def _get_period_total_result(data: object | None) -> float | None:
     """Calculate the period total result."""
     if not data:
         return None
-    total = getattr(data, "period_total_result", None)
-    if total is not None:
-        return total
+    if getattr(data, "period_total_result", None):
+        return getattr(data, "period_total_result")
 
     trading_result = _get_period_trading_result(data)
     if trading_result is None:
