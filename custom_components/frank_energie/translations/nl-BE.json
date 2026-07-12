@@ -743,16 +743,16 @@
         "name": "Periode handelsindex"
       },
       "period_trading_result": {
-        "name": "Periode handelsresultaat"
-      },
-      "period_total_result": {
         "name": "Periode totaal resultaat"
       },
+      "period_total_result": {
+        "name": "Periode totaal te verrekenen"
+      },
       "period_imbalance_result": {
-        "name": "Periode onbalans resultaat"
+        "name": "Periode handelsresultaat"
       },
       "period_epex_result": {
-        "name": "Periode EPEX resultaat"
+        "name": "Periode EPEX-correctie"
       },
       "period_frank_slim_bonus": {
         "name": "Periode Frank Slim bonus"

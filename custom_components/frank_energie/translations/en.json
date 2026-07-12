@@ -907,16 +907,16 @@
         "name": "Period Trade Index"
       },
       "period_trading_result": {
-        "name": "Period Trading Result"
-      },
-      "period_total_result": {
         "name": "Period Total Result"
       },
+      "period_total_result": {
+        "name": "Period Total to Settle"
+      },
       "period_imbalance_result": {
-        "name": "Period Imbalance Result"
+        "name": "Period Trading Result"
       },
       "period_epex_result": {
-        "name": "Period EPEX Result"
+        "name": "Period EPEX Correction"
       },
       "period_frank_slim_bonus": {
         "name": "Period Frank Slim Bonus"

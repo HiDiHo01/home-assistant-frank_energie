@@ -1507,6 +1507,49 @@ def _get_period_trading_result(data: object | None) -> float | None:
     return _safe_session_result_sum(sessions)
 
 
+def _get_period_trade_index(data: object | None) -> float | None:
+    """Calculate the period trade index."""
+    if not data:
+        return None
+    if getattr(data, "period_trade_index", None) is not None:
+        return getattr(data, "period_trade_index")
+
+    sessions = getattr(data, "sessions", None) or []
+    trade_indices = [
+        getattr(s, "trade_index")
+        for s in sessions
+        if getattr(s, "trade_index", None) is not None
+    ]
+    if not trade_indices:
+        return None
+    return round(sum(trade_indices) / len(trade_indices))
+
+
+def _get_period_imbalance_result(data: object | None) -> float | None:
+    """Calculate the period imbalance result."""
+    if not data:
+        return None
+    if getattr(data, "period_imbalance_result", None):
+        return getattr(data, "period_imbalance_result")
+
+    trading_result = _get_period_trading_result(data)
+    if trading_result is None:
+        return None
+
+    frank_slim = getattr(data, "period_frank_slim", None) or 0
+    return trading_result - frank_slim
+
+
+def _get_period_epex_result(data: object | None) -> float | None:
+    """Calculate the period EPEX result, ensuring it is a cost (negative value)."""
+    if not data:
+        return None
+    epex = getattr(data, "period_epex_result", None)
+    if epex is None:
+        return None
+    return -epex if epex > 0 else epex
+
+
 def _get_period_total_result(data: object | None) -> float | None:
     """Calculate the period total result."""
     if not data:
@@ -1514,11 +1557,12 @@ def _get_period_total_result(data: object | None) -> float | None:
     if getattr(data, "period_total_result", None):
         return getattr(data, "period_total_result")
 
-    return (
-        (getattr(data, "period_epex_result", 0) or 0)
-        + (getattr(data, "period_imbalance_result", 0) or 0)
-        + (getattr(data, "period_frank_slim", 0) or 0)
-    )
+    trading_result = _get_period_trading_result(data)
+    if trading_result is None:
+        return None
+
+    epex_result = _get_period_epex_result(data) or 0
+    return trading_result + epex_result
 
 
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
@@ -1573,15 +1617,12 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         entity_category=None,
         state_class="measurement",
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_trade_index", None)
-            if data and getattr(data, "period_trade_index", None) is not None
-            else None
-        ),
+        value_fn=_get_period_trade_index,
+        entity_registry_enabled_default=False,
     ),
     FrankEnergieEntityDescription(
         key="period_trading_result",
-        name="Period Trading Result",
+        name="Period Total Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1593,7 +1634,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_total_result",
-        name="Period Total Result",
+        name="Period Total to Settle",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1606,13 +1647,11 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
                 "device_id": getattr(data, "device_id", None),
                 "period_start_date": getattr(data, "period_start_date", None),
                 "period_end_date": getattr(data, "period_end_date", None),
-                "period_trade_index": getattr(data, "period_trade_index", None),
-                "period_trading_result": getattr(data, "period_trading_result", None),
-                "period_total_result": getattr(data, "period_total_result", None),
-                "period_imbalance_result": getattr(
-                    data, "period_imbalance_result", None
-                ),
-                "period_epex_result": getattr(data, "period_epex_result", None),
+                "period_trade_index": _get_period_trade_index(data),
+                "period_trading_result": _get_period_trading_result(data),
+                "period_total_result": _get_period_total_result(data),
+                "period_imbalance_result": _get_period_imbalance_result(data),
+                "period_epex_result": _get_period_epex_result(data),
                 "period_frank_slim": getattr(data, "period_frank_slim", None),
                 "sessions": [
                     {
@@ -1629,33 +1668,25 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_imbalance_result",
-        name="Period Imbalance Result",
+        name="Period Trading Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_imbalance_result", None)
-            if data and getattr(data, "period_imbalance_result", None) is not None
-            else None
-        ),
+        value_fn=_get_period_imbalance_result,
     ),
     FrankEnergieEntityDescription(
         key="period_epex_result",
-        name="Period EPEX Result",
+        name="Period EPEX Correction",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_epex_result", None)
-            if data and getattr(data, "period_epex_result", None) is not None
-            else None
-        ),
+        value_fn=_get_period_epex_result,
     ),
     FrankEnergieEntityDescription(
         key="period_frank_slim_bonus",
@@ -1713,6 +1744,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
             if data and getattr(data, "sessions", None)
             else None
         ),
+        entity_registry_enabled_default=False,
     ),
 )
 
