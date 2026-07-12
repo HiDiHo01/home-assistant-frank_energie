@@ -1501,6 +1501,14 @@ def _safe_session_result_sum(sessions: Any) -> float:
     return total
 
 
+def _get_session_status(session: Any) -> str:
+    """Safely extract the session status string without a walrus operator."""
+    status = getattr(session, "status", None)
+    if status is None:
+        return "unknown"
+    return str(getattr(status, "value", status)).lower()
+
+
 def _get_period_trading_result(data: object | None) -> float | None:
     """Calculate the period trading result."""
     if not data:
@@ -1663,9 +1671,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
                         "date": s.date,
                         "result": s.result,
                         "cumulative_result": s.cumulative_result,
-                        "status": str(s.status).lower()
-                        if getattr(s, "status", None)
-                        else "unknown",
+                        "status": _get_session_status(s),
                     }
                     for s in getattr(data, "sessions", []) or []
                 ],
