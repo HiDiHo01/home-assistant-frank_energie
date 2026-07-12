@@ -444,3 +444,68 @@ def test_sensors_with_state_translations_are_enums():
         "Sensors with state translations must be ENUMs with options:\n"
         + "\n".join(failures)
     )
+
+
+class _NameWithTranslationKeyValidator(ast.NodeVisitor):
+    def __init__(self):
+        self.failures = []
+
+    def visit_Call(self, node):
+        func_name = getattr(node.func, "id", getattr(node.func, "attr", None))
+
+        if func_name and func_name in {
+            "FrankEnergieEntityDescription",
+            "FrankEnergieBinaryEntityDescription",
+            "EnodeVehicleEntityDescription",
+            "ChargerSensorDescription",
+            "SmartFeatureBinarySensorDescription",
+            "FrankEnergieNumberEntityDescription",
+            "FrankEnergieButtonEntityDescription",
+            "FrankEnergieBinarySensorDescription",
+        }:
+            has_translation_key = any(k.arg == "translation_key" for k in node.keywords)
+            has_name = any(k.arg == "name" for k in node.keywords)
+
+            if has_translation_key and has_name:
+                name_node = next(k.value for k in node.keywords if k.arg == "name")
+                # Flag the name parameter unless it's explicitly set to None
+                is_explicit_none = (
+                    isinstance(name_node, ast.Constant) and name_node.value is None
+                )
+                if not is_explicit_none:
+                    self.failures.append(
+                        f"Line {node.lineno}: Entity description '{func_name}' "
+                        f"provides 'name' alongside 'translation_key'. "
+                        f"Remove the 'name' parameter (or set it to None) so Home Assistant can properly translate it."
+                    )
+        self.generic_visit(node)
+
+
+def test_no_hardcoded_name_with_translation_key():
+    """Verify that EntityDescriptions do not hardcode 'name' if a 'translation_key' is provided.
+
+    Hardcoding the name prevents Home Assistant from localizing the entity name
+    and breaks native Entity ID generation based on translations.
+    """
+    failures = []
+    validator = _NameWithTranslationKeyValidator()
+
+    for py_file in INTEGRATION_DIR.glob("**/*.py"):
+        if py_file.name == "smart_feature_factory.py":
+            continue
+        with open(py_file, "r", encoding="utf-8") as f:
+            try:
+                tree = ast.parse(f.read(), filename=py_file.name)
+                validator.visit(tree)
+                for failure in validator.failures:
+                    failures.append(f"{py_file.name}: {failure}")
+                validator.failures.clear()
+            except SyntaxError as exc:
+                import pytest
+
+                pytest.fail(f"Failed to parse {py_file}: {exc}")
+
+    assert not failures, (
+        f"Entity descriptions found with both 'name' and 'translation_key':\n"
+        f"{chr(10).join(failures)}"
+    )

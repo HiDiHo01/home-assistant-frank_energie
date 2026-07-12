@@ -838,6 +838,36 @@
           "idle_smart_home": "Inactief (Smart Home)",
           "unknown": "Onbekend"
         }
+      },
+      "battery_brand": {
+        "name": "Batterijmerk"
+      },
+      "battery_id": {
+        "name": "Batterij ID"
+      },
+      "battery_external_reference": {
+        "name": "Externe referentie"
+      },
+      "battery_max_charge_power": {
+        "name": "Max laadvermogen"
+      },
+      "battery_max_discharge_power": {
+        "name": "Max ontlaadvermogen"
+      },
+      "battery_provider": {
+        "name": "Aanbieder"
+      },
+      "battery_created_at": {
+        "name": "Aangemaakt op"
+      },
+      "battery_updated_at": {
+        "name": "Bijgewerkt op"
+      },
+      "battery_state_of_charge": {
+        "name": "Laadniveau"
+      },
+      "battery_last_update": {
+        "name": "Laatste update"
       }
     },
     "binary_sensor": {
