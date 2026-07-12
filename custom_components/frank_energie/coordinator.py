@@ -2526,7 +2526,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     )
                     self._api_resolution_state = data_contract_price_resolution_state
                     self._resolution_change_pending = (
-                        bool(data_contract_price_resolution_state.upcoming_change)
+                        bool(data_contract_price_resolution_state.upcomingChange)
                         if data_contract_price_resolution_state
                         else False
                     )
