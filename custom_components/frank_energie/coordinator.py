@@ -2622,7 +2622,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             self._tomorrow_prices_logged = False
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
-        self._connection_id = _extract_electricity_connection_id(user_data)
+        if extracted_conn_id := _extract_electricity_connection_id(user_data):
+            self._connection_id = extracted_conn_id
 
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
