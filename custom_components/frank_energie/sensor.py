@@ -301,6 +301,7 @@ class FrankEnergieEntityDescription(
     # Function to extract the sensor value from the coordinator's data
     value_fn: Callable[[_DataT], StateType] = lambda _: STATE_UNKNOWN
     attr_fn: Callable[[_DataT], dict[str, object]] = lambda _: {}
+    available_fn: Callable[[_DataT], bool] | None = None
 
     # Flags for filtering
     is_gas: bool = False
@@ -627,9 +628,13 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         """Return True if the sensor value is valid."""
+        if not super().available:
+            return False
         try:
             if self.coordinator.data is not None:
                 value = self.native_value
+                if self.entity_description.available_fn is not None:
+                    return self.entity_description.available_fn(self.coordinator.data)
         except (KeyError, AttributeError, TypeError) as err:
             _LOGGER.debug(
                 "Availability check failed for %s: %s",
@@ -1748,6 +1753,29 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
 )
 
+
+def _get_price_resolution_attributes(data: dict) -> dict:
+    state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
+    if not state:
+        return {}
+
+    available_opts = None
+    if state.available_options:
+        available_opts = [opt.lower() for opt in state.available_options]
+
+    upcoming = None
+    if state.upcoming_change:
+        upcoming = state.upcoming_change.lower()
+
+    return {
+        "available_options": available_opts,
+        "change_request_effective_date": state.change_request_effective_date,
+        "is_change_request_possible": state.is_change_request_possible,
+        "upcoming_change": upcoming,
+        "upcoming_change_effective_date": state.upcoming_change_effective_date,
+    }
+
+
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="contract_price_resolution_state",
@@ -1763,29 +1791,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
             if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
             and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
-            else None
+            else STATE_UNKNOWN
         ),
-        attr_fn=lambda data: (
-            {
-                key: value
-                for key, value in {
-                    "available_options": [
-                        opt.lower() for opt in state.available_options
-                    ]
-                    if state.available_options
-                    else None,
-                    "change_request_effective_date": state.change_request_effective_date,
-                    "is_change_request_possible": state.is_change_request_possible,
-                    "upcoming_change": state.upcoming_change.lower()
-                    if state.upcoming_change
-                    else None,
-                    "upcoming_change_effective_date": state.upcoming_change_effective_date,
-                }.items()
-                if value is not None
-            }
-            if (state := data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE))
-            else {}
+        available_fn=lambda data: (
+            data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None
         ),
+        attr_fn=_get_price_resolution_attributes,
     ),
     FrankEnergieEntityDescription(
         key="elec_markup",

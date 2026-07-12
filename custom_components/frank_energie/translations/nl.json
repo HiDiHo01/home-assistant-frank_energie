@@ -400,22 +400,25 @@
               "pt60m": "60 minuten"
             }
           },
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
           "is_change_request_possible": {
-            "name": "Is veranderen mogelijk",
+            "name": "Wijziging mogelijk",
             "state": {
               "false": "Nee",
               "true": "Ja"
             }
           },
           "upcoming_change": {
-            "name": "Gekozen resolutie",
+            "name": "Aankomende wijziging",
             "state": {
               "pt15m": "15 minuten",
               "pt60m": "60 minuten"
             }
           },
           "upcoming_change_effective_date": {
-            "name": "Verandering gaat in op"
+            "name": "Aankomende wijziging ingangsdatum"
           }
         }
       },

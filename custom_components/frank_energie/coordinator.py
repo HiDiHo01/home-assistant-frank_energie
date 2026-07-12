@@ -213,6 +213,29 @@ def _dict_to_resolution_state(data: dict[str, Any]) -> ContractPriceResolutionSt
     return state
 
 
+def _extract_electricity_connection_id(user_data: Any) -> str | None:
+    """Extract the ELECTRICITY connection ID from user data."""
+    if not user_data or not getattr(user_data, "connections", None):
+        return None
+
+    for connection in user_data.connections:
+        if isinstance(connection, dict):
+            cid = connection.get("connectionId")
+            segment = connection.get("segment")
+        else:
+            cid = getattr(connection, "connectionId", None)
+            segment = getattr(connection, "segment", None)
+
+        if cid and segment == "ELECTRICITY":
+            return str(cid)
+
+    _LOGGER.debug(
+        "No ELECTRICITY segment connection found in user data. "
+        "Resolution changes are only supported for electricity."
+    )
+    return None
+
+
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
     # Python 3.14-3.16
     try:
@@ -1060,11 +1083,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     country_code = country_code_raw.upper()
                     if country_code in {"NL", "BE"}:
                         self._country_code = country_code
-            if not self._connection_id and user_data and user_data.connections:
-                connection = user_data.connections[0]
-
-                if connection_id := connection.get("connectionId"):
-                    self._connection_id = connection_id
+            if not self._connection_id:
+                self._connection_id = _extract_electricity_connection_id(user_data)
 
             return user_data
         except AuthException as ex:
@@ -2220,7 +2240,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     options={**self.config_entry.options, "resolution": value},
                 )
                 _LOGGER.debug(
-                    "Resolution saved to options (not authenticated): %s -> options=%s",
+                    "Resolution saved to options (unauthenticated API): %s -> options=%s",
                     value,
                     self.config_entry.options,
                 )
@@ -2233,9 +2253,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return
 
         if not self._connection_id:
-            _LOGGER.warning(
-                "Cannot set resolution via API: connection_id not available"
+            _LOGGER.error(
+                "Cannot set resolution via API: electricity connection_id not available"
             )
+            return
+
+        if self._resolution_change_pending:
+            _LOGGER.warning("Cannot set resolution: a change is already pending")
             return
 
         if (
@@ -2247,53 +2271,69 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return
 
+        self._resolution_change_pending = True
+
         async def _mutation() -> None:
-            result = await self.api.contract_price_resolution_request_change(
-                self._connection_id,
-                cast(Resolution, value),
-            )
-
-            if result is None:
-                raise UpdateFailed("Resolution change request failed: no response")
-
-            if not result.success:
-                if result.reason == "CHANGE_NOT_POSSIBLE":
-                    _LOGGER.warning(
-                        "Resolution change not possible at this time "
-                        "(contract does not allow changes or cooling-off period active)"
-                    )
-                    async_create(
-                        self.hass,
-                        message=(
-                            "Resolution change is not possible at this time. "
-                            "Your contract may not allow changes or a cooling-off period is active. "
-                            f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
-                            f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
-                        ),
-                        title="Frank Energie - Resolution Change Failed",
-                        notification_id="frank_energie_resolution_change_failed",
-                    )
-                    return  # not an error, just not allowed right now
-                raise UpdateFailed(
-                    "Resolution change request failed: %s" % (result.reason)
+            try:
+                result = await self.api.contract_price_resolution_request_change(
+                    self._connection_id,
+                    cast(Resolution, value),
                 )
 
-            _LOGGER.info(
-                "Resolution change accepted (effective: %s)",
-                result.data.effectiveDate if result.data else "unknown",
-            )
-            self._resolution_change_pending = (
-                True  # disable select until change is effective
-            )
+                if result is None:
+                    raise UpdateFailed("Resolution change request failed: no response")
 
-            if self.config_entry is None:
-                return
+                if not result.success:
+                    if result.reason == "CHANGE_NOT_POSSIBLE":
+                        _LOGGER.warning(
+                            "Resolution change not possible at this time "
+                            "(contract does not allow changes or cooling-off period active)"
+                        )
+                        async_create(
+                            self.hass,
+                            message=(
+                                "Resolution change is not possible at this time. "
+                                "Your contract may not allow changes or a cooling-off period is active. "
+                                f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
+                                f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
+                            ),
+                            title="Frank Energie - Resolution Change Failed",
+                            notification_id="frank_energie_resolution_change_failed",
+                        )
+                        return  # not an error, just not allowed right now
+                    raise UpdateFailed(
+                        "Resolution change request failed: %s" % (result.reason)
+                    )
 
-            if self.config_entry.options.get("resolution") != value:
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "resolution": value},
+                _LOGGER.info(
+                    "Resolution change accepted (effective: %s)",
+                    result.data.effectiveDate if result.data else "unknown",
                 )
+
+                if self.config_entry is None:
+                    return
+
+                if self.config_entry.options.get("resolution") != value:
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        options={**self.config_entry.options, "resolution": value},
+                    )
+
+                # Re-fetch resolution state to update our internal tracker immediately
+                try:
+                    state = await self._fetch_contract_price_resolution_state(
+                        self._connection_id
+                    )
+                    if state:
+                        self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
+                except Exception as err:
+                    _LOGGER.debug(
+                        "Failed to re-fetch resolution state after successful change: %s",
+                        err,
+                    )
+
+            finally:
+                self._resolution_change_pending = False
 
         await self._mutation_queue.add(_mutation)
         await self.async_request_refresh()
@@ -2498,6 +2538,12 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     self._static_contract_price_resolution_state = (
                         data_contract_price_resolution_state
                     )
+                    self._api_resolution_state = data_contract_price_resolution_state
+                    self._resolution_change_pending = (
+                        bool(data_contract_price_resolution_state.upcomingChange)
+                        if data_contract_price_resolution_state
+                        else False
+                    )
 
                 if last_fetch_today_str := cached_data.get("last_fetch_today"):
                     self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
@@ -2589,16 +2635,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
             self._tomorrow_prices_logged = False
 
-        connection_id = None
         user_data = self.settings_coordinator.data.get(DATA_USER)
-        if user_data and user_data.connections:
-            connection = user_data.connections[0]
-            if isinstance(connection, dict):
-                connection_id = connection.get("connectionId")
-            else:
-                connection_id = getattr(connection, "connectionId", None)
-
-            self._connection_id = connection_id
+        if extracted_conn_id := _extract_electricity_connection_id(user_data):
+            self._connection_id = extracted_conn_id
 
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
@@ -2644,7 +2683,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 prices_today = self._static_prices_today
 
             data_contract_price_resolution_state = (
-                await self._fetch_contract_price_resolution_state(connection_id)
+                await self._fetch_contract_price_resolution_state(self._connection_id)
             )
             self._static_contract_price_resolution_state = (
                 data_contract_price_resolution_state
