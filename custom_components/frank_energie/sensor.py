@@ -1663,6 +1663,9 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
                         "date": s.date,
                         "result": s.result,
                         "cumulative_result": s.cumulative_result,
+                        "status": str(s.status).lower()
+                        if getattr(s, "status", None)
+                        else "unknown",
                     }
                     for s in getattr(data, "sessions", []) or []
                 ],
