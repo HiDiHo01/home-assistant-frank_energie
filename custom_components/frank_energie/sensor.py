@@ -450,7 +450,6 @@ class FrankEnergieBatterySessionSensor(
         self._attr_unique_id = (
             description.key if is_total else f"{battery_id}_{description.key}"
         )
-        self._attr_name = description.name
         self._attr_has_entity_name = True
         self._is_total = is_total
 
@@ -559,7 +558,6 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
             self._attr_unique_id = description.unique_id_fn(vehicle_data)
         else:
             self._attr_unique_id = f"{DOMAIN}_{self._vehicle_id}_{description.key}"
-        self._attr_name = description.name
         self._attr_translation_key = description.translation_key
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._vehicle_id)},
@@ -657,7 +655,6 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
 PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="total_bonus",
-        name="Total bonus",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -667,7 +664,6 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="total_result",
-        name="Total result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -678,7 +674,6 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="operational_status",
         translation_key="pv_operational_status",
-        name="Operational status",
         icon="mdi:information-outline",
         device_class=SensorDeviceClass.ENUM,
         options=["on", "off", "operational", "no_connection", "error", "unknown"],
@@ -686,7 +681,6 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="operational_status_timestamp",
-        name="Last updated",
         icon=ICON_CLOCK_OUTLINE,
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda summary: summary.operational_status_timestamp,
@@ -694,7 +688,6 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="steering_status",
         translation_key="pv_steering_status",
-        name="Steering status",
         icon="mdi:solar-power",
         device_class=SensorDeviceClass.ENUM,
         options=["active", "steering", "no_steering", "unknown"],
@@ -861,7 +854,6 @@ def format_user_name(data: dict) -> str | None:
 STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="enode_total_chargers",
-        name="Total Chargers",
         native_unit_of_measurement=None,
         state_class=None,
         device_class=None,
@@ -882,7 +874,6 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="total_charge_capacity",
-        name="Total Charge Capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_CHARGERS,
@@ -913,7 +904,6 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="total_charge_rate",
-        name="Total Charge Rate",
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_CHARGERS,
@@ -946,7 +936,6 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
 ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ChargerSensorDescription(
         key="charger_brand",
-        name="Brand",
         icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: (
@@ -956,7 +945,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="charger_model",
-        name="Model",
         icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: (
@@ -966,7 +954,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="can_smart_charge",
-        name="Can Smart Charge",
         icon="mdi:flash",
         authenticated=True,
         value_fn=lambda charger: charger.can_smart_charge,
@@ -974,7 +961,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="charge_capacity",
-        name="Charge Capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         icon="mdi:flash",
         device_class=SensorDeviceClass.ENERGY,
@@ -985,7 +971,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_plugged_in",
-        name="Is Plugged In",
         icon="mdi:flash",
         authenticated=True,
         value_fn=lambda charger: (
@@ -1014,7 +999,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_charging",
-        name="Is Charging",
         icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: (
@@ -1023,7 +1007,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="charge_rate",
-        name="Charge Rate",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         icon="mdi:flash",
@@ -1035,7 +1018,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_smart_charging_enabled",
-        name="Is Smart Charging Enabled",
         icon="mdi:flash",
         authenticated=True,
         value_fn=lambda charger: (
@@ -1046,7 +1028,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_solar_charging_enabled",
-        name="Is Solar Charging Enabled",
         icon="mdi:flash",
         authenticated=True,
         value_fn=lambda charger: (
@@ -1060,7 +1041,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
 STATIC_BATTERY_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="total_batteries",
-        name="Total Batteries",
         native_unit_of_measurement=None,
         state_class=None,
         device_class=None,
@@ -1095,7 +1075,6 @@ WEEKDAYS = [
 ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     EnodeVehicleEntityDescription(
         key="vehicle_name",
-        name="Vehicle Name",
         translation_key="vehicle_name",
         icon="mdi:car",
         authenticated=True,
@@ -1111,7 +1090,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="can_smart_charge",
-        name="Can Smart Charge",
         icon="mdi:car-electric",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1133,7 +1111,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="battery_capacity",
-        name="Battery Capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         icon="mdi:battery",
         device_class=SensorDeviceClass.ENERGY,
@@ -1148,7 +1125,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="battery_level",
-        name="Battery Level",
         icon="mdi:battery",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
@@ -1158,7 +1134,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="charge_limit",
-        name="Charge Limit",
         icon="mdi:battery-charging-70",
         native_unit_of_measurement=PERCENTAGE,
         authenticated=True,
@@ -1168,7 +1143,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="charge_rate",
-        name="Charge Rate",
         icon="mdi:flash",
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
@@ -1178,7 +1152,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="charge_time_remaining",
-        name="Charge Time Remaining",
         icon="mdi:clock-fast",
         native_unit_of_measurement=UnitOfTime.MINUTES,
         device_class=SensorDeviceClass.DURATION,
@@ -1192,7 +1165,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="vehicle_range",
-        name="Estimated Range",
         icon="mdi:map-marker-distance",
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         authenticated=True,
@@ -1205,7 +1177,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="is_charging",
-        name="Is Charging",
         icon="mdi:ev-station",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1218,7 +1189,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="charge_last_updated",
-        name="Charge Last Updated",
         device_class=SensorDeviceClass.TIMESTAMP,
         icon=ICON_CLOCK_OUTLINE,
         authenticated=True,
@@ -1229,7 +1199,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="is_fully_charged",
-        name="Fully Charged",
         icon="mdi:battery-check",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1242,7 +1211,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="is_plugged_in",
-        name="Is Plugged In",
         icon="mdi:power-plug",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1273,7 +1241,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="smart_charging_enabled",
-        name="Smart Charging Enabled",
         icon="mdi:car-electric",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1289,7 +1256,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="solar_charging_enabled",
-        name="Solar Charging Enabled",
         icon="mdi:solar-power",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1304,7 +1270,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="last_seen",
-        name="Last Seen",
         device_class=SensorDeviceClass.TIMESTAMP,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1313,7 +1278,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="calculated_deadline",
-        name="Calculated Deadline",
         icon="mdi:calendar-clock",
         authenticated=True,
         device_class=SensorDeviceClass.TIMESTAMP,
@@ -1325,7 +1289,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="deadline",
-        name="Charging Deadline",
         icon="mdi:calendar-end",
         authenticated=True,
         device_class=SensorDeviceClass.TIMESTAMP,
@@ -1337,7 +1300,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="charge_settings_id",
-        name="Charge Settings ID",
         icon="mdi:identifier",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1347,7 +1309,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="max_charge_limit",
-        name="Max Charge Limit",
         icon="mdi:battery-high",
         authenticated=True,
         native_unit_of_measurement=PERCENTAGE,
@@ -1363,7 +1324,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="min_charge_limit",
-        name="Min Charge Limit",
         icon="mdi:battery-low",
         authenticated=True,
         native_unit_of_measurement=PERCENTAGE,
@@ -1379,7 +1339,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="vehicle_vin",
-        name="VIN",
         icon="mdi:card-account-details",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1392,7 +1351,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="interventions_count",
-        name="Number of Interventions",
         icon="mdi:alert-circle-outline",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1406,7 +1364,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="intervention_description",
-        name="Intervention Description",
         icon="mdi:alert-circle-outline",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1424,7 +1381,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="intervention_title",
-        name="Intervention Title",
         icon="mdi:alert-decagram",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1439,7 +1395,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
 ] + [
     EnodeVehicleEntityDescription(
         key=f"charging_hour_{day}",
-        name=f"Charging Hour {day.capitalize()}",
         translation_key=f"charging_hour_{day}",
         icon="mdi:clock-time-four-outline",
         authenticated=True,
@@ -1583,7 +1538,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
 ] = (
     FrankEnergieEntityDescription(
         key="device_id",
-        name="Device ID",
         icon="mdi:battery",
         native_unit_of_measurement=None,
         state_class=None,
@@ -1594,7 +1548,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_start_date",
-        name="Period Start Date",
         icon="mdi:calendar-start",
         native_unit_of_measurement=None,
         entity_category=None,
@@ -1609,7 +1562,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_end_date",
-        name="Period End Date",
         icon="mdi:calendar-end",
         native_unit_of_measurement=None,
         entity_category=None,
@@ -1624,7 +1576,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_trade_index",
-        name="Period Trade Index",
         icon="mdi:numeric",
         native_unit_of_measurement=None,
         entity_category=None,
@@ -1635,7 +1586,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_trading_result",
-        name="Period Total Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1647,7 +1597,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_total_result",
-        name="Period Total to Settle",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1682,7 +1631,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_imbalance_result",
-        name="Period Trading Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1693,7 +1641,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_epex_result",
-        name="Period EPEX Correction",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1704,7 +1651,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="period_frank_slim_bonus",
-        name="Period Frank Slim Bonus",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1719,7 +1665,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="daily_trading_result",
-        name="Yesterday's Trading Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1746,7 +1691,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     ),
     FrankEnergieEntityDescription(
         key="total_trading_result",
-        name="Total Trading Result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1788,7 +1732,6 @@ def _get_price_resolution_attributes(data: dict) -> dict:
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="contract_price_resolution_state",
-        name="Contract Price Resolution State",
         translation_key="contract_price_resolution_state",
         device_class=SensorDeviceClass.ENUM,
         state_class=None,
@@ -1809,7 +1752,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_markup",
-        name="Current electricity price (All-in)",
         translation_key="current_electricity_price",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -1828,7 +1770,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_market",
-        name="Current electricity market price",
         translation_key="current_electricity_marketprice",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -1847,7 +1788,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tax",
-        name="Current electricity price including tax",
         translation_key="current_electricity_price_incl_tax",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -1866,7 +1806,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tax_vat",
-        name="Current electricity VAT price",
         translation_key="current_electricity_tax_price",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -1886,7 +1825,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_sourcing",
-        name="Current electricity sourcing markup",
         translation_key="current_electricity_sourcing_markup",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -1901,7 +1839,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tax_only",
-        name="Current electricity tax only",
         translation_key="elec_tax_only",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=5,
@@ -1916,7 +1853,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_fixed_kwh",
-        name="Fixed electricity cost kWh",
         translation_key="elec_fixed_kwh",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=6,
@@ -1934,7 +1870,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_var_kwh",
-        name="Variable electricity cost kWh",
         translation_key="elec_var_kwh",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=6,
@@ -1949,7 +1884,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_markup",
-        name="Current gas price (All-in)",
         translation_key="gas_markup",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -1969,7 +1903,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_market",
-        name="Current gas market price",
         translation_key="gas_market",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -1989,7 +1922,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tax",
-        name="Current gas price including tax",
         translation_key="gas_tax",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2014,7 +1946,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tax_vat",
-        name="Current gas VAT price",
         translation_key="gas_tax_vat",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2030,7 +1961,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_sourcing",
-        name="Current gas sourcing price",
         translation_key="gas_sourcing",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2046,7 +1976,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tax_only",
-        name="Current gas tax only",
         translation_key="gas_tax_only",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2062,7 +1991,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_min",
-        name="Lowest gas price today (All-in)",
         translation_key="gas_min",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=4,
@@ -2082,7 +2010,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_max",
-        name="Highest gas price today (All-in)",
         translation_key="gas_max",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2102,7 +2029,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_min",
-        name="Lowest electricity price today (All-in)",
         translation_key="elec_min",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -2124,7 +2050,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_max",
-        name="Highest electricity price today (All-in)",
         translation_key="elec_max",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -2146,7 +2071,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_avg",
-        name="Average electricity price today (All-in)",
         translation_key="average_electricity_price_today_all_in",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2161,7 +2085,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_previoushour",
-        name="Previous hour electricity price (All-in)",
         translation_key="elec_previoushour",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2176,7 +2099,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_nexthour",
-        name="Next hour electricity price (All-in)",
         translation_key="elec_nexthour",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2191,7 +2113,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_market_percent_tax",
-        name="Electricity market percent tax",
         translation_key="elec_market_percent_tax",
         native_unit_of_measurement=PERCENTAGE,
         suggested_display_precision=0,
@@ -2201,7 +2122,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_market_percent_tax",
-        name="Gas market percent tax",
         translation_key="gas_market_percent_tax",
         native_unit_of_measurement=PERCENTAGE,
         suggested_display_precision=0,
@@ -2212,7 +2132,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_all_min",
-        name="Lowest electricity price all hours (All-in)",
         translation_key="elec_all_min",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         value_fn=lambda data: data[DATA_ELECTRICITY].all_min.total,
@@ -2230,7 +2149,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_all_max",
-        name="Highest electricity price all hours (All-in)",
         translation_key="elec_all_max",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         value_fn=lambda data: (
@@ -2252,7 +2170,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_min",
-        name="Lowest electricity price tomorrow (All-in)",
         translation_key="elec_tomorrow_min",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -2274,7 +2191,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_max",
-        name="Highest electricity price tomorrow (All-in)",
         translation_key="elec_tomorrow_max",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -2296,7 +2212,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_upcoming_min",
-        name="Lowest electricity price upcoming hours (All-in)",
         translation_key="elec_upcoming_min",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -2314,7 +2229,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_upcoming_max",
-        name="Highest electricity price upcoming hours (All-in)",
         translation_key="elec_upcoming_max",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -2332,7 +2246,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_avg_tax",
-        name="Average electricity price today including tax",
         translation_key="average_electricity_price_today_including_tax",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2343,7 +2256,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_avg_tax_markup",
-        name="Average electricity price today including tax and markup",
         translation_key="average_electricity_price_today_including_tax_and_markup",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2354,7 +2266,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_avg_market",
-        name="Average electricity market price today",
         translation_key="average_electricity_market_price_today",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         device_class=SensorDeviceClass.MONETARY,
@@ -2364,7 +2275,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_avg_tax_markup",
-        name="Average electricity price tomorrow including tax and markup",
         translation_key="average_electricity_price_tomorrow_including_tax_and_markup",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2378,7 +2288,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_avg",
-        name="Average electricity price tomorrow (All-in)",
         translation_key="average_electricity_price_tomorrow_all_in",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         device_class=SensorDeviceClass.MONETARY,
@@ -2398,7 +2307,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_avg_tax",
-        name="Average electricity price tomorrow including tax",
         translation_key="average_electricity_price_tomorrow_including_tax",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2413,7 +2321,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tomorrow_avg_market",
-        name="Average electricity market price tomorrow",
         translation_key="average_electricity_market_price_tomorrow",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2428,7 +2335,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_market_upcoming",
-        name="Average electricity market price upcoming",
         translation_key="average_electricity_market_price_upcoming",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2451,7 +2357,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_upcoming",
-        name="Average electricity price upcoming (All-in)",
         translation_key="average_electricity_price_upcoming_market",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2470,7 +2375,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_all",
-        name="Average electricity price all hours (All-in)",
         translation_key="elec_all",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2494,7 +2398,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_tax_markup",
-        name="Current electricity price including tax and markup",
         translation_key="current_electricity_price_incl_tax_markup",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2518,7 +2421,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg",
-        name="Average gas price tomorrow (All-in)",
         translation_key="gas_tomorrow_avg_all_in",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2542,7 +2444,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tax_markup",
-        name="Current gas price including tax and markup",
         translation_key="gas_tax_markup",
         suggested_display_precision=3,
         native_unit_of_measurement=UNIT_GAS,
@@ -2566,7 +2467,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_hourcount",
-        name="Number of hours with electricity prices loaded",
         translation_key="elec_hourcount",
         icon="mdi:numeric-0-box-multiple",
         suggested_display_precision=0,
@@ -2583,7 +2483,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_hourcount",
-        name="Number of hours with gas prices loaded",
         translation_key="gas_hourcount",
         icon="mdi:numeric-0-box-multiple",
         suggested_display_precision=0,
@@ -2595,7 +2494,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_previoushour_market",
-        name="Previous hour electricity market price",
         translation_key="elec_previoushour_market",
         suggested_display_precision=3,
         native_unit_of_measurement=UNIT_ELECTRICITY,
@@ -2610,7 +2508,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_nexthour_market",
-        name="Next hour electricity market price",
         translation_key="elec_nexthour_market",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2625,7 +2522,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_previoushour_all_in",
-        name="Previous hour gas price (All-in)",
         translation_key="gas_previoushour_all_in",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2641,7 +2537,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_nexthour_all_in",
-        name="Next hour gas price (All-in)",
         translation_key="gas_nexthour_all_in",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2657,7 +2552,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_previoushour_market",
-        name="Previous hour gas market price",
         translation_key="gas_previoushour_market",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2673,7 +2567,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_nexthour_market",
-        name="Next hour gas market price",
         translation_key="gas_nexthour_market",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2689,7 +2582,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market",
-        name="Average gas market price tomorrow",
         translation_key="gas_tomorrow_avg_market",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2713,7 +2605,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market_tax",
-        name="Average gas market price incl tax tomorrow",
         translation_key="gas_tomorrow_avg_market_tax",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2737,7 +2628,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market_tax_markup",
-        name="Average gas market price incl tax and markup tomorrow",
         translation_key="gas_tomorrow_avg_market_tax_markup",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2763,7 +2653,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_today_avg_all_in",
-        name="Average gas price today (All-in)",
         translation_key="gas_today_avg_all_in",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2787,7 +2676,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_all_in",
-        name="Average gas price tomorrow (All-in)",
         translation_key="gas_tomorrow_avg_all_in",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2811,7 +2699,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_min",
-        name="Lowest gas price tomorrow (All-in)",
         translation_key="gas_tomorrow_min",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=4,
@@ -2834,7 +2721,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_max",
-        name="Highest gas price tomorrow (All-in)",
         translation_key="gas_tomorrow_max",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=4,
@@ -2857,7 +2743,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_market_upcoming",
-        name="Average gas market price upcoming hours",
         translation_key="gas_market_upcoming",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -2887,7 +2772,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_upcoming_min",
-        name="Lowest gas price upcoming hours (All-in)",
         translation_key="gas_upcoming_min",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=4,
@@ -2910,7 +2794,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_upcoming_max",
-        name="Highest gas price upcoming hours (All-in)",
         translation_key="gas_upcoming_max",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=4,
@@ -2935,7 +2818,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_electricity_price_upcoming_all_in",
-        name="Average electricity price upcoming (All-in)",
         translation_key="average_electricity_price_upcoming_all_in",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -2979,7 +2861,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_electricity_price_upcoming_market",
-        name="Average electricity price (upcoming, market)",
         translation_key="average_electricity_price_upcoming_market",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -3009,7 +2890,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_electricity_price_upcoming_market_tax",
-        name="Average electricity price (upcoming, market and tax)",
         translation_key="average_electricity_price_upcoming_market_tax",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -3039,7 +2919,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_electricity_price_upcoming_market_tax_markup",
-        name="Average electricity price (upcoming, market, tax and markup)",
         translation_key="average_electricity_price_upcoming_market_tax_markup",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=3,
@@ -3065,7 +2944,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_markup_before6am",
-        name="Gas price before 6AM (All-in)",
         translation_key="gas_markup_before6am",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -3086,7 +2964,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_markup_after6am",
-        name="Gas price after 6AM (All-in)",
         translation_key="gas_markup_after6am",
         native_unit_of_measurement=UNIT_GAS,
         suggested_display_precision=3,
@@ -3107,7 +2984,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_before6am",
-        name="Gas price tomorrow before 6AM (All-in)",
         translation_key="gas_price_tomorrow_before6am_allin",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3130,7 +3006,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gas_tomorrow_after6am",
-        name="Gas price tomorrow after 6AM (All-in)",
         translation_key="gas_price_tomorrow_after6am_allin",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3153,7 +3028,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="actual_costs_until_last_meter_reading_date",
-        name="Actual monthly cost",
         translation_key="actual_costs_until_last_meter_reading_date",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3176,7 +3050,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_until_last_meter_reading_date",
-        name="Expected monthly cost until now",
         translation_key="expected_costs_until_last_meter_reading_date",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3199,7 +3072,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="difference_costs_until_last_meter_reading_date",
-        name="Difference expected and actual monthly cost until now",
         translation_key="difference_costs_until_last_meter_reading_date",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3222,7 +3094,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="difference_costs_per_day",
-        name="Difference expected and actual cost per day",
         translation_key="difference_costs_per_day",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3245,7 +3116,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_this_month",
-        name="Expected cost this month",
         translation_key="expected_costs_this_month",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3272,7 +3142,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_per_day_this_month",
-        name="Expected cost per day this month",
         translation_key="expected_costs_per_day_this_month",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3300,7 +3169,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_per_day_till_now_this_month",
-        name="Cost per day till now this month",
         translation_key="costs_per_day_till_now_this_month",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3331,7 +3199,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="invoice_previous_period",
-        name="Invoice previous period",
         translation_key="invoice_previous_period",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3363,7 +3230,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="invoice_current_period",
-        name="Invoice current period",
         translation_key="invoice_current_period",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3394,7 +3260,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="invoice_upcoming_period",
-        name="Invoice upcoming period",
         translation_key="invoice_upcoming_period",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3424,7 +3289,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_this_year",
-        name="Costs this year",
         translation_key="costs_this_year",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3445,7 +3309,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="total_costs",
-        name="Total costs",
         translation_key="total_costs",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3482,7 +3345,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_month",
-        name="Average costs per month",
         translation_key="average_costs_per_month",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3498,7 +3360,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_year",
-        name="Average costs per year",
         translation_key="average_costs_per_year",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3528,7 +3389,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_year_corrected",
-        name="Average costs per year (corrected)",
         translation_key="average_costs_per_year_corrected",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3554,7 +3414,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_month_previous_year",
-        name="Average costs per month previous year",
         translation_key="average_costs_per_month_previous_year",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3572,7 +3431,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="average_costs_per_month_this_year",
-        name="Average costs per month this year",
         translation_key="average_costs_per_month_this_year",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3588,7 +3446,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_this_year",
-        name="Expected costs this year",
         translation_key="expected_costs_this_year",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3604,7 +3461,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_previous_year",
-        name="Costs previous year",
         translation_key="costs_previous_year",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3626,7 +3482,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_electricity_yesterday",
-        name="Costs electricity yesterday",
         translation_key="costs_electricity_yesterday",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3649,7 +3504,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_electricity_this_month",
-        name="Costs electricity this month",
         translation_key="costs_electricity_this_month",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3675,7 +3529,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="usage_electricity_yesterday",
-        name="Usage electricity yesterday",
         translation_key="usage_electricity_yesterday",
         icon="mdi:transmission-tower-export",
         device_class=SensorDeviceClass.ENERGY,
@@ -3697,7 +3550,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_gas_yesterday",
-        name="Costs gas yesterday",
         translation_key="costs_gas_yesterday",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3719,7 +3571,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="usage_gas_yesterday",
-        name="Usage gas yesterday",
         translation_key="usage_gas_yesterday",
         icon="mdi:meter-gas",
         device_class=SensorDeviceClass.GAS,
@@ -3742,7 +3593,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gains_feed_in_yesterday",
-        name="Gains feed-in yesterday",
         translation_key="gains_feed_in_yesterday",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3764,7 +3614,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="delivered_feed_in_yesterday",
-        name="Delivered feed-in yesterday",
         translation_key="delivered_feed_in_yesterday",
         icon="mdi:transmission-tower-import",
         device_class=SensorDeviceClass.ENERGY,
@@ -3787,7 +3636,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="advanced_payment_amount",
-        name="Advanced payment amount",
         translation_key="advanced_payment_amount",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3803,7 +3651,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="reference",
-        name="Reference",
         translation_key="reference",
         icon="mdi:numeric",
         authenticated=True,
@@ -3817,7 +3664,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="status",
-        name="Status",
         translation_key="status",
         device_class=SensorDeviceClass.ENUM,
         options=list(SERVICE_STATUSES),
@@ -3846,7 +3692,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="propositionType",
-        name="Proposition type",
         translation_key="proposition_type",
         device_class=SensorDeviceClass.ENUM,
         options=["dynamic"],
@@ -3861,7 +3706,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="contractProductName",
-        name="Contract Product Name",
         translation_key="contract_product_name",
         icon="mdi:file-document-check",
         authenticated=True,
@@ -3914,7 +3758,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="countryCode",
-        name="Country code",
         translation_key="country_code",
         icon="mdi:flag",
         authenticated=True,
@@ -3927,7 +3770,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="bankAccountNumber",
-        name="Bankaccount Number",
         translation_key="bank_account_number",
         icon="mdi:bank",
         authenticated=True,
@@ -3954,7 +3796,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="preferredAutomaticCollectionDay",
-        name="Preferred Automatic Collection Day",
         translation_key="preferred_automatic_collection_day",
         icon="mdi:bank",
         authenticated=True,
@@ -3969,7 +3810,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="fullName",
-        name="Full Name",
         translation_key="full_name",
         icon="mdi:form-textbox",
         authenticated=True,
@@ -3984,7 +3824,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="phoneNumber",
-        name="Phonenumber",
         translation_key="phone_number",
         icon="mdi:phone",
         authenticated=True,
@@ -3999,7 +3838,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="segments",
-        name="Segments",
         translation_key="segments",
         icon="mdi:segment",
         authenticated=True,
@@ -4013,7 +3851,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="gridOperator",
-        name="Gridoperator",
         translation_key="grid_operator",
         icon="mdi:transmission-tower",
         authenticated=True,
@@ -4034,7 +3871,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="EAN",
-        name="EAN (Energy Account Number)",
         translation_key="ean",
         icon="mdi:meter-electric",
         authenticated=True,
@@ -4054,7 +3890,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="meterType",
-        name="Meter Type",
         translation_key="meter_type",
         device_class=SensorDeviceClass.ENUM,
         options=["slm"],
@@ -4076,7 +3911,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="contractStartDate",
-        name="Contract Start Date",
         translation_key="contract_start_date",
         icon="mdi:file-document-outline",
         authenticated=True,
@@ -4102,7 +3936,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="EleccontractStatus",
-        name="Electricity Contract Status",
         translation_key="elec_contract_status",
         device_class=SensorDeviceClass.ENUM,
         options=list(SERVICE_STATUSES),
@@ -4129,7 +3962,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="GascontractStatus",
-        name="Gas Contract Status",
         translation_key="gas_contract_status",
         device_class=SensorDeviceClass.ENUM,
         options=list(SERVICE_STATUSES),
@@ -4156,7 +3988,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="deliveryStartDate",
-        name="Delivery start date",
         translation_key="delivery_start_date",
         icon="mdi:calendar-clock",
         authenticated=True,
@@ -4169,7 +4000,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="deliveryEndDate",
-        name="Delivery end date",
         translation_key="delivery_end_date",
         icon="mdi:calendar-clock",
         authenticated=True,
@@ -4183,7 +4013,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="firstMeterReadingDate",
-        name="First meter reading date",
         translation_key="first_meter_reading_date",
         icon="mdi:calendar-clock",
         authenticated=True,
@@ -4196,7 +4025,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="lastMeterReadingDate",
-        name="Last meter reading date",
         translation_key="last_meter_reading_date",
         icon="mdi:calendar-clock",
         authenticated=True,
@@ -4209,7 +4037,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="treesCount",
-        name="Trees count",
         translation_key="trees_count",
         icon="mdi:tree-outline",
         authenticated=True,
@@ -4222,7 +4049,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="friendsCount",
-        name="Friends count",
         translation_key="friends_count",
         icon="mdi:account-group",
         authenticated=True,
@@ -4235,7 +4061,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="deliverySite",
-        name="Delivery Site",
         translation_key="delivery_site",
         icon="mdi:home",
         authenticated=True,
@@ -4251,7 +4076,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="rewardPayoutPreference",
-        name="Reward payout preference",
         translation_key="reward_payout_preference",
         device_class=SensorDeviceClass.ENUM,
         options=["discount", "trees"],
@@ -4269,7 +4093,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="site_reference",
-        name="Site Reference",
         translation_key="site_reference",
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:identifier",
@@ -4281,7 +4104,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="token_expires_at",
-        name="Token expires at",
         translation_key="token_expires_at",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -4292,7 +4114,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="refresh_token_expires_at",
-        name="Refresh token expires at",
         translation_key="refresh_token_expires_at",
         icon="mdi:key-chain-variant",
         device_class=SensorDeviceClass.TIMESTAMP,
@@ -4303,7 +4124,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_4p",
-        name="Lowest average electricity price (4 periods)",
         translation_key="elec_lowest_4p",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -4323,7 +4143,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="elec_lowest_16p",
-        name="Lowest average electricity price (16 periods)",
         translation_key="elec_lowest_16p",
         native_unit_of_measurement=UNIT_ELECTRICITY,
         suggested_display_precision=4,
@@ -4707,7 +4526,6 @@ class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_name = description.name
         self._attr_icon = description.icon
         self._attr_unique_id = description.key
         self._attr_entity_registry_enabled_default = (
@@ -4882,7 +4700,7 @@ def _build_single_smart_battery_descriptions(
         [
             FrankEnergieEntityDescription(
                 key=f"{base_key}_brand",
-                name="Brand",
+                translation_key="battery_brand",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:battery",
@@ -4890,7 +4708,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_id",
-                name="ID",
+                translation_key="battery_id",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:fingerprint",
@@ -4899,7 +4717,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_external_reference",
-                name="External Reference",
+                translation_key="battery_external_reference",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:identifier",
@@ -4908,7 +4726,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_max_charge_power",
-                name="Max Charge Power",
+                translation_key="battery_max_charge_power",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:flash",
@@ -4919,7 +4737,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_max_discharge_power",
-                name="Max Discharge Power",
+                translation_key="battery_max_discharge_power",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:flash-outline",
@@ -4930,7 +4748,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_capacity",
-                name="Capacity",
+                translation_key="battery_capacity",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:battery-charging",
@@ -4941,7 +4759,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_provider",
-                name="Provider",
+                translation_key="battery_provider",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:factory",
@@ -4949,7 +4767,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_created_at",
-                name="Created At",
+                translation_key="battery_created_at",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:calendar-clock",
@@ -4958,7 +4776,7 @@ def _build_single_smart_battery_descriptions(
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_updated_at",
-                name="Updated At",
+                translation_key="battery_updated_at",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:calendar-clock",
@@ -4974,7 +4792,6 @@ def _build_single_smart_battery_descriptions(
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_battery_mode",
                     translation_key="battery_mode",
-                    name="Mode",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery",
@@ -4994,7 +4811,6 @@ def _build_single_smart_battery_descriptions(
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_imbalance_trading_strategy",
                     translation_key="battery_imbalance_trading_strategy",
-                    name="Imbalance Strategy",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:chart-line",
@@ -5019,7 +4835,7 @@ def _build_single_smart_battery_descriptions(
             [
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_state_of_charge",
-                    name="State of Charge",
+                    translation_key="battery_state_of_charge",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery-high",
@@ -5042,7 +4858,6 @@ def _build_single_smart_battery_descriptions(
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_status",
                     translation_key="battery_status",
-                    name="Status",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery-clock",
@@ -5054,7 +4869,7 @@ def _build_single_smart_battery_descriptions(
                 ),
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_last_update",
-                    name="Last Update",
+                    translation_key="battery_last_update",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     icon=ICON_CLOCK_OUTLINE,
@@ -5065,7 +4880,7 @@ def _build_single_smart_battery_descriptions(
                 ),
                 FrankEnergieEntityDescription(
                     key=f"{base_key}_total_result",
-                    name="Total Result",
+                    translation_key="total_result",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     device_class=SensorDeviceClass.MONETARY,
@@ -5130,7 +4945,6 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
         [
             FrankEnergieEntityDescription(
                 key="total_capacity",
-                name="Total Battery Capacity",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:battery-charging",
@@ -5150,7 +4964,6 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
             ),
             FrankEnergieEntityDescription(
                 key="total_max_charge_power",
-                name="Total Max Charge Power",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:flash",
@@ -5161,7 +4974,6 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
             ),
             FrankEnergieEntityDescription(
                 key="total_max_discharge_power",
-                name="Total Max Discharge Power",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:flash",
@@ -5172,7 +4984,6 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
             ),
             FrankEnergieEntityDescription(
                 key="total_result",
-                name="Total Result",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 device_class=SensorDeviceClass.MONETARY,
@@ -5183,7 +4994,6 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
             ),
             FrankEnergieEntityDescription(
                 key="average_state_of_charge",
-                name="Average State of Charge",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 device_class=SensorDeviceClass.BATTERY,

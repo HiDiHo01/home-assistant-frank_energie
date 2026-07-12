@@ -1002,6 +1002,36 @@
           "idle_smart_home": "Idle (Smart Home)",
           "unknown": "Unknown"
         }
+      },
+      "battery_brand": {
+        "name": "Battery Brand"
+      },
+      "battery_id": {
+        "name": "Battery ID"
+      },
+      "battery_external_reference": {
+        "name": "External Reference"
+      },
+      "battery_max_charge_power": {
+        "name": "Max Charge Power"
+      },
+      "battery_max_discharge_power": {
+        "name": "Max Discharge Power"
+      },
+      "battery_provider": {
+        "name": "Provider"
+      },
+      "battery_created_at": {
+        "name": "Created at"
+      },
+      "battery_updated_at": {
+        "name": "Updated at"
+      },
+      "battery_state_of_charge": {
+        "name": "State of Charge"
+      },
+      "battery_last_update": {
+        "name": "Last Update"
       }
     }
   },

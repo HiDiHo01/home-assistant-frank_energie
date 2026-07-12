@@ -517,7 +517,6 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
 ] = (
     FrankEnergieBinarySensorDescription(
         key="smartChargingisActivated",
-        name="Smart Charging",
         translation_key="smartcharging_isactivated",
         icon="mdi:car-electric",
         authenticated=True,
@@ -533,7 +532,6 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     ),
     FrankEnergieBinarySensorDescription(
         key="smartTradingisActivated",
-        name="Smart Trading",
         translation_key="smarttrading_isactivated",
         icon="mdi:battery-sync",
         authenticated=True,
@@ -598,7 +596,6 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     ),
     FrankEnergieBinarySensorDescription(
         key="smartPushNotifications",
-        name="Smart Push notification price alerts",
         translation_key="smart_push_notification_price_alerts",
         icon="mdi:bell-alert",
         authenticated=True,
@@ -613,7 +610,6 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     ),
     FrankEnergieBinarySensorDescription(
         key="has_CO2_compensation",
-        name="Has CO₂ compensation",
         translation_key="co2_compensation",
         icon="mdi:molecule-co2",
         authenticated=True,
