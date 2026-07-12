@@ -1828,7 +1828,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
 
         except (NoMarketPricesAvailableException, RequestException) as ex:
-            if isinstance(ex, RequestException) and "No marketprices found" not in str(ex):
+            if isinstance(ex, RequestException) and "No marketprices found" not in str(
+                ex
+            ):
                 raise
             _LOGGER.debug(
                 "No market prices available yet for %s (%s - %s)",
@@ -1877,7 +1879,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
 
         except (NoMarketPricesAvailableException, RequestException) as ex:
-            if isinstance(ex, RequestException) and "No marketprices found" not in str(ex):
+            if isinstance(ex, RequestException) and "No marketprices found" not in str(
+                ex
+            ):
                 raise
             _LOGGER.debug(
                 "No user market prices available yet for %s (%s - %s)",
