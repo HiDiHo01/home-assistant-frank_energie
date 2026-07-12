@@ -628,6 +628,8 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         """Return True if the sensor value is valid."""
+        if not super().available:
+            return False
         try:
             if self.coordinator.data is not None:
                 value = self.native_value

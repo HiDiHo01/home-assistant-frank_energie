@@ -156,6 +156,8 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
     @property
     def available(self) -> bool:
         """Return False when a resolution change is not currently possible."""
+        if not super().available:
+            return False
         if not self.coordinator.api.is_authenticated:
             return True
         if getattr(self.coordinator, "_resolution_change_pending", False):
