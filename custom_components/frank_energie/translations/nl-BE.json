@@ -394,28 +394,31 @@
         },
         "state_attributes": {
           "available_options": {
-            "name": "Contract prijsresolutie status",
+            "name": "Beschikbare opties",
             "state": {
               "pt15m": "15 minuten",
               "pt60m": "60 minuten"
             }
           },
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
           "is_change_request_possible": {
-            "name": "Contract prijsresolutie status",
+            "name": "Wijziging mogelijk",
             "state": {
               "false": "Nee",
               "true": "Ja"
             }
           },
           "upcoming_change": {
-            "name": "Contract prijsresolutie status",
+            "name": "Aankomende wijziging",
             "state": {
               "pt15m": "15 minuten",
               "pt60m": "60 minuten"
             }
           },
           "upcoming_change_effective_date": {
-            "name": "Contract prijsresolutie status"
+            "name": "Aankomende wijziging ingangsdatum"
           }
         }
       },
