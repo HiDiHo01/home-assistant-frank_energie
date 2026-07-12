@@ -223,6 +223,16 @@ if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
+ERROR_NO_MARKET_PRICES: Final[str] = "No marketprices found"
+
+
+def _is_no_market_prices_error(ex: Exception) -> bool:
+    """Check if the exception represents a 'No market prices available' error."""
+    if isinstance(ex, NoMarketPricesAvailableException):
+        return True
+    return isinstance(ex, RequestException) and ERROR_NO_MARKET_PRICES in str(ex)
+
+
 class FrankEnergieData(TypedDict):
     """Represents data fetched from Frank Energie API."""
 
@@ -1827,7 +1837,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 self.resolution,
             )
 
-        except NoMarketPricesAvailableException:
+        except RequestException as ex:
+            if not _is_no_market_prices_error(ex):
+                raise
             _LOGGER.debug(
                 "No market prices available yet for %s (%s - %s)",
                 country_code,
@@ -1874,7 +1886,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 end_date,
             )
 
-        except NoMarketPricesAvailableException:
+        except RequestException as ex:
+            if not _is_no_market_prices_error(ex):
+                raise
             _LOGGER.debug(
                 "No user market prices available yet for %s (%s - %s)",
                 user_country,
