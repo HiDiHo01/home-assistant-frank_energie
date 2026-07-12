@@ -153,8 +153,6 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
-
-
     @property
     def extra_state_attributes(self) -> dict:
         api = getattr(self.coordinator, "api_resolution", None)
