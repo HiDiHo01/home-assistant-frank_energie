@@ -1051,10 +1051,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     if country_code in {"NL", "BE"}:
                         self._country_code = country_code
             if not self._connection_id and user_data and user_data.connections:
-                connection = user_data.connections[0]
+                for connection in user_data.connections:
+                    if isinstance(connection, dict):
+                        cid = connection.get("connectionId")
+                        segment = connection.get("segment")
+                    else:
+                        cid = getattr(connection, "connectionId", None)
+                        segment = getattr(connection, "segment", None)
 
-                if connection_id := connection.get("connectionId"):
-                    self._connection_id = connection_id
+                    if cid and segment == "ELECTRICITY":
+                        self._connection_id = str(cid)
+                        break
 
             return user_data
         except AuthException as ex:
@@ -2206,7 +2213,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     options={**self.config_entry.options, "resolution": value},
                 )
                 _LOGGER.debug(
-                    "Resolution saved to options (not authenticated): %s -> options=%s",
+                    "Resolution saved to options (unauthenticated API): %s -> options=%s",
                     value,
                     self.config_entry.options,
                 )
@@ -2219,8 +2226,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return
 
         if not self._connection_id:
-            _LOGGER.warning(
-                "Cannot set resolution via API: connection_id not available"
+            _LOGGER.error(
+                "Cannot set resolution via API: electricity connection_id not available"
             )
             return
 
@@ -2484,6 +2491,12 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     self._static_contract_price_resolution_state = (
                         data_contract_price_resolution_state
                     )
+                    self._api_resolution_state = data_contract_price_resolution_state
+                    self._resolution_change_pending = (
+                        data_contract_price_resolution_state.hasUpcomingChange
+                        if data_contract_price_resolution_state
+                        else False
+                    )
 
                 if last_fetch_today_str := cached_data.get("last_fetch_today"):
                     self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
@@ -2578,11 +2591,17 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         connection_id = None
         user_data = self.settings_coordinator.data.get(DATA_USER)
         if user_data and user_data.connections:
-            connection = user_data.connections[0]
-            if isinstance(connection, dict):
-                connection_id = connection.get("connectionId")
-            else:
-                connection_id = getattr(connection, "connectionId", None)
+            for connection in user_data.connections:
+                if isinstance(connection, dict):
+                    cid = connection.get("connectionId")
+                    segment = connection.get("segment")
+                else:
+                    cid = getattr(connection, "connectionId", None)
+                    segment = getattr(connection, "segment", None)
+
+                if cid and segment == "ELECTRICITY":
+                    connection_id = str(cid)
+                    break
 
             self._connection_id = connection_id
 
