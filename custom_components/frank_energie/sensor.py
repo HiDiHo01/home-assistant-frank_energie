@@ -1768,12 +1768,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
             else STATE_UNKNOWN
         ),
-        available_fn=lambda data: data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None,
+        available_fn=lambda data: (
+            data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None
+        ),
         attr_fn=lambda data: (
             {
-                "available_options": [
-                    opt.lower() for opt in state.available_options
-                ]
+                "available_options": [opt.lower() for opt in state.available_options]
                 if state.available_options
                 else None,
                 "change_request_effective_date": state.change_request_effective_date,
