@@ -213,6 +213,29 @@ def _dict_to_resolution_state(data: dict[str, Any]) -> ContractPriceResolutionSt
     return state
 
 
+def _extract_electricity_connection_id(user_data: Any) -> str | None:
+    """Extract the ELECTRICITY connection ID from user data."""
+    if not user_data or not getattr(user_data, "connections", None):
+        return None
+
+    for connection in user_data.connections:
+        if isinstance(connection, dict):
+            cid = connection.get("connectionId")
+            segment = connection.get("segment")
+        else:
+            cid = getattr(connection, "connectionId", None)
+            segment = getattr(connection, "segment", None)
+
+        if cid and segment == "ELECTRICITY":
+            return str(cid)
+
+    _LOGGER.debug(
+        "No ELECTRICITY segment connection found in user data. "
+        "Resolution changes are only supported for electricity."
+    )
+    return None
+
+
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
     # Python 3.14-3.16
     try:
@@ -1050,18 +1073,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     country_code = country_code_raw.upper()
                     if country_code in {"NL", "BE"}:
                         self._country_code = country_code
-            if not self._connection_id and user_data and user_data.connections:
-                for connection in user_data.connections:
-                    if isinstance(connection, dict):
-                        cid = connection.get("connectionId")
-                        segment = connection.get("segment")
-                    else:
-                        cid = getattr(connection, "connectionId", None)
-                        segment = getattr(connection, "segment", None)
-
-                    if cid and segment == "ELECTRICITY":
-                        self._connection_id = str(cid)
-                        break
+            if not self._connection_id:
+                self._connection_id = _extract_electricity_connection_id(user_data)
 
             return user_data
         except AuthException as ex:
@@ -2588,22 +2601,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
             self._tomorrow_prices_logged = False
 
-        connection_id = None
         user_data = self.settings_coordinator.data.get(DATA_USER)
-        if user_data and user_data.connections:
-            for connection in user_data.connections:
-                if isinstance(connection, dict):
-                    cid = connection.get("connectionId")
-                    segment = connection.get("segment")
-                else:
-                    cid = getattr(connection, "connectionId", None)
-                    segment = getattr(connection, "segment", None)
-
-                if cid and segment == "ELECTRICITY":
-                    connection_id = str(cid)
-                    break
-
-            self._connection_id = connection_id
+        self._connection_id = _extract_electricity_connection_id(user_data)
 
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
@@ -2649,7 +2648,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 prices_today = self._static_prices_today
 
             data_contract_price_resolution_state = (
-                await self._fetch_contract_price_resolution_state(connection_id)
+                await self._fetch_contract_price_resolution_state(self._connection_id)
             )
             self._static_contract_price_resolution_state = (
                 data_contract_price_resolution_state
