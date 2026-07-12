@@ -2244,6 +2244,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return
 
+        if self._resolution_change_pending:
+            _LOGGER.warning("Cannot set resolution: a change is already pending")
+            return
+
         if (
             self._api_resolution_state is not None
             and not self._api_resolution_state.isChangeRequestPossible
@@ -2253,53 +2257,69 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return
 
+        self._resolution_change_pending = True
+
         async def _mutation() -> None:
-            result = await self.api.contract_price_resolution_request_change(
-                self._connection_id,
-                cast(Resolution, value),
-            )
-
-            if result is None:
-                raise UpdateFailed("Resolution change request failed: no response")
-
-            if not result.success:
-                if result.reason == "CHANGE_NOT_POSSIBLE":
-                    _LOGGER.warning(
-                        "Resolution change not possible at this time "
-                        "(contract does not allow changes or cooling-off period active)"
-                    )
-                    async_create(
-                        self.hass,
-                        message=(
-                            "Resolution change is not possible at this time. "
-                            "Your contract may not allow changes or a cooling-off period is active. "
-                            f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
-                            f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
-                        ),
-                        title="Frank Energie - Resolution Change Failed",
-                        notification_id="frank_energie_resolution_change_failed",
-                    )
-                    return  # not an error, just not allowed right now
-                raise UpdateFailed(
-                    "Resolution change request failed: %s" % (result.reason)
+            try:
+                result = await self.api.contract_price_resolution_request_change(
+                    self._connection_id,
+                    cast(Resolution, value),
                 )
 
-            _LOGGER.info(
-                "Resolution change accepted (effective: %s)",
-                result.data.effectiveDate if result.data else "unknown",
-            )
-            self._resolution_change_pending = (
-                True  # disable select until change is effective
-            )
+                if result is None:
+                    raise UpdateFailed("Resolution change request failed: no response")
 
-            if self.config_entry is None:
-                return
+                if not result.success:
+                    if result.reason == "CHANGE_NOT_POSSIBLE":
+                        _LOGGER.warning(
+                            "Resolution change not possible at this time "
+                            "(contract does not allow changes or cooling-off period active)"
+                        )
+                        async_create(
+                            self.hass,
+                            message=(
+                                "Resolution change is not possible at this time. "
+                                "Your contract may not allow changes or a cooling-off period is active. "
+                                f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
+                                f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
+                            ),
+                            title="Frank Energie - Resolution Change Failed",
+                            notification_id="frank_energie_resolution_change_failed",
+                        )
+                        return  # not an error, just not allowed right now
+                    raise UpdateFailed(
+                        "Resolution change request failed: %s" % (result.reason)
+                    )
 
-            if self.config_entry.options.get("resolution") != value:
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "resolution": value},
+                _LOGGER.info(
+                    "Resolution change accepted (effective: %s)",
+                    result.data.effectiveDate if result.data else "unknown",
                 )
+
+                if self.config_entry is None:
+                    return
+
+                if self.config_entry.options.get("resolution") != value:
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        options={**self.config_entry.options, "resolution": value},
+                    )
+
+                # Re-fetch resolution state to update our internal tracker immediately
+                try:
+                    state = await self._fetch_contract_price_resolution_state(
+                        self._connection_id
+                    )
+                    if state:
+                        self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
+                except Exception as err:
+                    _LOGGER.debug(
+                        "Failed to re-fetch resolution state after successful change: %s",
+                        err,
+                    )
+
+            finally:
+                self._resolution_change_pending = False
 
         await self._mutation_queue.add(_mutation)
         await self.async_request_refresh()
@@ -2506,7 +2526,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     )
                     self._api_resolution_state = data_contract_price_resolution_state
                     self._resolution_change_pending = (
-                        data_contract_price_resolution_state.hasUpcomingChange
+                        bool(data_contract_price_resolution_state.upcoming_change)
                         if data_contract_price_resolution_state
                         else False
                     )
