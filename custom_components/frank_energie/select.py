@@ -164,7 +164,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
             return False
         state = getattr(self.coordinator, "_api_resolution_state", None)
         if state is None:
-            return True  # unknown, allow optimistically
+            return False
         return state.is_change_request_possible
 
     @property
@@ -190,7 +190,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
             else None,
             "is_change_request_possible": state.isChangeRequestPossible
             if state
-            else None,
+            else False,
             "change_request_effective_date": str(state.changeRequestEffectiveDate)
             if state and state.changeRequestEffectiveDate
             else None,
