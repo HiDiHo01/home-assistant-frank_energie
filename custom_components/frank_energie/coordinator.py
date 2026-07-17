@@ -67,6 +67,7 @@ from python_frank_energie.models import (
 from .const import (
     DOMAIN,
     TIMEZONE_AMSTERDAM,
+    TOMORROW_PUBLICATION_HOUR_LOCAL,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
@@ -517,7 +518,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         _LOGGER.debug(
             "Starting data update for Frank Energie coordinator (user: %s).",
-            self.config_entry.title,
+            self.config_entry.title if self.config_entry else "Unknown",
         )
 
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -779,7 +780,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if self.cached_prices_today is not None:
             _LOGGER.debug(
                 "[%s][%s] Tomorrow electricity periods: %s",
-                self.config_entry.title,
+                self.config_entry.title if self.config_entry else "Unknown",
                 self.site_reference,
                 (
                     len(prices_tomorrow.electricity.all)
@@ -1852,12 +1853,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # Keep the combined data (yesterday + today) to prevent historical sensors
         # from becoming None at exactly 0:00. Merge the tomorrow cache in case it
         # never made it into an aggregation cycle before midnight.
-        combined_electricity = self._merge_prices(
-            source_data.get(DATA_ELECTRICITY), prices_tomorrow.electricity
-        )
-        combined_gas = self._merge_prices(
-            source_data.get(DATA_GAS), prices_tomorrow.gas
-        )
+        try:
+            combined_electricity = self._merge_prices(
+                source_data.get(DATA_ELECTRICITY), prices_tomorrow.electricity
+            )
+            combined_gas = self._merge_prices(
+                source_data.get(DATA_GAS), prices_tomorrow.gas
+            )
+        except ValueError:
+            _LOGGER.warning(
+                "Cannot merge price data: resolution or type mismatch, "
+                "falling back to tomorrow's prices only"
+            )
+            combined_electricity = prices_tomorrow.electricity or source_data.get(
+                DATA_ELECTRICITY
+            )
+            combined_gas = prices_tomorrow.gas or source_data.get(DATA_GAS)
 
         updated_data = source_data.copy()
         updated_data[DATA_ELECTRICITY] = combined_electricity
@@ -2673,15 +2684,15 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if not self.last_fetch_today:
             return False
 
-        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
+        today = now_local.date()
         if self.last_fetch_today.date() != today:
             return False
 
         if self.last_fetch_tomorrow and self.last_fetch_tomorrow.date() == today:
             return True
 
-        local_time = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).time()
-        return local_time < time(13, 0)
+        return now_local.time() < time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
 
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
@@ -2704,12 +2715,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         ):
             new_interval = None
         else:
-            tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
-            now_local = now_utc.astimezone(tz_amsterdam)
+            now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
             local_time = now_local.time()
-            if local_time < time(13, 0):
+            if local_time < time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0):
                 new_interval = None
-            elif time(13, 0) <= local_time < time(15, 0):
+            elif time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0) <= local_time < time(15, 0):
                 new_interval = timedelta(minutes=5)
             elif time(15, 0) <= local_time < time(18, 0):
                 new_interval = timedelta(minutes=15)

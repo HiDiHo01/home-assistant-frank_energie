@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from custom_components.frank_energie.const import (
@@ -1495,3 +1495,48 @@ async def test_async_update_enode_charge_settings_optimistic_cache(
     assert mock_vehicle.charge_settings.hour_friday == 520
     assert mock_vehicle.charge_settings.hour_saturday == 530
     assert mock_vehicle.charge_settings.hour_sunday == 540
+
+
+@pytest.mark.asyncio
+async def test_coordinator_helpers() -> None:
+    """Test coordinator static helpers."""
+    # Test _merge_prices
+    base = MagicMock()
+    base.__add__ = MagicMock(return_value="merged")
+    new_prices = MagicMock()
+
+    assert FrankEnergiePriceCoordinator._merge_prices(None, None) is None
+    assert FrankEnergiePriceCoordinator._merge_prices(base, None) is base
+    assert FrankEnergiePriceCoordinator._merge_prices(None, new_prices) is new_prices
+    assert FrankEnergiePriceCoordinator._merge_prices(base, new_prices) == "merged"
+    base.__add__.assert_called_once_with(new_prices)
+
+    # Test _build_tomorrow_cache
+    tomorrow = MagicMock()
+    tomorrow.energy_country = "NL"
+    tomorrow.energy_type = "electricity"
+    tomorrow.electricity = MagicMock()
+    tomorrow.gas = MagicMock()
+
+    elec_rem = MagicMock()
+    gas_rem = MagicMock()
+
+    res = FrankEnergiePriceCoordinator._build_tomorrow_cache(
+        tomorrow, elec_rem, gas_rem
+    )
+    assert res.electricity is elec_rem
+    assert res.gas is gas_rem
+    assert res.energy_country == "NL"
+    assert res.energy_type == "electricity"
+
+    # Test when remaining is None but tomorrow had prices (should replace with empty price_data)
+    with patch("custom_components.frank_energie.coordinator.replace") as mock_replace:
+        mock_replace.return_value = "empty"
+        res2 = FrankEnergiePriceCoordinator._build_tomorrow_cache(tomorrow, None, None)
+        assert res2 is None
+
+        res3 = FrankEnergiePriceCoordinator._build_tomorrow_cache(
+            tomorrow, elec_rem, None
+        )
+        assert res3.electricity is elec_rem
+        assert res3.gas == "empty"
