@@ -1702,7 +1702,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         try:
             combined = copy.copy(today_data)
+
+            # Defensive logging to trace resolution changes during merge (Issue #221)
+            old_res = getattr(combined, "resolution_minutes", None)
+
             combined += tomorrow_data
+
+            new_res = getattr(combined, "resolution_minutes", None)
+            if old_res is not None and old_res != new_res:
+                _LOGGER.debug(
+                    "Price data merge mutated resolution from %s to %s",
+                    old_res,
+                    new_res,
+                )
+
             return combined
         except TypeError:
             return today_data + tomorrow_data
