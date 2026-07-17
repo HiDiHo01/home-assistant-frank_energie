@@ -272,10 +272,10 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 class FrankEnergieBatteryBaseSelect(
     CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
 ):
+    """Base select entity for controlling smart battery."""
+
     entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-
-    """Base select entity for controlling smart battery."""
 
     def __init__(
         self,
@@ -410,10 +410,10 @@ class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
 class FrankEnergieEnodeChargingModeSelect(
     CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
 ):
+    """Select entity for controlling EV charging mode."""
+
     entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-
-    """Select entity for controlling EV charging mode."""
 
 
     def __init__(
@@ -512,10 +512,10 @@ class FrankEnergieEnodeChargingModeSelect(
 class FrankEnergieEnodeChargerChargingModeSelect(
     CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
 ):
+    """Select entity for controlling EV charger charging mode."""
+
     entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-
-    """Select entity for controlling EV charger charging mode."""
 
 
     def __init__(
