@@ -515,9 +515,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch and cache data from Frank Energie with smart interval logic."""
 
+        entry_title = self.config_entry.title or "no title"
         _LOGGER.debug(
             "Starting data update for Frank Energie coordinator (user: %s).",
-            self.config_entry.title,
+            entry_title,
         )
 
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -762,12 +763,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self.cached_prices_tomorrow = prices_tomorrow
             self.last_fetch_tomorrow = now_utc
 
+            entry_title = self.config_entry.title or "no title"
             if self.config_entry is not None:
                 self.hass.bus.async_fire(
                     EVENT_FRANK_ENERGIE,
                     {
                         "entry_id": self.config_entry.entry_id,
-                        "entry_title": self.config_entry.title,
+                        "entry_title": entry_title,
                         "action": "tomorrow_prices_available",
                         "date": tomorrow.isoformat(),
                         "resolution": self.resolution,
@@ -777,9 +779,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Tomorrow prices not yet available, retrying on next refresh")
 
         if self.cached_prices_today is not None:
+            entry_title = self.config_entry.title or "no title"
             _LOGGER.debug(
                 "[%s][%s] Tomorrow electricity periods: %s",
-                self.config_entry.title,
+                entry_title,
                 self.site_reference,
                 (
                     len(prices_tomorrow.electricity.all)
@@ -823,11 +826,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not (start <= now_utc < end):
             return
 
+        entry_title = self.config_entry.title or "no title"
         self.hass.bus.async_fire(
             EVENT_FRANK_ENERGIE,
             {
                 "entry_id": self.config_entry.entry_id,
-                "entry_title": self.config_entry.title,
+                "entry_title": entry_title,
                 "action": "lowest_price",
                 "resolution": int((end - start).total_seconds() / 60),
                 "price": lowest.total,
@@ -877,11 +881,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not (start <= now_utc < end):
             return
 
+        entry_title = self.config_entry.title or "no title"
         self.hass.bus.async_fire(
             EVENT_FRANK_ENERGIE,
             {
                 "entry_id": self.config_entry.entry_id,
-                "entry_title": self.config_entry.title,
+                "entry_title": entry_title,
                 "action": "lowest_4p_price",
                 "periods": 4,
                 "resolution": resolution,
@@ -937,11 +942,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not (start <= now_utc < end):
             return
 
+        entry_title = self.config_entry.title or "no title"
         self.hass.bus.async_fire(
             EVENT_FRANK_ENERGIE,
             {
                 "entry_id": self.config_entry.entry_id,
-                "entry_title": self.config_entry.title,
+                "entry_title": entry_title,
                 "action": "lowest_16p_price",
                 "periods": 16,
                 "resolution": resolution,
