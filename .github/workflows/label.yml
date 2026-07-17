@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 concurrency:
@@ -26,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     steps:
       - uses: actions/github-script@v9
@@ -34,25 +36,25 @@ jobs:
             const item = context.payload.issue || context.payload.pull_request;
             const title = item.title.toLowerCase();
 
-            const labels = [];
+            const labels = new Set();
 
-            if (title.includes("deps")) labels.push("dependencies");
-            if (title.includes("chore")) labels.push("chore");
-            if (title.includes("fix")) labels.push("fixed");
-            if (title.includes("feat")) labels.push("feature");
-            if (title.includes("enode")) labels.push("enode");
-            if (title.includes("graphql")) labels.push("graphql");
-            if (title.includes("price")) labels.push("prices");
-            if (title.includes("sensor")) labels.push("sensor");
-            if (title.includes("number")) labels.push("number");
-            if (title.includes("breaking")) labels.push("breaking-change");
+            if (title.includes("deps")) labels.add("dependencies");
+            if (title.includes("chore")) labels.add("chore");
+            if (title.includes("fix")) labels.add("fixed");
+            if (title.includes("feat")) labels.add("feature");
+            if (title.includes("enode")) labels.add("enode");
+            if (title.includes("graphql")) labels.add("graphql");
+            if (title.includes("price")) labels.add("prices");
+            if (title.includes("sensor")) labels.add("sensor");
+            if (title.includes("number")) labels.add("number");
+            if (title.includes("breaking")) labels.add("breaking-change");
 
             if (labels.length > 0) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: item.number,
-                labels,
+                labels: [...labels],
               });
             }
       - name: Apply labels
@@ -74,3 +76,4 @@ jobs:
           l_label: size/l
           l_max_size: 500
           xl_label: size/xl
+          xl_max_size: 1000
