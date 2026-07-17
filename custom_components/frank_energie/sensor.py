@@ -4422,13 +4422,8 @@ class FrankEnergieSensor(
         if not isinstance(resolution, str):
             resolution = "PT15M"
 
-        if resolution == "PT60M":
-            # Hourly resolution
-            next_update_time = now.replace(
-                minute=0, second=0, microsecond=0
-            ) + timedelta(hours=1)
-        elif minute >= 45:
-            # Next whole hour
+        if resolution == "PT60M" or minute >= 45:
+            # Hourly resolution or next whole hour
             next_update_time = now.replace(
                 minute=0, second=0, microsecond=0
             ) + timedelta(hours=1)
