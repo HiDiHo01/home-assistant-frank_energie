@@ -49,7 +49,7 @@ jobs:
             if (title.includes("number")) labels.add("number");
             if (title.includes("breaking")) labels.add("breaking-change");
 
-            if (labels.length > 0) {
+            if (labels.size > 0) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
