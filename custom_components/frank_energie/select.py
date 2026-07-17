@@ -173,7 +173,6 @@ async def async_setup_entry(
 class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
     """Select entity controlling resolution via coordinator state."""
 
-    _attr_options = list(DISPLAY_TO_VALUE.keys())
     _attr_has_entity_name = True
     _attr_icon = "mdi:clock-time-four-outline"
     _attr_options = list(DISPLAY_TO_VALUE.keys())
