@@ -1388,10 +1388,14 @@ async def test_price_coordinator_midnight_rollover(
     price_coordinator.promote_tomorrow_prices()
 
     assert price_coordinator.cached_prices_tomorrow is None
-    assert price_coordinator.cached_prices[DATA_ELECTRICITY] is original_electricity
-    assert price_coordinator.cached_prices[DATA_GAS] is original_gas
-    assert price_coordinator._static_prices_today.electricity is original_electricity
-    assert price_coordinator._static_prices_today.gas is original_gas
+
+    expected_electricity = original_electricity + tomorrow_prices.electricity
+    expected_gas = original_gas + tomorrow_prices.gas
+
+    assert price_coordinator.cached_prices[DATA_ELECTRICITY] == expected_electricity
+    assert price_coordinator.cached_prices[DATA_GAS] == expected_gas
+    assert price_coordinator._static_prices_today.electricity == expected_electricity
+    assert price_coordinator._static_prices_today.gas == expected_gas
 
 
 @pytest.mark.asyncio

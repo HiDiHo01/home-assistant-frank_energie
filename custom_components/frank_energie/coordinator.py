@@ -1777,8 +1777,69 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 self.cached_prices_today, prices_today=prices
             )
 
+    @staticmethod
+    def _price_data_after(
+        price_data: PriceData | None, cutoff: date
+    ) -> PriceData | None:
+        """Return a PriceData with entries starting after the given local date."""
+        if price_data is None:
+            return None
+
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+        remaining = [
+            price
+            for price in price_data.all
+            if price.date_from.astimezone(tz_amsterdam).date() > cutoff
+        ]
+        if not remaining:
+            return None
+
+        return replace(price_data, price_data=remaining)
+
+    @staticmethod
+    def _merge_prices(
+        base: PriceData | None, new_prices: PriceData | None
+    ) -> PriceData | None:
+        """Merge base and new prices if both exist, otherwise return the one that does."""
+        if base and new_prices:
+            return base + new_prices
+        return base or new_prices
+
+    @staticmethod
+    def _build_tomorrow_cache(
+        prices_tomorrow: MarketPrices,
+        remaining_electricity: PriceData | None,
+        remaining_gas: PriceData | None,
+    ) -> MarketPrices | None:
+        """Build the new tomorrow cache using the remaining prices."""
+        if remaining_electricity is None and remaining_gas is None:
+            return None
+
+        return MarketPrices(
+            electricity=remaining_electricity
+            or (
+                replace(prices_tomorrow.electricity, price_data=[])
+                if prices_tomorrow.electricity
+                else None
+            ),
+            gas=remaining_gas
+            or (
+                replace(prices_tomorrow.gas, price_data=[])
+                if prices_tomorrow.gas
+                else None
+            ),
+            energy_country=prices_tomorrow.energy_country,
+            energy_type=prices_tomorrow.energy_type,
+        )
+
     def promote_tomorrow_prices(self) -> None:
-        """Promote cached tomorrow prices to today's prices."""
+        """Promote cached tomorrow prices to today's prices at local midnight.
+
+        All cached price entries are promoted without any date filtering:
+        entries for the new today become today's prices, and entries dated
+        after the new today (the API may return multi-day windows) stay
+        available as the new tomorrow cache instead of being dropped.
+        """
         prices_tomorrow = self.cached_prices_tomorrow
         if prices_tomorrow is None:
             return
@@ -1789,24 +1850,51 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return
 
         # Keep the combined data (yesterday + today) to prevent historical sensors
-        # from becoming None at exactly 0:00.
+        # from becoming None at exactly 0:00. Merge the tomorrow cache in case it
+        # never made it into an aggregation cycle before midnight.
+        combined_electricity = self._merge_prices(
+            source_data.get(DATA_ELECTRICITY), prices_tomorrow.electricity
+        )
+        combined_gas = self._merge_prices(
+            source_data.get(DATA_GAS), prices_tomorrow.gas
+        )
+
         updated_data = source_data.copy()
+        updated_data[DATA_ELECTRICITY] = combined_electricity
+        updated_data[DATA_GAS] = combined_gas
 
         combined_market_prices = MarketPrices(
-            electricity=source_data.get(DATA_ELECTRICITY),
-            gas=source_data.get(DATA_GAS),
+            electricity=combined_electricity,
+            gas=combined_gas,
             energy_country=prices_tomorrow.energy_country,
             energy_type=prices_tomorrow.energy_type,
         )
 
-        self.cached_prices_tomorrow = None
+        # Prices dated after the new today are still tomorrow's prices:
+        # promote them to the tomorrow cache instead of clearing it.
+        new_today = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        remaining_electricity = self._price_data_after(combined_electricity, new_today)
+        remaining_gas = self._price_data_after(combined_gas, new_today)
+
+        self.cached_prices_tomorrow = self._build_tomorrow_cache(
+            prices_tomorrow, remaining_electricity, remaining_gas
+        )
+
         self.cached_prices = updated_data
         self.data = updated_data
         self._update_today_prices(combined_market_prices)
 
         self.async_update_listeners()
 
-        _LOGGER.debug("Promoted cached tomorrow prices to today's prices")
+        kept_elec = len(remaining_electricity.all) if remaining_electricity else 0
+        kept_gas = len(remaining_gas.all) if remaining_gas else 0
+
+        _LOGGER.debug(
+            "Promoted cached tomorrow prices to today's prices "
+            "(%s electricity and %s gas price entries kept for the new tomorrow)",
+            kept_elec,
+            kept_gas,
+        )
 
     def get_pv_system_metadata(self, system_id: str) -> dict[str, Any]:
         """Get PV system metadata (brand, model, display_name, serial_number)."""
@@ -2580,15 +2668,31 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
         return False
 
+    def _is_cache_fresh(self, now_utc: datetime) -> bool:
+        """Check if the loaded disk cache is fresh enough to skip API fetches."""
+        if not self.last_fetch_today:
+            return False
+
+        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        if self.last_fetch_today.date() != today:
+            return False
+
+        if self.last_fetch_tomorrow and self.last_fetch_tomorrow.date() == today:
+            return True
+
+        local_time = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).time()
+        return local_time < time(13, 0)
+
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
         cached_data_loaded = await self._async_setup()
+        now_utc = dt_util.utcnow()
 
-        if not cached_data_loaded:
-            _LOGGER.debug("No valid cache found, performing initial API fetch")
+        if not cached_data_loaded or not self._is_cache_fresh(now_utc):
+            _LOGGER.debug("No fresh cache found, performing initial API fetch")
             await super().async_config_entry_first_refresh()
         else:
-            _LOGGER.debug("Valid cache loaded, skipping initial API fetch")
+            _LOGGER.debug("Fresh cache loaded, skipping initial API fetch")
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
