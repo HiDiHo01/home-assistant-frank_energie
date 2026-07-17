@@ -45,6 +45,10 @@ from .const import (
     DEFAULT_INTERVAL_CHARGERS,
     DEFAULT_INTERVAL_VEHICLES,
     DEFAULT_INTERVAL_PV,
+    DATA_BATTERIES,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
+    DATA_PV_SYSTEMS,
 )
 from .helpers import decrypt_password, encrypt_password
 
@@ -894,72 +898,110 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.exception("Unexpected error in options flow: %s", ex)
                 errors = {"base": "unknown_error"}
 
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_USERNAME, default=current_username): str,
-                # Leave password blank to avoid exposing it in the UI
-                vol.Optional(CONF_PASSWORD, default=""): str,
-                vol.Required(
-                    CONF_INTERVAL_SETTINGS,
-                    default=entry.options.get(
-                        CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
-                    ),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
+        runtime_data = getattr(entry, "runtime_data", None)
+
+        has_batteries = True
+        has_chargers = True
+        has_vehicles = True
+        has_pv = True
+
+        if runtime_data:
+            battery_data = runtime_data.battery_coordinator.data.get(DATA_BATTERIES) if runtime_data.battery_coordinator.data else None
+            has_batteries = bool(battery_data and battery_data.batteries)
+
+            charger_data = runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS) if runtime_data.charger_coordinator.data else None
+            has_chargers = bool(charger_data and charger_data.chargers)
+
+            vehicle_data = runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES) if runtime_data.vehicle_coordinator.data else None
+            has_vehicles = bool(vehicle_data and vehicle_data.vehicles)
+
+            pv_data = runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS) if runtime_data.pv_coordinator.data else None
+            has_pv = bool(pv_data and pv_data.systems)
+
+        schema_dict = {
+            vol.Required(CONF_USERNAME, default=current_username): str,
+            # Leave password blank to avoid exposing it in the UI
+            vol.Optional(CONF_PASSWORD, default=""): str,
+            vol.Required(
+                CONF_INTERVAL_SETTINGS,
+                default=entry.options.get(
+                    CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
                 ),
-                vol.Required(
-                    CONF_INTERVAL_STATISTICS,
-                    default=entry.options.get(
-                        CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
-                    ),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=15, max=1440, mode=NumberSelectorMode.SLIDER
-                    )
+            ): NumberSelector(
+                NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
+            ),
+            vol.Required(
+                CONF_INTERVAL_STATISTICS,
+                default=entry.options.get(
+                    CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
                 ),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=15, max=1440, mode=NumberSelectorMode.SLIDER
+                )
+            ),
+        }
+
+        if has_batteries:
+            schema_dict[
                 vol.Required(
                     CONF_INTERVAL_BATTERIES,
                     default=entry.options.get(
                         CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
                     ),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-                ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+            schema_dict[
                 vol.Required(
                     CONF_INTERVAL_BATTERY_SESSIONS,
                     default=entry.options.get(
                         CONF_INTERVAL_BATTERY_SESSIONS,
                         DEFAULT_INTERVAL_BATTERY_SESSIONS,
                     ),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=5, max=1440, mode=NumberSelectorMode.SLIDER
-                    )
-                ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(
+                    min=5, max=1440, mode=NumberSelectorMode.SLIDER
+                )
+            )
+
+        if has_chargers:
+            schema_dict[
                 vol.Required(
                     CONF_INTERVAL_CHARGERS,
                     default=entry.options.get(
                         CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
                     ),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-                ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+
+        if has_vehicles:
+            schema_dict[
                 vol.Required(
                     CONF_INTERVAL_VEHICLES,
                     default=entry.options.get(
                         CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
                     ),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-                ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+
+        if has_pv:
+            schema_dict[
                 vol.Required(
                     CONF_INTERVAL_PV,
                     default=entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-                ),
-            }
-        )
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+
+        data_schema = vol.Schema(schema_dict)
 
         return self.async_show_form(
             step_id="user", data_schema=data_schema, errors=errors
