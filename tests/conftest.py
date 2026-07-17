@@ -255,7 +255,12 @@ def create_mock_charger(create_mock_charge_settings):
 
     return _create
 
+
 @pytest.fixture(autouse=True)
-def mock_core_uuid(hass):
-    """Mock core.uuid for tests."""
-    hass.data["core.uuid"] = "mocked-uuid-1234-5678-90ab"
+def mock_core_uuid():
+    """Mock core.uuid for tests by patching _get_fernet_key directly."""
+    with patch(
+        "custom_components.frank_energie.helpers._get_fernet_key",
+        return_value=b"test-key-1234567890123456789012345678901234=",
+    ) as mock_key:
+        yield mock_key

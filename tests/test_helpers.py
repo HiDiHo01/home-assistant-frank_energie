@@ -1,5 +1,6 @@
 from custom_components.frank_energie.helpers import device_translation_key
 
+
 def test_device_translation_key():
     """Test generating device translation key from service names."""
     # Simple lowercase string
@@ -20,4 +21,7 @@ def test_device_translation_key():
     # Real world examples
     assert device_translation_key("Frank Energie") == "frank_energie_frank_energie"
     assert device_translation_key("Gas Service") == "frank_energie_gas_service"
-    assert device_translation_key("Electricity Service") == "frank_energie_electricity_service"
+    assert (
+        device_translation_key("Electricity Service")
+        == "frank_energie_electricity_service"
+    )

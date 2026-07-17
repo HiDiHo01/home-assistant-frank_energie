@@ -4414,15 +4414,13 @@ class FrankEnergieSensor(
         minute = now.minute
 
         # Use hour updates when prices are available hourly only
-        resolution = "PT15M"
-        if hasattr(self.coordinator, "resolution") and not callable(
-            self.coordinator.resolution
-        ):
-            resolution = self.coordinator.resolution
-        elif hasattr(self.coordinator, "api_resolution") and not callable(
-            self.coordinator.api_resolution
-        ):
-            resolution = self.coordinator.api_resolution
+        resolution = getattr(
+            self.coordinator,
+            "resolution",
+            getattr(self.coordinator, "api_resolution", "PT15M"),
+        )
+        if not isinstance(resolution, str):
+            resolution = "PT15M"
 
         if resolution == "PT60M":
             # Hourly resolution

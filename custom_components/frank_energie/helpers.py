@@ -17,6 +17,7 @@ from .const import (
     UNIT_GAS_BE,
     UNIT_GAS_NL,
 )
+from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
     from python_frank_energie.models import ChargeSettings
@@ -76,7 +77,7 @@ def _get_fernet_key(hass: HomeAssistant) -> bytes:
     """Derive a Fernet key from the Home Assistant instance UUID."""
     instance_uuid = hass.data.get("core.uuid")
     if not instance_uuid:
-        raise ValueError(
+        raise EncryptionError(
             "Home Assistant core.uuid is missing. Cannot derive encryption key."
         )
     key_material = hashlib.sha256(instance_uuid.encode()).digest()
@@ -92,7 +93,7 @@ def encrypt_password(hass: HomeAssistant, password: str) -> str:
         return f.encrypt(password.encode()).decode()
     except Exception as ex:
         _LOGGER.exception("Failed to encrypt password: %s", ex)
-        raise ValueError(f"Failed to encrypt password: {ex}") from ex
+        raise EncryptionError(f"Failed to encrypt password: {ex}") from ex
 
 
 def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
