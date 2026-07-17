@@ -217,18 +217,10 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
         _LOGGER.debug("Resolution updated: %s -> %s", option, value)
 
 
-class FrankEnergieBatteryModeSelect(
+class FrankEnergieBatteryBaseSelect(
     CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
 ):
-    """Select entity for controlling smart battery mode."""
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:battery-sync"
-    _attr_options = [
-        "self_consumption_mix",
-        "trading",
-    ]
-    _attr_translation_key = "battery_mode"
+    """Base select entity for controlling smart battery."""
 
     def __init__(
         self,
@@ -236,16 +228,12 @@ class FrankEnergieBatteryModeSelect(
         entry: ConfigEntry,
         battery_id: str,
     ) -> None:
-        """Initialize the select entity."""
+        """Initialize the base select entity."""
         super().__init__(coordinator)
         self._entry = entry
         self._battery_id = battery_id
-        self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
 
-        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
-        battery = next(
-            (b for b in battery_details if b.smart_battery.id == battery_id), None
-        )
+        battery = self._get_battery()
         sb = battery.smart_battery if battery else None
 
         brand = sb.brand if sb else MANUFACTURER_FRANK_ENERGIE
@@ -265,6 +253,28 @@ class FrankEnergieBatteryModeSelect(
             (b for b in battery_details if b.smart_battery.id == self._battery_id),
             None,
         )
+
+
+class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
+    """Select entity for controlling smart battery mode."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:battery-sync"
+    _attr_options = [
+        "self_consumption_mix",
+        "trading",
+    ]
+    _attr_translation_key = "battery_mode"
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry,
+        battery_id: str,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator, entry, battery_id)
+        self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
 
     @property
     def current_option(self) -> str | None:
@@ -294,9 +304,7 @@ class FrankEnergieBatteryModeSelect(
             )
 
 
-class FrankEnergieBatteryStrategySelect(
-    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
-):
+class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
     """Select entity for controlling smart battery trading strategy."""
 
     _attr_has_entity_name = True
@@ -316,34 +324,8 @@ class FrankEnergieBatteryStrategySelect(
         battery_id: str,
     ) -> None:
         """Initialize the select entity."""
-        super().__init__(coordinator)
-        self._entry = entry
-        self._battery_id = battery_id
+        super().__init__(coordinator, entry, battery_id)
         self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_strategy"
-
-        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
-        battery = next(
-            (b for b in battery_details if b.smart_battery.id == battery_id), None
-        )
-        sb = battery.smart_battery if battery else None
-
-        brand = sb.brand if sb else MANUFACTURER_FRANK_ENERGIE
-        model = "Smart Battery"
-        name = f"{brand} {model}".strip()
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, battery_id)},
-            manufacturer=brand,
-            model=model,
-            name=name,
-        )
-
-    def _get_battery(self):
-        battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
-        return next(
-            (b for b in battery_details if b.smart_battery.id == self._battery_id),
-            None,
-        )
 
     @property
     def available(self) -> bool:

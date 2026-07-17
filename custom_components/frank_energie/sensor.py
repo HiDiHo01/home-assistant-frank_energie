@@ -96,7 +96,6 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS,
-    UNIT_GAS_NL,
     VERSION,
 )
 from .coordinator import (
@@ -111,24 +110,6 @@ from .statistics import lowest_window
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
-
-
-def _get_gas_unit(per_unit: str | None) -> str:
-    """Return the Home Assistant gas unit for an API perUnit value."""
-
-    if per_unit is None:
-        return UNIT_GAS_NL
-
-    unit = PER_UNIT_TO_UNIT.get(per_unit.upper())
-
-    if unit is None:
-        _LOGGER.warning(
-            "Unsupported gas perUnit value received from API: %s",
-            per_unit,
-        )
-        return UNIT_GAS_NL
-
-    return unit
 
 
 def _format_battery_date(date_val) -> datetime | None:
@@ -4429,10 +4410,26 @@ class FrankEnergieSensor(
             self._unsub_update = None
 
         # Schedule the next update at exactly the next whole hour sharp or every quarter hour
-        # TODO: Use hour updates when prices are available hourly only
         now = dt_util.now(ZoneInfo("UTC"))
         minute = now.minute
-        if minute >= 45:
+
+        # Use hour updates when prices are available hourly only
+        resolution = "PT15M"
+        if hasattr(self.coordinator, "resolution") and not callable(
+            self.coordinator.resolution
+        ):
+            resolution = self.coordinator.resolution
+        elif hasattr(self.coordinator, "api_resolution") and not callable(
+            self.coordinator.api_resolution
+        ):
+            resolution = self.coordinator.api_resolution
+
+        if resolution == "PT60M":
+            # Hourly resolution
+            next_update_time = now.replace(
+                minute=0, second=0, microsecond=0
+            ) + timedelta(hours=1)
+        elif minute >= 45:
             # Next whole hour
             next_update_time = now.replace(
                 minute=0, second=0, microsecond=0

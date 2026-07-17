@@ -92,7 +92,7 @@ def encrypt_password(hass: HomeAssistant, password: str) -> str:
         return f.encrypt(password.encode()).decode()
     except Exception as ex:
         _LOGGER.exception("Failed to encrypt password: %s", ex)
-        return password
+        raise ValueError(f"Failed to encrypt password: {ex}") from ex
 
 
 def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
