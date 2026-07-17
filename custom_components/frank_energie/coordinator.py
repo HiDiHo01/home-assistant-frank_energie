@@ -1718,7 +1718,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             return combined
         except TypeError:
-            return today_data + tomorrow_data
+            combined = today_data + tomorrow_data
+
+            # Defensive logging to trace resolution changes during merge fallback (Issue #221)
+            old_res = getattr(today_data, "resolution_minutes", None)
+            new_res = getattr(combined, "resolution_minutes", None)
+            if old_res is not None and old_res != new_res:
+                _LOGGER.debug(
+                    "Price data merge (non in-place) mutated resolution from %s to %s",
+                    old_res,
+                    new_res,
+                )
+
+            return combined
 
     def _aggregate_data(
         self,
