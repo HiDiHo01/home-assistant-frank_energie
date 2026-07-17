@@ -101,6 +101,21 @@ def test_select_attributes_translation_keys():
     authenticated_attrs = select_entity.extra_state_attributes
     assert authenticated_attrs is not None
 
+    emitted_authenticated_keys = set(authenticated_attrs.keys())
+    expected_authenticated_keys = {
+        "api_resolution",
+        "active_option",
+        "available_options",
+        "is_change_request_possible",
+        "change_request_effective_date",
+        "upcoming_change",
+        "upcoming_change_effective_date",
+    }
+    missing_required_keys = expected_authenticated_keys - emitted_authenticated_keys
+    assert not missing_required_keys, (
+        f"Authenticated extra_state_attributes missing required keys: {missing_required_keys}"
+    )
+
     # --- Collect attribute keys for unauthenticated state ---
     mock_coordinator_unauth = MagicMock()
     mock_coordinator_unauth.config_entry.entry_id = "test_entry_id"
@@ -112,7 +127,7 @@ def test_select_attributes_translation_keys():
     assert unauth_attrs is not None
 
     # --- Combine all emitted attribute keys ---
-    all_emitted_keys = set(authenticated_attrs.keys()) | set(unauth_attrs.keys())
+    all_emitted_keys = emitted_authenticated_keys | set(unauth_attrs.keys())
 
     # --- Load translation keys from strings.json ---
     with open(STRINGS_FILE, "r", encoding="utf-8") as f:
