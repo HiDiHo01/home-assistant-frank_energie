@@ -9,7 +9,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING, Final
 
-from cryptography.fernet import Fernet  # type: ignore[import]
+from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant
 
 from .const import (
@@ -91,7 +91,7 @@ def encrypt_password(hass: HomeAssistant, password: str) -> str:
     try:
         f = Fernet(_get_fernet_key(hass))
         return f.encrypt(password.encode()).decode()
-    except Exception as ex:
+    except (EncryptionError, ValueError, TypeError, InvalidToken) as ex:
         _LOGGER.exception("Failed to encrypt password: %s", ex)
         raise EncryptionError(f"Failed to encrypt password: {ex}") from ex
 
@@ -104,7 +104,7 @@ def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
         try:
             f = Fernet(_get_fernet_key(hass))
             return f.decrypt(password.encode()).decode()
-        except Exception as ex:
+        except (EncryptionError, ValueError, TypeError, InvalidToken) as ex:
             _LOGGER.warning("Failed to decrypt stored password: %s", ex)
             return None
     return password
