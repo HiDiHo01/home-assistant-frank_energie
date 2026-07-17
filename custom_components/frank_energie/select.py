@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -43,8 +44,11 @@ DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
 
 
-def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
-    entities = []
+def _setup_battery_entities(
+    coordinator: FrankEnergieCoordinator, entry: ConfigEntry
+) -> list[SelectEntity]:
+    """Create and return smart battery select entities."""
+    entities: list[SelectEntity] = []
     if coordinator.api.is_authenticated:
         battery_details = coordinator.data.get(DATA_BATTERY_DETAILS)
         if battery_details:
@@ -63,9 +67,13 @@ def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
 
 
 def _setup_enode_entities(
-    hass, vehicle_coordinator, charger_coordinator, entry
+    hass: HomeAssistant,
+    vehicle_coordinator: FrankEnergieCoordinator,
+    charger_coordinator: FrankEnergieCoordinator,
+    entry: ConfigEntry,
 ) -> list[SelectEntity]:
-    entities = []
+    """Create and return Enode vehicle and charger select entities."""
+    entities: list[SelectEntity] = []
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
         ent_reg = er.async_get(hass)
@@ -133,11 +141,13 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> str:
+        """Return the current resolution."""
         value = self.coordinator.resolution
         return VALUE_TO_DISPLAY.get(value, DEFAULT_DISPLAY)
 
     @property
     def device_info(self) -> DeviceInfo:
+        """Return device information for the resolution select entity."""
         return DeviceInfo(
             identifiers={
                 (
@@ -169,6 +179,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Return the state attributes for the resolution select entity."""
         api = getattr(self.coordinator, "api_resolution", None)
         state = getattr(self.coordinator, "_api_resolution_state", None)
 
@@ -247,7 +258,8 @@ class FrankEnergieBatteryBaseSelect(
             name=name,
         )
 
-    def _get_battery(self):
+    def _get_battery(self) -> Any | None:
+        """Fetch the smart battery instance for this entity from the coordinator data."""
         battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
         return next(
             (b for b in battery_details if b.smart_battery.id == self._battery_id),
@@ -415,7 +427,8 @@ class FrankEnergieEnodeChargingModeSelect(
             name=name,
         )
 
-    def _get_vehicle(self):
+    def _get_vehicle(self) -> Any | None:
+        """Fetch the Enode vehicle instance from the coordinator data."""
         enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
         if not enode_vehicles or not enode_vehicles.vehicles:
             return None

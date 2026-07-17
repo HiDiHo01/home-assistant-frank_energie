@@ -104,7 +104,7 @@ from .coordinator import (
     FrankEnergieData,
     SmartBatterySessions,
 )
-from .helpers import device_translation_key
+from .helpers import device_translation_key, resolve_gas_unit
 from .statistics import lowest_window
 
 _DataT = TypeVar("_DataT")
@@ -4255,9 +4255,7 @@ class FrankEnergieSensor(
                 and (gas_data := self.coordinator.data.get(DATA_GAS))
                 and (per_unit := getattr(gas_data, "per_unit", None))
             ):
-                return PER_UNIT_TO_UNIT.get(
-                    per_unit.upper(), self._attr_unit_of_measurement
-                )
+                return resolve_gas_unit(per_unit)
         return self._attr_unit_of_measurement
 
     _no_record_keys: ClassVar[frozenset[str]] = frozenset(
