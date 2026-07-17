@@ -188,8 +188,10 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
             ]
             if state
             else None,
-            "change_possible": state.isChangeRequestPossible if state else None,
-            "effective_date": str(state.changeRequestEffectiveDate)
+            "is_change_request_possible": state.isChangeRequestPossible
+            if state
+            else None,
+            "change_request_effective_date": str(state.changeRequestEffectiveDate)
             if state and state.changeRequestEffectiveDate
             else None,
             "upcoming_change": str(state.upcomingChange)

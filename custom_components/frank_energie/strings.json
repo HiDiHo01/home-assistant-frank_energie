@@ -252,6 +252,13 @@
               "true": "Yes"
             }
           },
+          "resolution": {
+            "name": "Resolution",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          },
           "available_options": {
             "name": "Available options",
             "state": {
@@ -272,6 +279,26 @@
               "pt15m": "15 minutes",
               "pt60m": "60 minutes"
             }
+          },
+          "is_change_request_possible": {
+            "name": "Change possible",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "change_request_effective_date": {
+            "name": "Change request effective date"
+          },
+          "upcoming_change": {
+            "name": "Upcoming change",
+            "state": {
+              "pt15m": "15 minutes",
+              "pt60m": "60 minutes"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Upcoming change effective date"
           }
         }
       },
