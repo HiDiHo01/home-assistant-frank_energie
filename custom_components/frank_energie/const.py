@@ -145,6 +145,23 @@ SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "unknown",
 )
 
+BATTERY_MODE_OPTIONS: Final[list[str]] = [
+    "self_consumption_mix",
+    "trading",
+]
+
+BATTERY_STRATEGY_OPTIONS: Final[list[str]] = [
+    "balanced",
+    "conservative",
+    "aggressive",
+    "imbalance_only",
+]
+
+ENODE_CHARGING_MODE_OPTIONS: Final[list[str]] = [
+    "on_off",
+    "smart",
+]
+
 POWER_DELIVERY_STATES: Final[tuple[str, ...]] = (
     "unplugged",
     "plugged_in_charging",

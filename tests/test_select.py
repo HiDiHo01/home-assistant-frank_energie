@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from custom_components.frank_energie.const import DATA_BATTERY_DETAILS
 from custom_components.frank_energie.select import (
+    SELECT_DESCRIPTIONS,
     FrankEnergieBatteryModeSelect,
     FrankEnergieBatteryStrategySelect,
 )
@@ -24,7 +25,10 @@ def test_battery_mode_select_properties(mock_coordinator, mock_config_entry):
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
 
     entity = FrankEnergieBatteryModeSelect(
-        mock_coordinator, mock_config_entry, battery_id
+        mock_coordinator,
+        mock_config_entry,
+        battery_id,
+        next(d for d in SELECT_DESCRIPTIONS if d.key == "battery_mode"),
     )
     assert entity.current_option == "self_consumption_mix"
     assert entity.device_info["manufacturer"] == "Sessy"
@@ -47,7 +51,10 @@ async def test_battery_mode_select_action(mock_coordinator, mock_config_entry):
     mock_coordinator.api.smart_battery_update_settings.return_value = True
 
     entity = FrankEnergieBatteryModeSelect(
-        mock_coordinator, mock_config_entry, battery_id
+        mock_coordinator,
+        mock_config_entry,
+        battery_id,
+        next(d for d in SELECT_DESCRIPTIONS if d.key == "battery_mode"),
     )
     await entity.async_select_option("trading")
 
@@ -71,7 +78,10 @@ def test_battery_strategy_select_properties(mock_coordinator, mock_config_entry)
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
 
     entity = FrankEnergieBatteryStrategySelect(
-        mock_coordinator, mock_config_entry, battery_id
+        mock_coordinator,
+        mock_config_entry,
+        battery_id,
+        next(d for d in SELECT_DESCRIPTIONS if d.key == "battery_strategy"),
     )
     assert entity.current_option == "aggressive"
     assert entity.available is True
@@ -92,7 +102,10 @@ async def test_battery_strategy_select_action(mock_coordinator, mock_config_entr
     mock_coordinator.api.smart_battery_update_settings.return_value = True
 
     entity = FrankEnergieBatteryStrategySelect(
-        mock_coordinator, mock_config_entry, battery_id
+        mock_coordinator,
+        mock_config_entry,
+        battery_id,
+        next(d for d in SELECT_DESCRIPTIONS if d.key == "battery_strategy"),
     )
     await entity.async_select_option("aggressive")
 
@@ -114,7 +127,10 @@ def test_battery_strategy_select_availability(mock_coordinator, mock_config_entr
     )
 
     entity = FrankEnergieBatteryStrategySelect(
-        mock_coordinator, mock_config_entry, battery_id
+        mock_coordinator,
+        mock_config_entry,
+        battery_id,
+        next(d for d in SELECT_DESCRIPTIONS if d.key == "battery_strategy"),
     )
 
     # Unavailable when no battery details exist

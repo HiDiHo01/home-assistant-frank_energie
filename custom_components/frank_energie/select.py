@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from homeassistant.components.select import SelectEntity
+from homeassistant.components.select import SelectEntity, SelectEntityDescription
+from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -16,8 +18,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from python_frank_energie.domain import SmartBatteryMode
 from python_frank_energie.models import EnodeCharger
 
+
 from .const import (
     API_CONF_URL,
+    BATTERY_MODE_OPTIONS,
+    BATTERY_STRATEGY_OPTIONS,
+    ENODE_CHARGING_MODE_OPTIONS,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
     DATA_ENODE_CHARGERS,
@@ -43,29 +49,72 @@ DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
 
 
-def _setup_battery_entities(coordinator, entry) -> list[SelectEntity]:
-    entities = []
+@dataclass(kw_only=True)
+class FrankEnergieSelectEntityDescription(SelectEntityDescription):
+    """Class describing Frank Energie select entities."""
+
+
+SELECT_DESCRIPTIONS: tuple[FrankEnergieSelectEntityDescription, ...] = (
+    FrankEnergieSelectEntityDescription(
+        key="battery_mode",
+        translation_key="battery_mode",
+        icon="mdi:battery-sync",
+        options=BATTERY_MODE_OPTIONS,
+    ),
+    FrankEnergieSelectEntityDescription(
+        key="battery_strategy",
+        translation_key="battery_strategy",
+        icon="mdi:shield-sync",
+        options=BATTERY_STRATEGY_OPTIONS,
+    ),
+    FrankEnergieSelectEntityDescription(
+        key="enode_charging_mode",
+        translation_key="enode_charging_mode",
+        icon="mdi:ev-station",
+        options=ENODE_CHARGING_MODE_OPTIONS,
+    ),
+)
+
+
+def _setup_battery_entities(
+    coordinator: FrankEnergieCoordinator, entry: ConfigEntry
+) -> list[SelectEntity]:
+    """Create and return smart battery select entities."""
+    entities: list[SelectEntity] = []
     if coordinator.api.is_authenticated:
         battery_details = coordinator.data.get(DATA_BATTERY_DETAILS)
         if battery_details:
             for battery in battery_details:
-                entities.append(
-                    FrankEnergieBatteryModeSelect(
-                        coordinator, entry, battery.smart_battery.id
-                    )
-                )
-                entities.append(
-                    FrankEnergieBatteryStrategySelect(
-                        coordinator, entry, battery.smart_battery.id
-                    )
-                )
+                for description in SELECT_DESCRIPTIONS:
+                    if description.key == "battery_mode":
+                        entities.append(
+                            FrankEnergieBatteryModeSelect(
+                                coordinator,
+                                entry,
+                                battery.smart_battery.id,
+                                description,
+                            )
+                        )
+                    elif description.key == "battery_strategy":
+                        entities.append(
+                            FrankEnergieBatteryStrategySelect(
+                                coordinator,
+                                entry,
+                                battery.smart_battery.id,
+                                description,
+                            )
+                        )
     return entities
 
 
 def _setup_enode_entities(
-    hass, vehicle_coordinator, charger_coordinator, entry
+    hass: HomeAssistant,
+    vehicle_coordinator: FrankEnergieCoordinator,
+    charger_coordinator: FrankEnergieCoordinator,
+    entry: ConfigEntry,
 ) -> list[SelectEntity]:
-    entities = []
+    """Create and return Enode vehicle and charger select entities."""
+    entities: list[SelectEntity] = []
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if enode_vehicles and enode_vehicles.vehicles:
         ent_reg = er.async_get(hass)
@@ -78,21 +127,25 @@ def _setup_enode_entities(
                 ):
                     ent_reg.async_remove(entity_id)
 
-                entities.append(
-                    FrankEnergieEnodeChargingModeSelect(
-                        vehicle_coordinator, entry, vehicle.id
-                    )
-                )
+                for description in SELECT_DESCRIPTIONS:
+                    if description.key == "enode_charging_mode":
+                        entities.append(
+                            FrankEnergieEnodeChargingModeSelect(
+                                vehicle_coordinator, entry, vehicle.id, description
+                            )
+                        )
 
     enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
     if enode_chargers and getattr(enode_chargers, "chargers", None):
         for charger in enode_chargers.chargers:
             if getattr(charger, "can_smart_charge", False):
-                entities.append(
-                    FrankEnergieEnodeChargerChargingModeSelect(
-                        charger_coordinator, entry, charger.id
-                    )
-                )
+                for description in SELECT_DESCRIPTIONS:
+                    if description.key == "enode_charging_mode":
+                        entities.append(
+                            FrankEnergieEnodeChargerChargingModeSelect(
+                                charger_coordinator, entry, charger.id, description
+                            )
+                        )
 
     return entities
 
@@ -124,6 +177,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
     _attr_icon = "mdi:clock-time-four-outline"
     _attr_options = list(DISPLAY_TO_VALUE.keys())
     _attr_translation_key = "resolution"
+
     service_name = SERVICE_NAME_SETTINGS
 
     def __init__(self, coordinator: FrankEnergieCoordinator) -> None:
@@ -133,11 +187,13 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> str:
+        """Return the current resolution."""
         value = self.coordinator.resolution
         return VALUE_TO_DISPLAY.get(value, DEFAULT_DISPLAY)
 
     @property
     def device_info(self) -> DeviceInfo:
+        """Return device information for the resolution select entity."""
         return DeviceInfo(
             identifiers={
                 (
@@ -169,6 +225,7 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Return the state attributes for the resolution select entity."""
         api = getattr(self.coordinator, "api_resolution", None)
         state = getattr(self.coordinator, "_api_resolution_state", None)
 
@@ -217,35 +274,28 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
         _LOGGER.debug("Resolution updated: %s -> %s", option, value)
 
 
-class FrankEnergieBatteryModeSelect(
+class FrankEnergieBatteryBaseSelect(
     CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
 ):
-    """Select entity for controlling smart battery mode."""
+    """Base select entity for controlling smart battery."""
 
+    entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-    _attr_icon = "mdi:battery-sync"
-    _attr_options = [
-        "self_consumption_mix",
-        "trading",
-    ]
-    _attr_translation_key = "battery_mode"
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         entry: ConfigEntry,
         battery_id: str,
+        description: FrankEnergieSelectEntityDescription,
     ) -> None:
-        """Initialize the select entity."""
+        """Initialize the base select entity."""
         super().__init__(coordinator)
+        self.entity_description = description
         self._entry = entry
         self._battery_id = battery_id
-        self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
 
-        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
-        battery = next(
-            (b for b in battery_details if b.smart_battery.id == battery_id), None
-        )
+        battery = self._get_battery()
         sb = battery.smart_battery if battery else None
 
         brand = sb.brand if sb else MANUFACTURER_FRANK_ENERGIE
@@ -259,12 +309,28 @@ class FrankEnergieBatteryModeSelect(
             name=name,
         )
 
-    def _get_battery(self):
+    def _get_battery(self) -> Any | None:
+        """Fetch the smart battery instance for this entity from the coordinator data."""
         battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
         return next(
             (b for b in battery_details if b.smart_battery.id == self._battery_id),
             None,
         )
+
+
+class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
+    """Select entity for controlling smart battery mode."""
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        entry: ConfigEntry,
+        battery_id: str,
+        description: FrankEnergieSelectEntityDescription,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator, entry, battery_id, description)
+        self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
 
     @property
     def current_option(self) -> str | None:
@@ -275,8 +341,6 @@ class FrankEnergieBatteryModeSelect(
         mode = battery.smart_battery.settings.battery_mode
         if mode:
             mode_lower = mode.lower()
-            if mode_lower not in self._attr_options:
-                self._attr_options = self._attr_options + [mode_lower]
             return mode_lower
         return None
 
@@ -294,56 +358,19 @@ class FrankEnergieBatteryModeSelect(
             )
 
 
-class FrankEnergieBatteryStrategySelect(
-    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
-):
+class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
     """Select entity for controlling smart battery trading strategy."""
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:shield-sync"
-    _attr_options = [
-        "balanced",
-        "conservative",
-        "aggressive",
-        "imbalance_only",
-    ]
-    _attr_translation_key = "battery_strategy"
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         entry: ConfigEntry,
         battery_id: str,
+        description: FrankEnergieSelectEntityDescription,
     ) -> None:
         """Initialize the select entity."""
-        super().__init__(coordinator)
-        self._entry = entry
-        self._battery_id = battery_id
+        super().__init__(coordinator, entry, battery_id, description)
         self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_strategy"
-
-        battery_details = coordinator.data.get(DATA_BATTERY_DETAILS) or []
-        battery = next(
-            (b for b in battery_details if b.smart_battery.id == battery_id), None
-        )
-        sb = battery.smart_battery if battery else None
-
-        brand = sb.brand if sb else MANUFACTURER_FRANK_ENERGIE
-        model = "Smart Battery"
-        name = f"{brand} {model}".strip()
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, battery_id)},
-            manufacturer=brand,
-            model=model,
-            name=name,
-        )
-
-    def _get_battery(self):
-        battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
-        return next(
-            (b for b in battery_details if b.smart_battery.id == self._battery_id),
-            None,
-        )
 
     @property
     def available(self) -> bool:
@@ -364,8 +391,6 @@ class FrankEnergieBatteryStrategySelect(
         strategy = battery.smart_battery.settings.imbalance_trading_strategy
         if strategy:
             strategy_lower = strategy.lower()
-            if strategy_lower not in self._attr_options:
-                self._attr_options = self._attr_options + [strategy_lower]
             return strategy_lower
         return None
 
@@ -390,19 +415,19 @@ class FrankEnergieEnodeChargingModeSelect(
 ):
     """Select entity for controlling EV charging mode."""
 
+    entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-    _attr_icon = "mdi:ev-station"
-    _attr_options = ["smart_charging", "boost_charging"]
-    _attr_translation_key = "enode_charging_mode"
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         entry: ConfigEntry,
         vehicle_id: str,
+        description: FrankEnergieSelectEntityDescription,
     ) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
+        self.entity_description = description
         self._entry = entry
         self._vehicle_id = vehicle_id
         self._attr_unique_id = f"{DOMAIN}_{vehicle_id}_enode_charging_mode"
@@ -433,7 +458,8 @@ class FrankEnergieEnodeChargingModeSelect(
             name=name,
         )
 
-    def _get_vehicle(self):
+    def _get_vehicle(self) -> Any | None:
+        """Fetch the Enode vehicle instance from the coordinator data."""
         enode_vehicles = self.coordinator.data.get(DATA_ENODE_VEHICLES)
         if not enode_vehicles or not enode_vehicles.vehicles:
             return None
@@ -490,19 +516,19 @@ class FrankEnergieEnodeChargerChargingModeSelect(
 ):
     """Select entity for controlling EV charger charging mode."""
 
+    entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-    _attr_icon = "mdi:ev-station"
-    _attr_options = ["smart_charging", "boost_charging"]
-    _attr_translation_key = "enode_charging_mode"
 
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
         entry: ConfigEntry,
         charger_id: str,
+        description: FrankEnergieSelectEntityDescription,
     ) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
+        self.entity_description = description
         self._entry = entry
         self._charger_id = charger_id
         self._attr_unique_id = f"{DOMAIN}_{charger_id}_enode_charging_mode"

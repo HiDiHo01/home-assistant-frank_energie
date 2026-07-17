@@ -9,7 +9,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING, Final
 
-from cryptography.fernet import Fernet  # type: ignore[import]
+from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant
 
 from .const import (
@@ -17,6 +17,7 @@ from .const import (
     UNIT_GAS_BE,
     UNIT_GAS_NL,
 )
+from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
     from python_frank_energie.models import ChargeSettings
@@ -76,7 +77,7 @@ def _get_fernet_key(hass: HomeAssistant) -> bytes:
     """Derive a Fernet key from the Home Assistant instance UUID."""
     instance_uuid = hass.data.get("core.uuid")
     if not instance_uuid:
-        raise ValueError(
+        raise EncryptionError(
             "Home Assistant core.uuid is missing. Cannot derive encryption key."
         )
     key_material = hashlib.sha256(instance_uuid.encode()).digest()
@@ -90,9 +91,9 @@ def encrypt_password(hass: HomeAssistant, password: str) -> str:
     try:
         f = Fernet(_get_fernet_key(hass))
         return f.encrypt(password.encode()).decode()
-    except Exception as ex:
+    except (EncryptionError, ValueError, TypeError, InvalidToken) as ex:
         _LOGGER.exception("Failed to encrypt password: %s", ex)
-        return password
+        raise EncryptionError(f"Failed to encrypt password: {ex}") from ex
 
 
 def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
@@ -103,7 +104,7 @@ def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
         try:
             f = Fernet(_get_fernet_key(hass))
             return f.decrypt(password.encode()).decode()
-        except Exception as ex:
+        except (EncryptionError, ValueError, TypeError, InvalidToken) as ex:
             _LOGGER.warning("Failed to decrypt stored password: %s", ex)
             return None
     return password

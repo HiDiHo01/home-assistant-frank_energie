@@ -11,3 +11,7 @@ class SmartTradingNotEnabledException(Exception):
 
 class NoSuitableSitesFoundError(Exception):
     """Exception raised when no suitable delivery sites are found for an account."""
+
+
+class EncryptionError(Exception):
+    """Exception raised when password encryption or decryption fails."""
