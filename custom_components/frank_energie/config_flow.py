@@ -906,16 +906,32 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         has_pv = True
 
         if runtime_data:
-            battery_data = runtime_data.battery_coordinator.data.get(DATA_BATTERIES) if runtime_data.battery_coordinator.data else None
+            battery_data = (
+                runtime_data.battery_coordinator.data.get(DATA_BATTERIES)
+                if runtime_data.battery_coordinator.data
+                else None
+            )
             has_batteries = bool(battery_data and battery_data.batteries)
 
-            charger_data = runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS) if runtime_data.charger_coordinator.data else None
+            charger_data = (
+                runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+                if runtime_data.charger_coordinator.data
+                else None
+            )
             has_chargers = bool(charger_data and charger_data.chargers)
 
-            vehicle_data = runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES) if runtime_data.vehicle_coordinator.data else None
+            vehicle_data = (
+                runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+                if runtime_data.vehicle_coordinator.data
+                else None
+            )
             has_vehicles = bool(vehicle_data and vehicle_data.vehicles)
 
-            pv_data = runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS) if runtime_data.pv_coordinator.data else None
+            pv_data = (
+                runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS)
+                if runtime_data.pv_coordinator.data
+                else None
+            )
             has_pv = bool(pv_data and pv_data.systems)
 
         schema_dict = {
@@ -936,9 +952,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
                 ),
             ): NumberSelector(
-                NumberSelectorConfig(
-                    min=15, max=1440, mode=NumberSelectorMode.SLIDER
-                )
+                NumberSelectorConfig(min=15, max=1440, mode=NumberSelectorMode.SLIDER)
             ),
         }
 
@@ -962,9 +976,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 )
             ] = NumberSelector(
-                NumberSelectorConfig(
-                    min=5, max=1440, mode=NumberSelectorMode.SLIDER
-                )
+                NumberSelectorConfig(min=5, max=1440, mode=NumberSelectorMode.SLIDER)
             )
 
         if has_chargers:
