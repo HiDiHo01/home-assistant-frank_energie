@@ -37,6 +37,7 @@ VERSION: Final[str] = "2026.7.10"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"
+TOMORROW_PUBLICATION_HOUR_LOCAL: Final[int] = 13
 
 # --- URLs ---
 # DATA_URL: Final[str] = "https://frank-graphql-prod.graphcdn.app/"
