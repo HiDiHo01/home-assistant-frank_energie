@@ -24,7 +24,6 @@ from .const import (
     BATTERY_MODE_OPTIONS,
     BATTERY_STRATEGY_OPTIONS,
     ENODE_CHARGING_MODE_OPTIONS,
-
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
     DATA_ENODE_CHARGERS,
@@ -48,6 +47,7 @@ VALUE_TO_DISPLAY: dict[str, str] = {v: k for k, v in DISPLAY_TO_VALUE.items()}
 
 DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
+
 
 @dataclass(kw_only=True)
 class FrankEnergieSelectEntityDescription(SelectEntityDescription):
@@ -89,13 +89,19 @@ def _setup_battery_entities(
                     if description.key == "battery_mode":
                         entities.append(
                             FrankEnergieBatteryModeSelect(
-                                coordinator, entry, battery.smart_battery.id, description
+                                coordinator,
+                                entry,
+                                battery.smart_battery.id,
+                                description,
                             )
                         )
                     elif description.key == "battery_strategy":
                         entities.append(
                             FrankEnergieBatteryStrategySelect(
-                                coordinator, entry, battery.smart_battery.id, description
+                                coordinator,
+                                entry,
+                                battery.smart_battery.id,
+                                description,
                             )
                         )
     return entities
@@ -316,7 +322,6 @@ class FrankEnergieBatteryBaseSelect(
 class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
     """Select entity for controlling smart battery mode."""
 
-
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
@@ -356,7 +361,6 @@ class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
 
 class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
     """Select entity for controlling smart battery trading strategy."""
-
 
     def __init__(
         self,
@@ -414,7 +418,6 @@ class FrankEnergieEnodeChargingModeSelect(
 
     entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-
 
     def __init__(
         self,
@@ -516,7 +519,6 @@ class FrankEnergieEnodeChargerChargingModeSelect(
 
     entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
-
 
     def __init__(
         self,
