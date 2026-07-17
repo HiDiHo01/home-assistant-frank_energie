@@ -95,7 +95,7 @@ from .const import (
     SERVICE_STATUSES,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
-    UNIT_GAS,
+    UNIT_GAS_NL,
     VERSION,
 )
 from .coordinator import (
@@ -1866,7 +1866,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_markup",
         translation_key="gas_markup",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1885,7 +1885,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_market",
         translation_key="gas_market",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1904,7 +1904,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tax",
         translation_key="gas_tax",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1928,7 +1928,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tax_vat",
         translation_key="gas_tax_vat",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1943,7 +1943,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_sourcing",
         translation_key="gas_sourcing",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1958,7 +1958,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tax_only",
         translation_key="gas_tax_only",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1973,7 +1973,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_min",
         translation_key="gas_min",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -1994,7 +1994,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="gas_max",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=4,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
@@ -2403,7 +2403,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg",
         translation_key="gas_tomorrow_avg_all_in",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2427,7 +2427,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="gas_tax_markup",
         translation_key="gas_tax_markup",
         suggested_display_precision=3,
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
@@ -2504,7 +2504,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_previoushour_all_in",
         translation_key="gas_previoushour_all_in",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2519,7 +2519,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_nexthour_all_in",
         translation_key="gas_nexthour_all_in",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2534,7 +2534,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_previoushour_market",
         translation_key="gas_previoushour_market",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2549,7 +2549,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_nexthour_market",
         translation_key="gas_nexthour_market",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2564,7 +2564,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market",
         translation_key="gas_tomorrow_avg_market",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2587,7 +2587,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market_tax",
         translation_key="gas_tomorrow_avg_market_tax",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2610,7 +2610,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_market_tax_markup",
         translation_key="gas_tomorrow_avg_market_tax_markup",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2635,7 +2635,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_today_avg_all_in",
         translation_key="gas_today_avg_all_in",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2658,7 +2658,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_avg_all_in",
         translation_key="gas_tomorrow_avg_all_in",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2681,7 +2681,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_min",
         translation_key="gas_tomorrow_min",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2703,7 +2703,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_tomorrow_max",
         translation_key="gas_tomorrow_max",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2725,7 +2725,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_market_upcoming",
         translation_key="gas_market_upcoming",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2754,7 +2754,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_upcoming_min",
         translation_key="gas_upcoming_min",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2776,7 +2776,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_upcoming_max",
         translation_key="gas_upcoming_max",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=4,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2926,7 +2926,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_markup_before6am",
         translation_key="gas_markup_before6am",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2946,7 +2946,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_markup_after6am",
         translation_key="gas_markup_after6am",
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -2968,7 +2968,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="gas_price_tomorrow_before6am_allin",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
@@ -2990,7 +2990,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="gas_price_tomorrow_after6am_allin",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
-        native_unit_of_measurement=UNIT_GAS,
+        native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
@@ -4249,7 +4249,7 @@ class FrankEnergieSensor(
     @property
     def native_unit_of_measurement(self) -> str | None:
         """Return the unit of measurement."""
-        if self._attr_unit_of_measurement == UNIT_GAS:
+        if self._attr_unit_of_measurement == UNIT_GAS_NL:
             if (
                 self.coordinator.data
                 and (gas_data := self.coordinator.data.get(DATA_GAS))
@@ -4358,9 +4358,6 @@ class FrankEnergieSensor(
         # Set defaults or exceptions for non default sensors.
         self._attr_icon = description.icon or self._attr_icon
 
-        self._update_job = HassJob(self._handle_scheduled_update)
-        self._unsub_update = None
-
         # Zet enabled_default op False bij feed-in sensor zonder waarde
         if hasattr(description, "is_feed_in") and description.is_feed_in:
             user_data = entry.runtime_data.settings_coordinator.data.get(DATA_USER)
@@ -4401,58 +4398,6 @@ class FrankEnergieSensor(
         except ZeroDivisionError:
             _LOGGER.exception("Division by zero error in FrankEnergieSensor")
             self._attr_native_value = None
-
-        # Cancel the currently scheduled event if there is any
-        if self._unsub_update:
-            self._unsub_update()
-            self._unsub_update = None
-
-        # Schedule the next update at exactly the next whole hour sharp or every quarter hour
-        now = dt_util.now(ZoneInfo("UTC"))
-        minute = now.minute
-
-        # Use hour updates when prices are available hourly only
-        resolution = getattr(
-            self.coordinator,
-            "resolution",
-            getattr(self.coordinator, "api_resolution", "PT15M"),
-        )
-        if not isinstance(resolution, str):
-            resolution = "PT15M"
-
-        if resolution == "PT60M" or minute >= 45:
-            # Hourly resolution or next whole hour
-            next_update_time = now.replace(
-                minute=0, second=0, microsecond=0
-            ) + timedelta(hours=1)
-        else:
-            # Round up to next quarter: 0 → 15, 1–14 → 15, 15–29 → 30, 30–44 → 45
-            next_quarter = ((minute // 15) + 1) * 15
-            next_update_time = now.replace(
-                minute=0, second=0, microsecond=0
-            ) + timedelta(minutes=next_quarter)
-
-        self._unsub_update = event.async_track_point_in_utc_time(
-            self.hass,
-            self._update_job,
-            next_update_time,
-        )
-
-    async def _handle_scheduled_update(self, _) -> None:
-        """Handle a scheduled update."""
-        # Only handle the scheduled update for entities which have a reference to hass,
-        # which disabled sensors don't have.
-        if self.hass is None:
-            return
-
-        self.async_schedule_update_ha_state(True)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up when entity is removed."""
-        await super().async_will_remove_from_hass()
-        if getattr(self, "_unsub_update", None):
-            self._unsub_update()
-            self._unsub_update = None
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
