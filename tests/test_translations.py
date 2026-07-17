@@ -73,11 +73,17 @@ def test_translation_keys_alignment():
 
 
 def test_select_attributes_translation_keys():
-    """Verify that all keys emitted in select entity extra_state_attributes are defined in strings.json."""
+    """Verify that all keys emitted in select entity extra_state_attributes are defined in strings.json.
+
+    This test dynamically collects ALL attribute keys from extra_state_attributes
+    (for both authenticated and unauthenticated states) and asserts every one
+    exists as a translation key in strings.json.  Any new attribute added to the
+    code will automatically fail this test if its translation key is missing.
+    """
     from unittest.mock import MagicMock
     from custom_components.frank_energie.select import FrankEnergieResolutionSelect
 
-    # Mock the coordinator
+    # --- Collect attribute keys for authenticated state ---
     mock_coordinator = MagicMock()
     mock_coordinator.config_entry.entry_id = "test_entry_id"
     mock_coordinator.resolution = "PT15M"
@@ -87,32 +93,65 @@ def test_select_attributes_translation_keys():
     mock_coordinator._api_resolution_state.availableOptions = ["PT15M", "PT60M"]
     mock_coordinator._api_resolution_state.isChangeRequestPossible = True
     mock_coordinator._api_resolution_state.changeRequestEffectiveDate = "2026-06-20"
+    mock_coordinator._api_resolution_state.upcomingChange = "PT60M"
+    mock_coordinator._api_resolution_state.upcomingChangeEffectiveDate = "2026-07-01"
     mock_coordinator.api.is_authenticated = True
 
     select_entity = FrankEnergieResolutionSelect(mock_coordinator)
-    assert select_entity.extra_state_attributes is not None
+    authenticated_attrs = select_entity.extra_state_attributes
+    assert authenticated_attrs is not None
 
-    # Load strings.json
+    emitted_authenticated_keys = set(authenticated_attrs.keys())
+    expected_authenticated_keys = {
+        "api_resolution",
+        "active_option",
+        "available_options",
+        "is_change_request_possible",
+        "change_request_effective_date",
+        "upcoming_change",
+        "upcoming_change_effective_date",
+    }
+    missing_required_keys = expected_authenticated_keys - emitted_authenticated_keys
+    assert not missing_required_keys, (
+        f"Authenticated extra_state_attributes missing required keys: {missing_required_keys}"
+    )
+
+    # --- Collect attribute keys for unauthenticated state ---
+    mock_coordinator_unauth = MagicMock()
+    mock_coordinator_unauth.config_entry.entry_id = "test_entry_id"
+    mock_coordinator_unauth.resolution = "PT15M"
+    mock_coordinator_unauth.api.is_authenticated = False
+
+    unauth_entity = FrankEnergieResolutionSelect(mock_coordinator_unauth)
+    unauth_attrs = unauth_entity.extra_state_attributes
+    assert unauth_attrs is not None
+
+    # --- Combine all emitted attribute keys ---
+    all_emitted_keys = emitted_authenticated_keys | set(unauth_attrs.keys())
+
+    # --- Load translation keys from strings.json ---
     with open(STRINGS_FILE, "r", encoding="utf-8") as f:
         strings_content = json.load(f)
 
-    # Get defined translation keys under select.resolution.state_attributes
-    translated_attrs = strings_content["entity"]["select"]["resolution"][
-        "state_attributes"
-    ].keys()
+    translated_attrs = set(
+        strings_content["entity"]["select"]["resolution"]["state_attributes"].keys()
+    )
 
-    # Verify that every emitted attribute that represents a translatable key exists in strings.json
-    # Note: change_possible and effective_date are boolean/string metrics that do not require state translation
-    translatable_attrs = {
-        "is_authenticated",
-        "available_options",
-        "api_resolution",
-        "active_option",
-    }
-    for attr in translatable_attrs:
-        assert attr in translated_attrs, (
-            f"Attribute '{attr}' is missing translation under select.resolution.state_attributes in strings.json"
-        )
+    # --- Verify every emitted key has a translation ---
+    missing_translations = all_emitted_keys - translated_attrs
+    assert not missing_translations, (
+        f"Attributes emitted by FrankEnergieResolutionSelect but missing "
+        f"from strings.json state_attributes: {sorted(missing_translations)}. "
+        f"Add translation keys to entity.select.resolution.state_attributes."
+    )
+
+    # --- Verify no orphaned translation keys ---
+    unused_translations = translated_attrs - all_emitted_keys
+    assert not unused_translations, (
+        f"Translation keys defined in strings.json state_attributes but never "
+        f"emitted by FrankEnergieResolutionSelect: {sorted(unused_translations)}. "
+        f"Either add the attribute to extra_state_attributes or remove the translation key."
+    )
 
 
 def test_no_unused_or_missing_translation_keys():

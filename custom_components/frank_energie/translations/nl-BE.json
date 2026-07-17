@@ -960,6 +960,13 @@
               "true": "Ja"
             }
           },
+          "resolution": {
+            "name": "Resolutie",
+            "state": {
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
+            }
+          },
           "available_options": {
             "name": "Beschikbare opties",
             "state": {
@@ -980,6 +987,26 @@
               "pt15m": "15 minuten",
               "pt60m": "60 minuten"
             }
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "pt15m": "15 minuten",
+              "pt60m": "60 minuten"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
           }
         }
       },
