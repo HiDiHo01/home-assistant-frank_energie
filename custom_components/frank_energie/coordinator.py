@@ -1869,12 +1869,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except ValueError:
             _LOGGER.warning(
                 "Cannot merge price data: resolution or type mismatch, "
-                "falling back to tomorrow's prices only"
+                "retaining today's prices if available, else falling back to tomorrow's prices"
             )
-            combined_electricity = prices_tomorrow.electricity or source_data.get(
-                DATA_ELECTRICITY
+            combined_electricity = (
+                source_data.get(DATA_ELECTRICITY) or prices_tomorrow.electricity
             )
-            combined_gas = prices_tomorrow.gas or source_data.get(DATA_GAS)
+            combined_gas = source_data.get(DATA_GAS) or prices_tomorrow.gas
 
         updated_data = source_data.copy()
         updated_data[DATA_ELECTRICITY] = combined_electricity
@@ -2677,6 +2677,14 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
                 self.data = self._aggregate_data(cache, prices_tomorrow)
                 self.cached_prices = self.data
+
+                if not self._is_cache_resolution_valid():
+                    self._static_prices_today = None
+                    self.last_fetch_today = None
+                    self.cached_prices_tomorrow = None
+                    self.last_fetch_tomorrow = None
+                    return False
+
                 return True
 
         except Exception as err:
@@ -2685,9 +2693,37 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
         return False
 
+    def _is_cache_resolution_valid(self) -> bool:
+        """Check if the cached resolution matches the configured resolution."""
+        if not self._static_prices_today or not self.config_entry:
+            return True
+
+        price_series = (
+            self._static_prices_today.electricity or self._static_prices_today.gas
+        )
+        if not price_series:
+            return True
+
+        cached_res = price_series.resolution_minutes
+        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        expected_res = 15 if config_value == "PT15M" else 60
+
+        if cached_res != expected_res:
+            _LOGGER.debug(
+                "Cache resolution (%s) differs from config (%s), invalidating cache",
+                cached_res,
+                expected_res,
+            )
+            return False
+
+        return True
+
     def _is_cache_fresh(self, now_utc: datetime) -> bool:
         """Check if the loaded disk cache is fresh enough to skip API fetches."""
         if not self.last_fetch_today:
+            return False
+
+        if not self._is_cache_resolution_valid():
             return False
 
         now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
