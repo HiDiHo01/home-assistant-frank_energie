@@ -1487,7 +1487,7 @@ async def test_async_update_enode_charge_settings_optimistic_cache(
     assert mock_vehicle.charge_settings.is_solar_charging_enabled is True
     assert mock_vehicle.charge_settings.min_charge_limit == 30
     assert mock_vehicle.charge_settings.max_charge_limit == 90
-    assert mock_vehicle.charge_settings.initial_charge == 15.0
+    assert mock_vehicle.charge_settings.initial_charge == pytest.approx(15.0)
     assert mock_vehicle.charge_settings.hour_monday == 480
     assert mock_vehicle.charge_settings.hour_tuesday == 490
     assert mock_vehicle.charge_settings.hour_wednesday == 500
