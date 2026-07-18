@@ -315,7 +315,9 @@ async def test_sensors_hour_price_attr(
             "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).attributes["prices"]
     ]
-    assert price_attr == price_generator(0.25, 0.05) + price_generator(0.3, 0.02)
+    assert price_attr == pytest.approx(
+        price_generator(0.25, 0.05) + price_generator(0.3, 0.02)
+    )
 
     # Check the all in electricity prices
     price_attr = [
@@ -324,7 +326,7 @@ async def test_sensors_hour_price_attr(
             "sensor.frank_energie_gas_prices_current_gas_price_all_in"
         ).attributes["prices"]
     ]
-    assert price_attr == [1.75] * 6 + [1.23] * 24 + [0.75] * 18
+    assert price_attr == pytest.approx([1.75] * 6 + [1.23] * 24 + [0.75] * 18)
 
     # For the other sensors just check if the prices attribute is there
     assert 48 == len(
@@ -605,7 +607,7 @@ def test_enode_charger_sensor_properties_and_value(
     sensor_rate = EnodeChargerSensor(
         coordinator=mock_coordinator, description=rate_desc, charger=mock_charger
     )
-    assert sensor_rate.native_value == 11.0
+    assert sensor_rate.native_value == pytest.approx(11.0)
 
 
 def test_calculate_market_percent_tax() -> None:
@@ -625,7 +627,7 @@ def test_calculate_market_percent_tax() -> None:
     price_data.current_hour = current_hour
     price_data.all = [current_hour]
 
-    assert _calculate_market_percent_tax(price_data) == 21.0
+    assert _calculate_market_percent_tax(price_data) == pytest.approx(21.0)
 
     # Case 3: Current hour has price 0, but other hours are non-zero
     zero_hour = MagicMock()
@@ -640,7 +642,7 @@ def test_calculate_market_percent_tax() -> None:
     price_data_fallback.current_hour = zero_hour
     price_data_fallback.all = [zero_hour, other_hour]
 
-    assert _calculate_market_percent_tax(price_data_fallback) == 21.0
+    assert _calculate_market_percent_tax(price_data_fallback) == pytest.approx(21.0)
 
     # Case 4: Negative prices (should calculate correctly)
     negative_hour = MagicMock()
@@ -651,14 +653,14 @@ def test_calculate_market_percent_tax() -> None:
     price_data_neg.current_hour = negative_hour
     price_data_neg.all = [negative_hour]
 
-    assert _calculate_market_percent_tax(price_data_neg) == 21.0
+    assert _calculate_market_percent_tax(price_data_neg) == pytest.approx(21.0)
 
     # Case 5: All hours are zero
     price_data_all_zero = MagicMock()
     price_data_all_zero.current_hour = zero_hour
     price_data_all_zero.all = [zero_hour, zero_hour]
 
-    assert _calculate_market_percent_tax(price_data_all_zero) == 0.0
+    assert _calculate_market_percent_tax(price_data_all_zero) == pytest.approx(0.0)
 
 
 def test_safe_session_result_sum():

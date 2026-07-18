@@ -374,7 +374,6 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             _LOGGER.warning(
                 "Multiple delivery sites found; defaulting to the first one. Create an issue on github if you need support for multiple sites."
             )
-            # TODO: Iimplementeer logica voor site-selectie
             selected_site = user_sites[0]
         else:
             # Selecteer de eerste bezorgsite

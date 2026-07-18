@@ -31,11 +31,11 @@ def test_battery_threshold_number_properties(mock_coordinator, mock_config_entry
     entity = FrankEnergieBatteryThresholdNumber(
         mock_coordinator, mock_config_entry, battery_id
     )
-    assert entity.native_value == 0.25
+    assert entity.native_value == pytest.approx(0.25)
     assert entity.available is True
-    assert entity.native_min_value == 0.20
-    assert entity.native_max_value == 0.40
-    assert entity.native_step == 0.05
+    assert entity.native_min_value == pytest.approx(0.20)
+    assert entity.native_max_value == pytest.approx(0.40)
+    assert entity.native_step == pytest.approx(0.05)
     assert entity.native_unit_of_measurement == "€/kWh"
     assert entity.device_info["manufacturer"] == "Sessy"
     assert entity.device_info["model"] == "Smart Battery"
@@ -161,7 +161,7 @@ async def test_enode_charge_limit_number_action(mock_coordinator):
     mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
         charger_id, False, {"initialCharge": 25.0}
     )
-    assert mock_charger.charge_settings.initial_charge == 25.0
+    assert mock_charger.charge_settings.initial_charge == pytest.approx(25.0)
 
 
 @pytest.mark.asyncio

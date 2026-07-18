@@ -47,8 +47,8 @@ async def test_price_serialization():
     serialized = _price_to_dict(price)
 
     assert serialized["from"] == "2026-06-26T07:30:00+00:00"
-    assert serialized["marketPrice"] == 0.15
-    assert serialized["energyTaxPrice"] == 0.12
+    assert serialized["marketPrice"] == pytest.approx(0.15)
+    assert serialized["energyTaxPrice"] == pytest.approx(0.12)
 
     # Test MarketPrices serialization and deserialization
     electricity = PriceData([raw_price], energy_type="electricity")
@@ -59,7 +59,7 @@ async def test_price_serialization():
     deserialized_mp = _dict_to_market_prices(serialized_mp)
 
     assert len(deserialized_mp.electricity.all) == 1
-    assert deserialized_mp.electricity.all[0].market_price == 0.15
+    assert deserialized_mp.electricity.all[0].market_price == pytest.approx(0.15)
     assert deserialized_mp.energy_country == "NL"
 
 

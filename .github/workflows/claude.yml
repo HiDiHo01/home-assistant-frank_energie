@@ -1,4 +1,6 @@
 name: Claude Code Action Official
+permissions:
+  contents: read
 on:
   issue_comment:
     types: [created]
@@ -12,7 +14,14 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
+        with:
+          persist-credentials: false
       - uses: anthropics/claude-code-action@e90deca47693f9457b72f2b53c17d7c445a87342
         with:
           trigger_phrase: "@claude"

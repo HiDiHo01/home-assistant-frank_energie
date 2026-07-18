@@ -30,7 +30,12 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/github-script@v9
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # @v9
         with:
           script: |
             const item = context.payload.issue || context.payload.pull_request;
