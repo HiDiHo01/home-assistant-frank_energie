@@ -14,6 +14,7 @@
     </td>
   </tr>
 </table>
+<img src="https://img.shields.io/github/downloads/HiDiHo01/home-assistant-frank_energie/v2026.7.10/total">
 
 ## Summary
 
