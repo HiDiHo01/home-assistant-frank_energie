@@ -2617,75 +2617,78 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             f"{DOMAIN}_prices_{config_entry.entry_id}",
         )
 
+    def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
+        """Parse cached data dictionary into coordinator state."""
+        if prices_today_dict := cached_data.get("prices_today"):
+            self._static_prices_today = _dict_to_market_prices(prices_today_dict)
+            
+        if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
+            self.cached_prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
+            
+        if resolution_state_dict := cached_data.get(
+            "contract_price_resolution_state"
+        ):
+            data_contract_price_resolution_state = _dict_to_resolution_state(
+                resolution_state_dict
+            )
+            self._static_contract_price_resolution_state = (
+                data_contract_price_resolution_state
+            )
+            self._api_resolution_state = data_contract_price_resolution_state
+            self._resolution_change_pending = (
+                bool(data_contract_price_resolution_state.upcomingChange)
+                if data_contract_price_resolution_state
+                else False
+            )
+
+        if last_fetch_today_str := cached_data.get("last_fetch_today"):
+            self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
+            
+        if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
+            self.last_fetch_tomorrow = dt_util.parse_datetime(
+                last_fetch_tomorrow_str
+            )
+
     async def _async_setup(self) -> bool:
         """Load cached prices into data before first refresh."""
         try:
             cached_data = await self.store.async_load()
-            if cached_data:
-                _LOGGER.debug("Loading cached prices from disk into coordinator data")
+            if not cached_data:
+                return False
+                
+            _LOGGER.debug("Loading cached prices from disk into coordinator data")
 
-                prices_today = None
-                prices_tomorrow = None
-                data_contract_price_resolution_state = None
+            self._parse_cached_data(cached_data)
 
-                if prices_today_dict := cached_data.get("prices_today"):
-                    prices_today = _dict_to_market_prices(prices_today_dict)
-                    self._static_prices_today = prices_today
-                if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
-                    prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
-                    self.cached_prices_tomorrow = prices_tomorrow
-                if resolution_state_dict := cached_data.get(
-                    "contract_price_resolution_state"
-                ):
-                    data_contract_price_resolution_state = _dict_to_resolution_state(
-                        resolution_state_dict
-                    )
-                    self._static_contract_price_resolution_state = (
-                        data_contract_price_resolution_state
-                    )
-                    self._api_resolution_state = data_contract_price_resolution_state
-                    self._resolution_change_pending = (
-                        bool(data_contract_price_resolution_state.upcomingChange)
-                        if data_contract_price_resolution_state
-                        else False
-                    )
+            cache = PricesTodayCache(
+                prices_today=self._static_prices_today,
+                data_month_summary=None,
+                data_invoices=None,
+                data_user=None,
+                user_sites=None,
+                data_period_usage=None,
+                data_enode_chargers=None,
+                data_smart_batteries=None,
+                data_smart_battery_details=[],
+                data_smart_battery_sessions=[],
+                data_enode_vehicles=None,
+                data_pv_systems=None,
+                data_pv_summary=None,
+                data_user_smart_feed_in=None,
+                data_contract_price_resolution_state=self._static_contract_price_resolution_state,
+            )
 
-                if last_fetch_today_str := cached_data.get("last_fetch_today"):
-                    self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
-                if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
-                    self.last_fetch_tomorrow = dt_util.parse_datetime(
-                        last_fetch_tomorrow_str
-                    )
+            self.data = self._aggregate_data(cache, self.cached_prices_tomorrow)
+            self.cached_prices = self.data
 
-                cache = PricesTodayCache(
-                    prices_today=prices_today,
-                    data_month_summary=None,
-                    data_invoices=None,
-                    data_user=None,
-                    user_sites=None,
-                    data_period_usage=None,
-                    data_enode_chargers=None,
-                    data_smart_batteries=None,
-                    data_smart_battery_details=[],
-                    data_smart_battery_sessions=[],
-                    data_enode_vehicles=None,
-                    data_pv_systems=None,
-                    data_pv_summary=None,
-                    data_user_smart_feed_in=None,
-                    data_contract_price_resolution_state=data_contract_price_resolution_state,
-                )
+            if not self._is_cache_resolution_valid():
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+                return False
 
-                self.data = self._aggregate_data(cache, prices_tomorrow)
-                self.cached_prices = self.data
-
-                if not self._is_cache_resolution_valid():
-                    self._static_prices_today = None
-                    self.last_fetch_today = None
-                    self.cached_prices_tomorrow = None
-                    self.last_fetch_tomorrow = None
-                    return False
-
-                return True
+            return True
 
         except Exception as err:
             _LOGGER.warning(
