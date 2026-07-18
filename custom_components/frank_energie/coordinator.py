@@ -1869,12 +1869,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except ValueError:
             _LOGGER.warning(
                 "Cannot merge price data: resolution or type mismatch, "
-                "falling back to tomorrow's prices only"
+                "retaining today's prices if available, else falling back to tomorrow's prices"
             )
-            combined_electricity = prices_tomorrow.electricity or source_data.get(
-                DATA_ELECTRICITY
+            combined_electricity = (
+                source_data.get(DATA_ELECTRICITY) or prices_tomorrow.electricity
             )
-            combined_gas = prices_tomorrow.gas or source_data.get(DATA_GAS)
+            combined_gas = source_data.get(DATA_GAS) or prices_tomorrow.gas
 
         updated_data = source_data.copy()
         updated_data[DATA_ELECTRICITY] = combined_electricity
@@ -2617,67 +2617,74 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             f"{DOMAIN}_prices_{config_entry.entry_id}",
         )
 
+    def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
+        """Parse cached data dictionary into coordinator state."""
+        if prices_today_dict := cached_data.get("prices_today"):
+            self._static_prices_today = _dict_to_market_prices(prices_today_dict)
+
+        if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
+            self.cached_prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
+
+        if resolution_state_dict := cached_data.get("contract_price_resolution_state"):
+            data_contract_price_resolution_state = _dict_to_resolution_state(
+                resolution_state_dict
+            )
+            self._static_contract_price_resolution_state = (
+                data_contract_price_resolution_state
+            )
+            self._api_resolution_state = data_contract_price_resolution_state
+            self._resolution_change_pending = (
+                bool(data_contract_price_resolution_state.upcomingChange)
+                if data_contract_price_resolution_state
+                else False
+            )
+
+        if last_fetch_today_str := cached_data.get("last_fetch_today"):
+            self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
+
+        if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
+            self.last_fetch_tomorrow = dt_util.parse_datetime(last_fetch_tomorrow_str)
+
     async def _async_setup(self) -> bool:
         """Load cached prices into data before first refresh."""
         try:
             cached_data = await self.store.async_load()
-            if cached_data:
-                _LOGGER.debug("Loading cached prices from disk into coordinator data")
+            if not cached_data:
+                return False
 
-                prices_today = None
-                prices_tomorrow = None
-                data_contract_price_resolution_state = None
+            _LOGGER.debug("Loading cached prices from disk into coordinator data")
 
-                if prices_today_dict := cached_data.get("prices_today"):
-                    prices_today = _dict_to_market_prices(prices_today_dict)
-                    self._static_prices_today = prices_today
-                if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
-                    prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
-                    self.cached_prices_tomorrow = prices_tomorrow
-                if resolution_state_dict := cached_data.get(
-                    "contract_price_resolution_state"
-                ):
-                    data_contract_price_resolution_state = _dict_to_resolution_state(
-                        resolution_state_dict
-                    )
-                    self._static_contract_price_resolution_state = (
-                        data_contract_price_resolution_state
-                    )
-                    self._api_resolution_state = data_contract_price_resolution_state
-                    self._resolution_change_pending = (
-                        bool(data_contract_price_resolution_state.upcomingChange)
-                        if data_contract_price_resolution_state
-                        else False
-                    )
+            self._parse_cached_data(cached_data)
 
-                if last_fetch_today_str := cached_data.get("last_fetch_today"):
-                    self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
-                if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
-                    self.last_fetch_tomorrow = dt_util.parse_datetime(
-                        last_fetch_tomorrow_str
-                    )
+            cache = PricesTodayCache(
+                prices_today=self._static_prices_today,
+                data_month_summary=None,
+                data_invoices=None,
+                data_user=None,
+                user_sites=None,
+                data_period_usage=None,
+                data_enode_chargers=None,
+                data_smart_batteries=None,
+                data_smart_battery_details=[],
+                data_smart_battery_sessions=[],
+                data_enode_vehicles=None,
+                data_pv_systems=None,
+                data_pv_summary=None,
+                data_user_smart_feed_in=None,
+                data_contract_price_resolution_state=self._static_contract_price_resolution_state,
+            )
 
-                cache = PricesTodayCache(
-                    prices_today=prices_today,
-                    data_month_summary=None,
-                    data_invoices=None,
-                    data_user=None,
-                    user_sites=None,
-                    data_period_usage=None,
-                    data_enode_chargers=None,
-                    data_smart_batteries=None,
-                    data_smart_battery_details=[],
-                    data_smart_battery_sessions=[],
-                    data_enode_vehicles=None,
-                    data_pv_systems=None,
-                    data_pv_summary=None,
-                    data_user_smart_feed_in=None,
-                    data_contract_price_resolution_state=data_contract_price_resolution_state,
-                )
+            self.data = self._aggregate_data(cache, self.cached_prices_tomorrow)
+            self.cached_prices = self.data
 
-                self.data = self._aggregate_data(cache, prices_tomorrow)
-                self.cached_prices = self.data
-                return True
+            if not self._is_cache_resolution_valid():
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+                return False
+
+            return True
 
         except Exception as err:
             _LOGGER.warning(
@@ -2685,9 +2692,37 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
         return False
 
+    def _is_cache_resolution_valid(self) -> bool:
+        """Check if the cached resolution matches the configured resolution."""
+        if not self._static_prices_today or not self.config_entry:
+            return True
+
+        price_series = (
+            self._static_prices_today.electricity or self._static_prices_today.gas
+        )
+        if not price_series:
+            return True
+
+        cached_res = price_series.resolution_minutes
+        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        expected_res = 15 if config_value == "PT15M" else 60
+
+        if cached_res != expected_res:
+            _LOGGER.debug(
+                "Cache resolution (%s) differs from config (%s), invalidating cache",
+                cached_res,
+                expected_res,
+            )
+            return False
+
+        return True
+
     def _is_cache_fresh(self, now_utc: datetime) -> bool:
         """Check if the loaded disk cache is fresh enough to skip API fetches."""
         if not self.last_fetch_today:
+            return False
+
+        if not self._is_cache_resolution_valid():
             return False
 
         now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
