@@ -315,7 +315,9 @@ async def test_sensors_hour_price_attr(
             "sensor.frank_energie_electricity_prices_current_electricity_price_all_in"
         ).attributes["prices"]
     ]
-    assert price_attr == pytest.approx(price_generator(0.25, 0.05) + price_generator(0.3, 0.02))
+    assert price_attr == pytest.approx(
+        price_generator(0.25, 0.05) + price_generator(0.3, 0.02)
+    )
 
     # Check the all in electricity prices
     price_attr = [
