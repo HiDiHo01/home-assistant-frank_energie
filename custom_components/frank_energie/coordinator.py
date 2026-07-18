@@ -2621,13 +2621,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         """Parse cached data dictionary into coordinator state."""
         if prices_today_dict := cached_data.get("prices_today"):
             self._static_prices_today = _dict_to_market_prices(prices_today_dict)
-            
+
         if prices_tomorrow_dict := cached_data.get("prices_tomorrow"):
             self.cached_prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
-            
-        if resolution_state_dict := cached_data.get(
-            "contract_price_resolution_state"
-        ):
+
+        if resolution_state_dict := cached_data.get("contract_price_resolution_state"):
             data_contract_price_resolution_state = _dict_to_resolution_state(
                 resolution_state_dict
             )
@@ -2643,11 +2641,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         if last_fetch_today_str := cached_data.get("last_fetch_today"):
             self.last_fetch_today = dt_util.parse_datetime(last_fetch_today_str)
-            
+
         if last_fetch_tomorrow_str := cached_data.get("last_fetch_tomorrow"):
-            self.last_fetch_tomorrow = dt_util.parse_datetime(
-                last_fetch_tomorrow_str
-            )
+            self.last_fetch_tomorrow = dt_util.parse_datetime(last_fetch_tomorrow_str)
 
     async def _async_setup(self) -> bool:
         """Load cached prices into data before first refresh."""
@@ -2655,7 +2651,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             cached_data = await self.store.async_load()
             if not cached_data:
                 return False
-                
+
             _LOGGER.debug("Loading cached prices from disk into coordinator data")
 
             self._parse_cached_data(cached_data)
