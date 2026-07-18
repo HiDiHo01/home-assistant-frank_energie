@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-    - main
+      - main
 
 permissions:
   contents: read
@@ -17,78 +17,77 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
-      with:
-        egress-policy: block
-        allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\n\
-          sonarcloud.io:443\nobjects.githubusercontent.com:443\n"
-    - name: Checkout repository
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
 
-    - name: Verify required documentation
-      run: |
-        required_docs=(
-          docs/index.md
-          docs/configuration.md
-          docs/diagnostics.md
-          docs/entities.md
-          docs/events.md
-          docs/examples.md
-          docs/faq.md
-          docs/troubleshooting.md
-          docs/update_frequency.md
-          docs/user_features.md
-          docs/smart_battery.md
-          docs/smart_charging.md
-          docs/architecture.md
-          docs/developer.md
-          docs/release_process.md
-        )
+      - name: Verify required documentation
+        run: |
+          required_docs=(
+            docs/index.md
+            docs/configuration.md
+            docs/diagnostics.md
+            docs/entities.md
+            docs/events.md
+            docs/examples.md
+            docs/faq.md
+            docs/troubleshooting.md
+            docs/update_frequency.md
+            docs/user_features.md
+            docs/smart_battery.md
+            docs/smart_charging.md
+            docs/architecture.md
+            docs/developer.md
+            docs/release_process.md
+          )
 
-        for file in "${required_docs[@]}"; do
-          if [ ! -f "$file" ]; then
-            echo "Missing required documentation: $file"
-            exit 1
-          fi
-        done
+          for file in "${required_docs[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing required documentation: $file"
+              exit 1
+            fi
+          done
 
-    - name: Verify diagnostics implementation exists
-      run: |
-        test -f custom_components/frank_energie/diagnostics.py
+      - name: Verify diagnostics implementation exists
+        run: |
+          test -f custom_components/frank_energie/diagnostics.py
 
-    - name: Verify translations exist
-      run: |
-        test -f custom_components/frank_energie/strings.json
-        test -d custom_components/frank_energie/translations
+      - name: Verify translations exist
+        run: |
+          test -f custom_components/frank_energie/strings.json
+          test -d custom_components/frank_energie/translations
 
-    - name: Verify config flow exists
-      run: |
-        test -f custom_components/frank_energie/config_flow.py
+      - name: Verify config flow exists
+        run: |
+          test -f custom_components/frank_energie/config_flow.py
 
-    - name: Verify tests directory exists
-      run: |
-        test -d tests
+      - name: Verify tests directory exists
+        run: |
+          test -d tests
 
-    - name: Verify README documentation links
-      run: |
-        grep -q "docs/index.md" README.md
-        grep -q "docs/entities.md" README.md
-        grep -q "docs/events.md" README.md
+      - name: Verify README documentation links
+        run: |
+          grep -q "docs/index.md" README.md
+          grep -q "docs/entities.md" README.md
+          grep -q "docs/events.md" README.md
 
-    - name: Verify manifest exists
-      run: |
-        test -f custom_components/frank_energie/manifest.json
+      - name: Verify manifest exists
+        run: |
+          test -f custom_components/frank_energie/manifest.json
 
-    - name: Verify GitHub workflows exist
-      run: |
-        test -d .github/workflows
+      - name: Verify GitHub workflows exist
+        run: |
+          test -d .github/workflows
 
-    - name: Summary
-      run: |-
-        echo "Quality Scale validation completed successfully"
-        echo "Documentation present"
-        echo "Diagnostics present"
-        echo "Translations present"
-        echo "Config flow present"
-        echo "Tests present"
+      - name: Summary
+        run: |-
+          echo "Quality Scale validation completed successfully"
+          echo "Documentation present"
+          echo "Diagnostics present"
+          echo "Translations present"
+          echo "Config flow present"
+          echo "Tests present"

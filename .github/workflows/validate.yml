@@ -6,10 +6,10 @@ permissions:
 on:
   push:
     branches:
-    - main
+      - main
   pull_request:
   schedule:
-  - cron: "0 0 * * 6"
+    - cron: "0 0 * * 6"
   workflow_dispatch:
 
 jobs:
@@ -19,20 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     name: Validate
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
-      with:
-        egress-policy: block
-        allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\n\
-          sonarcloud.io:443\nobjects.githubusercontent.com:443\n"
-    - name: Check out code from GitHub
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0   #v7.0.0
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - name: Check out code from GitHub
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7.0.0
 
-    - name: HACS validation
-      uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # @1ebf01c408f29afcb6406bd431bc98fd8cbb15aa
-      with:
-        category: integration
+      - name: HACS validation
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # @1ebf01c408f29afcb6406bd431bc98fd8cbb15aa
+        with:
+          category: integration
 
-    - name: Hassfest validation
-      uses: 
-        home-assistant/actions/hassfest@f4ca6f671bd429efb108c0f2fa0ae8af0215986c
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@f4ca6f671bd429efb108c0f2fa0ae8af0215986c

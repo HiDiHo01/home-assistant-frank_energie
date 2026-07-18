@@ -17,42 +17,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
-      with:
-        egress-policy: block
-        allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\n\
-          sonarcloud.io:443\nobjects.githubusercontent.com:443\n"
-    - name: Checkout code
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
 
-    - name: Set up Python 3.13
-      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # @v6
-      with:
-        python-version: '3.13'
-        cache: 'pip'
+      - name: Set up Python 3.13
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # @v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
 
-    - name: Install Poetry
-      run: |
-        curl -sSL https://install.python-poetry.org | python3 -
-        echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
 
-    - name: Install dependencies with Poetry
-      run: |
-        poetry install
-        if [ -f requirements.txt ]; then poetry run pip install -r requirements.txt; fi
+      - name: Install dependencies with Poetry
+        run: |
+          poetry install
+          if [ -f requirements.txt ]; then poetry run pip install -r requirements.txt; fi
 
-    - name: Register flake8 problem matcher
-      run: echo "::add-matcher::.github/workflows/flake8-matchers.json"
+      - name: Register flake8 problem matcher
+        run: echo "::add-matcher::.github/workflows/flake8-matchers.json"
 
-    - name: Lint with flake8
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 . --count --max-complexity=10 --max-line-length=120 --statistics
-      continue-on-error: true
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --max-complexity=10 --max-line-length=120 --statistics
+        continue-on-error: true
 
-    - name: Test with pytest
-      env:
-        PYTHONPATH: ${{ github.workspace }}/custom_components/frank_energie
-      run: |
-        poetry run pytest -v --capture=no
+      - name: Test with pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}/custom_components/frank_energie
+        run: |
+          poetry run pytest -v --capture=no

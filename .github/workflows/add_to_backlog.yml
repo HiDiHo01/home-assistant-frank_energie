@@ -7,7 +7,7 @@ permissions:
 on:
   issues:
     types:
-    - labeled
+      - labeled
 
 jobs:
   add_to_backlog:
@@ -17,14 +17,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
-      with:
-        egress-policy: block
-        allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\n\
-          sonarcloud.io:443\nobjects.githubusercontent.com:443\n"
-    - name: Add to GitHub Project (v2)
-      uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e # @v2
-      with:
-        project-url: https://github.com/users/HiDiHo01/projects/2
-        github-token: ${{ secrets.PAT_FOR_FRANK_ENERGIE }}
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - name: Add to GitHub Project (v2)
+        uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e # @v2
+        with:
+          project-url: https://github.com/users/HiDiHo01/projects/2
+          github-token: ${{ secrets.PAT_FOR_FRANK_ENERGIE }}

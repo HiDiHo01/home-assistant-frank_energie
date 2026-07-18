@@ -30,56 +30,55 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
-      with:
-        egress-policy: block
-        allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\n\
-          sonarcloud.io:443\nobjects.githubusercontent.com:443\n"
-    - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # @v9
-      with:
-        script: |
-          const item = context.payload.issue || context.payload.pull_request;
-          const title = item.title.toLowerCase();
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        with:
+          egress-policy: block
+          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # @v9
+        with:
+          script: |
+            const item = context.payload.issue || context.payload.pull_request;
+            const title = item.title.toLowerCase();
 
-          const labels = new Set();
+            const labels = new Set();
 
-          if (title.includes("deps")) labels.add("dependencies");
-          if (title.includes("chore")) labels.add("chore");
-          if (title.includes("fix")) labels.add("fixed");
-          if (title.includes("feat")) labels.add("feature");
-          if (title.includes("enode")) labels.add("enode");
-          if (title.includes("graphql")) labels.add("graphql");
-          if (title.includes("price")) labels.add("prices");
-          if (title.includes("sensor")) labels.add("sensor");
-          if (title.includes("number")) labels.add("number");
-          if (title.includes("breaking")) labels.add("breaking-change");
+            if (title.includes("deps")) labels.add("dependencies");
+            if (title.includes("chore")) labels.add("chore");
+            if (title.includes("fix")) labels.add("fixed");
+            if (title.includes("feat")) labels.add("feature");
+            if (title.includes("enode")) labels.add("enode");
+            if (title.includes("graphql")) labels.add("graphql");
+            if (title.includes("price")) labels.add("prices");
+            if (title.includes("sensor")) labels.add("sensor");
+            if (title.includes("number")) labels.add("number");
+            if (title.includes("breaking")) labels.add("breaking-change");
 
-          if (labels.size > 0) {
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: item.number,
-              labels: [...labels],
-            });
-          }
-    - name: Apply labels
-      uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d   #v6
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        configuration-path: .github/labeler.yml
-        sync-labels: true
+            if (labels.size > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: item.number,
+                labels: [...labels],
+              });
+            }
+      - name: Apply labels
+        uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d #v6
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: true
 
-    - name: Size label
-      uses: codelytv/pr-size-labeler@095a41fca88b8764fd9e008ad269bcdb82bb38b9   #v1
-      with:
-        xs_label: size/xs
-        xs_max_size: 10
-        s_label: size/s
-        s_max_size: 50
-        m_label: size/m
-        m_max_size: 200
-        l_label: size/l
-        l_max_size: 500
-        xl_label: size/xl
-        xl_max_size: 1000
+      - name: Size label
+        uses: codelytv/pr-size-labeler@095a41fca88b8764fd9e008ad269bcdb82bb38b9 #v1
+        with:
+          xs_label: size/xs
+          xs_max_size: 10
+          s_label: size/s
+          s_max_size: 50
+          m_label: size/m
+          m_max_size: 200
+          l_label: size/l
+          l_max_size: 500
+          xl_label: size/xl
+          xl_max_size: 1000
