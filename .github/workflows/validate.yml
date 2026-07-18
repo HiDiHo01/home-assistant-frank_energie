@@ -27,6 +27,8 @@ jobs:
       - name: Check out code from GitHub
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7.0.0
 
+        with:
+          persist-credentials: false
       - name: HACS validation
         uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # @1ebf01c408f29afcb6406bd431bc98fd8cbb15aa
         with:

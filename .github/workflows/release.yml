@@ -13,7 +13,7 @@ permissions:
 jobs:
   release_zip_file:
     permissions:
-      contents: read
+      contents: write
     name: Prepare release asset
     runs-on: ubuntu-latest
     steps:
@@ -25,6 +25,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
 
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # @v6
         with:
@@ -39,19 +41,7 @@ jobs:
           cd ${{ github.workspace }}/custom_components/frank_energie
           zip frank_energie.zip -r ./
 
-      - name: Get release
-        id: get_release
-        uses: bruceadams/get-release@74c3d60f5a28f358ccf241a00c9021ea16f0569f # v1.3.2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
       - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@e8f9f06c4b078e705bd2ea027f0926603fc9b4d5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: ${{ github.workspace }}/custom_components/frank_energie/frank_energie.zip
-          asset_name: frank_energie.zip
-          asset_content_type: application/zip
+        run: gh release upload ${{ github.event.release.tag_name }} ${{ github.workspace }}/custom_components/frank_energie/frank_energie.zip
