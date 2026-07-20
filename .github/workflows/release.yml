@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # @v2.8.1
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # @v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
