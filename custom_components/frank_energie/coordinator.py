@@ -177,6 +177,19 @@ def _dict_to_market_prices(data: dict[str, Any]) -> MarketPrices:
     country = data.get("energy_country", "NL")
     energy_type = data.get("energy_type")
 
+    if elec_prices and data.get("electricity_resolution_minutes") is None:
+        _LOGGER.debug(
+            "Cached electricity prices have no persisted resolution_minutes "
+            "(older cache format); relying on PriceData to derive it from "
+            "entry spacing"
+        )
+    if gas_prices and data.get("gas_resolution_minutes") is None:
+        _LOGGER.debug(
+            "Cached gas prices have no persisted resolution_minutes "
+            "(older cache format); relying on PriceData to derive it from "
+            "entry spacing"
+        )
+
     electricity = PriceData(
         prices=elec_prices,
         energy_type="electricity",
