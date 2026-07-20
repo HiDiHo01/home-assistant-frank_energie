@@ -108,7 +108,7 @@ header:
   show_states: false
   colorize_states: true
 series:
-  - entity: sensor.frank_energie_prijzen_huidige_elektriciteitsprijs_all_in
+  - entity: sensor.frank_energie_stroomprijzen_huidige_elektriciteitsprijs_all_in
     name: Prijs
     show:
       legend_value: false
@@ -190,7 +190,7 @@ header:
   show_states: false
   colorize_states: true
 series:
-  - entity: sensor.frank_energie_prijzen_huidige_elektriciteitsprijs_all_in
+  - entity: sensor.frank_energie_stroomprijzen_huidige_elektriciteitsprijs_all_in
     name: Prijs
     show:
       legend_value: false
@@ -268,7 +268,7 @@ header:
   show: true
   title: Energieprijs per kwartier (€/kWh) vandaag
 series:
-  - entity: sensor.frank_energie_prijzen_gemiddelde_elektriciteitsprijs_vandaag_all_in
+  - entity: sensor.frank_energie_stroomprijzen_gemiddelde_elektriciteitsprijs_vandaag_all_in
     name: Prijs
     stroke_width: 0
     float_precision: 3
@@ -344,7 +344,7 @@ experimental:
 type: conditional
 conditions:
   - condition: state
-    entity: sensor.frank_energie_prijzen_gemiddelde_elektriciteitsprijs_morgen_all_in
+    entity: sensor.frank_energie_stroomprijzen_gemiddelde_elektriciteitsprijs_morgen_all_in
     state_not: unavailable
 card:
   type: custom:apexcharts-card
@@ -357,7 +357,7 @@ card:
     title: Energieprijs per kwartier (€/kWh) morgen
   series:
     - entity: >-
-        sensor.frank_energie_prijzen_gemiddelde_elektriciteitsprijs_morgen_all_in
+        sensor.frank_energie_stroomprijzen_gemiddelde_elektriciteitsprijs_morgen_all_in
       name: Prijs
       stroke_width: 0
       float_precision: 3
@@ -585,19 +585,19 @@ content: >-
   per kWh
 
   het laagst tussen
-  {{as_timestamp(state_attr('sensor.frank_energie_prijzen_laagste_elektriciteitsprijs_vandaag_all_in',
+  {{as_timestamp(state_attr('sensor.frank_energie_stroomprijzen_laagste_elektriciteitsprijs_vandaag_all_in',
   'from_time'))|timestamp_custom(' %H:%M')|replace(" 0", "")}} en
-  {{(as_timestamp(state_attr('sensor.frank_energie_prijzen_laagste_elektriciteitsprijs_vandaag_all_in',
+  {{(as_timestamp(state_attr('sensor.frank_energie_stroomprijzen_laagste_elektriciteitsprijs_vandaag_all_in',
   'till_time')))|timestamp_custom(' %H:%M')|replace(" 0", "")}} (€
-  {{states('sensor.frank_energie_prijzen_laagste_elektriciteitsprijs_vandaag_all_in')|round(3)}})
+  {{states('sensor.frank_energie_stroomprijzen_laagste_elektriciteitsprijs_vandaag_all_in')|round(3)}})
   en
 
   het hoogst tussen
-  {{as_timestamp(state_attr('sensor.frank_energie_prijzen_hoogste_elektriciteitsprijs_vandaag_all_in',
+  {{as_timestamp(state_attr('sensor.frank_energie_stroomprijzen_hoogste_elektriciteitsprijs_vandaag_all_in',
   'from_time'))|timestamp_custom(' %H:%M')|replace(" 0", "")}} en
-  {{(as_timestamp(state_attr('sensor.frank_energie_prijzen_hoogste_elektriciteitsprijs_vandaag_all_in',
+  {{(as_timestamp(state_attr('sensor.frank_energie_stroomprijzen_hoogste_elektriciteitsprijs_vandaag_all_in',
   'till_time')))|timestamp_custom(' %H:%M')|replace(" 0", "")}} (€
-  {{states('sensor.frank_energie_prijzen_hoogste_elektriciteitsprijs_vandaag_all_in')|round(3)}}).
+  {{states('sensor.frank_energie_stroomprijzen_hoogste_elektriciteitsprijs_vandaag_all_in')|round(3)}}).
 
   </h2></ha-alert>
 ```
