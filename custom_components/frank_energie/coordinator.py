@@ -711,6 +711,29 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             raise UpdateFailed from err
 
+    @staticmethod
+    def _tomorrow_cache_matches_date(
+        cached_prices_tomorrow: MarketPrices | None, tomorrow: date
+    ) -> bool:
+        """Check that cached_prices_tomorrow's entries are actually dated for tomorrow.
+
+        Guards against trusting `last_fetch_tomorrow`'s timestamp alone: a cache
+        poisoned by a since-fixed bug (e.g. today's prices mistakenly cached as
+        tomorrow's) would otherwise look like a legitimate same-day fetch forever,
+        since nothing else ever re-validates its contents against reality.
+        """
+        price_series = (
+            cached_prices_tomorrow.electricity or cached_prices_tomorrow.gas
+            if cached_prices_tomorrow
+            else None
+        )
+        if not price_series or not price_series.all:
+            return False
+
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+        first_entry_date = price_series.all[0].date_from.astimezone(tz_amsterdam).date()
+        return first_entry_date >= tomorrow
+
     async def _refresh_tomorrow_cache(
         self,
         today: date,
@@ -750,11 +773,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             and self.last_fetch_tomorrow is not None
             and self.last_fetch_tomorrow.date() == today
         ):
-            _LOGGER.debug(
-                "Tomorrow prices already cached (fetched %s), skipping API call",
-                self.last_fetch_tomorrow,
+            if self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow):
+                _LOGGER.debug(
+                    "Tomorrow prices already cached (fetched %s), skipping API call",
+                    self.last_fetch_tomorrow,
+                )
+                return self.cached_prices_tomorrow
+
+            _LOGGER.warning(
+                "Cached tomorrow prices claim to be fetched today but are not "
+                "actually dated for %s — discarding stale/incorrect cache and "
+                "fetching fresh data",
+                tomorrow,
             )
-            return self.cached_prices_tomorrow
+            self.cached_prices_tomorrow = None
+            self.last_fetch_tomorrow = None
 
         _LOGGER.debug(
             "Tomorrow cache status: cached=%s last_fetch=%s",
