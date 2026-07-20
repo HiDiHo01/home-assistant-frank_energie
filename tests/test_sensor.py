@@ -610,6 +610,77 @@ def test_enode_charger_sensor_properties_and_value(
     assert sensor_rate.native_value == pytest.approx(11.0)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("num_vehicles", [1, 2])
+async def test_async_setup_entry_with_vehicles_does_not_crash(
+    hass: HomeAssistant, num_vehicles
+):
+    """Regression test for the vehicle sensor setup crash (see 7e97f7c).
+
+    async_setup_entry used to log entity.name for each vehicle sensor right
+    after creating it, but before async_add_entities had run - i.e. before
+    the entity had a platform. Entity.name requires self.platform, so this
+    raised AttributeError and aborted the *entire* sensor platform setup for
+    anyone with Enode vehicles connected, taking every other queued entity
+    (battery, PV, price, etc.) down with it. The fix logs entity.unique_id
+    instead, which has no platform dependency.
+
+    This calls the real async_setup_entry with 1+ vehicles present to prove
+    setup completes and every vehicle/description pair is added.
+    """
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        EnodeVehicleSensor,
+        ENODE_VEHICLE_SENSOR_TYPES,
+        async_setup_entry,
+    )
+
+    def make_coordinator():
+        coordinator = MagicMock()
+        coordinator.data = {}
+        coordinator.api.is_authenticated = False
+        return coordinator
+
+    runtime_data = MagicMock()
+    runtime_data.settings_coordinator = make_coordinator()
+    runtime_data.price_coordinator = make_coordinator()
+    runtime_data.battery_coordinator = make_coordinator()
+    runtime_data.charger_coordinator = make_coordinator()
+    runtime_data.pv_coordinator = make_coordinator()
+    runtime_data.statistics_coordinator = make_coordinator()
+
+    vehicle_coordinator = make_coordinator()
+    vehicles_obj = MagicMock()
+    vehicles_obj.vehicles = [
+        {"id": f"veh_{i}", "information": {"brand": "Tesla", "model": "Model 3"}}
+        for i in range(num_vehicles)
+    ]
+    vehicle_coordinator.data = {DATA_ENODE_VEHICLES: vehicles_obj}
+    runtime_data.vehicle_coordinator = vehicle_coordinator
+
+    config_entry = MagicMock()
+    config_entry.entry_id = "test_entry_id"
+    config_entry.unique_id = "test_unique_id"
+    config_entry.runtime_data = runtime_data
+
+    added_entities: list = []
+
+    def async_add_entities(new_entities, update_before_add=False):
+        added_entities.extend(new_entities)
+
+    await async_setup_entry(hass, config_entry, async_add_entities)
+
+    vehicle_entities = [e for e in added_entities if isinstance(e, EnodeVehicleSensor)]
+    assert len(vehicle_entities) == num_vehicles * len(ENODE_VEHICLE_SENSOR_TYPES)
+    assert {e.unique_id for e in vehicle_entities} == {
+        f"frank_energie_veh_{i}_{description.key}"
+        for i in range(num_vehicles)
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+    }
+
+
 def test_calculate_market_percent_tax() -> None:
     """Test the _calculate_market_percent_tax helper function under various pricing scenarios."""
     from unittest.mock import MagicMock

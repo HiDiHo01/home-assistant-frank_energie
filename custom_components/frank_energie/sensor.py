@@ -5215,7 +5215,9 @@ async def async_setup_entry(
                 )
 
         for entity in enode_vehicle_sensors:
-            _LOGGER.debug("Toegevoegde voertuig sensor: %s", entity.name)
+            # entity.name isn't safe here: it needs self.platform, which
+            # is only set once async_add_entities registers the entity below.
+            _LOGGER.debug("Added vehicle sensor: %s", entity.unique_id)
 
         entities.extend(enode_vehicle_sensors)
 
