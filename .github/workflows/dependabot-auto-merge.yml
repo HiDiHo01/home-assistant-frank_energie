@@ -17,7 +17,19 @@ jobs:
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # @v2.20.0
         with:
           egress-policy: block
-          allowed-endpoints: "api.github.com:443\ngithub.com:443\npypi.org:443\nfiles.pythonhosted.org:443\nsonarcloud.io:443\nobjects.githubusercontent.com:443\n\nuploads.github.com:443\nupload.pypi.org:443\ntest.pypi.org:443\ncodecov.io:443\nuploader.codecov.io:443"
+          allowed-endpoints: >
+            api.github.com:443
+            raw.githubusercontent.com:443
+            github.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            sonarcloud.io:443
+            objects.githubusercontent.com:443
+            uploads.github.com:443
+            upload.pypi.org:443
+            test.pypi.org:443
+            codecov.io:443
+            uploader.codecov.io:443
       - name: Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # @v3
