@@ -35,6 +35,11 @@ jobs:
             test.pypi.org:443
             codecov.io:443
             uploader.codecov.io:443
+            www.home-assistant.io:443
+            www.buymeacoffee.com:443
+            docs.python.org:443
+            peps.python.org:443
+            www.paypal.me:443
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
 
