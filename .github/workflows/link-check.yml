@@ -44,7 +44,8 @@ jobs:
             buymeacoffee.com:443
             hacs.xyz:443
             my.home-assistant.io:443
-            chatgpt.com
+            chatgpt.com:443
+            img.shields.io:443
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
 
