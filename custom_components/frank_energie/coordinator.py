@@ -2867,7 +2867,20 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return False
 
         if self.last_fetch_tomorrow and self.last_fetch_tomorrow.date() == today:
-            return True
+            tomorrow = today + timedelta(days=1)
+            if self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow):
+                _LOGGER.debug(
+                    "Cached tomorrow prices (fetched today) validated as "
+                    "genuinely dated for %s — cache is fresh",
+                    tomorrow,
+                )
+                return True
+            _LOGGER.debug(
+                "Cached tomorrow prices claim to be fetched today but are not "
+                "actually dated for %s — cache is not fresh",
+                tomorrow,
+            )
+            return False
 
         return now_local.time() < time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
 

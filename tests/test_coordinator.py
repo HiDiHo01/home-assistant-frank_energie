@@ -1846,3 +1846,63 @@ async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
 
     coordinator._fetch_tomorrow_data.assert_not_called()
     assert result is multi_day_prices
+
+
+@pytest.mark.asyncio
+async def test_is_cache_fresh_detects_poisoned_same_day_tomorrow_cache(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """_is_cache_fresh must not be fooled by a poisoned same-day tomorrow cache.
+
+    Regression test: _is_cache_fresh had the same last_fetch_tomorrow-only
+    trust issue as the old _refresh_tomorrow_cache short-circuit. Since a
+    "fresh" verdict here makes async_config_entry_first_refresh skip the
+    live refresh entirely (super().async_config_entry_first_refresh() is
+    never called), a poisoned cache could survive every reload/restart
+    indefinitely — the _refresh_tomorrow_cache validation never even runs,
+    because _async_update_data is never reached on that path.
+    """
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    now_utc = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)
+
+    price_coordinator.last_fetch_today = now_utc
+    price_coordinator._static_prices_today = None  # bypass resolution check
+
+    # Poisoned: claims to be fetched today, but entries are dated today too.
+    price_coordinator.last_fetch_tomorrow = now_utc
+    price_coordinator.cached_prices_tomorrow = _make_market_prices(
+        "2026-07-20T10:00:00.000Z"
+    )
+
+    assert price_coordinator._is_cache_fresh(now_utc) is False
+
+
+@pytest.mark.asyncio
+async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """_is_cache_fresh must still return True for a genuinely valid same-day cache."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    now_utc = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)
+
+    price_coordinator.last_fetch_today = now_utc
+    price_coordinator._static_prices_today = None  # bypass resolution check
+
+    price_coordinator.last_fetch_tomorrow = now_utc
+    price_coordinator.cached_prices_tomorrow = _make_market_prices(
+        "2026-07-20T22:00:00.000Z"  # genuinely tomorrow (local)
+    )
+
+    assert price_coordinator._is_cache_fresh(now_utc) is True
