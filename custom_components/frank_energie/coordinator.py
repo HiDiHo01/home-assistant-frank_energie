@@ -209,6 +209,24 @@ def _dict_to_market_prices(data: dict[str, Any]) -> MarketPrices:
     )
 
 
+def _price_counts(market_prices: MarketPrices | None) -> tuple[int, int]:
+    """Return (electricity_count, gas_count) for a MarketPrices.
+
+    Explicit attribute access rather than getattr(..., energy_type) so a
+    typo'd energy type can't silently resolve to 0 instead of failing —
+    there's no string parameter here to misuse. Centralized so any future
+    logging that needs these counts reuses this instead of duplicating the
+    electricity/gas lookup at each call site.
+    """
+    if market_prices is None:
+        return 0, 0
+    electricity_count = (
+        len(market_prices.electricity.all) if market_prices.electricity else 0
+    )
+    gas_count = len(market_prices.gas.all) if market_prices.gas else 0
+    return electricity_count, gas_count
+
+
 def _resolution_state_to_dict(state: ContractPriceResolutionState) -> dict[str, Any]:
     """Convert ContractPriceResolutionState to serializable dict."""
     return {
@@ -1973,10 +1991,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 source_data.get(DATA_GAS), prices_tomorrow.gas
             )
         except ValueError:
+            today_elec = source_data.get(DATA_ELECTRICITY)
+            today_gas = source_data.get(DATA_GAS)
             _LOGGER.warning(
-                "Cannot merge price data: resolution or type mismatch "
-                "(likely a contract resolution change). Using tomorrow's "
-                "prices for the new day instead of yesterday's stale resolution"
+                "Cannot merge today's and tomorrow's price data: resolution "
+                "or type mismatch (today electricity=%s gas=%s, tomorrow "
+                "electricity=%s gas=%s). This can happen on a genuine "
+                "contract resolution change, or simply because the API "
+                "returned different resolutions for the two fetches. Using "
+                "tomorrow's prices for the new day instead of merging",
+                getattr(today_elec, "resolution_minutes", None),
+                getattr(today_gas, "resolution_minutes", None),
+                getattr(prices_tomorrow.electricity, "resolution_minutes", None),
+                getattr(prices_tomorrow.gas, "resolution_minutes", None),
             )
             # An empty PriceData instance is truthy, so check for actual
             # entries — the tomorrow cache holds an empty series for an
@@ -2791,6 +2818,19 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             _LOGGER.debug("Loading cached prices from disk into coordinator data")
 
             self._parse_cached_data(cached_data)
+
+            today_elec_count, today_gas_count = _price_counts(self._static_prices_today)
+            tomorrow_elec_count, tomorrow_gas_count = _price_counts(
+                self.cached_prices_tomorrow
+            )
+            _LOGGER.debug(
+                "Loaded from disk: today electricity=%s gas=%s, "
+                "tomorrow electricity=%s gas=%s",
+                today_elec_count,
+                today_gas_count,
+                tomorrow_elec_count,
+                tomorrow_gas_count,
+            )
 
             cache = PricesTodayCache(
                 prices_today=self._static_prices_today,
