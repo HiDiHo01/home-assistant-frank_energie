@@ -1700,3 +1700,149 @@ async def test_price_data_after_and_build_tomorrow_cache_with_real_pricedata() -
     assert built.electricity is remaining_electricity
     assert built.gas is not None
     assert built.gas.all == []
+
+
+def _make_market_prices(*entry_date_isos: str):
+    """Build a minimal real MarketPrices with one electricity entry per given ISO start."""
+    from datetime import timedelta as _timedelta
+
+    from python_frank_energie.models import MarketPrices, PriceData
+
+    raw_prices = []
+    for entry_date_iso in entry_date_isos:
+        entry_start = datetime.fromisoformat(entry_date_iso.replace("Z", "+00:00"))
+        raw_prices.append(
+            {
+                "from": entry_date_iso,
+                "till": (entry_start + _timedelta(minutes=15)).isoformat(),
+                "marketPrice": 0.1,
+                "marketPriceTax": 0.02,
+                "sourcingMarkupPrice": 0.01,
+                "energyTaxPrice": 0.1,
+            }
+        )
+    electricity = PriceData(raw_prices, energy_type="electricity")
+    gas = PriceData([], energy_type="gas")
+    return MarketPrices(electricity=electricity, gas=gas, energy_country="NL")
+
+
+@pytest.mark.asyncio
+async def test_refresh_tomorrow_cache_detects_poisoned_same_day_cache(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """A same-day cache whose entries aren't actually dated for tomorrow must be discarded.
+
+    Regression test for a real post-release bug report: a cache poisoned by
+    the (now-fixed) unauthenticated tomorrow-fetch bug has last_fetch_tomorrow
+    dated today, so the short-circuit treated it as a legitimate same-day
+    fetch forever — surviving reloads, restarts, and the manual refresh
+    button, since nothing ever re-validated the cached data against the date
+    it claims to represent.
+    """
+    from datetime import date
+
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+
+    # Poisoned: claims to be fetched "today", but its entries are dated today,
+    # not tomorrow (exactly what the old bug produced).
+    coordinator.cached_prices_tomorrow = _make_market_prices("2026-07-20T10:00:00.000Z")
+    coordinator.last_fetch_tomorrow = now_utc
+
+    fresh_tomorrow_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=fresh_tomorrow_prices)
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    coordinator._fetch_tomorrow_data.assert_called_once()
+    assert result is fresh_tomorrow_prices
+    assert coordinator.cached_prices_tomorrow is fresh_tomorrow_prices
+
+
+@pytest.mark.asyncio
+async def test_refresh_tomorrow_cache_returns_valid_same_day_cache(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """A genuinely valid same-day cache must still short-circuit without an API call."""
+    from datetime import date
+
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+
+    valid_tomorrow_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+    coordinator.cached_prices_tomorrow = valid_tomorrow_prices
+    coordinator.last_fetch_tomorrow = now_utc
+
+    coordinator._fetch_tomorrow_data = AsyncMock()
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    coordinator._fetch_tomorrow_data.assert_not_called()
+    assert result is valid_tomorrow_prices
+
+
+@pytest.mark.asyncio
+async def test_refresh_tomorrow_cache_detects_poisoned_entry_after_a_valid_first_entry(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """A poisoned entry later in the series must be caught, not just entry[0].
+
+    Regression test raised in code review: checking only the first cached
+    entry would miss a partially-poisoned or unsorted series where a later
+    entry is dated today instead of tomorrow.
+    """
+    from datetime import date
+
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+
+    # First entry is correctly dated tomorrow, second entry is poisoned (today).
+    coordinator.cached_prices_tomorrow = _make_market_prices(
+        "2026-07-20T22:00:00.000Z",  # tomorrow (local)
+        "2026-07-20T10:00:00.000Z",  # today (local) — poisoned
+    )
+    coordinator.last_fetch_tomorrow = now_utc
+
+    fresh_tomorrow_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=fresh_tomorrow_prices)
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    coordinator._fetch_tomorrow_data.assert_called_once()
+    assert result is fresh_tomorrow_prices
+
+
+@pytest.mark.asyncio
+async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """A cache spanning tomorrow and the day after must still short-circuit.
+
+    Regression test raised in code review: tightening the date check to
+    require every entry to match tomorrow exactly (rather than tomorrow or
+    later) would incorrectly discard legitimately-cached multi-day API
+    windows, which _price_data_after/_build_tomorrow_cache/
+    promote_tomorrow_prices are specifically designed to preserve.
+    """
+    from datetime import date
+
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+
+    multi_day_prices = _make_market_prices(
+        "2026-07-20T22:00:00.000Z",  # tomorrow (local)
+        "2026-07-21T22:00:00.000Z",  # day after tomorrow (local)
+    )
+    coordinator.cached_prices_tomorrow = multi_day_prices
+    coordinator.last_fetch_tomorrow = now_utc
+
+    coordinator._fetch_tomorrow_data = AsyncMock()
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    coordinator._fetch_tomorrow_data.assert_not_called()
+    assert result is multi_day_prices
