@@ -64,6 +64,40 @@ async def test_price_serialization():
 
 
 @pytest.mark.asyncio
+async def test_market_prices_resolution_minutes_round_trip():
+    """resolution_minutes must survive the disk-cache serialize/deserialize round trip.
+
+    Regression test: `_market_prices_to_dict`/`_dict_to_market_prices` previously
+    dropped `resolution_minutes` entirely, so restoring a cached PT15M contract's
+    prices silently fell back to the PriceData dataclass default of 60. This made
+    `_is_cache_resolution_valid()` always see a (bogus) resolution mismatch after
+    every HA restart for PT15M users, forcing a full live re-fetch every time and
+    defeating the disk-cache optimization.
+    """
+    raw_price = {
+        "from": "2026-06-26T07:30:00+00:00",
+        "till": "2026-06-26T07:45:00+00:00",
+        "marketPrice": 0.15,
+        "marketPriceTax": 0.03,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.12,
+        "perUnit": "kwh",
+    }
+
+    electricity = PriceData(
+        [raw_price], energy_type="electricity", resolution_minutes=15
+    )
+    gas = PriceData([], energy_type="gas", resolution_minutes=60)
+    market_prices = MarketPrices(electricity=electricity, gas=gas, energy_country="NL")
+
+    serialized_mp = _market_prices_to_dict(market_prices)
+    deserialized_mp = _dict_to_market_prices(serialized_mp)
+
+    assert deserialized_mp.electricity.resolution_minutes == 15
+    assert deserialized_mp.gas.resolution_minutes == 60
+
+
+@pytest.mark.asyncio
 async def test_resolution_state_serialization():
     """Test ContractPriceResolutionState serialization and deserialization."""
     raw_state = {
@@ -146,6 +180,8 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
             "gas": [],
             "energy_country": "NL",
             "energy_type": "electricity",
+            "electricity_resolution_minutes": 15,
+            "gas_resolution_minutes": 60,
         },
         "prices_tomorrow": None,
         "contract_price_resolution_state": {

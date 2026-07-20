@@ -159,6 +159,14 @@ def _market_prices_to_dict(market_prices: MarketPrices) -> dict[str, Any]:
         else [],
         "energy_country": market_prices.energy_country,
         "energy_type": market_prices.energy_type,
+        "electricity_resolution_minutes": (
+            market_prices.electricity.resolution_minutes
+            if market_prices.electricity
+            else None
+        ),
+        "gas_resolution_minutes": (
+            market_prices.gas.resolution_minutes if market_prices.gas else None
+        ),
     }
 
 
@@ -169,8 +177,16 @@ def _dict_to_market_prices(data: dict[str, Any]) -> MarketPrices:
     country = data.get("energy_country", "NL")
     energy_type = data.get("energy_type")
 
-    electricity = PriceData(prices=elec_prices, energy_type="electricity")
-    gas = PriceData(prices=gas_prices, energy_type="gas")
+    electricity = PriceData(
+        prices=elec_prices,
+        energy_type="electricity",
+        resolution_minutes=data.get("electricity_resolution_minutes") or 60,
+    )
+    gas = PriceData(
+        prices=gas_prices,
+        energy_type="gas",
+        resolution_minutes=data.get("gas_resolution_minutes") or 60,
+    )
 
     return MarketPrices(
         electricity=electricity,
@@ -408,10 +424,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_update_success = False
         self.user_electricity_enabled = False
         self.user_gas_enabled = False
-        _LOGGER.debug(
-            "Initializing Frank Energie coordinator with country_code: %s",
-            self.country_code,
-        )
 
         self.cached_prices: FrankEnergieData | None = None
         self.cached_prices_today: PricesTodayCache | None = None
@@ -725,6 +737,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             and self.last_fetch_tomorrow is not None
             and self.last_fetch_tomorrow.date() == today
         ):
+            _LOGGER.debug(
+                "Tomorrow prices already cached (fetched %s), skipping API call",
+                self.last_fetch_tomorrow,
+            )
             return self.cached_prices_tomorrow
 
         _LOGGER.debug(
@@ -969,6 +985,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_user_sites(self) -> UserSites | None:
         """Fetch user sites from the API."""
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping user sites fetch because the client is not authenticated"
+            )
             return None
         try:
             sites = await self.api.UserSites()
@@ -1014,6 +1033,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_invoices(self) -> Invoices | None:
         """Fetch invoices from the API."""
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping invoices fetch because the client is not authenticated"
+            )
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch invoices.")
@@ -1040,6 +1062,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_period_usage(self, start_date: date) -> PeriodUsageAndCosts | None:
         """Fetch period usage and costs from the API."""
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping period usage fetch because the client is not authenticated"
+            )
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch period usage.")
@@ -1068,6 +1093,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping user data fetch because the client is not authenticated"
+            )
             return None
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch user data.")
@@ -1245,6 +1273,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         Failures leave the flag unchanged so the next cycle retries.
         """
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping smart PV systems fetch because the client is not authenticated"
+            )
             return None
         if self._has_pv_systems is False:
             return None
@@ -1278,6 +1309,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     async def _fetch_user_smart_feed_in(self) -> UserSmartFeedInStatus | None:
         """Fetch user smart feed-in status from the API."""
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping user smart feed-in fetch because the client is not authenticated"
+            )
             return None
         try:
             return await self.api.user_smart_feed_in()
@@ -1712,6 +1746,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             combined += tomorrow_data
             return combined
         except TypeError:
+            _LOGGER.debug(
+                "In-place merge of %s failed, falling back to __add__",
+                type(today_data).__name__,
+            )
             return today_data + tomorrow_data
 
     def _aggregate_data(
@@ -1801,7 +1839,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not remaining:
             return None
 
-        return replace(price_data, price_data=remaining)
+        # `price_data` (the parsed Price list) is set in __post_init__, not a
+        # dataclass field, so replace(..., price_data=...) would raise
+        # TypeError. Clear `prices` via replace() to keep the other metadata
+        # (energy_type, resolution_minutes, ...), then inject the
+        # already-filtered, already-parsed entries directly.
+        filtered = replace(price_data, prices=[])
+        filtered.price_data = remaining
+        return filtered
 
     @staticmethod
     def _merge_prices(
@@ -1825,15 +1870,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         return MarketPrices(
             electricity=remaining_electricity
             or (
-                replace(prices_tomorrow.electricity, price_data=[])
+                replace(prices_tomorrow.electricity, prices=[])
                 if prices_tomorrow.electricity
                 else None
             ),
             gas=remaining_gas
             or (
-                replace(prices_tomorrow.gas, price_data=[])
-                if prices_tomorrow.gas
-                else None
+                replace(prices_tomorrow.gas, prices=[]) if prices_tomorrow.gas else None
             ),
             energy_country=prices_tomorrow.energy_country,
             energy_type=prices_tomorrow.energy_type,
@@ -1849,6 +1892,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """
         prices_tomorrow = self.cached_prices_tomorrow
         if prices_tomorrow is None:
+            _LOGGER.debug(
+                "Midnight rollover: no cached tomorrow prices to promote "
+                "(last_fetch_tomorrow=%s), today's prices will be refetched live",
+                self.last_fetch_tomorrow,
+            )
             return
 
         source_data = self.cached_prices or self.data
@@ -1868,13 +1916,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
         except ValueError:
             _LOGGER.warning(
-                "Cannot merge price data: resolution or type mismatch, "
-                "retaining today's prices if available, else falling back to tomorrow's prices"
+                "Cannot merge price data: resolution or type mismatch "
+                "(likely a contract resolution change). Using tomorrow's "
+                "prices for the new day instead of yesterday's stale resolution"
             )
+            # An empty PriceData instance is truthy, so check for actual
+            # entries — the tomorrow cache holds an empty series for an
+            # energy type the user has no contract for.
             combined_electricity = (
-                source_data.get(DATA_ELECTRICITY) or prices_tomorrow.electricity
+                prices_tomorrow.electricity
+                if prices_tomorrow.electricity and prices_tomorrow.electricity.all
+                else source_data.get(DATA_ELECTRICITY)
             )
-            combined_gas = source_data.get(DATA_GAS) or prices_tomorrow.gas
+            combined_gas = (
+                prices_tomorrow.gas
+                if prices_tomorrow.gas and prices_tomorrow.gas.all
+                else source_data.get(DATA_GAS)
+            )
 
         updated_data = source_data.copy()
         updated_data[DATA_ELECTRICITY] = combined_electricity
@@ -1903,12 +1961,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         self.async_update_listeners()
 
+        promoted_elec = (
+            len(prices_tomorrow.electricity.all) if prices_tomorrow.electricity else 0
+        )
+        promoted_gas = len(prices_tomorrow.gas.all) if prices_tomorrow.gas else 0
         kept_elec = len(remaining_electricity.all) if remaining_electricity else 0
         kept_gas = len(remaining_gas.all) if remaining_gas else 0
 
         _LOGGER.debug(
-            "Promoted cached tomorrow prices to today's prices "
-            "(%s electricity and %s gas price entries kept for the new tomorrow)",
+            "Promoted %s electricity and %s gas price entries from tomorrow to "
+            "today's prices (%s electricity and %s gas price entries kept for "
+            "the new tomorrow)",
+            promoted_elec,
+            promoted_gas,
             kept_elec,
             kept_gas,
         )
@@ -1985,6 +2050,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> MarketPrices | None:
         """Fetch user-specific prices for a given date range."""
         if not self.api.is_authenticated:
+            _LOGGER.debug(
+                "Skipping user prices fetch because the client is not authenticated"
+            )
             return None
 
         site_reference = self.site_reference
@@ -2050,6 +2118,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         if public_prices is None:
+            if not use_fallback and not self.api.is_authenticated:
+                # e.g. tomorrow's prices not published yet — don't substitute
+                # today's cached prices, or _refresh_tomorrow_cache will treat
+                # today's data as a successful tomorrow fetch and stop retrying.
+                _LOGGER.debug(
+                    "No public prices available yet, skipping fallback to cached prices"
+                )
+                return None
             public_prices = getattr(
                 self,
                 "_cached_prices",
@@ -2563,6 +2639,7 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
         """Initialize the settings coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie settings coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.update_interval = timedelta(
             hours=config_entry.options.get(
                 CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
@@ -2609,6 +2686,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         """Initialize the price coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie price coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = None
         self.store = Store(
@@ -2937,6 +3015,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         """Initialize the battery coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie battery coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
             minutes=config_entry.options.get(
@@ -3008,6 +3087,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
         """Initialize the charger coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie charger coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
             minutes=config_entry.options.get(
@@ -3077,6 +3157,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         """Initialize the PV coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie PV coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
             minutes=config_entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV)
@@ -3151,6 +3232,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
         """Initialize the vehicle coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie vehicle coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
             minutes=config_entry.options.get(
@@ -3221,6 +3303,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         """Initialize the statistics coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie statistics coordinator"
+        _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
             minutes=config_entry.options.get(

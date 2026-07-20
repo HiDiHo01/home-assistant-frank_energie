@@ -992,6 +992,57 @@ async def test_fetch_contract_price_resolution_state_skips_when_unauthenticated_
 
 
 @pytest.mark.asyncio
+async def test_fetch_prices_with_fallback_unauthenticated_tomorrow_not_published(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Unauthenticated tomorrow-fetch must not fall back to cached today prices.
+
+    Regression test: when the public API hasn't published tomorrow's prices yet,
+    the coordinator previously substituted `_cached_prices` (today's data) and
+    returned it as if it were tomorrow's prices. `_refresh_tomorrow_cache` would
+    then believe tomorrow was successfully fetched, cache a duplicate of today's
+    data, and permanently skip retries for the rest of the day.
+    """
+    from datetime import date
+
+    mock_frank_energie.is_authenticated = False
+
+    today_prices = MagicMock()
+    coordinator._cached_prices = today_prices
+
+    coordinator._fetch_public_prices_for_range = AsyncMock(return_value=None)
+    coordinator._fetch_user_prices_for_range = AsyncMock(return_value=None)
+
+    result = await coordinator._fetch_prices_with_fallback(
+        date(2026, 7, 20), date(2026, 7, 21), use_fallback=False
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_prices_with_fallback_unauthenticated_today_uses_cache(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Today's fetch should still fall back to cached prices on transient failure."""
+    from datetime import date
+
+    mock_frank_energie.is_authenticated = False
+
+    today_prices = MagicMock()
+    coordinator._cached_prices = today_prices
+
+    coordinator._fetch_public_prices_for_range = AsyncMock(return_value=None)
+    coordinator._fetch_user_prices_for_range = AsyncMock(return_value=None)
+
+    result = await coordinator._fetch_prices_with_fallback(
+        date(2026, 7, 19), date(2026, 7, 20), use_fallback=True
+    )
+
+    assert result is today_prices
+
+
+@pytest.mark.asyncio
 async def test_dynamic_fetches_skip_when_feature_disabled(
     coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
 ) -> None:
@@ -1399,6 +1450,48 @@ async def test_price_coordinator_midnight_rollover(
 
 
 @pytest.mark.asyncio
+async def test_price_coordinator_midnight_rollover_resolution_mismatch(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """On a resolution-change day, promotion must prefer tomorrow's (new) resolution.
+
+    Regression test: when `_merge_prices` raises ValueError because today's and
+    tomorrow's cached price series have mismatched resolutions (e.g. a contract
+    resolution change taking effect at midnight), the fallback previously kept
+    yesterday's stale-resolution data instead of the freshly-fetched,
+    correct-resolution tomorrow data.
+    """
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    tomorrow_prices = MagicMock()
+    tomorrow_prices.electricity = MagicMock(name="tomorrow_electricity")
+    tomorrow_prices.gas = MagicMock(name="tomorrow_gas")
+    price_coordinator.cached_prices_tomorrow = tomorrow_prices
+
+    price_coordinator.cached_prices = {
+        DATA_ELECTRICITY: MagicMock(name="yesterday_electricity"),
+        DATA_GAS: MagicMock(name="yesterday_gas"),
+    }
+
+    price_coordinator._merge_prices = MagicMock(
+        side_effect=ValueError("resolution mismatch")
+    )
+
+    price_coordinator.promote_tomorrow_prices()
+
+    assert (
+        price_coordinator._static_prices_today.electricity
+        is tomorrow_prices.electricity
+    )
+    assert price_coordinator._static_prices_today.gas is tomorrow_prices.gas
+
+
+@pytest.mark.asyncio
 async def test_sub_coordinators_properties(
     mock_frank_energie, mock_config_entry
 ) -> None:
@@ -1540,3 +1633,70 @@ async def test_coordinator_helpers() -> None:
         )
         assert res3.electricity is elec_rem
         assert res3.gas == "empty"
+
+
+@pytest.mark.asyncio
+async def test_price_data_after_and_build_tomorrow_cache_with_real_pricedata() -> None:
+    """_price_data_after/_build_tomorrow_cache must not crash on a real multi-day window.
+
+    Regression test: both methods called `dataclasses.replace(price_data, price_data=...)`,
+    but `price_data` is an instance attribute set in `PriceData.__post_init__`, not a
+    declared dataclass field. `replace()` always raised TypeError for any real PriceData
+    object, so a genuine multi-day API response would silently crash midnight promotion.
+    The previous test only exercised this with MagicMocks, which masked the bug since
+    mocked `replace()` never touches the real dataclass machinery.
+    """
+    from datetime import date, timezone
+    from python_frank_energie.models import PriceData
+
+    raw_today = {
+        "from": "2026-07-19T22:00:00.000Z",
+        "till": "2026-07-19T22:15:00.000Z",
+        "marketPrice": 0.1,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    raw_day_after = {
+        "from": "2026-07-20T22:00:00.000Z",
+        "till": "2026-07-20T22:15:00.000Z",
+        "marketPrice": 0.2,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    multi_day_electricity = PriceData(
+        [raw_today, raw_day_after], energy_type="electricity"
+    )
+    empty_gas = PriceData([], energy_type="gas")
+
+    new_today = date(2026, 7, 20)
+
+    remaining_electricity = FrankEnergiePriceCoordinator._price_data_after(
+        multi_day_electricity, new_today
+    )
+    remaining_gas = FrankEnergiePriceCoordinator._price_data_after(empty_gas, new_today)
+
+    assert remaining_electricity is not None
+    assert len(remaining_electricity.all) == 1
+    assert remaining_electricity.all[0].date_from == datetime(
+        2026, 7, 20, 22, 0, tzinfo=timezone.utc
+    )
+    # Metadata (e.g. resolution) must survive the rebuild.
+    assert remaining_electricity.resolution_minutes == 15
+    assert remaining_gas is None
+
+    tomorrow_prices = MagicMock()
+    tomorrow_prices.electricity = multi_day_electricity
+    tomorrow_prices.gas = empty_gas
+    tomorrow_prices.energy_country = "NL"
+    tomorrow_prices.energy_type = "electricity"
+
+    built = FrankEnergiePriceCoordinator._build_tomorrow_cache(
+        tomorrow_prices, remaining_electricity, remaining_gas
+    )
+
+    assert built is not None
+    assert built.electricity is remaining_electricity
+    assert built.gas is not None
+    assert built.gas.all == []
