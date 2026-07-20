@@ -31,6 +31,7 @@ jobs:
             test.pypi.org:443
             codecov.io:443
             uploader.codecov.io:443
+            registry.npmjs.org:443
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
         with:
           persist-credentials: false
