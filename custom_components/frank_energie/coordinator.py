@@ -209,6 +209,16 @@ def _dict_to_market_prices(data: dict[str, Any]) -> MarketPrices:
     )
 
 
+def _price_count(market_prices: MarketPrices | None, energy_type: str) -> int:
+    """Count entries for one energy type ("electricity" or "gas") in a MarketPrices."""
+    if market_prices is None:
+        return 0
+    price_series = getattr(market_prices, energy_type, None)
+    if not price_series:
+        return 0
+    return len(price_series.all)
+
+
 def _resolution_state_to_dict(state: ContractPriceResolutionState) -> dict[str, Any]:
     """Convert ContractPriceResolutionState to serializable dict."""
     return {
@@ -2791,6 +2801,15 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             _LOGGER.debug("Loading cached prices from disk into coordinator data")
 
             self._parse_cached_data(cached_data)
+
+            _LOGGER.debug(
+                "Loaded from disk: today electricity=%s gas=%s, "
+                "tomorrow electricity=%s gas=%s",
+                _price_count(self._static_prices_today, "electricity"),
+                _price_count(self._static_prices_today, "gas"),
+                _price_count(self.cached_prices_tomorrow, "electricity"),
+                _price_count(self.cached_prices_tomorrow, "gas"),
+            )
 
             cache = PricesTodayCache(
                 prices_today=self._static_prices_today,
