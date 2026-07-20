@@ -209,14 +209,22 @@ def _dict_to_market_prices(data: dict[str, Any]) -> MarketPrices:
     )
 
 
-def _price_count(market_prices: MarketPrices | None, energy_type: str) -> int:
-    """Count entries for one energy type ("electricity" or "gas") in a MarketPrices."""
+def _price_counts(market_prices: MarketPrices | None) -> tuple[int, int]:
+    """Return (electricity_count, gas_count) for a MarketPrices.
+
+    Explicit attribute access rather than getattr(..., energy_type) so a
+    typo'd energy type can't silently resolve to 0 instead of failing —
+    there's no string parameter here to misuse. Centralized so any future
+    logging that needs these counts reuses this instead of duplicating the
+    electricity/gas lookup at each call site.
+    """
     if market_prices is None:
-        return 0
-    price_series = getattr(market_prices, energy_type, None)
-    if not price_series:
-        return 0
-    return len(price_series.all)
+        return 0, 0
+    electricity_count = (
+        len(market_prices.electricity.all) if market_prices.electricity else 0
+    )
+    gas_count = len(market_prices.gas.all) if market_prices.gas else 0
+    return electricity_count, gas_count
 
 
 def _resolution_state_to_dict(state: ContractPriceResolutionState) -> dict[str, Any]:
@@ -2811,13 +2819,17 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
             self._parse_cached_data(cached_data)
 
+            today_elec_count, today_gas_count = _price_counts(self._static_prices_today)
+            tomorrow_elec_count, tomorrow_gas_count = _price_counts(
+                self.cached_prices_tomorrow
+            )
             _LOGGER.debug(
                 "Loaded from disk: today electricity=%s gas=%s, "
                 "tomorrow electricity=%s gas=%s",
-                _price_count(self._static_prices_today, "electricity"),
-                _price_count(self._static_prices_today, "gas"),
-                _price_count(self.cached_prices_tomorrow, "electricity"),
-                _price_count(self.cached_prices_tomorrow, "gas"),
+                today_elec_count,
+                today_gas_count,
+                tomorrow_elec_count,
+                tomorrow_gas_count,
             )
 
             cache = PricesTodayCache(
