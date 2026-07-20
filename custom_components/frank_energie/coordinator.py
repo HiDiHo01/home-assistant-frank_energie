@@ -1983,10 +1983,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 source_data.get(DATA_GAS), prices_tomorrow.gas
             )
         except ValueError:
+            today_elec = source_data.get(DATA_ELECTRICITY)
+            today_gas = source_data.get(DATA_GAS)
             _LOGGER.warning(
-                "Cannot merge price data: resolution or type mismatch "
-                "(likely a contract resolution change). Using tomorrow's "
-                "prices for the new day instead of yesterday's stale resolution"
+                "Cannot merge today's and tomorrow's price data: resolution "
+                "or type mismatch (today electricity=%s gas=%s, tomorrow "
+                "electricity=%s gas=%s). This can happen on a genuine "
+                "contract resolution change, or simply because the API "
+                "returned different resolutions for the two fetches. Using "
+                "tomorrow's prices for the new day instead of merging",
+                getattr(today_elec, "resolution_minutes", None),
+                getattr(today_gas, "resolution_minutes", None),
+                getattr(prices_tomorrow.electricity, "resolution_minutes", None),
+                getattr(prices_tomorrow.gas, "resolution_minutes", None),
             )
             # An empty PriceData instance is truthy, so check for actual
             # entries — the tomorrow cache holds an empty series for an

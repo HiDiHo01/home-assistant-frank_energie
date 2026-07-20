@@ -5201,7 +5201,7 @@ async def async_setup_entry(
 
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
-    _LOGGER.debug("Aantal voertuigen gevonden: %d", num_vehicles)
+    _LOGGER.debug("Number of vehicles found: %d", num_vehicles)
 
     if enode_vehicles and enode_vehicles.vehicles:
         enode_vehicle_sensors = []
