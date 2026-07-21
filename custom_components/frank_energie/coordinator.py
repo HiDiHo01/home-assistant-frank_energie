@@ -2987,8 +2987,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return bool(
                 price_data
                 and price_data.all
-                and price_data.all[-1].date_from.astimezone(tz_amsterdam).date()
-                < today
+                and price_data.all[-1].date_from.astimezone(tz_amsterdam).date() < today
             )
 
         if not (
