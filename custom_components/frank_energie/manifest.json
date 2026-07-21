@@ -2,7 +2,8 @@
     "domain": "frank_energie",
     "name": "Frank Energie",
     "codeowners": [
-        "@HiDiHo01"
+        "@HiDiHo01",
+        "@Veldkornet"
     ],
     "config_flow": true,
     "documentation": "https://github.com/HiDiHo01/home-assistant-frank_energie",
@@ -17,5 +18,5 @@
     "requirements": [
         "python-frank-energie==2026.7.20"
     ],
-    "version": "2026.7.20"
+    "version": "2026.7.21"
 }
