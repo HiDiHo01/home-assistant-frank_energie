@@ -2962,6 +2962,64 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
             self.update_interval = new_interval
 
+    def _carry_forward_previous_day(
+        self, new_prices: MarketPrices | None, today: date
+    ) -> MarketPrices | None:
+        """Preserve yesterday's cached prices when a live fetch crosses local midnight.
+
+        Normally `promote_tomorrow_prices` merges the previous day's prices
+        with the already-cached tomorrow prices at exactly 00:00 local time,
+        so `previous_hour`/history-dependent sensors don't go unavailable.
+        But if tomorrow's prices weren't cached yet when midnight hit (late
+        API publication, a failed fetch, a restart), promotion has nothing to
+        promote, and this method's caller ends up doing a live, today-only
+        fetch instead. Without this, that fetch would replace `today - 1`'s
+        data outright and `previous_hour` would have no matching entry for
+        the entire first hour of the new day.
+        """
+        previous = self._static_prices_today
+        if previous is None or new_prices is None:
+            return new_prices
+
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+        def is_from_before_today(price_data: PriceData | None) -> bool:
+            return bool(
+                price_data
+                and price_data.all
+                and price_data.all[-1].date_from.astimezone(tz_amsterdam).date()
+                < today
+            )
+
+        if not (
+            is_from_before_today(previous.electricity)
+            or is_from_before_today(previous.gas)
+        ):
+            return new_prices
+
+        try:
+            merged_electricity = self._merge_prices(
+                previous.electricity, new_prices.electricity
+            )
+            merged_gas = self._merge_prices(previous.gas, new_prices.gas)
+        except ValueError:
+            _LOGGER.debug(
+                "Cannot carry yesterday's prices over local midnight "
+                "(resolution or energy-type mismatch); using freshly "
+                "fetched today prices only"
+            )
+            return new_prices
+
+        # Keep yesterday + today only; anything older would just accumulate.
+        cutoff = today - timedelta(days=2)
+        return MarketPrices(
+            electricity=self._price_data_after(merged_electricity, cutoff)
+            or merged_electricity,
+            gas=self._price_data_after(merged_gas, cutoff) or merged_gas,
+            energy_country=new_prices.energy_country,
+            energy_type=new_prices.energy_type,
+        )
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch price data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -2999,8 +3057,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 or self.last_fetch_today.date() != today
             ):
                 try:
-                    prices_today = await self._fetch_prices_with_fallback(
+                    fetched_prices_today = await self._fetch_prices_with_fallback(
                         today, tomorrow, use_fallback=True
+                    )
+                    prices_today = self._carry_forward_previous_day(
+                        fetched_prices_today, today
                     )
                     self._update_today_prices(prices_today)
                     self.last_fetch_today = now_utc

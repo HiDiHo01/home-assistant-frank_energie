@@ -1492,6 +1492,139 @@ async def test_price_coordinator_midnight_rollover_resolution_mismatch(
 
 
 @pytest.mark.asyncio
+async def test_carry_forward_previous_day_merges_yesterday_tail(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """A live today-only fetch across midnight must keep yesterday's tail.
+
+    Regression test: promote_tomorrow_prices only merges yesterday's prices
+    with the already-cached tomorrow prices at exactly 00:00 local time. If
+    tomorrow's prices weren't cached yet when midnight hit (late API
+    publication, a failed fetch, a restart), promotion has nothing to
+    promote, and _async_update_data instead does a live, today-only fetch.
+    Without carrying yesterday's cached prices forward, that fetch replaced
+    `_static_prices_today` outright and `previous_hour` had no matching entry
+    for the entire first hour of the new day.
+    """
+    from datetime import date
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    # Amsterdam is UTC+2 in July (CEST): 21:00 UTC on the 20th is 23:00 local
+    # on the 20th (yesterday), and 22:00 UTC on the 20th is 00:00 local on
+    # the 21st (the new "today").
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-20T21:00:00.000Z"
+    )
+
+    new_today = date(2026, 7, 21)
+    fresh_today_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+
+    merged = price_coordinator._carry_forward_previous_day(
+        fresh_today_prices, new_today
+    )
+
+    dates = {p.date_from for p in merged.electricity.all}
+    assert datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc) in dates
+    assert datetime(2026, 7, 20, 22, 0, tzinfo=timezone.utc) in dates
+
+
+@pytest.mark.asyncio
+async def test_carry_forward_previous_day_noop_within_same_day(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """No merge should happen on an ordinary same-day refetch.
+
+    Merging on every same-day fetch (not just the midnight-crossing one)
+    would needlessly re-run the merge machinery and risk unbounded growth.
+    """
+    from datetime import date
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    today = date(2026, 7, 21)
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-21T10:00:00.000Z"
+    )
+    fresh_today_prices = _make_market_prices("2026-07-21T11:00:00.000Z")
+
+    result = price_coordinator._carry_forward_previous_day(fresh_today_prices, today)
+
+    assert result is fresh_today_prices
+
+
+@pytest.mark.asyncio
+async def test_carry_forward_previous_day_prunes_older_than_yesterday(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Stale multi-day-old cached data must not accumulate forever."""
+    from datetime import date
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    # Cached data is two days stale (e.g. HA was offline over midnight twice):
+    # 21:00 UTC on the 19th is 23:00 local on the 19th.
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-19T21:00:00.000Z"
+    )
+
+    new_today = date(2026, 7, 21)
+    fresh_today_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+
+    merged = price_coordinator._carry_forward_previous_day(
+        fresh_today_prices, new_today
+    )
+
+    dates = {p.date_from for p in merged.electricity.all}
+    assert datetime(2026, 7, 19, 21, 0, tzinfo=timezone.utc) not in dates
+    assert datetime(2026, 7, 20, 22, 0, tzinfo=timezone.utc) in dates
+
+
+@pytest.mark.asyncio
+async def test_carry_forward_previous_day_falls_back_on_resolution_mismatch(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """A resolution/energy-type change across midnight must not crash; use fresh data."""
+    from datetime import date
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-20T21:00:00.000Z"
+    )
+    new_today = date(2026, 7, 21)
+    fresh_today_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+
+    price_coordinator._merge_prices = MagicMock(side_effect=ValueError("mismatch"))
+
+    result = price_coordinator._carry_forward_previous_day(
+        fresh_today_prices, new_today
+    )
+
+    assert result is fresh_today_prices
+
+
+@pytest.mark.asyncio
 async def test_sub_coordinators_properties(
     mock_frank_energie, mock_config_entry
 ) -> None:
