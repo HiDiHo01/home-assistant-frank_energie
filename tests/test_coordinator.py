@@ -1493,7 +1493,7 @@ async def test_price_coordinator_midnight_rollover_resolution_mismatch(
 
 @pytest.mark.asyncio
 async def test_carry_forward_previous_day_merges_yesterday_tail(
-    mock_frank_energie, mock_config_entry
+    mock_frank_energie: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
     """A live today-only fetch across midnight must keep yesterday's tail.
 
@@ -1530,13 +1530,13 @@ async def test_carry_forward_previous_day_merges_yesterday_tail(
     )
 
     dates = {p.date_from for p in merged.electricity.all}
-    assert datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc) in dates
-    assert datetime(2026, 7, 20, 22, 0, tzinfo=timezone.utc) in dates
+    assert datetime(2026, 7, 20, 21, 0, tzinfo=UTC) in dates
+    assert datetime(2026, 7, 20, 22, 0, tzinfo=UTC) in dates
 
 
 @pytest.mark.asyncio
 async def test_carry_forward_previous_day_noop_within_same_day(
-    mock_frank_energie, mock_config_entry
+    mock_frank_energie: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
     """No merge should happen on an ordinary same-day refetch.
 
@@ -1565,7 +1565,7 @@ async def test_carry_forward_previous_day_noop_within_same_day(
 
 @pytest.mark.asyncio
 async def test_carry_forward_previous_day_prunes_older_than_yesterday(
-    mock_frank_energie, mock_config_entry
+    mock_frank_energie: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
     """Stale multi-day-old cached data must not accumulate forever."""
     from datetime import date
@@ -1591,13 +1591,13 @@ async def test_carry_forward_previous_day_prunes_older_than_yesterday(
     )
 
     dates = {p.date_from for p in merged.electricity.all}
-    assert datetime(2026, 7, 19, 21, 0, tzinfo=timezone.utc) not in dates
-    assert datetime(2026, 7, 20, 22, 0, tzinfo=timezone.utc) in dates
+    assert datetime(2026, 7, 19, 21, 0, tzinfo=UTC) not in dates
+    assert datetime(2026, 7, 20, 22, 0, tzinfo=UTC) in dates
 
 
 @pytest.mark.asyncio
 async def test_carry_forward_previous_day_falls_back_on_resolution_mismatch(
-    mock_frank_energie, mock_config_entry
+    mock_frank_energie: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
     """A resolution/energy-type change across midnight must not crash; use fresh data."""
     from datetime import date
