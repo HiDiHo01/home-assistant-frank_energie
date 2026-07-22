@@ -69,7 +69,7 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
     SUPPORTED_COUNTRIES,
-    COUNTRIES_WITH_SIMPLE_MARKET_PRICES,
+    COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
@@ -2105,7 +2105,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         try:
-            if country_code in COUNTRIES_WITH_SIMPLE_MARKET_PRICES:
+            if COUNTRY_USES_SIMPLE_MARKET_PRICES.get(country_code, False):
                 return await self.api.country_prices(
                     country_code, start_date, end_date, self.resolution
                 )

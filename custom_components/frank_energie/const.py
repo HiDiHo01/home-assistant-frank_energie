@@ -97,11 +97,18 @@ DEFAULT_INTERVAL_VEHICLES: Final[int] = 15
 DEFAULT_INTERVAL_PV: Final[int] = 5
 
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
-SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE", "FR")
 
-# Countries whose public market prices are fetched via the 'x-country' header
-# using the simplified market-prices query, instead of the NL-shaped `prices()` query.
-COUNTRIES_WITH_SIMPLE_MARKET_PRICES: Final[tuple[str, ...]] = ("BE", "FR")
+# Single source of truth for country support: maps each supported country
+# code to whether its public market prices are fetched via the 'x-country'
+# header using the simplified market-prices query, instead of the NL-shaped
+# `prices()` query. SUPPORTED_COUNTRIES is derived from this mapping so the
+# two can never drift out of sync.
+COUNTRY_USES_SIMPLE_MARKET_PRICES: Final[dict[str, bool]] = {
+    "NL": False,
+    "BE": True,
+    "FR": True,
+}
+SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = tuple(COUNTRY_USES_SIMPLE_MARKET_PRICES)
 
 SERVICE_STATUSES: Final[tuple[str, ...]] = (
     "active",
