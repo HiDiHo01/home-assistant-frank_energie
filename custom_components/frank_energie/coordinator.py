@@ -68,6 +68,8 @@ from .const import (
     DOMAIN,
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
+    SUPPORTED_COUNTRIES,
+    COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
@@ -1192,7 +1194,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 country_code_raw = user_data.countryCode
                 if isinstance(country_code_raw, str) and country_code_raw:
                     country_code = country_code_raw.upper()
-                    if country_code in {"NL", "BE"}:
+                    if country_code in SUPPORTED_COUNTRIES:
                         self._country_code = country_code
             if not self._connection_id:
                 self._connection_id = _extract_electricity_connection_id(user_data)
@@ -2103,13 +2105,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         try:
-            if country_code == "BE":
-                return await self.api.be_prices(start_date, end_date)
+            if COUNTRY_USES_SIMPLE_MARKET_PRICES.get(country_code, False):
+                return await self.api.country_prices(
+                    country_code, start_date, end_date, self.resolution
+                )
 
             return await self.api.prices(
                 start_date,
-                end_date,
-                self.resolution,
+                resolution=self.resolution,
             )
 
         except RequestException as ex:
