@@ -232,9 +232,10 @@
         "name": "Stratégie de batterie intelligente",
         "state": {
           "aggressive": "Agressive",
-          "balanced": "Standard",
+          "balanced": "Équilibrée",
           "conservative": "Conservatrice",
           "imbalance_only": "Équilibrage uniquement",
+          "standard": "Standard",
           "unknown": "Inconnu"
         }
       },
@@ -985,10 +986,11 @@
       "battery_imbalance_trading_strategy": {
         "name": "Stratégie de trading d'équilibrage",
         "state": {
-          "balanced": "Standard",
+          "balanced": "Équilibrée",
           "conservative": "Conservatrice",
           "imbalance_only": "Équilibrage uniquement",
           "aggressive": "Agressive",
+          "standard": "Standard",
           "unknown": "Inconnu"
         }
       },

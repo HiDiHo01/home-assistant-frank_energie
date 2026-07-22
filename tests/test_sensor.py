@@ -681,6 +681,136 @@ async def test_async_setup_entry_with_vehicles_does_not_crash(
     }
 
 
+def _make_tesla_model_3(last_seen: datetime) -> object:
+    """Build a real EnodeVehicle (Tesla Model 3), as returned by python-frank-energie."""
+    from python_frank_energie.models import (
+        ChargeSettings,
+        ChargeState,
+        EnodeVehicle,
+        PowerDeliveryState,
+        VehicleInformation,
+    )
+
+    now = dt.utcnow()
+    return EnodeVehicle(
+        id="veh_123",
+        can_smart_charge=True,
+        charge_settings=ChargeSettings(
+            calculated_deadline=now,
+            capacity=75.0,
+            deadline=None,
+            hour_friday=7,
+            hour_monday=7,
+            hour_saturday=7,
+            hour_sunday=7,
+            hour_thursday=7,
+            hour_tuesday=7,
+            hour_wednesday=7,
+            id="cs-1",
+            is_smart_charging_enabled=True,
+            is_solar_charging_enabled=False,
+            max_charge_limit=100,
+            min_charge_limit=20,
+        ),
+        charge_state=ChargeState(
+            battery_capacity=75.0,
+            battery_level=80,
+            charge_limit=100,
+            charge_rate=11.0,
+            charge_time_remaining=0,
+            is_charging=False,
+            is_fully_charged=True,
+            is_plugged_in=True,
+            last_updated=now,
+            power_delivery_state=PowerDeliveryState.PLUGGED_IN_FINISHED,
+            range=300,
+        ),
+        information=VehicleInformation(
+            brand="Tesla", model="Model 3", vin="VIN123", year=2022
+        ),
+        interventions=[],
+        is_reachable=True,
+        last_seen=last_seen,
+    )
+
+
+def test_enode_vehicle_available_does_not_crash_without_available_fn(
+    hass: HomeAssistant,
+) -> None:
+    """Test that EnodeVehicleSensor.available handles descriptions with no available_fn."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(last_seen=dt.utcnow())
+    vehicles_obj = MagicMock()
+    vehicles_obj.vehicles = [vehicle]
+
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: vehicles_obj}
+
+    for description in ENODE_VEHICLE_SENSOR_TYPES:
+        assert description.available_fn is None
+        sensor = EnodeVehicleSensor(
+            hass=hass,
+            coordinator=coordinator,
+            description=description,
+            vehicle_data=vehicle,
+            vehicle_index=0,
+        )
+        assert sensor.available in (True, False)
+
+    battery_level_desc = next(
+        d for d in ENODE_VEHICLE_SENSOR_TYPES if d.key == "battery_level"
+    )
+    battery_level_sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=battery_level_desc,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+    assert battery_level_sensor.available is True
+
+
+def test_enode_vehicle_last_seen_handles_already_parsed_datetime(
+    hass: HomeAssistant,
+) -> None:
+    """Test that the last_seen sensor returns the datetime unchanged when EnodeVehicle.last_seen is already parsed."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    last_seen = dt.utcnow()
+    vehicle = _make_tesla_model_3(last_seen=last_seen)
+    vehicles_obj = MagicMock()
+    vehicles_obj.vehicles = [vehicle]
+
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: vehicles_obj}
+
+    last_seen_description = next(
+        d for d in ENODE_VEHICLE_SENSOR_TYPES if d.key == "last_seen"
+    )
+    sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=last_seen_description,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+
+    assert sensor.native_value == last_seen
+
+
 def test_calculate_market_percent_tax() -> None:
     """Test the _calculate_market_percent_tax helper function under various pricing scenarios."""
     from unittest.mock import MagicMock
