@@ -754,7 +754,6 @@ def test_enode_vehicle_available_does_not_crash_without_available_fn(
     coordinator.data = {DATA_ENODE_VEHICLES: vehicles_obj}
 
     for description in ENODE_VEHICLE_SENSOR_TYPES:
-        assert description.available_fn is None
         sensor = EnodeVehicleSensor(
             hass=hass,
             coordinator=coordinator,
@@ -767,6 +766,7 @@ def test_enode_vehicle_available_does_not_crash_without_available_fn(
     battery_level_desc = next(
         d for d in ENODE_VEHICLE_SENSOR_TYPES if d.key == "battery_level"
     )
+    assert battery_level_desc.available_fn is None
     battery_level_sensor = EnodeVehicleSensor(
         hass=hass,
         coordinator=coordinator,

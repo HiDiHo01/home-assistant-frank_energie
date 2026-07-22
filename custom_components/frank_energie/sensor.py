@@ -5267,7 +5267,7 @@ def _get_nested(data: object, *keys: str) -> object | None:
 
 
 def _parse_iso_datetime(dt_value: datetime | str | None) -> datetime | None:
-    """Parse ISO 8601 datetime string to aware datetime or return None."""
+    """Return dt_value unchanged if already a datetime, else parse it as an ISO 8601 string."""
     if not dt_value:
         return None
     if isinstance(dt_value, datetime):
