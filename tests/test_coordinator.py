@@ -1085,7 +1085,7 @@ async def test_fetch_public_prices_for_range_nl_uses_default_prices_query(
     )
 
     mock_frank_energie.prices.assert_awaited_once_with(
-        start_date, end_date, coordinator.resolution
+        start_date, resolution=coordinator.resolution
     )
     mock_frank_energie.country_prices.assert_not_awaited()
     assert result is expected

@@ -2112,8 +2112,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             return await self.api.prices(
                 start_date,
-                end_date,
-                self.resolution,
+                resolution=self.resolution,
             )
 
         except RequestException as ex:
