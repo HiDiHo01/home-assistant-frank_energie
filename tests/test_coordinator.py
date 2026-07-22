@@ -1043,6 +1043,75 @@ async def test_fetch_prices_with_fallback_unauthenticated_today_uses_cache(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("country_code", ["BE", "FR"])
+async def test_fetch_public_prices_for_range_uses_country_prices(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    country_code: str,
+) -> None:
+    """BE and FR public prices must go through the country-scoped 'x-country' query."""
+    from datetime import date
+
+    start_date = date(2026, 7, 22)
+    end_date = date(2026, 7, 23)
+    expected = MagicMock()
+    mock_frank_energie.country_prices = AsyncMock(return_value=expected)
+
+    result = await coordinator._fetch_public_prices_for_range(
+        start_date, end_date, country_code
+    )
+
+    mock_frank_energie.country_prices.assert_awaited_once_with(
+        country_code, start_date, end_date, coordinator.resolution
+    )
+    mock_frank_energie.prices.assert_not_awaited()
+    assert result is expected
+
+
+@pytest.mark.asyncio
+async def test_fetch_public_prices_for_range_nl_uses_default_prices_query(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """NL (and other non-simplified markets) must keep using the default `prices()` query."""
+    from datetime import date
+
+    start_date = date(2026, 7, 22)
+    end_date = date(2026, 7, 23)
+    expected = MagicMock()
+    mock_frank_energie.prices = AsyncMock(return_value=expected)
+
+    result = await coordinator._fetch_public_prices_for_range(
+        start_date, end_date, "NL"
+    )
+
+    mock_frank_energie.prices.assert_awaited_once_with(
+        start_date, end_date, coordinator.resolution
+    )
+    mock_frank_energie.country_prices.assert_not_awaited()
+    assert result is expected
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_accepts_fr_country_code(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Account countryCode 'FR' must be accepted, not silently dropped."""
+    mock_frank_energie.is_authenticated = True
+    coordinator._country_code = None
+
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "FR"
+    user_data.connections = []
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.smart_hvac_status = AsyncMock(return_value=None)
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert coordinator._country_code == "FR"
+
+
+@pytest.mark.asyncio
 async def test_dynamic_fetches_skip_when_feature_disabled(
     coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
 ) -> None:

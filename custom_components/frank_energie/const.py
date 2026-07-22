@@ -97,7 +97,11 @@ DEFAULT_INTERVAL_VEHICLES: Final[int] = 15
 DEFAULT_INTERVAL_PV: Final[int] = 5
 
 SUPPORTED_RESOLUTIONS: Final[tuple[str, ...]] = ("PT15M", "PT60M")
-SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE")
+SUPPORTED_COUNTRIES: Final[tuple[str, ...]] = ("NL", "BE", "FR")
+
+# Countries whose public market prices are fetched via the 'x-country' header
+# using the simplified market-prices query, instead of the NL-shaped `prices()` query.
+COUNTRIES_WITH_SIMPLE_MARKET_PRICES: Final[tuple[str, ...]] = ("BE", "FR")
 
 SERVICE_STATUSES: Final[tuple[str, ...]] = (
     "active",
