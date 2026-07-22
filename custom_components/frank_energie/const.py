@@ -167,6 +167,7 @@ BATTERY_STRATEGY_OPTIONS: Final[list[str]] = [
     "conservative",
     "aggressive",
     "imbalance_only",
+    "standard",
 ]
 
 ENODE_CHARGING_MODE_OPTIONS: Final[list[str]] = [

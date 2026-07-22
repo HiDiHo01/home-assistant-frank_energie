@@ -794,10 +794,11 @@
       "battery_imbalance_trading_strategy": {
         "name": "Onbalans handelsstrategie",
         "state": {
-          "balanced": "Standaard",
+          "balanced": "Gebalanceerd",
           "conservative": "Conservatief",
           "imbalance_only": "Alleen onbalans",
           "aggressive": "Agressief",
+          "standard": "Standaard",
           "unknown": "Unknown"
         }
       },
@@ -1024,9 +1025,10 @@
         "name": "Slimme batterijstrategie",
         "state": {
           "aggressive": "Agressief",
-          "balanced": "Standaard",
+          "balanced": "Gebalanceerd",
           "conservative": "Conservatief",
           "imbalance_only": "Alleen onbalans",
+          "standard": "Standaard",
           "unknown": "Unknown"
         }
       },

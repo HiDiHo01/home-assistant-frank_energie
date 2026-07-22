@@ -336,6 +336,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
     value_fn: Callable[[dict], object]
     attr_fn: Callable[[dict], dict] = field(default_factory=lambda: lambda _: {})
     unique_id_fn: Callable[[dict], str] | None = None
+    available_fn: Callable[[dict], bool] | None = None
     authenticated: bool = False
     service_name: str = SERVICE_NAME_ENODE_VEHICLES
     translation_key: str | None = None
@@ -352,6 +353,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
         service_name: Union[str, None] = None,
         value_fn: Callable[[dict[str, StateType]], StateType] | None = None,
         unique_id_fn: Callable[[dict], str] | None = None,
+        available_fn: Callable[[dict], bool] | None = None,
         attr_fn: Callable[[dict], dict[str, StateType | list | None]] = field(
             default_factory=lambda: lambda _: {}
         ),
@@ -380,6 +382,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             else entity_category,
         )
         object.__setattr__(self, "value_fn", value_fn or (lambda _: STATE_UNKNOWN))
+        object.__setattr__(self, "available_fn", available_fn)
 
     def get_state(self, data: dict[str, object]) -> StateType:
         """Return validated state value."""
@@ -5263,15 +5266,17 @@ def _get_nested(data: object, *keys: str) -> object | None:
     return data
 
 
-def _parse_iso_datetime(dt_str: str | None) -> datetime | None:
-    """Parse ISO 8601 datetime string to aware datetime or return None."""
-    if not dt_str:
+def _parse_iso_datetime(dt_value: datetime | str | None) -> datetime | None:
+    """Return dt_value unchanged if already a datetime, else parse it as an ISO 8601 string."""
+    if not dt_value:
         return None
+    if isinstance(dt_value, datetime):
+        return dt_value
     try:
         # Zorg dat 'Z' vervangen wordt door '+00:00' voor UTC
-        if dt_str.endswith("Z"):
-            dt_str = dt_str[:-1] + "+00:00"
-        return datetime.fromisoformat(dt_str)
+        if dt_value.endswith("Z"):
+            dt_value = dt_value[:-1] + "+00:00"
+        return datetime.fromisoformat(dt_value)
     except ValueError:
         return None
 

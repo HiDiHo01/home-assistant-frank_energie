@@ -232,9 +232,10 @@
         "name": "Smart battery strategy",
         "state": {
           "aggressive": "Aggressive",
-          "balanced": "Standard",
+          "balanced": "Balanced",
           "conservative": "Conservative",
           "imbalance_only": "Imbalance only",
+          "standard": "Standard",
           "unknown": "Unknown"
         }
       },
@@ -985,10 +986,11 @@
       "battery_imbalance_trading_strategy": {
         "name": "Imbalance Trading Strategy",
         "state": {
-          "balanced": "Standard",
+          "balanced": "Balanced",
           "conservative": "Conservative",
           "imbalance_only": "Imbalance only",
           "aggressive": "Aggressive",
+          "standard": "Standard",
           "unknown": "Unknown"
         }
       },
