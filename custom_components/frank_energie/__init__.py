@@ -2,6 +2,7 @@
 # __init__.py
 # version 2026.06.15
 
+import asyncio
 import logging
 import warnings
 from dataclasses import dataclass, field
@@ -277,15 +278,18 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         )
 
         try:
-            # Perform the initial refresh sequentially for sub-coordinators in dependency order
+            # settings_coordinator refreshes first; the other six only read its
+            # data and not each other's, so they refresh concurrently.
             _LOGGER.debug("Performing initial refresh for sub-coordinators")
             await settings_coordinator.async_config_entry_first_refresh()
-            await price_coordinator.async_config_entry_first_refresh()
-            await statistics_coordinator.async_config_entry_first_refresh()
-            await battery_coordinator.async_config_entry_first_refresh()
-            await charger_coordinator.async_config_entry_first_refresh()
-            await pv_coordinator.async_config_entry_first_refresh()
-            await vehicle_coordinator.async_config_entry_first_refresh()
+            await asyncio.gather(
+                price_coordinator.async_config_entry_first_refresh(),
+                statistics_coordinator.async_config_entry_first_refresh(),
+                battery_coordinator.async_config_entry_first_refresh(),
+                charger_coordinator.async_config_entry_first_refresh(),
+                pv_coordinator.async_config_entry_first_refresh(),
+                vehicle_coordinator.async_config_entry_first_refresh(),
+            )
 
             # Forward entry setups to platforms
             _LOGGER.debug("Forwarding entry setups to platforms")
