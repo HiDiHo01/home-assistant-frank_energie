@@ -1343,11 +1343,12 @@ async def test_full_day_cycle_fetch_promote_refetch(
         assert coordinator.cached_prices_tomorrow is tomorrow_fetches[tomorrow]
         assert coordinator.last_fetch_tomorrow == now_utc_first
         assert (
-            result[DATA_ELECTRICITY].all[-1].date_from.astimezone(tz).date()
-            == tomorrow
+            result[DATA_ELECTRICITY].all[-1].date_from.astimezone(tz).date() == tomorrow
         )
         tomorrow_fetch_calls_after_first = coordinator._fetch_tomorrow_data.call_count
-        today_fetch_calls_after_first = coordinator._fetch_prices_with_fallback.call_count
+        today_fetch_calls_after_first = (
+            coordinator._fetch_prices_with_fallback.call_count
+        )
 
         # --- {today}, 13:05 local: next in-window tick must be a pure no-op ---
         freezer.move_to(datetime(today.year, today.month, today.day, 13, 5, tzinfo=tz))
@@ -1374,9 +1375,12 @@ async def test_full_day_cycle_fetch_promote_refetch(
         coordinator.promote_tomorrow_prices()
 
         assert coordinator.cached_prices_tomorrow is None
-        assert coordinator._static_prices_today.electricity.all[
-            -1
-        ].date_from.astimezone(tz).date() == tomorrow
+        assert (
+            coordinator._static_prices_today.electricity.all[-1]
+            .date_from.astimezone(tz)
+            .date()
+            == tomorrow
+        )
         # promote_tomorrow_prices deliberately never touches last_fetch_tomorrow —
         # it's still stale for the new today until the next _async_update_data run.
         assert coordinator.last_fetch_tomorrow == now_utc_first
@@ -1530,7 +1534,9 @@ async def test_full_day_cycle_recovers_when_first_attempt_is_poisoned(
     freezer.move_to(datetime(2026, 7, 21, 13, 0, tzinfo=tz))
     now_utc_2_first = dt_util.utcnow()
 
-    poisoned_response = _make_market_prices("2026-07-21T10:00:00.000Z")  # today, not tomorrow
+    poisoned_response = _make_market_prices(
+        "2026-07-21T10:00:00.000Z"
+    )  # today, not tomorrow
     coordinator._fetch_tomorrow_data = AsyncMock(return_value=poisoned_response)
 
     result_first_attempt = await coordinator._refresh_tomorrow_cache(

@@ -177,7 +177,9 @@ async def test_remove_entry_deletes_price_cache_store(
         await hass.async_block_till_done()
 
         assert remove_result["require_restart"] is False
-        mock_store_cls.assert_called_once_with(hass, 1, f"{DOMAIN}_prices_{entry.entry_id}")
+        mock_store_cls.assert_called_once_with(
+            hass, 1, f"{DOMAIN}_prices_{entry.entry_id}"
+        )
         mock_store.async_remove.assert_awaited_once()
 
 
