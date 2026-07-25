@@ -17,7 +17,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import AuthException
@@ -43,6 +42,7 @@ from .coordinator import (
     FrankEnergieStatisticsCoordinator,
 )
 from .exceptions import NoSuitableSitesFoundError
+from .helpers import price_cache_store
 
 _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
@@ -141,7 +141,7 @@ async def async_remove_entry(
 ) -> None:
     """Clean up persistent storage when a config entry is removed."""
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
-    await Store(hass, 1, f"{DOMAIN}_prices_{entry.entry_id}").async_remove()
+    await price_cache_store(hass, entry.entry_id).async_remove()
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods

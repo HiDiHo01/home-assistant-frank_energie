@@ -27,7 +27,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -65,7 +64,6 @@ from python_frank_energie.models import (
 )
 
 from .const import (
-    DOMAIN,
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
     SUPPORTED_COUNTRIES,
@@ -106,7 +104,7 @@ from .const import (
     DEFAULT_INTERVAL_VEHICLES,
     DEFAULT_INTERVAL_PV,
 )
-from .helpers import decrypt_password
+from .helpers import decrypt_password, price_cache_store
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
@@ -2368,11 +2366,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = None
-        self.store = Store(
-            hass,
-            1,
-            f"{DOMAIN}_prices_{config_entry.entry_id}",
-        )
+        self.store = price_cache_store(hass, config_entry.entry_id)
 
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
         """Parse cached data dictionary into coordinator state."""

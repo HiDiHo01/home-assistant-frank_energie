@@ -168,7 +168,7 @@ async def test_remove_entry_deletes_price_cache_store(
     assert result is True
 
     with patch(
-        "custom_components.frank_energie.Store", autospec=True
+        "custom_components.frank_energie.helpers.Store", autospec=True
     ) as mock_store_cls:
         mock_store = mock_store_cls.return_value
         mock_store.async_remove = AsyncMock()

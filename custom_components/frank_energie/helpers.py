@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final
 
 from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 
 from .const import (
     DOMAIN,
@@ -29,6 +30,19 @@ PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
     "M3": UNIT_GAS_NL,
     "KWH": UNIT_GAS_BE,
 }
+
+PRICE_CACHE_STORE_VERSION: Final[int] = 1
+
+
+def price_cache_store(hass: HomeAssistant, entry_id: str) -> Store:
+    """Return the Store used for a config entry's cached price data.
+
+    Shared by FrankEnergiePriceCoordinator (creation) and async_remove_entry
+    (cleanup on entry removal) so both always target the exact same file —
+    a version bump or key-format change made in only one place would
+    otherwise leave the removal path silently cleaning up nothing.
+    """
+    return Store(hass, PRICE_CACHE_STORE_VERSION, f"{DOMAIN}_prices_{entry_id}")
 
 
 def resolve_gas_unit(per_unit: str | None) -> str:

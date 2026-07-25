@@ -10,11 +10,11 @@ from custom_components.frank_energie.mutation_queue import MutationQueue
 pytestmark = pytest.mark.asyncio
 
 
-async def test_add_executes_and_awaits_the_mutation():
+async def test_add_executes_and_awaits_the_mutation() -> None:
     queue = MutationQueue()
-    executed = []
+    executed: list[str] = []
 
-    async def mutation():
+    async def mutation() -> None:
         executed.append("done")
 
     await queue.add(mutation)
@@ -22,7 +22,7 @@ async def test_add_executes_and_awaits_the_mutation():
     assert executed == ["done"]
 
 
-async def test_concurrent_adds_are_fully_serialized_not_interleaved():
+async def test_concurrent_adds_are_fully_serialized_not_interleaved() -> None:
     """The entire point of MutationQueue: a second mutation submitted while
     the first is still in flight must wait for it to complete, not run
     concurrently — even though the first yields control mid-mutation.
@@ -38,13 +38,13 @@ async def test_concurrent_adds_are_fully_serialized_not_interleaved():
     a_started = asyncio.Event()
     a_may_finish = asyncio.Event()
 
-    async def mutation_a():
+    async def mutation_a() -> None:
         order.append("a-start")
         a_started.set()
         await a_may_finish.wait()
         order.append("a-end")
 
-    async def mutation_b():
+    async def mutation_b() -> None:
         order.append("b-start")
         order.append("b-end")
 
@@ -64,30 +64,30 @@ async def test_concurrent_adds_are_fully_serialized_not_interleaved():
     assert order == ["a-start", "a-end", "b-start", "b-end"]
 
 
-async def test_exception_in_mutation_propagates_to_caller():
+async def test_exception_in_mutation_propagates_to_caller() -> None:
     queue = MutationQueue()
 
-    async def failing_mutation():
+    async def failing_mutation() -> None:
         raise ValueError("mutation boom")
 
     with pytest.raises(ValueError, match="mutation boom"):
         await queue.add(failing_mutation)
 
 
-async def test_queue_remains_usable_after_a_failed_mutation():
+async def test_queue_remains_usable_after_a_failed_mutation() -> None:
     """A failed mutation must not leave the lock held or the queue broken
     for subsequent calls."""
     queue = MutationQueue()
 
-    async def failing_mutation():
+    async def failing_mutation() -> None:
         raise ValueError("boom")
 
     with pytest.raises(ValueError):
         await queue.add(failing_mutation)
 
-    executed = []
+    executed: list[str] = []
 
-    async def ok_mutation():
+    async def ok_mutation() -> None:
         executed.append("done")
 
     await queue.add(ok_mutation)

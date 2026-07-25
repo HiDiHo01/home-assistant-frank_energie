@@ -1253,7 +1253,7 @@ async def test_promote_tomorrow_prices_rejects_stale_multi_day_old_cache(
     # rollover is now happening for 2026-07-23 (e.g. HA was down in between).
     stale_prices = _make_market_prices("2026-07-19T22:00:00.000Z")
     coordinator.cached_prices_tomorrow = stale_prices
-    coordinator.last_fetch_tomorrow = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+    coordinator.last_fetch_tomorrow = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 
     freezer.move_to(datetime(2026, 7, 23, 0, 0, tzinfo=tz))
     coordinator.promote_tomorrow_prices()
@@ -2071,7 +2071,7 @@ async def test_refresh_tomorrow_cache_rejects_freshly_fetched_poisoned_data(
 
     today = date(2026, 7, 20)
     tomorrow = date(2026, 7, 21)
-    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
 
     coordinator.cached_prices_tomorrow = None
     coordinator.last_fetch_tomorrow = None

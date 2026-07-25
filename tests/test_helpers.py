@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from custom_components.frank_energie.const import UNIT_GAS_BE, UNIT_GAS_NL
 from custom_components.frank_energie.helpers import (
@@ -8,31 +8,31 @@ from custom_components.frank_energie.helpers import (
 )
 
 
-def test_resolve_gas_unit_m3_maps_to_nl():
+def test_resolve_gas_unit_m3_maps_to_nl() -> None:
     assert resolve_gas_unit("M3") == UNIT_GAS_NL
 
 
-def test_resolve_gas_unit_kwh_maps_to_be():
+def test_resolve_gas_unit_kwh_maps_to_be() -> None:
     assert resolve_gas_unit("KWH") == UNIT_GAS_BE
 
 
-def test_resolve_gas_unit_is_case_insensitive():
+def test_resolve_gas_unit_is_case_insensitive() -> None:
     assert resolve_gas_unit("m3") == UNIT_GAS_NL
     assert resolve_gas_unit("kwh") == UNIT_GAS_BE
 
 
-def test_resolve_gas_unit_none_defaults_to_nl():
+def test_resolve_gas_unit_none_defaults_to_nl() -> None:
     assert resolve_gas_unit(None) == UNIT_GAS_NL
 
 
-def test_resolve_gas_unit_unsupported_value_falls_back_to_nl():
+def test_resolve_gas_unit_unsupported_value_falls_back_to_nl() -> None:
     assert resolve_gas_unit("LITER") == UNIT_GAS_NL
 
 
-def test_build_charge_settings_input_includes_all_thirteen_fields():
+def test_build_charge_settings_input_includes_all_thirteen_fields() -> None:
     from python_frank_energie.models import ChargeSettings
 
-    deadline = datetime(2026, 7, 21, 7, 0, tzinfo=timezone.utc)
+    deadline = datetime(2026, 7, 21, 7, 0, tzinfo=UTC)
     settings = ChargeSettings(
         calculated_deadline=deadline,
         capacity=50.0,
@@ -70,11 +70,11 @@ def test_build_charge_settings_input_includes_all_thirteen_fields():
     }
 
 
-def test_build_charge_settings_input_handles_none_deadline():
+def test_build_charge_settings_input_handles_none_deadline() -> None:
     from python_frank_energie.models import ChargeSettings
 
     settings = ChargeSettings(
-        calculated_deadline=datetime(2026, 7, 21, 7, 0, tzinfo=timezone.utc),
+        calculated_deadline=datetime(2026, 7, 21, 7, 0, tzinfo=UTC),
         capacity=50.0,
         deadline=None,
         hour_friday=0,
@@ -96,7 +96,7 @@ def test_build_charge_settings_input_handles_none_deadline():
     assert result["deadline"] is None
 
 
-def test_device_translation_key():
+def test_device_translation_key() -> None:
     """Test generating device translation key from service names."""
     # Simple lowercase string
     assert device_translation_key("test") == "frank_energie_test"
