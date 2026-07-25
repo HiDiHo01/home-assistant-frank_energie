@@ -22,7 +22,7 @@ from custom_components.frank_energie.coordinator import (
 @pytest.fixture
 def mock_store():
     """Mock the Store helper."""
-    with patch("custom_components.frank_energie.coordinator.Store") as mock_store_class:
+    with patch("custom_components.frank_energie.helpers.Store") as mock_store_class:
         store_instance = mock_store_class.return_value
         store_instance.async_load = AsyncMock(return_value=None)
         store_instance.async_save = AsyncMock()

@@ -7,8 +7,16 @@ import zoneinfo
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
-from custom_components.frank_energie.const import DOMAIN, CONF_COORDINATOR
+from custom_components.frank_energie import FrankEnergieComponent
+from custom_components.frank_energie.const import (
+    DOMAIN,
+    CONF_COORDINATOR,
+    TIMEZONE_AMSTERDAM,
+)
 from custom_components.frank_energie.helpers import encrypt_password
+from custom_components.frank_energie.helpers import (
+    _get_fernet_key as real_get_fernet_key,
+)
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tests.utils import ResponseMocks
 
@@ -120,6 +128,123 @@ async def test_unload_entry(
     assert entry.entry_id not in hass.data[DOMAIN]
 
 
+async def test_remove_entry_deletes_price_cache_store(
+    hass: HomeAssistant,
+    aioclient_responses: ResponseMocks,
+    freezer,
+    enable_custom_integrations,
+) -> None:
+    """Removing a config entry must delete its persisted price cache file.
+
+    Regression test: only async_unload_entry existed, which HA calls on
+    reload/disable, not on full removal. Without async_remove_entry, the
+    per-entry Store file under .storage/ was never cleaned up, so
+    add-then-delete-then-readd (e.g. testing with a throwaway unauthenticated
+    entry) left orphaned cache files behind indefinitely.
+    """
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
+    now = datetime.now(tz).replace(hour=10, minute=15, second=0, microsecond=0)
+    freezer.move_to(now)
+
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    aioclient_responses.add(
+        start_of_day,
+        [0.2] * 24,
+        [1.23] * 24,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "username": "test@example.com",
+        },
+        entry_id="1234abcd",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert result is True
+
+    with patch(
+        "custom_components.frank_energie.helpers.Store", autospec=True
+    ) as mock_store_cls:
+        mock_store = mock_store_cls.return_value
+        mock_store.async_remove = AsyncMock()
+
+        remove_result = await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert remove_result["require_restart"] is False
+        mock_store_cls.assert_called_once_with(
+            hass, 1, f"{DOMAIN}_prices_{entry.entry_id}"
+        )
+        mock_store.async_remove.assert_awaited_once()
+
+
+async def test_aligned_refresh_covers_whole_price_release_window(
+    hass: HomeAssistant,
+) -> None:
+    """The 13:00 trigger must not be a single exact-tick point of failure.
+
+    Regression test: only the exact hour==13, minute==0 tick used to call
+    async_request_refresh(); every other quarter-hour tick in the window
+    just re-broadcast cached data via async_update_listeners() without
+    fetching anything. If this listener's registration (the last step of
+    setup) lost the race against that one exact boundary — plausible on a
+    slow full HA restart competing with every other integration for the
+    event loop — nothing else was scheduled to try again until the next
+    day's 13:00. Now every tick across 13:00-15:00 local retries, so no
+    single tick is load-bearing.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="test_aligned")
+    entry.add_to_hass(hass)
+    component = FrankEnergieComponent(hass, entry)
+
+    price_coordinator = MagicMock()
+    price_coordinator.async_request_refresh = AsyncMock()
+    price_coordinator.async_update_listeners = MagicMock()
+    price_coordinator.resolution = "PT60M"
+
+    captured_callback = None
+
+    def fake_track_utc_time_change(hass_arg, action, **kwargs):
+        nonlocal captured_callback
+        captured_callback = action
+        return MagicMock()
+
+    with patch(
+        "custom_components.frank_energie.async_track_utc_time_change",
+        side_effect=fake_track_utc_time_change,
+    ):
+        await component._schedule_aligned_updates(price_coordinator)
+
+    assert captured_callback is not None
+
+    tz = zoneinfo.ZoneInfo(TIMEZONE_AMSTERDAM)
+
+    for hour, minute in [(13, 0), (13, 15), (13, 45), (14, 45)]:
+        price_coordinator.async_request_refresh.reset_mock()
+        with patch(
+            "homeassistant.util.dt.now",
+            return_value=datetime(2026, 7, 21, hour, minute, tzinfo=tz),
+        ):
+            await captured_callback(datetime.now(tz))
+        price_coordinator.async_request_refresh.assert_awaited_once()
+
+    # Outside the window: no refresh, just a listener update.
+    price_coordinator.async_request_refresh.reset_mock()
+    price_coordinator.async_update_listeners.reset_mock()
+    with patch(
+        "homeassistant.util.dt.now",
+        return_value=datetime(2026, 7, 21, 15, 0, tzinfo=tz),
+    ):
+        await captured_callback(datetime.now(tz))
+    price_coordinator.async_request_refresh.assert_not_called()
+    price_coordinator.async_update_listeners.assert_called_once()
+
+
 async def test_encryption_decryption(hass: HomeAssistant) -> None:
     """Test encrypting and decrypting passwords."""
     from custom_components.frank_energie.helpers import (
@@ -141,6 +266,45 @@ async def test_encryption_decryption(hass: HomeAssistant) -> None:
     # Test plaintext fallback
     assert decrypt_password(hass, "my_plain_password") == "my_plain_password"
     assert decrypt_password(hass, "") == ""
+
+
+async def test_decrypt_password_returns_none_on_corrupted_ciphertext(
+    hass: HomeAssistant,
+) -> None:
+    """A gAAAA-prefixed string that fails to decrypt (wrong/rotated key,
+    corruption) must return None with a warning, not raise.
+
+    Realistic scenario: core.uuid changes, or a password encrypted on one
+    HA instance gets restored via backup onto another.
+    """
+    from custom_components.frank_energie.helpers import decrypt_password
+
+    hass.data["core.uuid"] = "test_uuid_123"
+
+    # Looks like a Fernet token (gAAAA prefix) but isn't valid ciphertext.
+    corrupted = "gAAAAABnot-a-real-fernet-token" + "x" * 20
+
+    assert decrypt_password(hass, corrupted) is None
+
+
+async def test_get_fernet_key_raises_when_core_uuid_missing(
+    hass: HomeAssistant,
+) -> None:
+    """_get_fernet_key must raise EncryptionError when core.uuid is unavailable,
+    rather than silently deriving a key from a missing/None value.
+
+    Tests the real implementation directly (captured at import time, before
+    the autouse mock_core_uuid fixture in conftest.py patches this same name
+    for every other test) — that fixture exists specifically so hass-based
+    tests don't need a real core.uuid, which means it also hides this
+    function's own error path from every test that goes through the mock.
+    """
+    from custom_components.frank_energie.exceptions import EncryptionError
+
+    hass.data.pop("core.uuid", None)
+
+    with pytest.raises(EncryptionError):
+        real_get_fernet_key(hass)
 
 
 @pytest.mark.skip(reason="Lingering timer false positive during mock teardown")

@@ -27,7 +27,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -65,7 +64,6 @@ from python_frank_energie.models import (
 )
 
 from .const import (
-    DOMAIN,
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
     SUPPORTED_COUNTRIES,
@@ -106,7 +104,7 @@ from .const import (
     DEFAULT_INTERVAL_VEHICLES,
     DEFAULT_INTERVAL_PV,
 )
-from .helpers import decrypt_password
+from .helpers import decrypt_password, price_cache_store
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
@@ -558,179 +556,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # Clear the flag so we can log again if status changes back
             delattr(self, "_not_in_delivery_logged")
 
-    async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch and cache data from Frank Energie with smart interval logic."""
-
-        entry_title = self.config_entry.title if self.config_entry else "Unknown"
-        _LOGGER.debug(
-            "Starting data update for Frank Energie coordinator (user: %s).",
-            entry_title,
-        )
-
-        now_utc = datetime.now(ZoneInfo("UTC"))
-        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
-        tomorrow = today + timedelta(days=1)
-
-        # skip API calls between 00:00 and 01:00 UTC to avoid maintenance window
-        skip_api_calls = self._should_skip_api_calls(now_utc)
-
-        self._reconcile_resolution()
-        self._adjust_update_interval(now_utc)
-
-        # Reset daily log flag on new day
-        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
-            self._today_prices_logged = False
-            self._has_pv_systems = None  # re-probe PV ownership once per day
-
-        if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
-            self._tomorrow_prices_logged = False
-
-        # ---------------------------------------------------
-        # TODAY DATA
-        # ---------------------------------------------------
-        if skip_api_calls:
-            _LOGGER.debug(
-                "Skipping Frank Energie API calls between 00:00 and 01:00 UTC"
-            )
-
-            if self.cached_prices_today is None:
-                _LOGGER.info(
-                    "No cached Frank Energie data available during API maintenance window. Sensors will be unavailable until the first successful data fetch after 01:00 UTC."
-                )
-        else:
-            await self._refresh_today_cache(
-                today,
-                tomorrow,
-                now_utc,
-            )
-
-        if self.cached_prices_today is None:
-            if skip_api_calls:
-                if self.cached_prices is not None:
-                    return self.cached_prices
-
-                if self.data is not None:
-                    return self.data
-
-                raise UpdateFailed(
-                    "No cached data available during maintenance window."
-                )
-
-            raise UpdateFailed(
-                "No cached Frank Energie data available after attempting update."
-            )
-
-        # ---------------------------------------------------
-        # TOMORROW PRICES
-        # ---------------------------------------------------
-        if skip_api_calls:
-            prices_tomorrow = self.cached_prices_tomorrow
-        else:
-            prices_tomorrow = await self._refresh_tomorrow_cache(
-                today,
-                tomorrow,
-                now_utc,
-            )
-
-        assert self.cached_prices_today is not None
-
-        # ---------------------------------------------------
-        # AGGREGATION
-        # ---------------------------------------------------
-        _LOGGER.debug(
-            "Today electricity periods: %s",
-            (
-                len(self.cached_prices_today.prices_today.electricity.all)
-                if self.cached_prices_today
-                and self.cached_prices_today.prices_today
-                and self.cached_prices_today.prices_today.electricity
-                else 0
-            ),
-        )
-
-        _LOGGER.debug(
-            "Tomorrow electricity periods: %s",
-            (
-                len(prices_tomorrow.electricity.all)
-                if prices_tomorrow and prices_tomorrow.electricity
-                else 0
-            ),
-        )
-        result = self._aggregate_data(self.cached_prices_today, prices_tomorrow)
-        self.cached_prices = result
-
-        # ---------------------------------------------------
-        # EVENTS
-        # ---------------------------------------------------
-        self._maybe_fire_lowest_price_event(
-            self.cached_prices_today.prices_today, today, now_utc
-        )
-        self._maybe_fire_lowest_4p_event(
-            self.cached_prices_today.prices_today, today, now_utc
-        )
-        self._maybe_fire_lowest_16p_event(
-            self.cached_prices_today.prices_today, today, now_utc
-        )
-
-        _LOGGER.debug(
-            "Returning coordinator data with %s electricity periods",
-            len(result[DATA_ELECTRICITY].all) if result[DATA_ELECTRICITY] else 0,
-        )
-        return result
-
-    async def _refresh_today_cache(
-        self, today: date, tomorrow: date, now_utc: datetime
-    ) -> None:
-        """Fetch and cache today's data if stale or missing."""
-        if (
-            self.cached_prices_today is not None
-            and self.last_fetch_today is not None
-            and self.last_fetch_today.date() == today
-        ):
-            return
-
-        try:
-            self.cached_prices_today = await self._fetch_today_data(today, tomorrow)
-            self.last_fetch_today = now_utc
-
-            if (
-                self.cached_prices_today.prices_today is not None
-                and self.cached_prices_today.prices_today.electricity is not None
-                and not self._today_prices_logged
-            ):
-                _LOGGER.info("Frank Energie electricity prices available for %s", today)
-                self._today_prices_logged = True
-        except AuthRequiredException as err:
-            raise ConfigEntryAuthFailed from err
-        except AuthException as err:
-            await self._try_renew_token()
-            raise UpdateFailed("Authentication temporarily failed") from err
-        except FrankEnergieException as err:
-            # FrankEnergieException can wrap AuthException ("Not authorized")
-            # Route auth errors to _try_renew_token instead of treating as network error
-            err_msg = str(err).casefold()
-            if "not authorized" in err_msg or "unauthorized" in err_msg:
-                _LOGGER.warning(
-                    "Auth error wrapped as FrankEnergieException: %s. Attempting token renewal.",
-                    err,
-                )
-                await self._try_renew_token()
-                raise UpdateFailed(
-                    "Authentication temporarily failed, token renewal attempted"
-                ) from err
-            _LOGGER.warning(
-                "Temporary network error while fetching Frank Energie data: %s",
-                err,
-            )
-            raise UpdateFailed from err
-
-        except (RequestException, ClientError) as err:
-            _LOGGER.warning(
-                "Temporary network error while fetching Frank Energie data: %s",
-                err,
-            )
-            raise UpdateFailed from err
-
     @staticmethod
     def _tomorrow_cache_matches_date(
         cached_prices_tomorrow: MarketPrices | None, tomorrow: date
@@ -788,9 +613,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # cached_prices_tomorrow still holds yesterday's D+1 data, which
         # _aggregate_data would concatenate with today's prices — doubling
         # price periods on sensors between 11:00 and ~14:00 UTC every morning.
+        # Not gated on cached_prices_tomorrow being set: promotion can leave
+        # last_fetch_tomorrow behind on its own (e.g. cleared to None because
+        # there was nothing left to carry over), and a stale timestamp with
+        # no cache to match it is exactly the kind of inconsistent state this
+        # method exists to clean up before trusting anything.
         if (
-            self.cached_prices_tomorrow is not None
-            and self.last_fetch_tomorrow is not None
+            self.last_fetch_tomorrow is not None
             and self.last_fetch_tomorrow.date() != today
         ):
             _LOGGER.debug(
@@ -812,6 +641,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
                 return self.cached_prices_tomorrow
 
+            # A live fetch now validates itself before caching (see the
+            # freshly-fetched check below), so reaching this branch means the
+            # bad data came from disk — e.g. state persisted by an older
+            # build. Kept at warning: that's a genuine anomaly, not routine.
             _LOGGER.warning(
                 "Cached tomorrow prices claim to be fetched today but are not "
                 "actually dated for %s — discarding stale/incorrect cache and "
@@ -848,6 +681,30 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             has_electricity,
             has_gas,
         )
+
+        if (has_electricity or has_gas) and not self._tomorrow_cache_matches_date(
+            prices_tomorrow, tomorrow
+        ):
+            # Same poisoning this method's self-heal check guards against, but
+            # caught immediately instead of one cycle later: a freshly fetched
+            # response can itself come back non-empty but dated for today
+            # instead of tomorrow (e.g. the API echoing the latest available
+            # day back for a not-yet-published date — routinely the case in
+            # the few minutes right around 13:00, since prices are typically
+            # published closer to 13:15-13:20 than exactly on the hour).
+            # Accepting it here would cache it as a genuine fetch and (via
+            # _adjust_update_interval) go idle for the rest of the day,
+            # silently repeating the exact same poisoning next time with no
+            # further warning. Logged at debug, not warning: this is the
+            # expected shape of "not published yet", not an anomaly.
+            _LOGGER.debug(
+                "Freshly fetched tomorrow prices are not actually dated for "
+                "%s — treating as not yet available and retrying on next "
+                "refresh",
+                tomorrow,
+            )
+            prices_tomorrow = None
+            has_electricity = has_gas = False
 
         if has_electricity or has_gas:
             _LOGGER.info(
@@ -1481,150 +1338,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._fetch_battery_sessions(battery, start_date, tomorrow),
         )
 
-    def _has_valid_usage_data(self, usage: PeriodUsageAndCosts | None) -> bool:
-        """Check if the usage data has been populated with actual values."""
-        if usage is None:
-            return False
-
-        categories = []
-        for attr in ("gas", "electricity", "feed_in"):
-            if hasattr(usage, attr):
-                categories.append(getattr(usage, attr))
-
-        active_categories = [c for c in categories if c is not None]
-        if not active_categories:
-            return False
-
-        for cat in active_categories:
-            usage_total = getattr(cat, "usage_total", None)
-            costs_total = getattr(cat, "costs_total", None)
-            if usage_total is not None or costs_total is not None:
-                return True
-
-        return False
-
-    async def _get_static_data(
-        self, today: date, tomorrow: date, start_date: date
-    ) -> tuple[
-        MarketPrices | None,
-        UserSites | None,
-        MonthSummary | None,
-        Invoices | None,
-        PeriodUsageAndCosts | None,
-        User | None,
-        ContractPriceResolutionState | None,
-    ]:
-        """Fetch daily static data concurrently or return from cache."""
-        if (
-            self._static_prices_today is None
-            or self.last_fetch_today is None
-            or self.last_fetch_today.date() != today
-        ):
-            _LOGGER.debug("Fetching Frank Energie static daily data concurrently")
-            (
-                prices_today,
-                user_sites,
-                data_month_summary,
-                data_invoices,
-                data_period_usage,
-                data_user,
-            ) = await asyncio.gather(
-                self._fetch_prices_with_fallback(today, tomorrow, use_fallback=True),
-                self._fetch_user_sites(),
-                self._fetch_month_summary(),
-                self._fetch_invoices(),
-                self._fetch_period_usage(start_date),
-                self._fetch_user_data(),
-            )
-
-            # --- Haal contractPriceResolutionState op ---
-            data_contract_price_resolution_state = (
-                await self._fetch_contract_price_resolution_state(self._connection_id)
-            )
-
-            # Check if fetched prices are valid (i.e., contain actual price points)
-            has_fetched_elec = (
-                prices_today
-                and prices_today.electricity
-                and prices_today.electricity.all
-            )
-            has_fetched_gas = prices_today and prices_today.gas and prices_today.gas.all
-
-            # Check if our cached/promoted prices are valid and belong to the current day
-            cached_is_valid_for_today = False
-            if self._static_prices_today is not None:
-                cached_elec = self._static_prices_today.electricity
-                cached_gas = self._static_prices_today.gas
-
-                elec_valid = True
-                if cached_elec and cached_elec.all:
-                    elec_valid = (
-                        cached_elec.all[0].date_from.date() == today
-                        and cached_elec.all[-1].date_from.date() == today
-                    )
-
-                gas_valid = True
-                if cached_gas and cached_gas.all:
-                    gas_valid = (
-                        cached_gas.all[0].date_from.date() == today
-                        and cached_gas.all[-1].date_from.date() == today
-                    )
-
-                has_cached_data = (cached_elec and cached_elec.all) or (
-                    cached_gas and cached_gas.all
-                )
-                if has_cached_data and elec_valid and gas_valid:
-                    cached_is_valid_for_today = True
-
-            if not (has_fetched_elec or has_fetched_gas) and cached_is_valid_for_today:
-                _LOGGER.info(
-                    "API returned no prices for today, reusing valid cached prices"
-                )
-                prices_today = self._static_prices_today
-
-            self._update_today_prices(prices_today)
-            self._static_month_summary = data_month_summary
-            self._static_invoices = data_invoices
-            self._static_user = data_user
-            self._static_user_sites = user_sites
-            self._static_period_usage = data_period_usage
-            self._static_contract_price_resolution_state = (
-                data_contract_price_resolution_state
-            )
-        else:
-            prices_today = self._static_prices_today
-            data_month_summary = self._static_month_summary
-            data_invoices = self._static_invoices
-            user_sites = self._static_user_sites
-            data_contract_price_resolution_state = (
-                self._static_contract_price_resolution_state
-            )
-            data_user = self._static_user
-
-            # If we don't have valid/complete usage data yet, try to fetch it now
-            if not self._has_valid_usage_data(self._static_period_usage):
-                _LOGGER.debug(
-                    "Fetching Frank Energie usage data (retry because previous data was missing or incomplete)"
-                )
-                try:
-                    data_period_usage = await self._fetch_period_usage(start_date)
-                    self._static_period_usage = data_period_usage
-                except Exception as err:
-                    _LOGGER.debug("Failed to fetch usage data during retry: %s", err)
-                    data_period_usage = self._static_period_usage
-            else:
-                data_period_usage = self._static_period_usage
-
-        return (
-            prices_today,
-            user_sites,
-            data_month_summary,
-            data_invoices,
-            data_period_usage,
-            data_user,
-            data_contract_price_resolution_state,
-        )
-
     async def _get_battery_details_and_sessions(
         self,
         data_smart_batteries: SmartBatteries | None,
@@ -1655,128 +1368,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 sessions_list.append(sessions)
 
         return details_list, sessions_list
-
-    async def _fetch_today_data(self, today: date, tomorrow: date) -> PricesTodayCache:
-        """
-        Fetches all relevant Frank Energie data for the current day, including prices, user sites, monthly summaries, invoices, usage, user info, Enode chargers, smart batteries, battery details, battery sessions, and smart PV systems.
-
-        Attempts to retrieve user-specific and public data as available, handling authentication failures and falling back to cached data if necessary. Also manages token renewal on authentication errors.
-
-        Parameters:
-            today (date): The current date for which data is being fetched.
-            tomorrow (date): The next day, used for price and session range queries.
-
-        Returns:
-            Tuple containing today's data components including Smart PV systems and summaries.
-        """
-        yesterday = today - timedelta(days=1)
-        start_date = yesterday
-
-        try:
-            _LOGGER.debug(
-                "Fetching Frank Energie data for today %s", self.config_entry.entry_id
-            )
-
-            (
-                prices_today,
-                user_sites,
-                data_month_summary,
-                data_invoices,
-                data_period_usage,
-                data_user,
-                data_contract_price_resolution_state,
-            ) = await self._get_static_data(today, tomorrow, start_date)
-
-            # Initialize feature flags
-            is_smart_charging = False
-            is_smart_trading = False
-            if data_user:
-                # Check if smart charging and trading are activated
-                is_smart_charging = self._is_smart_charging_enabled(data_user)
-                is_smart_trading = self._is_smart_trading_enabled(data_user)
-
-            _LOGGER.debug("Fetching dynamic interval data concurrently")
-            (
-                data_enode_chargers,
-                data_smart_batteries,
-                data_enode_vehicles,
-                data_pv_systems,
-                data_user_smart_feed_in,
-            ) = await asyncio.gather(
-                self._fetch_enode_chargers(start_date, is_smart_charging),
-                self._fetch_smart_batteries(is_smart_trading),
-                self._fetch_enode_vehicles(is_smart_charging),
-                self._fetch_smart_pv_systems(),
-                self._fetch_user_smart_feed_in(),
-            )
-
-            (
-                data_smart_battery_details,
-                data_smart_battery_sessions,
-            ) = await self._get_battery_details_and_sessions(
-                data_smart_batteries, start_date, tomorrow
-            )
-
-            data_pv_summary = {}
-            if data_pv_systems and data_pv_systems.systems:
-                systems = [s for s in data_pv_systems.systems if s]
-                pv_tasks = [
-                    self._fetch_smart_pv_summary(system.id) for system in systems
-                ]
-                pv_summaries = await asyncio.gather(*pv_tasks)
-                for system, summary in zip(systems, pv_summaries):
-                    if summary:
-                        data_pv_summary[system.id] = summary
-
-            # Detect and log IN_DELIVERY status for clean user experience
-            if self.api.is_authenticated:
-                is_not_in_delivery = self._is_not_in_delivery_site(
-                    data_month_summary, data_invoices, user_sites
-                )
-                self._log_not_in_delivery_status(is_not_in_delivery)
-
-            return PricesTodayCache(
-                prices_today=prices_today,
-                data_month_summary=data_month_summary,
-                data_invoices=data_invoices,
-                data_user=data_user,
-                user_sites=user_sites,
-                data_period_usage=data_period_usage,
-                data_enode_chargers=data_enode_chargers,
-                data_smart_batteries=data_smart_batteries,
-                data_smart_battery_details=data_smart_battery_details,
-                data_smart_battery_sessions=data_smart_battery_sessions,
-                data_enode_vehicles=data_enode_vehicles,
-                data_pv_systems=data_pv_systems,
-                data_pv_summary=data_pv_summary,
-                data_user_smart_feed_in=data_user_smart_feed_in,
-                data_contract_price_resolution_state=data_contract_price_resolution_state,
-            )
-
-        except UpdateFailed as err:
-            if self.cached_prices_today:
-                _LOGGER.warning(
-                    "Update failed, but prices are cached: %s",
-                    err,
-                )
-                return self.cached_prices_today
-
-            raise
-
-        except RequestException as ex:
-            if str(ex).startswith("user-error:"):
-                raise ConfigEntryAuthFailed from ex
-            raise UpdateFailed(ex) from ex
-
-        except AuthRequiredException as err:
-            _LOGGER.warning("Authentication failed: %s", err)
-            await self._try_renew_token()
-            raise ConfigEntryAuthFailed("Authentication is required.") from err
-
-        except AuthException as ex:
-            _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
-            await self._try_renew_token()
-            raise UpdateFailed(ex) from ex
 
     async def _fetch_tomorrow_data(
         self,
@@ -1977,6 +1568,28 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return
 
+        new_today = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+
+        # Everything else in this file re-validates cached_prices_tomorrow
+        # against the date it's meant to represent before trusting it (see
+        # _refresh_tomorrow_cache and _adjust_update_interval); promotion is
+        # the one remaining place that didn't. It normally can't reach here
+        # holding stale data — _refresh_tomorrow_cache clears anything not
+        # fetched today before every 13:00+ run — but if a day is ever
+        # skipped entirely (HA down across a whole day), or a future bug
+        # reintroduces unvalidated writes, this stops days-old prices from
+        # getting merged straight into "today" with no warning.
+        if not self._tomorrow_cache_matches_date(prices_tomorrow, new_today):
+            _LOGGER.warning(
+                "Midnight rollover: cached tomorrow prices are not actually "
+                "dated for %s — discarding instead of promoting, today's "
+                "prices will be refetched live",
+                new_today,
+            )
+            self.cached_prices_tomorrow = None
+            self.last_fetch_tomorrow = None
+            return
+
         source_data = self.cached_prices or self.data
         if source_data is None:
             _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
@@ -2034,7 +1647,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         # Prices dated after the new today are still tomorrow's prices:
         # promote them to the tomorrow cache instead of clearing it.
-        new_today = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         remaining_electricity = self._price_data_after(combined_electricity, new_today)
         remaining_gas = self._price_data_after(combined_gas, new_today)
 
@@ -2391,26 +2003,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 err,
             )
             return None
-
-    def _adjust_update_interval(self, now_utc: datetime) -> None:
-        """Adjust coordinator update interval around price release windows."""
-        # default_interval is None outside the release window — polling is
-        # event-driven (e.g. HA restart, button press) outside 13:00–15:00 Europe/Amsterdam local time.
-        default_interval = None
-
-        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
-        now_local = now_utc.astimezone(tz_amsterdam)
-        local_time = now_local.time()
-
-        new_interval = (
-            timedelta(minutes=5)
-            if time(13, 0) <= local_time <= time(15, 0)
-            else default_interval
-        )
-
-        if self.update_interval != new_interval:
-            _LOGGER.debug("Update interval changed to %s", new_interval)
-            self.update_interval = new_interval
 
     def _ensure_utc(self, value: datetime) -> datetime:
         """Ensure datetime is timezone-aware UTC."""
@@ -2777,11 +2369,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = None
-        self.store = Store(
-            hass,
-            1,
-            f"{DOMAIN}_prices_{config_entry.entry_id}",
-        )
+        self.store = price_cache_store(hass, config_entry.entry_id)
 
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
         """Parse cached data dictionary into coordinator state."""
@@ -2941,11 +2529,18 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust coordinator update interval based on publication window and cache status."""
         today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        tomorrow = today + timedelta(days=1)
         if (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
             and self.last_fetch_tomorrow.date() == today
+            and self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow)
         ):
+            # Only go idle once the cache is verified to actually be tomorrow's
+            # data — trusting last_fetch_tomorrow's date alone would let a
+            # poisoned cache (see _refresh_tomorrow_cache) silence automatic
+            # polling for the rest of the day, since nothing else would ever
+            # re-trigger the fetch that re-validates it.
             new_interval = None
         else:
             now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))

@@ -5,7 +5,7 @@
 import logging
 import warnings
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
@@ -29,6 +29,7 @@ from .const import (
     SERVICE_NAME_BATTERY_SESSIONS,
     SERVICE_NAME_ENODE_CHARGERS,
     TIMEZONE_AMSTERDAM,
+    TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
 from .coordinator import (
     FrankEnergieCoordinator,
@@ -41,6 +42,7 @@ from .coordinator import (
     FrankEnergieStatisticsCoordinator,
 )
 from .exceptions import NoSuitableSitesFoundError
+from .helpers import price_cache_store
 
 _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
@@ -133,6 +135,15 @@ async def async_unload_entry(
     return unload_ok
 
 
+async def async_remove_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+) -> None:
+    """Clean up persistent storage when a config entry is removed."""
+    _LOGGER.debug("Removing entry: %s", entry.entry_id)
+    await price_cache_store(hass, entry.entry_id).async_remove()
+
+
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
 
@@ -160,9 +171,27 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 )
                 price_coordinator.promote_tomorrow_prices()
 
-            # Check for 13:00 local TIMEZONE_AMSTERDAM transition to fetch tomorrow's prices
-            if now_local.hour == 13 and now_local.minute == 0:
-                _LOGGER.info("13:00 local time: explicitly triggering price fetch")
+            # Every aligned tick across the price release window explicitly
+            # triggers a refresh, not just the exact 13:00 one. A single
+            # exact-tick trigger is a single point of failure: if this
+            # listener's registration (the last step of a slow startup) loses
+            # the race against the exact 13:00:00 boundary, that tick is
+            # gone for good and nothing else was scheduled to try again until
+            # the next day. FrankEnergiePriceCoordinator's _async_update_data
+            # already short-circuits both today's and tomorrow's fetch to a
+            # no-op once genuinely up to date, so the extra calls on ticks
+            # where nothing changed cost nothing.
+            if (
+                time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
+                <= now_local.time()
+                < time(15, 0)
+            ):
+                # Debug, not info: this now fires up to 8x/day, and
+                # _refresh_tomorrow_cache already logs its own outcome
+                # (fetched vs. already cached, skip) at the appropriate level.
+                _LOGGER.debug(
+                    "Price release window local time: explicitly triggering price fetch"
+                )
                 await price_coordinator.async_request_refresh()
             else:
                 # Trigger sensor state updates using cached data
@@ -391,13 +420,6 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         _LOGGER.debug("Generated title: %s for site reference: %s", title, reference)
         return reference, title
-
-    def _create_frank_energie_coordinator(
-        self, api: FrankEnergie
-    ) -> FrankEnergieCoordinator:
-        """Create the Frank Energie Coordinator instance."""
-        _LOGGER.debug("Creating Frank Energie Coordinator instance")
-        return FrankEnergieCoordinator(self.hass, self.entry, api)
 
     async def _async_forward_entry_setups(self) -> None:
         """Forward entry setups to appropriate platforms.

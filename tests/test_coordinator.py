@@ -2,12 +2,15 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
     DATA_USER,
+    TIMEZONE_AMSTERDAM,
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import (
@@ -97,36 +100,6 @@ def coordinator(mock_frank_energie, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_fetch_today_data(coordinator, mock_frank_energie):
-    """Test fetching today's data."""
-    # Setup mock return values
-    mock_prices = MagicMock()
-    mock_prices.electricity.all = [MagicMock()]
-    mock_prices.gas.all = [MagicMock()]
-    mock_prices.electricity.today_min = MagicMock()
-    mock_frank_energie.user_prices.return_value = mock_prices
-    mock_frank_energie.month_summary.return_value = MagicMock()
-    mock_frank_energie.invoices.return_value = MagicMock()
-
-    mock_user = MagicMock()
-    mock_user.connections = []
-    mock_frank_energie.user.return_value = mock_user
-
-    # Perform the fetch
-    data = await coordinator._fetch_today_data(
-        datetime.now(timezone.utc).date(),
-        datetime.now(timezone.utc).date() + timedelta(days=1),
-    )
-
-    # Assertions
-    assert data is not None
-    assert data.prices_today == mock_prices
-    assert isinstance(data.data_month_summary, MagicMock)
-    assert isinstance(data.data_invoices, MagicMock)
-    assert isinstance(data.data_user, MagicMock)
-
-
-@pytest.mark.asyncio
 async def test_renew_token(coordinator, mock_frank_energie):
     """Test token renewal."""
     # Mock renewal of the token
@@ -189,145 +162,6 @@ async def test_aggregate_data(coordinator):
     assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MagicMock)
     assert isinstance(aggregated_data[DATA_INVOICES], MagicMock)
     assert isinstance(aggregated_data[DATA_USER], MagicMock)
-
-
-@pytest.mark.asyncio
-async def test_adjust_update_interval_inside_window(coordinator):
-    """Test update interval adjustment inside the price release window."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    # Price release window is between 13:00 and 15:00 local time
-    # On May 27th (summer), 12:00 UTC = 14:00 local time (inside window)
-    now_utc = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
-
-    coordinator._adjust_update_interval(now_utc)
-    # Exactly 300 seconds (5 minutes)
-    assert coordinator.update_interval.total_seconds() == 300
-
-
-@pytest.mark.asyncio
-async def test_adjust_update_interval_outside_window(coordinator):
-    """Test update interval adjustment outside the price release window."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    # On May 27th, 10:00 UTC = 12:00 local time (outside window)
-    now_utc = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
-
-    coordinator._adjust_update_interval(now_utc)
-    # Update interval is disabled (None) outside window
-    assert coordinator.update_interval is None
-
-
-@pytest.mark.asyncio
-async def test_fetch_today_data_caching(coordinator, mock_frank_energie):
-    """Test that static data is cached and not refetched on the same day, but refetched on a new day."""
-    from datetime import datetime, timezone, timedelta
-
-    mock_prices = MagicMock()
-    mock_prices.electricity.all = [MagicMock()]
-    mock_prices.gas.all = [MagicMock()]
-    mock_prices.electricity.today_min = MagicMock()
-    mock_frank_energie.user_prices.return_value = mock_prices
-    mock_frank_energie.month_summary.return_value = MagicMock()
-    mock_frank_energie.invoices.return_value = MagicMock()
-
-    mock_user = MagicMock()
-    mock_user.connections = []
-    mock_frank_energie.user.return_value = mock_user
-
-    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
-
-    # First fetch (cache empty)
-    await coordinator._fetch_today_data(today, tomorrow)
-    assert mock_frank_energie.user_prices.call_count == 1
-    coordinator.last_fetch_today = datetime(2026, 5, 27, 14, 0, 0, tzinfo=timezone.utc)
-
-    # Second fetch on same day (should use cache)
-    await coordinator._fetch_today_data(today, tomorrow)
-    assert mock_frank_energie.user_prices.call_count == 1
-
-    # Fetch on a new day (cache should invalidate)
-    new_day = today + timedelta(days=1)
-    new_tomorrow = new_day + timedelta(days=1)
-    await coordinator._fetch_today_data(new_day, new_tomorrow)
-    assert mock_frank_energie.user_prices.call_count == 2
-
-
-@pytest.mark.asyncio
-async def test_fetch_today_data_auth_failure(coordinator, mock_frank_energie):
-    """Test auth failure triggers token renewal attempt and raises ConfigEntryAuthFailed."""
-    from datetime import datetime, timezone, timedelta
-    from python_frank_energie.exceptions import AuthRequiredException
-    from homeassistant.exceptions import ConfigEntryAuthFailed
-
-    mock_frank_energie.user_prices.side_effect = AuthRequiredException("auth_required")
-    coordinator._try_renew_token = AsyncMock()
-
-    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
-
-    with pytest.raises(ConfigEntryAuthFailed):
-        await coordinator._fetch_today_data(today, tomorrow)
-
-    coordinator._try_renew_token.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_fetch_today_data_network_failure(coordinator, mock_frank_energie):
-    """Test that a non-auth network failure raises UpdateFailed."""
-    from datetime import datetime, timezone, timedelta
-    from python_frank_energie.exceptions import RequestException
-    from homeassistant.helpers.update_coordinator import UpdateFailed
-
-    mock_frank_energie.user_prices.side_effect = RequestException("network_error")
-
-    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
-
-    with pytest.raises(UpdateFailed):
-        await coordinator._fetch_today_data(today, tomorrow)
-
-
-@pytest.mark.asyncio
-async def test_fetch_today_data_dynamic_auth_failure(coordinator, mock_frank_energie):
-    """Test that auth failures from dynamic endpoints propagate and trigger token renewal."""
-    from datetime import datetime, timezone, timedelta
-    from python_frank_energie.exceptions import AuthRequiredException
-    from homeassistant.exceptions import ConfigEntryAuthFailed
-
-    # Setup mock return values for static data
-    mock_prices = MagicMock()
-    mock_prices.electricity.all = [MagicMock()]
-    mock_prices.gas.all = [MagicMock()]
-    mock_prices.electricity.today_min = MagicMock()
-    mock_frank_energie.user_prices.return_value = mock_prices
-    mock_frank_energie.month_summary.return_value = MagicMock()
-    mock_frank_energie.invoices.return_value = MagicMock()
-    mock_user = MagicMock()
-    mock_user.connections = []
-    # Make sure smart trading and charging are True so dynamic endpoints are queried
-    mock_user.smartTrading = {"isActivated": True}
-    mock_user.smartCharging = {"isActivated": True}
-    mock_frank_energie.user.return_value = mock_user
-
-    # Mock one of the dynamic calls to raise AuthRequiredException
-    mock_frank_energie.smart_batteries.side_effect = AuthRequiredException(
-        "auth_required"
-    )
-    coordinator._try_renew_token = AsyncMock()
-
-    today = datetime(2026, 5, 27, tzinfo=timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
-
-    # Perform fetch - should raise ConfigEntryAuthFailed
-    with pytest.raises(ConfigEntryAuthFailed):
-        await coordinator._fetch_today_data(today, tomorrow)
-
-    # Verify token renewal was triggered
-    coordinator._try_renew_token.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -873,64 +707,6 @@ class TestAsyncSetResolution:
 
 
 @pytest.mark.asyncio
-async def test_fetch_today_data_retry_on_auth_failure(coordinator, mock_frank_energie):
-    """Test that _fetch_today_data retries on AuthException after renewing token."""
-    from python_frank_energie.exceptions import AuthException
-
-    # Mock static data fetch: raise AuthException on first call, return valid tuple on second
-    mock_prices = MagicMock()
-    mock_prices.electricity.all = [MagicMock()]
-    mock_prices.gas.all = [MagicMock()]
-    mock_prices.electricity.today_min = MagicMock()
-
-    mock_user = MagicMock()
-    mock_user.connections = []
-
-    static_data_result = (
-        mock_prices,
-        MagicMock(),  # user_sites
-        MagicMock(),  # data_month_summary
-        MagicMock(),  # data_invoices
-        MagicMock(),  # data_period_usage
-        mock_user,  # data_user
-        None,  # data_contract_price_resolution_state
-    )
-
-    call_count = 0
-
-    async def mock_get_static_data(today, tomorrow, start_date):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise AuthException("Token expired")
-        return static_data_result
-
-    coordinator._get_static_data = mock_get_static_data
-    coordinator._try_renew_token = AsyncMock()
-    coordinator._clear_static_cache = MagicMock()
-
-    # Mock dynamic data fetches
-    coordinator._fetch_enode_chargers = AsyncMock(return_value={})
-    coordinator._fetch_smart_batteries = AsyncMock(return_value=None)
-    coordinator._fetch_enode_vehicles = AsyncMock(return_value=None)
-    coordinator._fetch_smart_pv_systems = AsyncMock(return_value=None)
-    coordinator._fetch_user_smart_feed_in = AsyncMock(return_value=None)
-    coordinator._get_battery_details_and_sessions = AsyncMock(return_value=([], []))
-
-    from homeassistant.helpers.update_coordinator import UpdateFailed
-
-    # Perform the fetch - expect UpdateFailed to be raised
-    with pytest.raises(UpdateFailed):
-        await coordinator._fetch_today_data(
-            datetime.now(timezone.utc).date(),
-            datetime.now(timezone.utc).date() + timedelta(days=1),
-        )
-
-    assert call_count == 1
-    coordinator._try_renew_token.assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_dynamic_fetch_network_errors_during_first_refresh(
     coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
 ) -> None:
@@ -1018,6 +794,70 @@ async def test_fetch_prices_with_fallback_unauthenticated_tomorrow_not_published
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_prices_with_fallback_authenticated_tomorrow_not_published(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Authenticated tomorrow-fetch must not fall back to cached today prices either.
+
+    The unauthenticated guard (see the test above) explicitly returns before
+    ever substituting _cached_prices for a missing public-prices response.
+    For authenticated users that guard doesn't apply — is_authenticated=True
+    means public_prices *does* get substituted with _cached_prices — but that
+    substituted value is never actually returned for a tomorrow-fetch: every
+    reachable return path in this branch is driven by user_prices (None here,
+    so returns None), not public_prices. This proves that by code path, not
+    just inspection.
+    """
+    from datetime import date
+
+    mock_frank_energie.is_authenticated = True
+
+    today_prices = MagicMock()
+    coordinator._cached_prices = today_prices
+
+    coordinator._fetch_public_prices_for_range = AsyncMock(return_value=None)
+    coordinator._fetch_user_prices_for_range = AsyncMock(return_value=None)
+
+    result = await coordinator._fetch_prices_with_fallback(
+        date(2026, 7, 20), date(2026, 7, 21), use_fallback=False
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_prices_with_fallback_authenticated_tomorrow_incomplete_user_prices_not_merged_with_public(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Incomplete authenticated tomorrow prices must be returned as-is, not
+    merged with (potentially poisoned) public prices — same "no fallback for
+    tomorrow" rule that applies when user_prices is missing entirely.
+    """
+    from datetime import date
+
+    mock_frank_energie.is_authenticated = True
+
+    public_prices = MagicMock()
+    coordinator._fetch_public_prices_for_range = AsyncMock(return_value=public_prices)
+
+    # Electricity present, gas missing — incomplete, but real customer data.
+    incomplete_user_prices = MagicMock()
+    incomplete_user_prices.electricity.all = [MagicMock()]
+    incomplete_user_prices.gas = None
+    coordinator._fetch_user_prices_for_range = AsyncMock(
+        return_value=incomplete_user_prices
+    )
+
+    result = await coordinator._fetch_prices_with_fallback(
+        date(2026, 7, 20), date(2026, 7, 21), use_fallback=False
+    )
+
+    assert result is incomplete_user_prices
+    # Must not have been merged with the concurrently-fetched public prices.
+    assert result.gas is None
 
 
 @pytest.mark.asyncio
@@ -1140,89 +980,6 @@ async def test_dynamic_fetches_skip_when_feature_disabled(
 
 
 @pytest.mark.asyncio
-async def test_coordinator_retry_incomplete_usage_data(
-    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
-) -> None:
-    """Test that coordinator retries fetching usage data if it is None or incomplete."""
-    from python_frank_energie.models import EnergyCategory, PeriodUsageAndCosts
-
-    today = datetime.now(timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
-    yesterday = today - timedelta(days=1)
-
-    # 1. Test helper _has_valid_usage_data
-    assert coordinator._has_valid_usage_data(None) is False
-
-    # Incomplete usage: electricity category is present but has usage_total/costs_total as None
-    incomplete_electricity = EnergyCategory(
-        usage_total=None,
-        costs_total=None,
-        unit="KWH",
-        items=[],
-    )
-    incomplete_usage = PeriodUsageAndCosts(
-        _id="123",
-        gas=None,
-        electricity=incomplete_electricity,
-        feed_in=None,
-    )
-    assert coordinator._has_valid_usage_data(incomplete_usage) is False
-
-    # Complete usage
-    complete_electricity = EnergyCategory(
-        usage_total=10.5,
-        costs_total=2.5,
-        unit="KWH",
-        items=[],
-    )
-    complete_usage = PeriodUsageAndCosts(
-        _id="123",
-        gas=None,
-        electricity=complete_electricity,
-        feed_in=None,
-    )
-    assert coordinator._has_valid_usage_data(complete_usage) is True
-
-    # 2. Test coordinator caching & retry logic
-    # Mock all other static fetches
-    coordinator._fetch_prices_with_fallback = AsyncMock()
-    coordinator._fetch_user_sites = AsyncMock()
-    coordinator._fetch_month_summary = AsyncMock()
-    coordinator._fetch_invoices = AsyncMock()
-    coordinator._fetch_user_data = AsyncMock()
-    coordinator._fetch_contract_price_resolution_state = AsyncMock()
-
-    # Setup first fetch with incomplete usage
-    coordinator._fetch_period_usage = AsyncMock(return_value=incomplete_usage)
-
-    # Trigger first fetch (which populates cache and sets last_fetch_today)
-    await coordinator._get_static_data(today, tomorrow, yesterday)
-    coordinator.last_fetch_today = datetime.now(timezone.utc)
-
-    # Verify first fetch called _fetch_period_usage
-    coordinator._fetch_period_usage.assert_called_once_with(yesterday)
-    assert coordinator._static_period_usage == incomplete_usage
-
-    # Reset mock call count
-    coordinator._fetch_period_usage.reset_mock()
-
-    # Subsequent fetch with incomplete cache should retry fetching
-    coordinator._fetch_period_usage.return_value = complete_usage
-    await coordinator._get_static_data(today, tomorrow, yesterday)
-
-    # Verify that it retried fetching usage data, and successfully updated the cache
-    coordinator._fetch_period_usage.assert_called_once_with(yesterday)
-    assert coordinator._static_period_usage == complete_usage
-
-    # Reset mock call count again
-    coordinator._fetch_period_usage.reset_mock()
-
-    # Subsequent fetch with complete cache should NOT retry fetching
-    await coordinator._get_static_data(today, tomorrow, yesterday)
-    coordinator._fetch_period_usage.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
     """Test that promote_tomorrow_prices promotes tomorrow's prices to all relevant today caching fields."""
     tomorrow_prices = MagicMock()
@@ -1270,138 +1027,6 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
         is tomorrow_prices.energy_country
     )
     assert coordinator._static_prices_today.energy_type is tomorrow_prices.energy_type
-
-
-@pytest.mark.asyncio
-async def test_get_static_data_fallback_to_promoted_prices_when_api_returns_empty(
-    coordinator,
-) -> None:
-    """Test that _get_static_data falls back to _static_prices_today if the API returns no prices but cached prices are valid for today."""
-    from datetime import date
-
-    today = date(2026, 6, 20)
-    tomorrow = date(2026, 6, 21)
-    start_date = date(2026, 6, 19)
-
-    # Mock cached prices for today (electricity valid, gas empty)
-    valid_price = MagicMock()
-    valid_price.date_from.date.return_value = today
-
-    cached_prices = MagicMock()
-    cached_prices.electricity.all = [valid_price]
-    cached_prices.gas.all = []
-    coordinator._static_prices_today = cached_prices
-
-    # Mock fetches returning empty prices (no electricity/gas points)
-    empty_prices = MagicMock()
-    empty_prices.electricity.all = []
-    empty_prices.gas.all = []
-    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=empty_prices)
-    coordinator._fetch_user_sites = AsyncMock(return_value=None)
-    coordinator._fetch_month_summary = AsyncMock(return_value=None)
-    coordinator._fetch_invoices = AsyncMock(return_value=None)
-    coordinator._fetch_period_usage = AsyncMock(return_value=None)
-    coordinator._fetch_user_data = AsyncMock(return_value=None)
-    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
-
-    # Force refetch by setting last_fetch_today date to yesterday
-    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
-
-    # Perform get static data
-    prices_today, *rest = await coordinator._get_static_data(
-        today, tomorrow, start_date
-    )
-
-    # Verify fallback happened
-    assert prices_today is cached_prices
-
-
-@pytest.mark.asyncio
-async def test_get_static_data_no_fallback_when_cached_prices_belong_to_other_day(
-    coordinator,
-) -> None:
-    """Test that _get_static_data does NOT fall back if the cached prices are for a different day."""
-    from datetime import date
-
-    today = date(2026, 6, 20)
-    tomorrow = date(2026, 6, 21)
-    start_date = date(2026, 6, 19)
-
-    # Mock cached prices for yesterday (not today)
-    invalid_price = MagicMock()
-    invalid_price.date_from.date.return_value = date(2026, 6, 19)
-
-    cached_prices = MagicMock()
-    cached_prices.electricity.all = [invalid_price]
-    cached_prices.gas.all = []
-    coordinator._static_prices_today = cached_prices
-
-    # Mock fetches returning empty prices
-    empty_prices = MagicMock()
-    empty_prices.electricity.all = []
-    empty_prices.gas.all = []
-    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=empty_prices)
-    coordinator._fetch_user_sites = AsyncMock(return_value=None)
-    coordinator._fetch_month_summary = AsyncMock(return_value=None)
-    coordinator._fetch_invoices = AsyncMock(return_value=None)
-    coordinator._fetch_period_usage = AsyncMock(return_value=None)
-    coordinator._fetch_user_data = AsyncMock(return_value=None)
-    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
-
-    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
-
-    # Perform get static data
-    prices_today, *rest = await coordinator._get_static_data(
-        today, tomorrow, start_date
-    )
-
-    # Verify fallback did NOT happen (we get the empty/fetched prices instead of the stale cached ones)
-    assert prices_today is empty_prices
-
-
-@pytest.mark.asyncio
-async def test_get_static_data_fallback_when_both_electricity_and_gas_are_valid(
-    coordinator,
-) -> None:
-    """Test that _get_static_data falls back to cached prices when both electricity and gas are valid for today."""
-    from datetime import date
-
-    today = date(2026, 6, 20)
-    tomorrow = date(2026, 6, 21)
-    start_date = date(2026, 6, 19)
-
-    # Mock cached prices where both are present and valid
-    valid_elec = MagicMock()
-    valid_elec.date_from.date.return_value = today
-    valid_gas = MagicMock()
-    valid_gas.date_from.date.return_value = today
-
-    cached_prices = MagicMock()
-    cached_prices.electricity.all = [valid_elec]
-    cached_prices.gas.all = [valid_gas]
-    coordinator._static_prices_today = cached_prices
-
-    # Mock fetches returning empty prices
-    empty_prices = MagicMock()
-    empty_prices.electricity.all = []
-    empty_prices.gas.all = []
-    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=empty_prices)
-    coordinator._fetch_user_sites = AsyncMock(return_value=None)
-    coordinator._fetch_month_summary = AsyncMock(return_value=None)
-    coordinator._fetch_invoices = AsyncMock(return_value=None)
-    coordinator._fetch_period_usage = AsyncMock(return_value=None)
-    coordinator._fetch_user_data = AsyncMock(return_value=None)
-    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
-
-    coordinator.last_fetch_today = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
-
-    # Perform get static data
-    prices_today, *rest = await coordinator._get_static_data(
-        today, tomorrow, start_date
-    )
-
-    # Verify fallback happened
-    assert prices_today is cached_prices
 
 
 @pytest.mark.asyncio
@@ -1470,14 +1095,49 @@ async def test_price_coordinator_skipped_when_cached(
         MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
     )
 
-    # Mock cached tomorrow prices as available and fetched today
-    tomorrow_prices = MagicMock()
+    # Mock cached tomorrow prices as available, genuinely dated tomorrow, and
+    # fetched today.
+    tomorrow_prices = _make_market_prices("2026-05-27T22:00:00.000Z")
     price_coordinator.cached_prices_tomorrow = tomorrow_prices
     price_coordinator.last_fetch_tomorrow = mock_now
 
     price_coordinator._adjust_update_interval(mock_now)
 
     assert price_coordinator.update_interval is None
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_not_skipped_when_cache_poisoned(
+    mock_frank_energie, mock_config_entry, monkeypatch
+) -> None:
+    """A same-day cache that isn't actually dated tomorrow must not silence polling.
+
+    Regression test: trusting last_fetch_tomorrow's date alone let a poisoned
+    cache set update_interval to None, which meant nothing would ever
+    automatically re-trigger _async_update_data (and therefore the
+    _refresh_tomorrow_cache self-heal check) again for the rest of the day.
+    """
+    # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
+    mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    from homeassistant.util import dt as dt_util
+
+    monkeypatch.setattr(dt_util, "utcnow", lambda: mock_now)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    # Poisoned: claims to be fetched today, but entries are dated today too.
+    poisoned_prices = _make_market_prices("2026-05-27T10:00:00.000Z")
+    price_coordinator.cached_prices_tomorrow = poisoned_prices
+    price_coordinator.last_fetch_tomorrow = mock_now
+
+    price_coordinator._adjust_update_interval(mock_now)
+
+    assert price_coordinator.update_interval == timedelta(minutes=5)
 
 
 @pytest.mark.asyncio
@@ -1558,6 +1218,354 @@ async def test_price_coordinator_midnight_rollover_resolution_mismatch(
         is tomorrow_prices.electricity
     )
     assert price_coordinator._static_prices_today.gas is tomorrow_prices.gas
+
+
+@pytest.mark.asyncio
+async def test_promote_tomorrow_prices_rejects_stale_multi_day_old_cache(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """Promotion must not merge a tomorrow-cache that isn't dated for the new today.
+
+    Regression test: unlike _refresh_tomorrow_cache and _adjust_update_interval,
+    promote_tomorrow_prices trusted cached_prices_tomorrow unconditionally. In
+    normal operation _refresh_tomorrow_cache always clears anything not
+    fetched today before every 13:00+ run, so this couldn't happen — but if a
+    whole day is ever skipped (HA down across it) days-old prices would
+    otherwise get merged straight into "today" with no validation at all.
+    """
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    existing_today = _make_market_prices("2026-07-19T10:00:00.000Z")
+    coordinator._static_prices_today = existing_today
+    coordinator.cached_prices = {
+        DATA_ELECTRICITY: existing_today.electricity,
+        DATA_GAS: existing_today.gas,
+    }
+
+    # Three days stale: last genuinely fetched for 2026-07-20, but midnight
+    # rollover is now happening for 2026-07-23 (e.g. HA was down in between).
+    stale_prices = _make_market_prices("2026-07-19T22:00:00.000Z")
+    coordinator.cached_prices_tomorrow = stale_prices
+    coordinator.last_fetch_tomorrow = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
+
+    freezer.move_to(datetime(2026, 7, 23, 0, 0, tzinfo=tz))
+    coordinator.promote_tomorrow_prices()
+
+    assert coordinator.cached_prices_tomorrow is None
+    assert coordinator.last_fetch_tomorrow is None
+    # Today's prices must be untouched, not poisoned with the stale merge.
+    assert coordinator._static_prices_today is existing_today
+
+
+@pytest.mark.asyncio
+async def test_full_day_cycle_fetch_promote_refetch(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """Simulate three real days end-to-end through the actual production entry point.
+
+    FrankEnergiePriceCoordinator fully overrides _async_update_data (it does
+    NOT use the base class's _refresh_today_cache/_fetch_today_data at all —
+    those are dead code in production, since every real coordinator subclass
+    replaces _async_update_data). So driving _refresh_tomorrow_cache directly,
+    as the previous version of this test did, exercised real logic but not
+    the real entry point or the real "today" fetch path
+    (_fetch_prices_with_fallback + _carry_forward_previous_day).
+
+    This drives the actual await coordinator._async_update_data() HA calls,
+    for Day 1 -> Day 2 -> Day 3 -> (into Day 4), with a midnight
+    promote_tomorrow_prices() between each pair — matching production, where
+    that call comes from __init__.py's independent midnight scheduler, not
+    from _async_update_data itself. Each day also does a second call 5
+    minutes later, mirroring the real 5-minute in-window polling, to confirm
+    the second call is a genuine no-op (matches the observed real-world log:
+    fetch completes one cycle, "update interval changed to None" appears
+    only on the next).
+    """
+    from datetime import date
+
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+    day1, day2, day3, day4 = (
+        date(2026, 7, 20),
+        date(2026, 7, 21),
+        date(2026, 7, 22),
+        date(2026, 7, 23),
+    )
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator.store.async_save = AsyncMock()
+
+    # "Today" fetches, keyed by the local date being fetched as of.
+    today_fetches = {
+        day1: _make_market_prices("2026-07-20T10:00:00.000Z"),
+        day2: _make_market_prices("2026-07-21T10:00:00.000Z"),
+        day3: _make_market_prices("2026-07-22T10:00:00.000Z"),
+    }
+    # "Tomorrow" fetches, keyed by the tomorrow date being fetched.
+    tomorrow_fetches = {
+        day2: _make_market_prices("2026-07-20T22:00:00.000Z"),
+        day3: _make_market_prices("2026-07-21T22:00:00.000Z"),
+        day4: _make_market_prices("2026-07-22T22:00:00.000Z"),
+    }
+
+    async def fake_fetch_prices_with_fallback(start_date, end_date, use_fallback=True):
+        return today_fetches[start_date]
+
+    async def fake_fetch_tomorrow_data(tomorrow):
+        return tomorrow_fetches[tomorrow]
+
+    coordinator._fetch_prices_with_fallback = AsyncMock(
+        side_effect=fake_fetch_prices_with_fallback
+    )
+    coordinator._fetch_tomorrow_data = AsyncMock(side_effect=fake_fetch_tomorrow_data)
+
+    for today, tomorrow in ((day1, day2), (day2, day3), (day3, day4)):
+        # --- {today}, 13:00 local: the real update cycle fetches tomorrow ---
+        freezer.move_to(datetime(today.year, today.month, today.day, 13, 0, tzinfo=tz))
+        now_utc_first = dt_util.utcnow()
+
+        result = await coordinator._async_update_data()
+
+        assert coordinator.cached_prices_tomorrow is tomorrow_fetches[tomorrow]
+        assert coordinator.last_fetch_tomorrow == now_utc_first
+        assert (
+            result[DATA_ELECTRICITY].all[-1].date_from.astimezone(tz).date() == tomorrow
+        )
+        tomorrow_fetch_calls_after_first = coordinator._fetch_tomorrow_data.call_count
+        today_fetch_calls_after_first = (
+            coordinator._fetch_prices_with_fallback.call_count
+        )
+
+        # --- {today}, 13:05 local: next in-window tick must be a pure no-op ---
+        freezer.move_to(datetime(today.year, today.month, today.day, 13, 5, tzinfo=tz))
+        await coordinator._async_update_data()
+
+        assert (
+            coordinator._fetch_tomorrow_data.call_count
+            == tomorrow_fetch_calls_after_first
+        )
+        # Today's fetch must also skip re-fetching once already done today —
+        # the live _async_update_data has its own separate freshness check
+        # for this (last_fetch_today.date() == today), distinct from
+        # _refresh_tomorrow_cache's.
+        assert (
+            coordinator._fetch_prices_with_fallback.call_count
+            == today_fetch_calls_after_first
+        )
+        assert coordinator.update_interval is None  # now confirmed idle
+
+        # --- Midnight {today} -> {tomorrow}: promote tomorrow's cache ---
+        freezer.move_to(
+            datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, tzinfo=tz)
+        )
+        coordinator.promote_tomorrow_prices()
+
+        assert coordinator.cached_prices_tomorrow is None
+        assert (
+            coordinator._static_prices_today.electricity.all[-1]
+            .date_from.astimezone(tz)
+            .date()
+            == tomorrow
+        )
+        # promote_tomorrow_prices deliberately never touches last_fetch_tomorrow —
+        # it's still stale for the new today until the next _async_update_data run.
+        assert coordinator.last_fetch_tomorrow == now_utc_first
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_falls_back_to_cached_today_on_fetch_failure(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """A failed today-fetch must fall back to cached data instead of failing the update.
+
+    Coverage gap left by removing the dead _fetch_today_data/_get_static_data
+    path: FrankEnergiePriceCoordinator's real _async_update_data has its own,
+    different fallback-on-exception logic for today's fetch (checking
+    electricity/gas .current instead of a date-range check), which had no
+    test coverage of its own — the old tests exercised the dead method's
+    version of this behavior, not the live one.
+    """
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator.store.async_save = AsyncMock()
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=None)
+
+    freezer.move_to(datetime(2026, 7, 20, 13, 0, tzinfo=tz))
+
+    # Valid cached "today" data whose current entry covers this exact moment —
+    # the fallback check requires both electricity AND gas to have a .current
+    # entry, so (unlike _make_market_prices' always-empty gas) both need data.
+    from python_frank_energie.models import MarketPrices, PriceData
+
+    cached_today = MarketPrices(
+        electricity=_make_market_prices("2026-07-20T11:00:00.000Z").electricity,
+        gas=PriceData(
+            [
+                {
+                    "from": "2026-07-20T11:00:00.000Z",
+                    "till": "2026-07-20T11:15:00.000Z",
+                    "marketPrice": 0.5,
+                    "marketPriceTax": 0.1,
+                    "sourcingMarkupPrice": 0.05,
+                    "energyTaxPrice": 0.3,
+                }
+            ],
+            energy_type="gas",
+        ),
+        energy_country="NL",
+    )
+    coordinator._static_prices_today = cached_today
+
+    coordinator._fetch_prices_with_fallback = AsyncMock(
+        side_effect=RequestException("simulated network error")
+    )
+
+    result = await coordinator._async_update_data()
+
+    assert result[DATA_ELECTRICITY] is cached_today.electricity
+    assert coordinator.last_fetch_today is None  # fallback path never updates it
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_raises_when_fetch_fails_and_no_valid_cache(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """A failed today-fetch with nothing valid to fall back to must raise UpdateFailed."""
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator.store.async_save = AsyncMock()
+
+    freezer.move_to(datetime(2026, 7, 20, 13, 0, tzinfo=tz))
+
+    assert coordinator._static_prices_today is None  # nothing cached yet
+
+    coordinator._fetch_prices_with_fallback = AsyncMock(
+        side_effect=RequestException("simulated network error")
+    )
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_full_day_cycle_recovers_when_first_attempt_is_poisoned(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """A day whose first 13:00 attempt is poisoned must still self-heal via retry.
+
+    Reported in the wild: the fix worked for one day, then failed the next.
+    This simulates the shape of that report directly — Day 2's first fetch
+    attempt at 13:00 comes back non-empty but dated for today instead of
+    tomorrow (the API echo case), and only the retry a few minutes later
+    (as _adjust_update_interval's 5-minute in-window polling would trigger)
+    actually gets tomorrow's real data. Confirms two things stay true across
+    a poisoned attempt: the coordinator does not go idle after it (so the
+    retry can happen automatically), and the retry itself succeeds cleanly.
+    """
+    from datetime import date
+
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+    day1, day2, day3 = date(2026, 7, 20), date(2026, 7, 21), date(2026, 7, 22)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    # --- Day 1, 13:00: fetch succeeds cleanly, same as the happy path ---
+    freezer.move_to(datetime(2026, 7, 20, 13, 0, tzinfo=tz))
+    now_utc_1 = dt_util.utcnow()
+
+    day1_today_prices = _make_market_prices("2026-07-20T10:00:00.000Z")
+    coordinator._static_prices_today = day1_today_prices
+    coordinator.cached_prices = {
+        DATA_ELECTRICITY: day1_today_prices.electricity,
+        DATA_GAS: day1_today_prices.gas,
+    }
+
+    day2_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=day2_prices)
+    await coordinator._refresh_tomorrow_cache(day1, day2, now_utc_1)
+    coordinator._adjust_update_interval(now_utc_1)
+
+    assert coordinator.cached_prices_tomorrow is day2_prices
+    assert coordinator.update_interval is None  # validated cache, safe to go idle
+
+    # --- Midnight Day 1 -> Day 2 ---
+    freezer.move_to(datetime(2026, 7, 21, 0, 0, tzinfo=tz))
+    coordinator.promote_tomorrow_prices()
+    assert coordinator.cached_prices_tomorrow is None
+
+    # --- Day 2, 13:00: first attempt is poisoned (echoes today's date) ---
+    freezer.move_to(datetime(2026, 7, 21, 13, 0, tzinfo=tz))
+    now_utc_2_first = dt_util.utcnow()
+
+    poisoned_response = _make_market_prices(
+        "2026-07-21T10:00:00.000Z"
+    )  # today, not tomorrow
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=poisoned_response)
+
+    result_first_attempt = await coordinator._refresh_tomorrow_cache(
+        day2, day3, now_utc_2_first
+    )
+    coordinator._adjust_update_interval(now_utc_2_first)
+
+    assert result_first_attempt is None
+    assert coordinator.cached_prices_tomorrow is None
+    assert coordinator.last_fetch_tomorrow is None
+    # Must not go idle — the retry needs the polling loop to still be running.
+    assert coordinator.update_interval == timedelta(minutes=5)
+
+    # --- Day 2, 13:05: retry gets the real data ---
+    freezer.move_to(datetime(2026, 7, 21, 13, 5, tzinfo=tz))
+    now_utc_2_retry = dt_util.utcnow()
+
+    day3_prices = _make_market_prices("2026-07-21T22:00:00.000Z")
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=day3_prices)
+
+    result_retry = await coordinator._refresh_tomorrow_cache(
+        day2, day3, now_utc_2_retry
+    )
+    coordinator._adjust_update_interval(now_utc_2_retry)
+
+    assert result_retry is day3_prices
+    assert coordinator.cached_prices_tomorrow is day3_prices
+    assert coordinator.last_fetch_tomorrow == now_utc_2_retry
+    assert coordinator.update_interval is None  # now validated, safe to go idle
 
 
 @pytest.mark.asyncio
@@ -2048,6 +2056,40 @@ async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
 
     coordinator._fetch_tomorrow_data.assert_not_called()
     assert result is multi_day_prices
+
+
+@pytest.mark.asyncio
+async def test_refresh_tomorrow_cache_rejects_freshly_fetched_poisoned_data(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """A freshly fetched response dated for today, not tomorrow, must not be cached.
+
+    Regression test: the self-heal check only re-validated an *existing*
+    same-day cache one cycle later. It never validated the response of the
+    fetch it triggered to fix that cache, so a fetch that itself came back
+    non-empty but still dated for today (e.g. the API echoing the latest
+    available day back for a not-yet-published date) got cached as a
+    genuine success — silently re-poisoning the cache with no further
+    warning, and (via _adjust_update_interval) going idle for the rest of
+    the day.
+    """
+    from datetime import date
+
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+
+    coordinator.cached_prices_tomorrow = None
+    coordinator.last_fetch_tomorrow = None
+
+    poisoned_fetch_result = _make_market_prices("2026-07-20T10:00:00.000Z")
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=poisoned_fetch_result)
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    assert result is None
+    assert coordinator.cached_prices_tomorrow is None
+    assert coordinator.last_fetch_tomorrow is None
 
 
 @pytest.mark.asyncio
