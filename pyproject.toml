@@ -20,3 +20,12 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 
+[tool.ruff]
+# Pinned: with no version pin anywhere, both CI's ruff-action and local dev
+# silently drift to whatever's "latest" at the time, and new ruff releases
+# regularly enable new rules by default. Confirmed directly: this exact repo,
+# unchanged, goes from 0 lint errors on 0.15.18 to 90 on 0.16.0. Bump this
+# deliberately (and address whatever it newly flags) rather than letting CI
+# fail on unrelated PRs whenever ruff cuts a release.
+required-version = "0.15.18"
+

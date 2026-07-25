@@ -181,7 +181,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             # already short-circuits both today's and tomorrow's fetch to a
             # no-op once genuinely up to date, so the extra calls on ticks
             # where nothing changed cost nothing.
-            if time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0) <= now_local.time() < time(15, 0):
+            if (
+                time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
+                <= now_local.time()
+                < time(15, 0)
+            ):
                 # Debug, not info: this now fires up to 8x/day, and
                 # _refresh_tomorrow_cache already logs its own outcome
                 # (fetched vs. already cached, skip) at the appropriate level.

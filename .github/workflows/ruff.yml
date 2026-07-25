@@ -46,9 +46,11 @@ jobs:
       - name: Ruff lint
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
+          version: "0.15.18"
           args: "check custom_components"
 
       - name: Ruff format check
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
+          version: "0.15.18"
           args: "format --check custom_components"

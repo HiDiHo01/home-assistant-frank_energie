@@ -618,7 +618,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # there was nothing left to carry over), and a stale timestamp with
         # no cache to match it is exactly the kind of inconsistent state this
         # method exists to clean up before trusting anything.
-        if self.last_fetch_tomorrow is not None and self.last_fetch_tomorrow.date() != today:
+        if (
+            self.last_fetch_tomorrow is not None
+            and self.last_fetch_tomorrow.date() != today
+        ):
             _LOGGER.debug(
                 "Invalidating stale tomorrow-price cache (was fetched on %s)",
                 self.last_fetch_tomorrow.date(),
