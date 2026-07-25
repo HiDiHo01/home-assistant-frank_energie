@@ -82,7 +82,13 @@ async def async_setup_entry(
     """Set up the Frank Energie component from a config entry."""
     _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
     _LOGGER.debug("Setting up Frank Energie entry: %s", entry)
-    _LOGGER.debug("Setting up Frank Energie entry data: %s", entry.data)
+    _LOGGER.debug(
+        "Setting up Frank Energie entry data: %s",
+        {
+            key: "**REDACTED**" if key in (CONF_ACCESS_TOKEN, CONF_TOKEN) else value
+            for key, value in entry.data.items()
+        },
+    )
     _LOGGER.debug("Setting up Frank Energie entry domain: %s", entry.domain)
     _LOGGER.debug("Setting up Frank Energie entry unique_id: %s", entry.unique_id)
     _LOGGER.debug("Setting up Frank Energie entry options: %s", entry.options)
