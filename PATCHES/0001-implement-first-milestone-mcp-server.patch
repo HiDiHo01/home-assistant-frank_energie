@@ -1,1 +1,59 @@
-PLACEHOLDER
+From 214b6332bf6dc8d68ffc96392cadd00e009dbab6 Mon Sep 17 00:00:00 2001
+From: frank-energie-mcp scaffold <dev@example.com>
+Date: Tue, 28 Jul 2026 19:37:15 +0000
+Subject: [PATCH] Implement first-milestone MCP server
+
+Adds the src/ layout and price/account tools described in README.md's
+'First milestone' and 'Planned structure' sections:
+
+- config.py / auth.py: env-based credentials, lazy login, single
+  FrankEnergie client per process
+- models.py: deterministic JSON serialization for MarketPrices/Price/
+  UserSites, plus ToolError + translate_frank_energie_error() so backend
+  exceptions never leak internals to MCP clients (SECURITY.md,
+  docs/DEVELOPMENT.md)
+- tools/prices.py: get_current_prices, get_today_prices,
+  get_tomorrow_prices, get_gas_price (public, no credentials needed)
+- tools/account.py: get_account, list_sites (only registered when
+  FRANK_USERNAME/FRANK_PASSWORD are set)
+- server.py: MCPServer (mcp>=2.0.0) wiring; FastMCP was the v1 name
+- docs/API.md: tool reference and error-translation table, following
+  the existing docs/DEVELOPMENT.md naming convention
+- tests/test_server.py: verifies account tools are absent without
+  credentials
+
+All Frank Energie communication stays in python-frank-energie per the
+architecture rule in CONTRIBUTING.md / AI_POLICY.md. ruff clean,
+pytest passing.
+---
+ .gitignore                                  |   6 ++
+ docs/API.md                                 |  61 +++++++++++
+ pyproject.toml                              |  57 +++++++++++
+ src/frank_energie_mcp/__init__.py           |   5 +
+ src/frank_energie_mcp/__main__.py           |  16 +++
+ src/frank_energie_mcp/auth.py               |  51 ++++++++++
+ src/frank_energie_mcp/config.py             |  31 ++++++
+ src/frank_energie_mcp/models.py             | 107 ++++++++++++++++++++
+ src/frank_energie_mcp/prompts/__init__.py   |   4 +
+ src/frank_energie_mcp/resources/__init__.py |   6 ++
+ src/frank_energie_mcp/server.py             |  34 +++++++
+ src/frank_energie_mcp/tools/__init__.py     |   6 ++
+ src/frank_energie_mcp/tools/account.py      |  44 +++++++++
+ src/frank_energie_mcp/tools/prices.py       |  76 +++++++++++++++
+ tests/test_server.py                        |  24 +++++
+ 15 files changed, 528 insertions(+)
+ create mode 100644 .gitignore
+ create mode 100644 docs/API.md
+ create mode 100644 pyproject.toml
+ create mode 100644 src/frank_energie_mcp/__init__.py
+ create mode 100644 src/frank_energie_mcp/__main__.py
+ create mode 100644 src/frank_energie_mcp/auth.py
+ create mode 100644 src/frank_energie_mcp/config.py
+ create mode 100644 src/frank_energie_mcp/models.py
+ create mode 100644 src/frank_energie_mcp/prompts/__init__.py
+ create mode 100644 src/frank_energie_mcp/resources/__init__.py
+ create mode 100644 src/frank_energie_mcp/server.py
+ create mode 100644 src/frank_energie_mcp/tools/__init__.py
+ create mode 100644 src/frank_energie_mcp/tools/account.py
+ create mode 100644 src/frank_energie_mcp/tools/prices.py
+ create mode 100644 tests/test_server.py
