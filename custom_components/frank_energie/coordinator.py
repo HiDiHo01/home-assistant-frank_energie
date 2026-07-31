@@ -1463,6 +1463,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             {price.date_from: price for price in tomorrow_data.price_data}
         )
         merged.price_data = sorted(unique_prices.values(), key=lambda p: p.date_from)
+
+        # `merged` is a shallow copy, so resolution_minutes still reflects
+        # today_data's entry spacing, not the mixed-resolution price_data we
+        # just built. Recompute it the same way PriceData.__post_init__
+        # does (smallest positive interval wins) so downstream consumers
+        # like _is_cache_resolution_valid() don't see stale metadata.
+        intervals = [
+            int((price.date_till - price.date_from).total_seconds() // 60)
+            for price in merged.price_data
+            if price.date_from and price.date_till
+        ]
+        positive_intervals = [minutes for minutes in intervals if minutes > 0]
+        if positive_intervals:
+            merged.resolution_minutes = min(positive_intervals)
+
         return merged
 
     def _aggregate_data(
@@ -1642,6 +1657,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # Keep the combined data (yesterday + today) to prevent historical sensors
         # from becoming None at exactly 0:00. Merge the tomorrow cache in case it
         # never made it into an aggregation cycle before midnight.
+        #
+        # On a ValueError (resolution/energy-type mismatch) this deliberately
+        # picks tomorrow's series and drops the rest, unlike
+        # _resolve_price_data_merge_conflict's entry-level merge used in
+        # _aggregate_data. The two failure sites aren't equivalent: here,
+        # "tomorrow" genuinely *becomes* the new "today" at this exact
+        # instant, so its resolution is the correct one going forward and
+        # source_data's incompatible entries are, by definition, about to be
+        # the wrong resolution for the new day. Merging them in anyway would
+        # just reintroduce the same mismatch one call later.
         try:
             combined_electricity = self._merge_prices(
                 source_data.get(DATA_ELECTRICITY), prices_tomorrow.electricity
