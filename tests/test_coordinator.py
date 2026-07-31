@@ -28,7 +28,13 @@ from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import FrankEnergieException, RequestException
-from python_frank_energie.models import MonthSummary, Invoices, User
+from python_frank_energie.models import (
+    MonthSummary,
+    Invoices,
+    User,
+    PriceData,
+    MarketPrices,
+)
 from aiohttp import ClientError
 
 
@@ -162,6 +168,116 @@ async def test_aggregate_data(coordinator):
     assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MagicMock)
     assert isinstance(aggregated_data[DATA_INVOICES], MagicMock)
     assert isinstance(aggregated_data[DATA_USER], MagicMock)
+
+
+@pytest.mark.asyncio
+async def test_aggregate_data_handles_contract_resolution_change(coordinator):
+    """A contract resolution change (e.g. PT15M -> PT60M) must not crash the update.
+
+    Regression test: cached "today" prices at one resolution combined with
+    freshly-fetched "tomorrow" prices at a different resolution used to raise
+    ValueError out of PriceData.__add__ and crash the whole coordinator
+    refresh (_aggregate_data -> _combine_price_data). Today's prices carry a
+    real 15-minute contract resolution here; tomorrow's switch to 60 minutes.
+    """
+    raw_today = {
+        "from": "2026-07-31T22:00:00.000Z",
+        "till": "2026-07-31T22:15:00.000Z",
+        "marketPrice": 0.1,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    raw_tomorrow = {
+        "from": "2026-08-01T22:00:00.000Z",
+        "till": "2026-08-01T23:00:00.000Z",
+        "marketPrice": 0.2,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    today_electricity = PriceData([raw_today], energy_type="electricity")
+    tomorrow_electricity = PriceData([raw_tomorrow], energy_type="electricity")
+    assert today_electricity.resolution_minutes == 15
+    assert tomorrow_electricity.resolution_minutes == 60
+
+    prices_today = MagicMock()
+    prices_today.electricity = today_electricity
+    prices_today.gas = None
+    prices_tomorrow = MagicMock()
+    prices_tomorrow.electricity = tomorrow_electricity
+    prices_tomorrow.gas = None
+    data_month_summary = MagicMock(spec=MonthSummary)
+    data_invoices = MagicMock(spec=Invoices)
+    data_user = MagicMock(spec=User)
+
+    cache = PricesTodayCache(
+        prices_today=prices_today,
+        data_month_summary=data_month_summary,
+        data_invoices=data_invoices,
+        data_user=data_user,
+        user_sites=None,
+        data_period_usage=None,
+        data_enode_chargers=None,
+        data_smart_batteries=None,
+        data_smart_battery_details=[],
+        data_smart_battery_sessions=[],
+        data_enode_vehicles=None,
+        data_pv_systems=None,
+        data_pv_summary=None,
+        data_user_smart_feed_in=None,
+        data_contract_price_resolution_state=None,
+    )
+
+    aggregated_data = coordinator._aggregate_data(cache, prices_tomorrow)
+
+    # Today's real entry must survive the merge (regression: an earlier fix
+    # discarded it in favor of tomorrow's, making "today" sensors go
+    # unavailable), and tomorrow's entry must still be present too.
+    merged_electricity = aggregated_data[DATA_ELECTRICITY]
+    assert [p.date_from for p in merged_electricity.price_data] == [
+        today_electricity.price_data[0].date_from,
+        tomorrow_electricity.price_data[0].date_from,
+    ]
+
+
+def test_resolve_price_data_merge_conflict_recomputes_resolution_minutes():
+    """The merged series' resolution_minutes must reflect its actual entries.
+
+    Regression test: _resolve_price_data_merge_conflict builds `merged` via
+    copy.copy(today_data), a shallow copy that keeps today_data's stale
+    resolution_minutes even after price_data is replaced. Uses PT60M ->
+    PT15M (the reverse direction of the other regression test) so a
+    leftover stale value (60) is distinguishable from the correctly
+    recomputed one (15, from tomorrow's finer-grained entries).
+    """
+    raw_today = {
+        "from": "2026-07-31T20:00:00.000Z",
+        "till": "2026-07-31T21:00:00.000Z",
+        "marketPrice": 0.1,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    raw_tomorrow = {
+        "from": "2026-08-01T20:00:00.000Z",
+        "till": "2026-08-01T20:15:00.000Z",
+        "marketPrice": 0.2,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    today_electricity = PriceData([raw_today], energy_type="electricity")
+    tomorrow_electricity = PriceData([raw_tomorrow], energy_type="electricity")
+    assert today_electricity.resolution_minutes == 60
+    assert tomorrow_electricity.resolution_minutes == 15
+
+    err = ValueError("Cannot merge PriceData with different resolutions: 60 vs 15")
+    merged = FrankEnergiePriceCoordinator._resolve_price_data_merge_conflict(
+        today_electricity, tomorrow_electricity, err
+    )
+
+    assert merged.resolution_minutes == 15
 
 
 @pytest.mark.asyncio
@@ -1387,6 +1503,105 @@ async def test_full_day_cycle_fetch_promote_refetch(
 
 
 @pytest.mark.asyncio
+async def test_full_day_cycle_survives_contract_resolution_change(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """A real end-to-end contract resolution change (PT15M -> PT60M) must not
+    crash the update or make "today" sensors go unavailable, across the
+    transition day and into the day after.
+
+    Drives the same real entry points as test_full_day_cycle_fetch_promote_refetch
+    (_async_update_data + promote_tomorrow_prices), but with day1's "today" fetch
+    at 15-minute resolution and day1's "tomorrow" fetch already at 60-minute
+    resolution — the exact shape of a genuine in-progress contract resolution
+    change reported in production. Confirms three things:
+    1. Day 1's live aggregation survives the mismatch and keeps both today's
+       and tomorrow's entries visible (regression: an earlier fix dropped
+       today's entries in favor of tomorrow's here).
+    2. Midnight promotion still cleanly adopts the new (60-minute) resolution.
+    3. Day 2 onward, now that both sides agree on resolution, merging goes
+       through the normal path with no further conflict.
+    """
+    from datetime import date
+
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+    day1, day2, day3 = date(2026, 7, 31), date(2026, 8, 1), date(2026, 8, 2)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator.store.async_save = AsyncMock()
+
+    day1_today = _make_market_prices_with_resolution(15, "2026-07-31T10:00:00.000Z")
+    day1_tomorrow = _make_market_prices_with_resolution(
+        60, "2026-07-31T22:00:00.000Z"
+    )  # day2, already on the new resolution
+    day2_tomorrow = _make_market_prices_with_resolution(
+        60, "2026-08-01T22:00:00.000Z"
+    )  # day3, resolution has settled
+
+    today_fetches = {day1: day1_today}
+    tomorrow_fetches = {day2: day1_tomorrow, day3: day2_tomorrow}
+
+    async def fake_fetch_prices_with_fallback(start_date, end_date, use_fallback=True):
+        return today_fetches[start_date]
+
+    async def fake_fetch_tomorrow_data(tomorrow):
+        return tomorrow_fetches[tomorrow]
+
+    coordinator._fetch_prices_with_fallback = AsyncMock(
+        side_effect=fake_fetch_prices_with_fallback
+    )
+    coordinator._fetch_tomorrow_data = AsyncMock(side_effect=fake_fetch_tomorrow_data)
+
+    # --- Day 1, 13:00: today=15min, tomorrow=60min. Must not crash. ---
+    freezer.move_to(datetime(day1.year, day1.month, day1.day, 13, 0, tzinfo=tz))
+    result = await coordinator._async_update_data()
+
+    merged_electricity = result[DATA_ELECTRICITY]
+    assert len(merged_electricity.today) == 1
+    assert merged_electricity.today[0].date_from.astimezone(tz).date() == day1
+    assert len(merged_electricity.tomorrow) == 1
+    assert merged_electricity.tomorrow[0].date_from.astimezone(tz).date() == day2
+
+    # --- Midnight day1 -> day2: promote tomorrow's (60min) cache ---
+    freezer.move_to(datetime(day2.year, day2.month, day2.day, 0, 0, tzinfo=tz))
+    coordinator.promote_tomorrow_prices()
+
+    assert coordinator.cached_prices_tomorrow is None
+    assert coordinator._static_prices_today.electricity.resolution_minutes == 60
+    assert (
+        coordinator._static_prices_today.electricity.all[-1]
+        .date_from.astimezone(tz)
+        .date()
+        == day2
+    )
+
+    # --- Day 2, 13:00: both sides now agree on 60min, no more conflict ---
+    freezer.move_to(datetime(day2.year, day2.month, day2.day, 13, 0, tzinfo=tz))
+    # day2's "today" prices are already the ones promoted at midnight (60min).
+    coordinator.last_fetch_today = None  # force a live "today" re-check this cycle
+    coordinator._fetch_prices_with_fallback = AsyncMock(
+        side_effect=lambda *a, **kw: coordinator._static_prices_today
+    )
+
+    result_day2 = await coordinator._async_update_data()
+
+    assert coordinator.cached_prices_tomorrow is day2_tomorrow
+    assert len(result_day2[DATA_ELECTRICITY].tomorrow) == 1
+    assert (
+        result_day2[DATA_ELECTRICITY].tomorrow[0].date_from.astimezone(tz).date()
+        == day3
+    )
+
+
+@pytest.mark.asyncio
 async def test_async_update_data_falls_back_to_cached_today_on_fetch_failure(
     mock_frank_energie, mock_config_entry, freezer
 ) -> None:
@@ -1914,9 +2129,14 @@ async def test_price_data_after_and_build_tomorrow_cache_with_real_pricedata() -
 
 def _make_market_prices(*entry_date_isos: str):
     """Build a minimal real MarketPrices with one electricity entry per given ISO start."""
-    from datetime import timedelta as _timedelta
+    return _make_market_prices_with_resolution(15, *entry_date_isos)
 
-    from python_frank_energie.models import MarketPrices, PriceData
+
+def _make_market_prices_with_resolution(
+    resolution_minutes: int, *entry_date_isos: str
+) -> MarketPrices:
+    """Build a minimal real MarketPrices with entries spaced `resolution_minutes` apart."""
+    from datetime import timedelta as _timedelta
 
     raw_prices = []
     for entry_date_iso in entry_date_isos:
@@ -1924,7 +2144,9 @@ def _make_market_prices(*entry_date_isos: str):
         raw_prices.append(
             {
                 "from": entry_date_iso,
-                "till": (entry_start + _timedelta(minutes=15)).isoformat(),
+                "till": (
+                    entry_start + _timedelta(minutes=resolution_minutes)
+                ).isoformat(),
                 "marketPrice": 0.1,
                 "marketPriceTax": 0.02,
                 "sourcingMarkupPrice": 0.01,

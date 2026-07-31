@@ -1419,7 +1419,66 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "In-place merge of %s failed, falling back to __add__",
                 type(today_data).__name__,
             )
-            return today_data + tomorrow_data
+            try:
+                return today_data + tomorrow_data
+            except ValueError as err:
+                return self._resolve_price_data_merge_conflict(
+                    today_data, tomorrow_data, err
+                )
+        except ValueError as err:
+            return self._resolve_price_data_merge_conflict(
+                today_data, tomorrow_data, err
+            )
+
+    @staticmethod
+    def _resolve_price_data_merge_conflict(
+        today_data: Any, tomorrow_data: Any, err: ValueError
+    ) -> Any:
+        """Fall back when today's and tomorrow's price data can't be merged.
+
+        A resolution or energy-type mismatch here is expected on a genuine
+        contract price resolution change (e.g. PT15M -> PT60M) rather than a
+        bug, so this must not crash the whole coordinator update.
+
+        Unlike the midnight-rollover promotion (where tomorrow legitimately
+        *becomes* the new today), this runs while today is still today:
+        today_data holds the real, currently-active prices, so it must never
+        be dropped in favor of tomorrow's forward-looking entries — doing so
+        previously made "today" sensors go unavailable the moment a
+        resolution-change window began. Each Price entry is self-describing
+        via date_from/date_till (see PriceData.current/.today/.tomorrow), so
+        a mixed-resolution series is still valid for display; only
+        PriceData.__add__'s strict equality guard rejects it. Merge the
+        entries directly instead of picking a side.
+        """
+        _LOGGER.warning(
+            "Today's and tomorrow's %s price data have mismatched metadata "
+            "(%s); merging entries directly instead of failing the update",
+            type(today_data).__name__,
+            err,
+        )
+        merged = copy.copy(today_data)
+        unique_prices = {price.date_from: price for price in today_data.price_data}
+        unique_prices.update(
+            {price.date_from: price for price in tomorrow_data.price_data}
+        )
+        merged.price_data = sorted(unique_prices.values(), key=lambda p: p.date_from)
+
+        # `merged` is a shallow copy, so resolution_minutes still reflects
+        # today_data's entry spacing, not the mixed-resolution price_data we
+        # just built. Recompute it the same way PriceData.__post_init__
+        # does (smallest positive interval wins) so downstream consumers
+        # like _is_cache_resolution_valid() don't see stale metadata.
+        intervals = [
+            int((price.date_till - price.date_from).total_seconds() // 60)
+            for price in merged.price_data
+            if price.date_from and price.date_till
+        ]
+        positive_intervals = [minutes for minutes in intervals if minutes > 0]
+        if positive_intervals:
+            merged.resolution_minutes = min(positive_intervals)
+
+        return merged
 
     def _aggregate_data(
         self,
@@ -1598,6 +1657,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # Keep the combined data (yesterday + today) to prevent historical sensors
         # from becoming None at exactly 0:00. Merge the tomorrow cache in case it
         # never made it into an aggregation cycle before midnight.
+        #
+        # On a ValueError (resolution/energy-type mismatch) this deliberately
+        # picks tomorrow's series and drops the rest, unlike
+        # _resolve_price_data_merge_conflict's entry-level merge used in
+        # _aggregate_data. The two failure sites aren't equivalent: here,
+        # "tomorrow" genuinely *becomes* the new "today" at this exact
+        # instant, so its resolution is the correct one going forward and
+        # source_data's incompatible entries are, by definition, about to be
+        # the wrong resolution for the new day. Merging them in anyway would
+        # just reintroduce the same mismatch one call later.
         try:
             combined_electricity = self._merge_prices(
                 source_data.get(DATA_ELECTRICITY), prices_tomorrow.electricity
