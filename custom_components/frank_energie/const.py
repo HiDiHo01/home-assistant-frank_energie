@@ -181,6 +181,7 @@ POWER_DELIVERY_STATES: Final[tuple[str, ...]] = (
     "plugged_in_not_charging",
     "plugged_in_finished",
     "plugged_in_no_power",
+    "plugged_in_stopped",
     "unknown",
     "error",
 )

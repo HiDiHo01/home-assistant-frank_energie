@@ -843,6 +843,7 @@
           "plugged_in_not_charging": "Branché : pas en charge",
           "plugged_in_finished": "Branché : charge terminée",
           "plugged_in_no_power": "Branché : pas d'alimentation",
+          "plugged_in_stopped": "Branché : arrêté",
           "unknown": "Inconnu",
           "error": "Erreur"
         }
