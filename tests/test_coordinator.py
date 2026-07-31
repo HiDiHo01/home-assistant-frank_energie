@@ -28,7 +28,7 @@ from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import FrankEnergieException, RequestException
-from python_frank_energie.models import MonthSummary, Invoices, User
+from python_frank_energie.models import MonthSummary, Invoices, User, PriceData
 from aiohttp import ClientError
 
 
@@ -162,6 +162,77 @@ async def test_aggregate_data(coordinator):
     assert isinstance(aggregated_data[DATA_MONTH_SUMMARY], MagicMock)
     assert isinstance(aggregated_data[DATA_INVOICES], MagicMock)
     assert isinstance(aggregated_data[DATA_USER], MagicMock)
+
+
+@pytest.mark.asyncio
+async def test_aggregate_data_handles_contract_resolution_change(coordinator):
+    """A contract resolution change (e.g. PT15M -> PT60M) must not crash the update.
+
+    Regression test: cached "today" prices at one resolution combined with
+    freshly-fetched "tomorrow" prices at a different resolution used to raise
+    ValueError out of PriceData.__add__ and crash the whole coordinator
+    refresh (_aggregate_data -> _combine_price_data). Today's prices carry a
+    real 15-minute contract resolution here; tomorrow's switch to 60 minutes.
+    """
+    raw_today = {
+        "from": "2026-07-31T22:00:00.000Z",
+        "till": "2026-07-31T22:15:00.000Z",
+        "marketPrice": 0.1,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    raw_tomorrow = {
+        "from": "2026-08-01T22:00:00.000Z",
+        "till": "2026-08-01T23:00:00.000Z",
+        "marketPrice": 0.2,
+        "marketPriceTax": 0.02,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.1,
+    }
+    today_electricity = PriceData([raw_today], energy_type="electricity")
+    tomorrow_electricity = PriceData([raw_tomorrow], energy_type="electricity")
+    assert today_electricity.resolution_minutes == 15
+    assert tomorrow_electricity.resolution_minutes == 60
+
+    prices_today = MagicMock()
+    prices_today.electricity = today_electricity
+    prices_today.gas = None
+    prices_tomorrow = MagicMock()
+    prices_tomorrow.electricity = tomorrow_electricity
+    prices_tomorrow.gas = None
+    data_month_summary = MagicMock(spec=MonthSummary)
+    data_invoices = MagicMock(spec=Invoices)
+    data_user = MagicMock(spec=User)
+
+    cache = PricesTodayCache(
+        prices_today=prices_today,
+        data_month_summary=data_month_summary,
+        data_invoices=data_invoices,
+        data_user=data_user,
+        user_sites=None,
+        data_period_usage=None,
+        data_enode_chargers=None,
+        data_smart_batteries=None,
+        data_smart_battery_details=[],
+        data_smart_battery_sessions=[],
+        data_enode_vehicles=None,
+        data_pv_systems=None,
+        data_pv_summary=None,
+        data_user_smart_feed_in=None,
+        data_contract_price_resolution_state=None,
+    )
+
+    aggregated_data = coordinator._aggregate_data(cache, prices_tomorrow)
+
+    # Today's real entry must survive the merge (regression: an earlier fix
+    # discarded it in favor of tomorrow's, making "today" sensors go
+    # unavailable), and tomorrow's entry must still be present too.
+    merged_electricity = aggregated_data[DATA_ELECTRICITY]
+    assert [p.date_from for p in merged_electricity.price_data] == [
+        today_electricity.price_data[0].date_from,
+        tomorrow_electricity.price_data[0].date_from,
+    ]
 
 
 @pytest.mark.asyncio
