@@ -171,8 +171,8 @@ BATTERY_STRATEGY_OPTIONS: Final[list[str]] = [
 ]
 
 ENODE_CHARGING_MODE_OPTIONS: Final[list[str]] = [
-    "on_off",
-    "smart",
+    "smart_charging",
+    "boost_charging",
 ]
 
 POWER_DELIVERY_STATES: Final[tuple[str, ...]] = (
