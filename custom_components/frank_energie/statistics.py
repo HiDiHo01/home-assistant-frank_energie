@@ -59,6 +59,7 @@ def working_lowest_window(
         lowest_end,
     )
 
+
 def lowest_window(
     data: FrankEnergieData,
     window: int,
