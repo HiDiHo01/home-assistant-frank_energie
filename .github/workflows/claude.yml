@@ -33,7 +33,7 @@ jobs:
             uploader.codecov.io:443
             registry.npmjs.org:443
             api.anthropic.com:443
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # @v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
         with:
           persist-credentials: false
       - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b
