@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
         with:
           persist-credentials: false
-      - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b
+      - uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79
         with:
           trigger_phrase: "@claude"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
