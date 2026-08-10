@@ -429,9 +429,9 @@
           "delivery_ended": "Levering beëindigd",
           "inactive": "Inactief",
           "in_delivery": "In levering",
-          "ready": "Klaar",
-          "switched": "Omgeschakeld",
-          "loss": "Verlies",
+          "ready": "Gereed",
+          "switched": "Overgestapt",
+          "loss": "Gestopt",
           "unknown": "Onbekend"
         }
       },
@@ -442,9 +442,9 @@
           "delivery_ended": "Levering beëindigd",
           "inactive": "Inactief",
           "in_delivery": "In levering",
-          "ready": "Klaar",
-          "switched": "Omgeschakeld",
-          "loss": "Verlies",
+          "ready": "Gereed",
+          "switched": "Overgestapt",
+          "loss": "Gestopt",
           "unknown": "Onbekend"
         }
       },
