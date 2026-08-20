@@ -19,6 +19,8 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            release-assets.githubusercontent.com:443
+            ec2-44-240-119-218.us-west-2.compute.amazonaws.com:443
             ec2-54-185-253-63.us-west-2.compute.amazonaws.com:443
             api.github.com:443
             raw.githubusercontent.com:443
