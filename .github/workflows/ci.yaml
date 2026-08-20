@@ -24,6 +24,7 @@ jobs:
             api.github.com:443
             raw.githubusercontent.com:443
             github.com:443
+            install.python-poetry.org:443
             pypi.org:443
             files.pythonhosted.org:443
             sonarcloud.io:443
@@ -46,6 +47,7 @@ jobs:
 
       - name: Install Poetry
         run: |
+          set -o pipefail
           curl -sSL https://install.python-poetry.org | python3 -
           echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
 
