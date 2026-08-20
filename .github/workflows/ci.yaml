@@ -2,9 +2,8 @@ name: Flake8 and pytest
 
 on:
   push:
-    branches: ["dev"]
+    branches: ["main"]
   pull_request:
-    branches: ["dev"]
 
 permissions:
   contents: read
@@ -39,10 +38,10 @@ jobs:
 
         with:
           persist-credentials: false
-      - name: Set up Python 3.13
+      - name: Set up Python 3.14
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # @v6
         with:
-          python-version: '3.13'
+          python-version: '3.14'
           cache: 'pip'
 
       - name: Install Poetry
