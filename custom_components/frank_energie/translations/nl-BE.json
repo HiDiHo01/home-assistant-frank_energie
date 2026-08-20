@@ -652,6 +652,8 @@
           "plugged_in_finished": "Gekoppeld, laden voltooid",
           "plugged_in_no_power": "Gekoppeld, geen stroom",
           "plugged_in_stopped": "Gekoppeld, gestopt",
+          "plugged_in_initializing": "Gekoppeld, initialiseert",
+          "plugged_in_complete": "Gekoppeld, voltooid",
           "unknown": "Onbekend",
           "error": "Fout"
         }
