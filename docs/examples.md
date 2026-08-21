@@ -160,6 +160,36 @@ actions:
       message: Electricity prices are currently negative.
 ```
 
+## Using your own sourcing markup input
+
+Create a number input entity and get your custom price calculation.
+(or use a fixed sourcing markup price like this example)
+
+```
+template:
+  - sensor:
+      - name: "Electricity price with my sourcing markup"
+        unique_id: elec_price_with_my_markup
+        device_class: monetary
+        state_class: total
+        unit_of_measurement: "EUR/kWh"
+        state: >
+          {% set markup = states('number.sourcing_markup') %} # or use a fixed number
+          {% set markup = 0.02 %}
+          {% set prices = state_attr('sensor.frank_energie_electricity_prices_current_electricity_market_price', 'prices') %}
+          {% set nowdt = now() %}
+          {% set current = prices | selectattr('from', 'le', nowdt) | selectattr('till', 'gt', nowdt) | list %}
+          {{ (current[0].price + markup) | round(3) if current else 'unavailable' }}
+        attributes:
+          prices: >
+            {% set markup = 0.02 %}
+            {% set ns = namespace(result=[]) %}
+            {% for p in state_attr('sensor.frank_energie_electricity_prices_current_electricity_market_price', 'prices') %}
+              {% set ns.result = ns.result + [ dict(**{'from': p['from'].isoformat(), 'till': p.till.isoformat(), 'price': (p.price + markup) | round(3)}) ] %}
+            {% endfor %}
+            {{ ns.result }}
+```
+
 ## Dashboard Ideas
 
 Useful entities for Energy dashboards:
