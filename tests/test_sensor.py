@@ -9,6 +9,10 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     MockConfigEntry,
 )
+from python_frank_energie.domain import (
+    SmartPvOperationalStatus,
+    SmartPvSteeringStatus,
+)
 
 from custom_components.frank_energie import const
 from tests.utils import ResponseMocks
@@ -893,3 +897,153 @@ def test_safe_session_result_sum():
 
     # Test empty
     assert _safe_session_result_sum([]) == pytest.approx(0.0)
+
+
+def _pv_sensor_description(key: str) -> object:
+    """Return the PV_SENSORS entity description with the given key."""
+    from custom_components.frank_energie.sensor import PV_SENSORS
+
+    return next(d for d in PV_SENSORS if d.key == key)
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "enum_cls"),
+    [
+        ("operational_status", SmartPvOperationalStatus),
+        ("steering_status", SmartPvSteeringStatus),
+    ],
+)
+def test_pv_enum_sensor_options_cover_domain_and_translations(
+    sensor_key: str, enum_cls: type[SmartPvOperationalStatus | SmartPvSteeringStatus]
+) -> None:
+    """PV ENUM sensor options must cover every python-frank-energie status value
+    and have a matching shipped strings.json translation.
+
+    Regression guard for issue #277: python-frank-energie added
+    SmartPvSteeringStatus.INACTIVE, but the sensor's ``options`` list and the
+    translation files were missing it, which trips Home Assistant's
+    SensorEntity ENUM validation ("not in the list of options provided") and
+    leaves the sensor unavailable. The options list is allowed to run *ahead*
+    of the currently pinned library (forward-compat for an unreleased status),
+    but must never lag it, and every option must be translated.
+    """
+    import json
+    from pathlib import Path
+
+    description = _pv_sensor_description(sensor_key)
+
+    strings = json.loads(
+        Path(__file__)
+        .parents[1]
+        .joinpath("custom_components/frank_energie/strings.json")
+        .read_text(encoding="utf-8")
+    )
+    state_strings = strings["entity"]["sensor"][description.translation_key]["state"]
+
+    options = set(description.options or ())
+    enum_values = {member.value.lower() for member in enum_cls}
+    translated = set(state_strings)
+
+    assert enum_values <= options, f"options missing {enum_values - options}"
+    assert options == translated, (
+        f"options vs strings.json state mismatch {options ^ translated}"
+    )
+
+
+async def _pv_steering_status_state(
+    hass: HomeAssistant, coordinator_data: dict[str, object]
+) -> str | None:
+    """Register the PV steering_status sensor on a real entity platform and
+    return the state Home Assistant computed for it (running the real
+    SensorEntity ENUM ``options`` validation)."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+
+    from custom_components.frank_energie.const import DOMAIN
+    from custom_components.frank_energie.sensor import FrankEnergiePvSensor
+
+    coordinator = MagicMock()
+    coordinator.data = coordinator_data
+    coordinator.get_pv_system_metadata.return_value = {
+        "brand": "SolarEdge",
+        "model": "SE3000",
+        "display_name": "Roof",
+        "serial_number": "SN1",
+    }
+
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
+    platform.config_entry = entry
+
+    sensor = FrankEnergiePvSensor(
+        coordinator, "pv_1", _pv_sensor_description("steering_status")
+    )
+    await platform.async_add_entities([sensor])
+
+    state = hass.states.get(sensor.entity_id)
+    return state.state if state else None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", list(SmartPvSteeringStatus))
+async def test_pv_steering_status_summary_path_passes_ha_enum_validation(
+    hass: HomeAssistant, status: SmartPvSteeringStatus
+) -> None:
+    """Every real SmartPvSteeringStatus from the summary endpoint yields a state
+    Home Assistant's ENUM ``options`` validation accepts (issue #277)."""
+    from python_frank_energie.domain import SmartPvOperationalStatus
+    from python_frank_energie.models import SmartPvSystemSummary
+
+    from custom_components.frank_energie.const import DATA_PV_SUMMARY
+
+    summary = SmartPvSystemSummary(
+        operational_status=SmartPvOperationalStatus.OPERATIONAL,
+        operational_status_timestamp=None,
+        steering_status=status,
+        total_bonus=None,
+        total_result=None,
+    )
+    state = await _pv_steering_status_state(hass, {DATA_PV_SUMMARY: {"pv_1": summary}})
+    assert state == status.value.lower()
+
+
+@pytest.mark.asyncio
+async def test_pv_steering_status_inactive_passes_ha_enum_validation(
+    hass: HomeAssistant,
+) -> None:
+    """``INACTIVE`` (issue #277) must be an accepted sensor option even when the
+    pinned python-frank-energie release does not know it yet - fed as a raw
+    string so the check is independent of the installed library version."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.const import DATA_PV_SUMMARY
+
+    state = await _pv_steering_status_state(
+        hass, {DATA_PV_SUMMARY: {"pv_1": SimpleNamespace(steering_status="INACTIVE")}}
+    )
+    assert state == "inactive"
+
+
+@pytest.mark.asyncio
+async def test_pv_steering_status_systems_fallback_passes_ha_enum_validation(
+    hass: HomeAssistant,
+) -> None:
+    """When the summary endpoint has no entry for a system, native_value falls
+    back to the systems list; that value must also pass HA's ENUM validation
+    (regression: the fallback returned the raw enum whose str() is ``ACTIVE``,
+    never present in the lowercase ``options``)."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DATA_PV_SYSTEMS
+
+    pv_system = MagicMock()
+    pv_system.id = "pv_1"
+    pv_system.steering_status = SmartPvSteeringStatus.ACTIVE
+    systems_obj = MagicMock()
+    systems_obj.systems = [pv_system]
+
+    state = await _pv_steering_status_state(hass, {DATA_PV_SYSTEMS: systems_obj})
+    assert state == "active"

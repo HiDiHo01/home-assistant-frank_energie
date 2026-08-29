@@ -738,6 +738,7 @@
         "name": "Statut de pilotage",
         "state": {
           "active": "Actif",
+          "inactive": "Inactif",
           "steering": "Pilotage en cours",
           "no_steering": "Pas de pilotage",
           "unknown": "Inconnu"

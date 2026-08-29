@@ -738,6 +738,7 @@
         "name": "Steering status",
         "state": {
           "active": "Active",
+          "inactive": "Inactive",
           "steering": "Steering",
           "no_steering": "No steering",
           "unknown": "Unknown"

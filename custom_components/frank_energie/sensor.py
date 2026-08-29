@@ -672,7 +672,7 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="pv_steering_status",
         icon="mdi:solar-power",
         device_class=SensorDeviceClass.ENUM,
-        options=["active", "steering", "no_steering", "unknown"],
+        options=["active", "inactive", "steering", "no_steering", "unknown"],
         value_fn=lambda summary: str(summary.steering_status).lower(),
     ),
 )
@@ -727,7 +727,9 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
                     (s for s in systems_obj.systems if s.id == self._system_id), None
                 )
                 if pv_system:
-                    return pv_system.steering_status
+                    # Match value_fn: HA's ENUM sensor validates the state
+                    # against the lowercase ``options`` list.
+                    return str(pv_system.steering_status).lower()
             return None
 
         if summary and self.entity_description.value_fn:

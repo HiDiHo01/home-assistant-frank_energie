@@ -593,6 +593,7 @@
         "name": "Sturingsstatus",
         "state": {
           "active": "Actief",
+          "inactive": "Inactief",
           "steering": "Sturend",
           "no_steering": "Niet sturend",
           "unknown": "Onbekend"
