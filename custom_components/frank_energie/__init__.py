@@ -231,8 +231,9 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             SERVICE_NAME_BATTERY_SESSIONS,
             SERVICE_NAME_ENODE_CHARGERS,
         ):
-            if device := device_registry.async_get_device(
-                identifiers={(DOMAIN, f"{self.entry.entry_id}_{obsolete_service}")}
+            if device := device_registry.async_get_device_by_identifier(
+                (DOMAIN, f"{self.entry.entry_id}_{obsolete_service}"),
+                config_entry_id=self.entry.entry_id,
             ):
                 device_registry.async_remove_device(device.id)
                 _LOGGER.debug("Removed obsolete umbrella device: %s", obsolete_service)
