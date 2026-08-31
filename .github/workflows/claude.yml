@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
         with:
           persist-credentials: false
-      - uses: anthropics/claude-code-action@dcb57747bfceeaa1fa72638cae52295d1d853d4a
+      - uses: anthropics/claude-code-action@a874e9ecd7bb36efdad65429c6b35815f5a08f10
         if: |
           github.event.comment.user.type != 'Bot' &&
           (github.event.comment.author_association == 'OWNER' ||
