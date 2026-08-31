@@ -92,4 +92,3 @@ jobs:
           m_max_size: 200
           l_label: size/l
           l_max_size: 500
-          xl_label: size/xl
