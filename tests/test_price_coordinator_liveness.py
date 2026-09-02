@@ -1,22 +1,43 @@
 """Regression tests for price coordinator refresh scheduling."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+from python_frank_energie.models import MarketPrices, PriceData
 
 from custom_components.frank_energie.coordinator import FrankEnergiePriceCoordinator
 
 
+def _market_prices_dated(*iso_starts: str) -> MarketPrices:
+    """Minimal real MarketPrices with one electricity entry per ISO start."""
+    raw = [
+        {
+            "from": iso,
+            "till": iso,
+            "marketPrice": 0.1,
+            "marketPriceTax": 0.02,
+            "sourcingMarkupPrice": 0.01,
+            "energyTaxPrice": 0.1,
+        }
+        for iso in iso_starts
+    ]
+    return MarketPrices(
+        electricity=PriceData(raw, energy_type="electricity"),
+        gas=PriceData([], energy_type="gas"),
+        energy_country="NL",
+    )
+
+
 @pytest.fixture
 def price_coordinator() -> FrankEnergiePriceCoordinator:
-    """Create a minimally initialized price coordinator for interval tests."""
-    coordinator = object.__new__(FrankEnergiePriceCoordinator)
-    coordinator.config_entry = MagicMock()
-    coordinator.config_entry.options = {"resolution": "PT15M"}
-    coordinator._api_resolution_state = None
-    coordinator._resolution_change_pending = False
-    coordinator.cached_prices_tomorrow = object()
+    """Create a price coordinator with lightweight mocks for interval tests."""
+    config_entry = MagicMock()
+    config_entry.options = {"resolution": "PT15M"}
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), config_entry, MagicMock(), MagicMock()
+    )
+    coordinator.cached_prices_tomorrow = _market_prices_dated("2026-08-31T22:00:00.000Z")
     coordinator.last_fetch_tomorrow = datetime(2026, 8, 31, 11, tzinfo=UTC)
     coordinator.update_interval = None
     return coordinator
