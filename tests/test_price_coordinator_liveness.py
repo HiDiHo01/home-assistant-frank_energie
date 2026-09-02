@@ -56,12 +56,7 @@ def test_cached_tomorrow_prices_keep_coordinator_alive(
     price_coordinator.config_entry.options["resolution"] = resolution
     now_utc = datetime(2026, 8, 31, 14, 0, tzinfo=UTC)
 
-    with patch.object(
-        FrankEnergiePriceCoordinator,
-        "_tomorrow_cache_matches_date",
-        return_value=True,
-    ):
-        price_coordinator._adjust_update_interval(now_utc)
+    price_coordinator._adjust_update_interval(now_utc)
 
     assert price_coordinator.update_interval == expected_interval
 
