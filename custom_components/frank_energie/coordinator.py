@@ -449,8 +449,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = _empty_data()
         # self._update_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
-        self._update_interval = (
-            None  # Start with no update interval; will be set after first fetch
+        self.update_interval = timedelta(
+            minutes=15 if self.resolution == "PT15M" else 60
         )
         self._last_update_success = False
         self.user_electricity_enabled = False
@@ -2596,38 +2596,47 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             _LOGGER.debug("Fresh cache loaded, skipping initial API fetch")
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
-        """Adjust coordinator update interval based on publication window and cache status."""
-        today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        """Adjust the coordinator update interval based on cache and publication state."""
+        now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
+        today = now_local.date()
         tomorrow = today + timedelta(days=1)
-        if (
+    
+        tomorrow_cache_valid = (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
             and self.last_fetch_tomorrow.date() == today
-            and self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow)
-        ):
-            # Only go idle once the cache is verified to actually be tomorrow's
-            # data — trusting last_fetch_tomorrow's date alone would let a
-            # poisoned cache (see _refresh_tomorrow_cache) silence automatic
-            # polling for the rest of the day, since nothing else would ever
-            # re-trigger the fetch that re-validates it.
-            new_interval = None
-        else:
-            now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
-            local_time = now_local.time()
-            if local_time < time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0):
-                new_interval = None
-            elif time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0) <= local_time < time(15, 0):
-                new_interval = timedelta(minutes=5)
-            elif time(15, 0) <= local_time < time(18, 0):
-                new_interval = timedelta(minutes=15)
-            else:
-                new_interval = timedelta(minutes=DEFAULT_INTERVAL_PRICES)
-
-        if self.update_interval != new_interval:
-            _LOGGER.debug(
-                "Price coordinator update interval changed to %s", new_interval
+            and self._tomorrow_cache_matches_date(
+                self.cached_prices_tomorrow,
+                tomorrow,
             )
-            self.update_interval = new_interval
+        )
+    
+        if tomorrow_cache_valid:
+            # Keep the coordinator alive as a safety fallback. The aligned
+            # scheduler remains responsible for exact slot-boundary updates.
+            new_interval = timedelta(
+                minutes=15 if self.resolution == "PT15M" else 60
+            )
+        elif now_local.time() < time(TOMORROW_PUBLICATION_HOUR_LOCAL):
+            # Keep a low-frequency fallback alive before publication.
+            new_interval = timedelta(hours=1)
+        elif now_local.time() < time(15, 0):
+            # Poll frequently while tomorrow's prices are expected to become
+            # available.
+            new_interval = timedelta(minutes=5)
+        elif now_local.time() < time(18, 0):
+            new_interval = timedelta(minutes=15)
+        else:
+            new_interval = timedelta(minutes=DEFAULT_INTERVAL_PRICES)
+    
+        if self.update_interval == new_interval:
+            return
+    
+        _LOGGER.debug(
+            "Price coordinator update interval changed to %s",
+            new_interval,
+        )
+        self.update_interval = new_interval
 
     def _carry_forward_previous_day(
         self, new_prices: MarketPrices | None, today: date

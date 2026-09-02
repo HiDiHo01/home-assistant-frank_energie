@@ -14,7 +14,7 @@ poem: false
 
 auto_review:
 enabled: true
-drafts: false
+drafts: true
 
 path_filters:
 - "!*.md"
