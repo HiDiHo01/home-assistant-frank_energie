@@ -37,7 +37,9 @@ def price_coordinator() -> FrankEnergiePriceCoordinator:
     coordinator = FrankEnergiePriceCoordinator(
         MagicMock(), config_entry, MagicMock(), MagicMock()
     )
-    coordinator.cached_prices_tomorrow = _market_prices_dated("2026-08-31T22:00:00.000Z")
+    coordinator.cached_prices_tomorrow = _market_prices_dated(
+        "2026-08-31T22:00:00.000Z"
+    )
     coordinator.last_fetch_tomorrow = datetime(2026, 8, 31, 11, tzinfo=UTC)
     coordinator.update_interval = None
     return coordinator
