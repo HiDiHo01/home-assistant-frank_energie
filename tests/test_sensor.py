@@ -1,9 +1,12 @@
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 import pytest
 from homeassistant import config_entries
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.util import dt
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
@@ -612,6 +615,121 @@ def test_enode_charger_sensor_properties_and_value(
         coordinator=mock_coordinator, description=rate_desc, charger=mock_charger
     )
     assert sensor_rate.native_value == pytest.approx(11.0)
+
+
+async def _parent_and_child_devices_after_add(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    sensor: SensorEntity,
+    service_name: str,
+) -> tuple[DeviceEntry | None, DeviceEntry | None]:
+    """Add ``sensor`` through a real entity platform and return the (parent,
+    child) device-registry entries HA created from its ``device_info`` -- so
+    HA's own ``async_get_or_create`` validation runs against what we build.
+    """
+    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+    from homeassistant.helpers import device_registry as dr
+    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+
+    from custom_components.frank_energie.const import DOMAIN
+
+    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
+    platform.config_entry = entry
+    await platform.async_add_entities([sensor])
+
+    dev_reg = dr.async_get(hass)
+    parent = dev_reg.async_get_device_by_identifier(
+        (DOMAIN, f"{entry.entry_id}_{service_name}"), config_entry_id=entry.entry_id
+    )
+    child = dev_reg.async_get_device_by_identifier(
+        next(iter(sensor.device_info["identifiers"])), config_entry_id=entry.entry_id
+    )
+    return parent, child
+
+
+@pytest.mark.asyncio
+async def test_enode_charger_device_nests_under_parent(
+    hass: HomeAssistant, create_mock_charger: Callable[..., object]
+) -> None:
+    """An Enode charger's device links to the Chargers service device by id.
+
+    ``DeviceInfo`` no longer accepts the deprecated ``via_device`` identifier
+    tuple -- HA Core 2026.9 raises on it while entities are added and removes it
+    in 2027.8 -- so the child must reference the parent's registry id instead.
+    """
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import (
+        DOMAIN,
+        SERVICE_NAME_ENODE_CHARGERS,
+    )
+    from custom_components.frank_energie.helpers import register_service_device
+    from custom_components.frank_energie.sensor import (
+        ENODE_CHARGER_SENSOR_TYPES,
+        EnodeChargerSensor,
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="test")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = {}
+    coordinator.last_update_success = True
+
+    via_device_id = register_service_device(hass, entry, SERVICE_NAME_ENODE_CHARGERS)
+    charger = create_mock_charger(charger_id="chg_1", brand="Wallbox", model="Copper")
+    description = next(
+        d for d in ENODE_CHARGER_SENSOR_TYPES if d.key == "charger_brand"
+    )
+    sensor = EnodeChargerSensor(coordinator, description, charger, via_device_id)
+    assert "via_device" not in sensor.device_info
+
+    parent, child = await _parent_and_child_devices_after_add(
+        hass, entry, sensor, SERVICE_NAME_ENODE_CHARGERS
+    )
+    assert parent is not None
+    assert parent.id == via_device_id
+    assert child is not None
+    assert child.via_device_id == via_device_id
+
+
+@pytest.mark.asyncio
+async def test_smart_battery_device_nests_under_parent(hass: HomeAssistant) -> None:
+    """A smart battery's device links to the Batteries service device by id
+    (the deprecated ``via_device`` tuple is rejected by HA Core)."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DOMAIN, SERVICE_NAME_BATTERIES
+    from custom_components.frank_energie.helpers import register_service_device
+    from custom_components.frank_energie.sensor import (
+        STATIC_BATTERY_SENSOR_TYPES,
+        FrankEnergieSmartBatterySensor,
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="test")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.data = {}
+    coordinator.last_update_success = True
+
+    via_device_id = register_service_device(hass, entry, SERVICE_NAME_BATTERIES)
+    sensor = FrankEnergieSmartBatterySensor(
+        coordinator,
+        STATIC_BATTERY_SENSOR_TYPES[0],
+        entry,
+        "bat_1",
+        "Smart Battery bat_1",
+        "Sessy",
+        via_device_id,
+    )
+    assert "via_device" not in sensor.device_info
+
+    parent, child = await _parent_and_child_devices_after_add(
+        hass, entry, sensor, SERVICE_NAME_BATTERIES
+    )
+    assert parent is not None
+    assert parent.id == via_device_id
+    assert child is not None
+    assert child.via_device_id == via_device_id
 
 
 @pytest.mark.asyncio

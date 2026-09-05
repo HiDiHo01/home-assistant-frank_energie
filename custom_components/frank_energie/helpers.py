@@ -11,16 +11,23 @@ from typing import TYPE_CHECKING, Final
 
 from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    API_CONF_URL,
+    COMPONENT_TITLE,
     DOMAIN,
+    SERVICE_NAME_PRICES,
     UNIT_GAS_BE,
     UNIT_GAS_NL,
+    VERSION,
 )
 from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
     from python_frank_energie.models import ChargeSettings
 
 _LOGGER = logging.getLogger(__name__)
@@ -127,3 +134,62 @@ def decrypt_password(hass: HomeAssistant, password: str) -> str | None:
 def device_translation_key(service_name: str) -> str:
     """Generate a lowercase slugified device translation key from a service name."""
     return f"{DOMAIN}_{service_name.lower().replace(' ', '_')}"
+
+
+def service_device_info(
+    entry_id: str,
+    service_name: str,
+    *,
+    configuration_url: str | None = None,
+) -> DeviceInfo:
+    """Return the DeviceInfo for a Frank Energie service (parent) device.
+
+    Individual batteries, chargers and vehicles are child devices that link
+    back to one of these via ``via_device_id``. Building the parent identity
+    in a single place keeps the child's ``via_device_id`` lookup and the
+    parent the sensor platform registers exactly in sync.
+    """
+    identifier = (
+        entry_id
+        if service_name == SERVICE_NAME_PRICES
+        else f"{entry_id}_{service_name}"
+    )
+    return DeviceInfo(
+        identifiers={(DOMAIN, identifier)},
+        name=f"{COMPONENT_TITLE} - {service_name}",
+        translation_key=device_translation_key(service_name),
+        manufacturer=COMPONENT_TITLE,
+        entry_type=DeviceEntryType.SERVICE,
+        configuration_url=configuration_url or API_CONF_URL,
+        model=service_name,
+        sw_version=VERSION,
+    )
+
+
+def register_service_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    service_name: str,
+    *,
+    configuration_url: str | None = None,
+) -> str:
+    """Register a Frank Energie service (parent) device and return its id.
+
+    Child devices reference the parent by ``via_device_id``. ``DeviceInfo`` no
+    longer accepts the deprecated ``via_device`` identifier tuple -- HA Core
+    2026.9 rejects it in ``async_get_or_create`` while entities are added (the
+    deprecation report is raised, not just logged, so entity setup aborts) and
+    removes it entirely in 2027.8. Registering the parent here, before the child
+    entities are added, guarantees the id resolves regardless of the order in
+    which entities are processed.
+
+    Pass the same ``configuration_url`` the aggregate sensor uses so the shared
+    parent device is not rewritten with a different value moments later.
+    """
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **service_device_info(
+            entry.entry_id, service_name, configuration_url=configuration_url
+        ),
+    )
+    return device.id
