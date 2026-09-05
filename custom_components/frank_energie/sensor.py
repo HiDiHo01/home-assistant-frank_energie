@@ -37,7 +37,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import (
@@ -48,13 +48,11 @@ from homeassistant.util import dt as dt_util
 from python_frank_energie.models import EnodeCharger
 
 from .const import (
-    API_CONF_URL,
     ATTR_FROM_TIME,
     ATTR_LAST_UPDATE,
     ATTR_START_DATE,
     ATTR_TILL_TIME,
     ATTRIBUTION,
-    COMPONENT_TITLE,
     DATA_BATTERIES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_ELECTRICITY,
@@ -94,7 +92,6 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
-    VERSION,
 )
 from .coordinator import (
     FrankEnergieBatterySessionCoordinator,
@@ -102,7 +99,11 @@ from .coordinator import (
     FrankEnergieData,
     SmartBatterySessions,
 )
-from .helpers import device_translation_key, resolve_gas_unit
+from .helpers import (
+    register_service_device,
+    resolve_gas_unit,
+    service_device_info,
+)
 from .statistics import lowest_window
 
 _DataT = TypeVar("_DataT")
@@ -4162,6 +4163,7 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
         coordinator: FrankEnergieCoordinator,
         description: ChargerSensorDescription,
         charger: EnodeCharger,
+        via_device_id: str | None = None,
     ) -> None:
         """Initialize the Enode charger sensor."""
         super().__init__(coordinator)
@@ -4180,11 +4182,8 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
             model=model,
             name=charger_name,
         )
-        if coordinator.config_entry:
-            self._attr_device_info["via_device"] = (
-                DOMAIN,
-                f"{coordinator.config_entry.entry_id}_{SERVICE_NAME_ENODE_CHARGERS}",
-            )
+        if via_device_id:
+            self._attr_device_info["via_device_id"] = via_device_id
 
     def _get_charger(self) -> Any | None:
         """Look up the current charger object from coordinator data by ID."""
@@ -4336,26 +4335,16 @@ class FrankEnergieSensor(
 
         self._attr_unique_id = f"{entry.unique_id}.{description.key}"
 
-        # Do not set extra identifier for default service, backwards compatibility
-        device_info_identifiers: set[tuple[str, str]] = (
-            {(DOMAIN, f"{entry.entry_id}")}
-            if description.service_name == SERVICE_NAME_PRICES
-            else {(DOMAIN, f"{entry.entry_id}_{description.service_name}")}
-        )
-
         user_data = (
             coordinator.data.get(DATA_USER) if coordinator.data is not None else None
         )
 
-        self._attr_device_info = DeviceInfo(
-            identifiers=device_info_identifiers,
-            name=f"{COMPONENT_TITLE} - {description.service_name}",
-            translation_key=device_translation_key(description.service_name),
-            manufacturer=COMPONENT_TITLE,
-            entry_type=DeviceEntryType.SERVICE,
-            configuration_url=(getattr(user_data, "websiteUrl", None) or API_CONF_URL),
-            model=description.service_name,
-            sw_version=VERSION,
+        # The Prices service keeps the bare entry_id as its identifier for
+        # backwards compatibility; every other service is suffixed.
+        self._attr_device_info = service_device_info(
+            entry.entry_id,
+            description.service_name,
+            configuration_url=getattr(user_data, "websiteUrl", None),
         )
 
         # Set defaults or exceptions for non default sensors.
@@ -4428,25 +4417,28 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
         battery_id: str,
         battery_name: str,
         battery_brand: str,
+        via_device_id: str | None = None,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, description, entry)
         self._battery_id = battery_id
         self._battery_name = battery_name
         self._battery_brand = battery_brand
-        self._entry_id = entry.entry_id
+        self._via_device_id = via_device_id
         self._attr_unique_id = f"{entry.unique_id}.{battery_id}_{description.key}"
 
     @property
     def device_info(self) -> DeviceInfo | None:
         """Return device info."""
-        return DeviceInfo(
+        info = DeviceInfo(
             identifiers={(DOMAIN, self._battery_id)},
             name=self._battery_name,
             manufacturer=self._battery_brand,
             model="SmartBattery",
-            via_device=(DOMAIN, f"{self._entry_id}_{SERVICE_NAME_BATTERIES}"),
         )
+        if self._via_device_id:
+            info["via_device_id"] = self._via_device_id
+        return info
 
 
 class FrankEnergieBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -4944,6 +4936,29 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
     return descriptions
 
 
+def _service_parent_device_id(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: FrankEnergieCoordinator,
+    service_name: str,
+    user_data: object,
+) -> str | None:
+    """Return the id of the service parent device the child devices link to.
+
+    Returns ``None`` when the coordinator is unauthenticated: its child
+    sensors are all filtered out in that case, so registering the parent
+    would leave an entity-less device behind.
+    """
+    if not coordinator.api.is_authenticated:
+        return None
+    return register_service_device(
+        hass,
+        entry,
+        service_name,
+        configuration_url=getattr(user_data, "websiteUrl", None),
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -5104,6 +5119,14 @@ async def async_setup_entry(
         _LOGGER.debug(
             "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
         )
+        # Register the Chargers parent device before its child devices are added.
+        charger_via_device_id = _service_parent_device_id(
+            hass,
+            config_entry,
+            charger_coordinator,
+            SERVICE_NAME_ENODE_CHARGERS,
+            user_data,
+        )
         for description in STATIC_ENODE_SENSOR_TYPES:
             if (
                 not description.authenticated
@@ -5120,7 +5143,12 @@ async def async_setup_entry(
                     or charger_coordinator.api.is_authenticated
                 ):
                     entities.append(
-                        EnodeChargerSensor(charger_coordinator, description, charger)
+                        EnodeChargerSensor(
+                            charger_coordinator,
+                            description,
+                            charger,
+                            charger_via_device_id,
+                        )
                     )
 
     if (
@@ -5134,6 +5162,14 @@ async def async_setup_entry(
         _LOGGER.debug(
             "Setting up smart battery type: %s", type(batteries.batteries)
         )  # <class 'list'>
+        # Register the Batteries parent device before its child devices are added.
+        battery_via_device_id = _service_parent_device_id(
+            hass,
+            config_entry,
+            battery_coordinator,
+            SERVICE_NAME_BATTERIES,
+            user_data,
+        )
         aggregated_battery_descriptions = (
             _build_aggregated_smart_batteries_descriptions()
         )
@@ -5170,6 +5206,7 @@ async def async_setup_entry(
                             battery.id,
                             f"Smart Battery {battery.id}",
                             battery.brand,
+                            battery_via_device_id,
                         )
                     )
                     _LOGGER.debug(

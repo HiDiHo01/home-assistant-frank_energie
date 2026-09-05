@@ -26,9 +26,7 @@ from python_frank_energie.models import UserSites
 from .const import (
     CONF_COORDINATOR,
     DOMAIN,
-    SERVICE_NAME_BATTERIES,
     SERVICE_NAME_BATTERY_SESSIONS,
-    SERVICE_NAME_ENODE_CHARGERS,
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
@@ -224,19 +222,18 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # For backwards compatibility, update the unique ID
         self._update_unique_id()
 
-        # Clean up obsolete umbrella devices ("Smart Batteries", "Chargers", "Battery Sessions") from registry
+        # Clean up the obsolete "Frank Energie - Battery Sessions" umbrella device
+        # from the registry; session sensors are grouped under their individual
+        # battery devices now. The "Batteries" and "Chargers" service devices are
+        # NOT obsolete - they carry the aggregate sensors and are the parent the
+        # per-battery / per-charger child devices link to via `via_device_id`.
         device_registry = dr.async_get(self.hass)
-        for obsolete_service in (
-            SERVICE_NAME_BATTERIES,
-            SERVICE_NAME_BATTERY_SESSIONS,
-            SERVICE_NAME_ENODE_CHARGERS,
+        if device := device_registry.async_get_device_by_identifier(
+            (DOMAIN, f"{self.entry.entry_id}_{SERVICE_NAME_BATTERY_SESSIONS}"),
+            config_entry_id=self.entry.entry_id,
         ):
-            if device := device_registry.async_get_device_by_identifier(
-                (DOMAIN, f"{self.entry.entry_id}_{obsolete_service}"),
-                config_entry_id=self.entry.entry_id,
-            ):
-                device_registry.async_remove_device(device.id)
-                _LOGGER.debug("Removed obsolete umbrella device: %s", obsolete_service)
+            device_registry.async_remove_device(device.id)
+            _LOGGER.debug("Removed obsolete Battery Sessions umbrella device")
 
         # Create API and Coordinators
         _LOGGER.debug("Creating Frank Energie API instance")
@@ -439,7 +436,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         platforms (binary_sensor, button, switch, datetime) run. This ensures
         all parent service devices (Frank Energie - Batteries, Chargers, etc.)
         are registered in the device registry before child devices attempt to
-        link to them via via_device.
+        link to them via via_device_id.
         """
         _LOGGER.debug("Starting to forward entry setups to platforms")
         try:
