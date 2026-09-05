@@ -74,3 +74,27 @@ def test_before_publication_keeps_coordinator_alive(
     price_coordinator._adjust_update_interval(now_utc)
 
     assert price_coordinator.update_interval == timedelta(hours=1)
+
+
+def test_fetch_just_after_local_midnight_counts_as_today(
+    price_coordinator: FrankEnergiePriceCoordinator,
+) -> None:
+    """A fetch whose UTC timestamp still falls on the previous calendar day
+    (the ~1-2h after Amsterdam midnight) must count as "fetched today".
+
+    ``last_fetch_tomorrow`` is a UTC instant but the freshness checks reason
+    in Amsterdam-local days; taking ``.date()`` on the raw UTC value here
+    would drop back to the pre-publication hourly interval right after
+    midnight instead of the cached-and-fresh fallback.
+    """
+    # Amsterdam 2026-09-01 00:30 CEST == UTC 2026-08-31 22:30.
+    now_utc = datetime(2026, 8, 31, 22, 30, tzinfo=UTC)
+    price_coordinator.last_fetch_tomorrow = now_utc
+    # Cache holds prices for the new "tomorrow", Amsterdam 2026-09-02.
+    price_coordinator.cached_prices_tomorrow = _market_prices_dated(
+        "2026-09-01T22:00:00.000Z"
+    )
+
+    price_coordinator._adjust_update_interval(now_utc)
+
+    assert price_coordinator.update_interval == timedelta(minutes=15)
