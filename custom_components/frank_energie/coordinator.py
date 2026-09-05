@@ -135,6 +135,18 @@ def _get_refresh_token_expires_at(api: Any) -> datetime | None:
     return None
 
 
+def _amsterdam_date(moment: datetime) -> date:
+    """Return the Amsterdam-local calendar date of a timestamp.
+
+    ``last_fetch_today`` / ``last_fetch_tomorrow`` are stored as UTC instants,
+    but every freshness check compares them against ``today`` / ``tomorrow``,
+    which are Amsterdam-local dates. ``moment.date()`` on the raw UTC value is
+    a day behind for the ~1-2h after local midnight (Amsterdam is always ahead
+    of UTC), which would wrongly treat a just-completed fetch as stale.
+    """
+    return moment.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+
+
 def _price_to_dict(price: Price) -> dict[str, Any]:
     """Convert Price to dict."""
     return {
@@ -620,11 +632,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # method exists to clean up before trusting anything.
         if (
             self.last_fetch_tomorrow is not None
-            and self.last_fetch_tomorrow.date() != today
+            and _amsterdam_date(self.last_fetch_tomorrow) != today
         ):
             _LOGGER.debug(
                 "Invalidating stale tomorrow-price cache (was fetched on %s)",
-                self.last_fetch_tomorrow.date(),
+                _amsterdam_date(self.last_fetch_tomorrow),
             )
             self.cached_prices_tomorrow = None
             self.last_fetch_tomorrow = None
@@ -632,7 +644,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
-            and self.last_fetch_tomorrow.date() == today
+            and _amsterdam_date(self.last_fetch_tomorrow) == today
         ):
             if self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow):
                 _LOGGER.debug(
@@ -2563,10 +2575,13 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
         today = now_local.date()
-        if self.last_fetch_today.date() != today:
+        if _amsterdam_date(self.last_fetch_today) != today:
             return False
 
-        if self.last_fetch_tomorrow and self.last_fetch_tomorrow.date() == today:
+        if (
+            self.last_fetch_tomorrow
+            and _amsterdam_date(self.last_fetch_tomorrow) == today
+        ):
             tomorrow = today + timedelta(days=1)
             if self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow):
                 _LOGGER.debug(
@@ -2604,7 +2619,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         tomorrow_cache_valid = (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
-            and self.last_fetch_tomorrow.date() == today
+            and _amsterdam_date(self.last_fetch_tomorrow) == today
             and self._tomorrow_cache_matches_date(
                 self.cached_prices_tomorrow,
                 tomorrow,
@@ -2704,10 +2719,16 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self._adjust_update_interval(now_utc)
 
         # Reset daily flags on new day
-        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
+        if (
+            self.last_fetch_today is None
+            or _amsterdam_date(self.last_fetch_today) != today
+        ):
             self._today_prices_logged = False
 
-        if self.last_fetch_tomorrow is None or self.last_fetch_tomorrow.date() != today:
+        if (
+            self.last_fetch_tomorrow is None
+            or _amsterdam_date(self.last_fetch_tomorrow) != today
+        ):
             self._tomorrow_prices_logged = False
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
@@ -2727,7 +2748,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             if (
                 self._static_prices_today is None
                 or self.last_fetch_today is None
-                or self.last_fetch_today.date() != today
+                or _amsterdam_date(self.last_fetch_today) != today
             ):
                 try:
                     fetched_prices_today = await self._fetch_prices_with_fallback(
@@ -3017,7 +3038,10 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
             raise UpdateFailed("Maintenance window active")
 
         today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
-        if self.last_fetch_today is None or self.last_fetch_today.date() != today:
+        if (
+            self.last_fetch_today is None
+            or _amsterdam_date(self.last_fetch_today) != today
+        ):
             self._has_pv_systems = None
         self.last_fetch_today = now_utc
 
