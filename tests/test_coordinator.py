@@ -1149,7 +1149,8 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
 async def test_price_coordinator_before_window(
     mock_frank_energie, mock_config_entry, monkeypatch
 ) -> None:
-    """Test that price coordinator update interval is None before local 13:00 when tomorrow's prices are not cached."""
+    """Before local 13:00 with no cached tomorrow prices, the coordinator keeps
+    a low-frequency (hourly) fallback interval rather than going idle."""
     # Mock utcnow to 10:00 UTC (12:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 10, 0, 0, tzinfo=ZoneInfo("UTC"))
     from homeassistant.util import dt as dt_util
@@ -1166,7 +1167,7 @@ async def test_price_coordinator_before_window(
     price_coordinator.cached_prices_tomorrow = None
     price_coordinator._adjust_update_interval(mock_now)
 
-    assert price_coordinator.update_interval is None
+    assert price_coordinator.update_interval == timedelta(hours=1)
 
 
 @pytest.mark.asyncio
@@ -1197,7 +1198,8 @@ async def test_price_coordinator_inside_window(
 async def test_price_coordinator_skipped_when_cached(
     mock_frank_energie, mock_config_entry, monkeypatch
 ) -> None:
-    """Test that price coordinator update interval is None if tomorrow's prices are already cached."""
+    """With tomorrow's prices already cached, the coordinator keeps a fallback
+    interval (15 min at PT15M) rather than going idle."""
     # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
     from homeassistant.util import dt as dt_util
@@ -1219,7 +1221,7 @@ async def test_price_coordinator_skipped_when_cached(
 
     price_coordinator._adjust_update_interval(mock_now)
 
-    assert price_coordinator.update_interval is None
+    assert price_coordinator.update_interval == timedelta(minutes=15)
 
 
 @pytest.mark.asyncio
@@ -1482,7 +1484,8 @@ async def test_full_day_cycle_fetch_promote_refetch(
             coordinator._fetch_prices_with_fallback.call_count
             == today_fetch_calls_after_first
         )
-        assert coordinator.update_interval is None  # now confirmed idle
+        # Stays alive on the fallback interval rather than going idle.
+        assert coordinator.update_interval == timedelta(minutes=15)
 
         # --- Midnight {today} -> {tomorrow}: promote tomorrow's cache ---
         freezer.move_to(
@@ -1738,7 +1741,8 @@ async def test_full_day_cycle_recovers_when_first_attempt_is_poisoned(
     coordinator._adjust_update_interval(now_utc_1)
 
     assert coordinator.cached_prices_tomorrow is day2_prices
-    assert coordinator.update_interval is None  # validated cache, safe to go idle
+    # Stays alive on the fallback interval rather than going idle.
+    assert coordinator.update_interval == timedelta(minutes=15)
 
     # --- Midnight Day 1 -> Day 2 ---
     freezer.move_to(datetime(2026, 7, 21, 0, 0, tzinfo=tz))
@@ -1780,7 +1784,8 @@ async def test_full_day_cycle_recovers_when_first_attempt_is_poisoned(
     assert result_retry is day3_prices
     assert coordinator.cached_prices_tomorrow is day3_prices
     assert coordinator.last_fetch_tomorrow == now_utc_2_retry
-    assert coordinator.update_interval is None  # now validated, safe to go idle
+    # Stays alive on the fallback interval rather than going idle.
+    assert coordinator.update_interval == timedelta(minutes=15)
 
 
 @pytest.mark.asyncio

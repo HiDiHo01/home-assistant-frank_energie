@@ -2600,7 +2600,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
         today = now_local.date()
         tomorrow = today + timedelta(days=1)
-    
+
         tomorrow_cache_valid = (
             self.cached_prices_tomorrow is not None
             and self.last_fetch_tomorrow is not None
@@ -2610,13 +2610,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 tomorrow,
             )
         )
-    
+
         if tomorrow_cache_valid:
             # Keep the coordinator alive as a safety fallback. The aligned
             # scheduler remains responsible for exact slot-boundary updates.
-            new_interval = timedelta(
-                minutes=15 if self.resolution == "PT15M" else 60
-            )
+            new_interval = timedelta(minutes=15 if self.resolution == "PT15M" else 60)
         elif now_local.time() < time(TOMORROW_PUBLICATION_HOUR_LOCAL):
             # Keep a low-frequency fallback alive before publication.
             new_interval = timedelta(hours=1)
@@ -2628,10 +2626,10 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             new_interval = timedelta(minutes=15)
         else:
             new_interval = timedelta(minutes=DEFAULT_INTERVAL_PRICES)
-    
+
         if self.update_interval == new_interval:
             return
-    
+
         _LOGGER.debug(
             "Price coordinator update interval changed to %s",
             new_interval,
