@@ -1,4 +1,6 @@
 import sys
+import zoneinfo
+from datetime import datetime
 from os.path import abspath, dirname
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
@@ -113,6 +115,39 @@ def config_entry_with_site(hass):
     )
     entry.add_to_hass(hass)
     return entry
+
+
+@pytest.fixture
+def frank_energie_setup(hass, aioclient_responses, freezer, enable_custom_integrations):
+    """Return a callable that runs a full, unauthenticated ``async_setup``.
+
+    Unlike the hand-rolled ``mock_coordinator`` fixture, this loads the real
+    coordinators and forwards to the real platforms, so Home Assistant's own
+    entity/service validation runs against what the integration builds.
+    """
+    from custom_components.frank_energie import const
+
+    async def _setup(options: dict | None = None) -> MockConfigEntry:
+        await hass.config.async_set_time_zone("Europe/Amsterdam")
+        tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
+        now = datetime.now(tz).replace(hour=14, minute=15, second=0, microsecond=0)
+        freezer.move_to(now)
+        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        aioclient_responses.add(start_of_day, [0.2] * 24, [1.23] * 24)
+        aioclient_responses.cyclic()
+
+        entry = MockConfigEntry(
+            domain=const.DOMAIN,
+            data={},
+            options=options or {},
+            unique_id=const.UNIQUE_ID,
+        )
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        return entry
+
+    return _setup
 
 
 @pytest.fixture

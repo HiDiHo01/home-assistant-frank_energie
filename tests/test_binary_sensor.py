@@ -1,9 +1,19 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockEntityPlatform,
+)
 
 from custom_components.frank_energie.const import (
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
     DATA_PV_SYSTEMS,
+    DOMAIN,
 )
 from custom_components.frank_energie.binary_sensor import (
     BINARY_SENSOR_DESCRIPTIONS,
@@ -216,3 +226,103 @@ def test_smart_pv_systems_binary_sensor(mock_coordinator, mock_config_entry):
     assert attrs["system_count"] == 1
     assert attrs["systems"][0]["id"] == "pv_123"
     assert attrs["systems"][0]["status"] == "CONNECTED"
+
+
+# --- Real-hass layer -------------------------------------------------------
+#
+# The tests above read ``sensor.is_on`` / ``sensor.extra_state_attributes``
+# straight off the entity. These add the entity through a real
+# ``MockEntityPlatform`` so Home Assistant resolves ``is_on`` into an actual
+# on/off/unknown state and serialises the attributes into the state machine --
+# the path that would reject a bad ``device_class`` or an unserialisable
+# attribute value.
+
+
+async def _add_through_real_platform(
+    hass: HomeAssistant, entry: MockConfigEntry, *sensors: FrankEnergieBinarySensor
+) -> None:
+    platform = MockEntityPlatform(
+        hass, domain=BINARY_SENSOR_DOMAIN, platform_name=DOMAIN
+    )
+    platform.config_entry = entry
+    await platform.async_add_entities(list(sensors))
+    await hass.async_block_till_done()
+
+
+def _entity_id(hass: HomeAssistant, unique_key: str) -> str:
+    return er.async_get(hass).async_get_entity_id(
+        BINARY_SENSOR_DOMAIN, DOMAIN, f"frank_energie_{unique_key}"
+    )
+
+
+async def test_smart_feature_binary_sensors_reach_the_state_machine(
+    hass: HomeAssistant,
+) -> None:
+    """A smart-feature sensor added through the real platform resolves to an
+    on/off state carrying its ``running`` device class and mapped attributes."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
+    entry.add_to_hass(hass)
+
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+    coordinator.data = {
+        DATA_USER: SimpleNamespace(
+            smartHvac={
+                "isActivated": True,
+                "isAvailableInCountry": True,
+                "userId": "user-1",
+            },
+        ),
+        DATA_USER_SMART_FEED_IN: {"isActivated": False},
+    }
+
+    hvac = next(d for d in BINARY_SENSOR_DESCRIPTIONS if d.key == "smart_hvac")
+    feed_in = next(d for d in BINARY_SENSOR_DESCRIPTIONS if d.key == "smart_feed_in")
+    await _add_through_real_platform(
+        hass,
+        entry,
+        FrankEnergieBinarySensor(coordinator, hvac, entry),
+        FrankEnergieBinarySensor(coordinator, feed_in, entry),
+    )
+
+    hvac_state = hass.states.get(_entity_id(hass, "smart_hvac"))
+    assert hvac_state.state == "on"
+    assert hvac_state.attributes["device_class"] == "running"
+    assert hvac_state.attributes["available_in_country"] is True
+    assert hvac_state.attributes["user_id"] == "user-1"
+
+    assert hass.states.get(_entity_id(hass, "smart_feed_in")).state == "off"
+
+
+async def test_missing_smart_feature_data_resolves_to_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """No user data -> ``is_on`` is None -> HA renders the state as unknown,
+    not a stale value or an exception during the state write."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
+    entry.add_to_hass(hass)
+
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+    coordinator.data = {}
+
+    trading = next(
+        d for d in BINARY_SENSOR_DESCRIPTIONS if d.key == "smartTradingisActivated"
+    )
+    await _add_through_real_platform(
+        hass, entry, FrankEnergieBinarySensor(coordinator, trading, entry)
+    )
+
+    assert hass.states.get(_entity_id(hass, "smartTradingisActivated")).state == (
+        "unknown"
+    )
+
+
+# TODO: real-hass coverage for the per-battery binary sensors built by
+# _build_battery_descriptions(). Their attr_fn reads sb.capacity /
+# sb.max_charge_power / settings.battery_mode, so serialising them into the
+# state machine needs faithful SmartBatteryDetails objects -- build them from
+# python-frank-energie's smart_battery_details.json fixture (via the model
+# from_dict parsers) rather than MagicMock, then add via _add_through_real_platform
+# above. A full authenticated async_setup would also work but needs the
+# operationName->JSON dispatcher described in the other platform test files.
