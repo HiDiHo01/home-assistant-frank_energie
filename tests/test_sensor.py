@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 from homeassistant import config_entries
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.util import dt
@@ -401,7 +401,7 @@ async def test_sensors_quarter_hour_prices(
     await hass.config_entries.async_setup(frank_energie_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    def state(key: str):
+    def state(key: str) -> State | None:
         return hass.states.get(f"sensor.frank_energie_electricity_prices_{key}")
 
     if not _HAS_QUARTER_HOUR_LIB_API:

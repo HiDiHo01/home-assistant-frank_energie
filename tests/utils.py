@@ -71,9 +71,9 @@ class ResponseMocks:
     def _generate_prices_response(
         self,
         start: datetime,
-        all_in_prices: list | range,
+        all_in_prices: list[float] | range,
         interval: timedelta,
-    ):
+    ) -> list[dict[str, str | float]]:
         """Generate a list of prices."""
         start = start.replace(second=0, microsecond=0)
         return [
