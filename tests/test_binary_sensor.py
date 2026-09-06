@@ -250,9 +250,11 @@ async def _add_through_real_platform(
 
 
 def _entity_id(hass: HomeAssistant, unique_key: str) -> str:
-    return er.async_get(hass).async_get_entity_id(
+    entity_id = er.async_get(hass).async_get_entity_id(
         BINARY_SENSOR_DOMAIN, DOMAIN, f"frank_energie_{unique_key}"
     )
+    assert entity_id is not None, unique_key
+    return entity_id
 
 
 async def test_smart_feature_binary_sensors_reach_the_state_machine(
@@ -286,12 +288,15 @@ async def test_smart_feature_binary_sensors_reach_the_state_machine(
     )
 
     hvac_state = hass.states.get(_entity_id(hass, "smart_hvac"))
+    assert hvac_state is not None
     assert hvac_state.state == "on"
     assert hvac_state.attributes["device_class"] == "running"
     assert hvac_state.attributes["available_in_country"] is True
     assert hvac_state.attributes["user_id"] == "user-1"
 
-    assert hass.states.get(_entity_id(hass, "smart_feed_in")).state == "off"
+    feed_in_state = hass.states.get(_entity_id(hass, "smart_feed_in"))
+    assert feed_in_state is not None
+    assert feed_in_state.state == "off"
 
 
 async def test_missing_smart_feature_data_resolves_to_unknown(
@@ -313,9 +318,9 @@ async def test_missing_smart_feature_data_resolves_to_unknown(
         hass, entry, FrankEnergieBinarySensor(coordinator, trading, entry)
     )
 
-    assert hass.states.get(_entity_id(hass, "smartTradingisActivated")).state == (
-        "unknown"
-    )
+    state = hass.states.get(_entity_id(hass, "smartTradingisActivated"))
+    assert state is not None
+    assert state.state == "unknown"
 
 
 # TODO: real-hass coverage for the per-battery binary sensors built by

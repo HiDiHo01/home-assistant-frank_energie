@@ -171,9 +171,9 @@ async def test_resolution_select_registers_with_real_hass(
     assert state is not None
     assert state.state == "pt15m"
     assert state.attributes["options"] == ["pt15m", "pt60m"]
-    assert er.async_get(hass).async_get(_RESOLUTION_SELECT).config_entry_id == (
-        entry.entry_id
-    )
+    registry_entry = er.async_get(hass).async_get(_RESOLUTION_SELECT)
+    assert registry_entry is not None
+    assert registry_entry.config_entry_id == entry.entry_id
 
 
 async def test_resolution_select_option_goes_through_ha_validation(

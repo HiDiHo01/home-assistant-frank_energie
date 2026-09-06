@@ -296,7 +296,9 @@ async def test_config_numbers_register_with_real_hass(
         state = hass.states.get(entity_id)
         assert state is not None, entity_id
         assert float(state.state) == default
-        assert reg.async_get(entity_id).config_entry_id == entry.entry_id
+        registry_entry = reg.async_get(entity_id)
+        assert registry_entry is not None, entity_id
+        assert registry_entry.config_entry_id == entry.entry_id
 
 
 @pytest.mark.parametrize(
