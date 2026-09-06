@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from python_frank_energie.domain import SmartBatteryMode
 import pytest
 from unittest.mock import MagicMock, AsyncMock
@@ -8,6 +10,7 @@ from custom_components.frank_energie.const import (
     DATA_ENODE_CHARGERS,
 )
 from custom_components.frank_energie.number import (
+    CONFIG_NUMBER_DESCRIPTIONS,
     FrankEnergieBatteryThresholdNumber,
     FrankEnergieEnodeChargeLimitNumber,
 )
@@ -210,3 +213,16 @@ async def test_enode_charge_limit_validation(mock_coordinator):
     mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
         charger_id, False, {"maxChargeLimit": 85}
     )
+
+
+@pytest.mark.parametrize("description", CONFIG_NUMBER_DESCRIPTIONS, ids=lambda d: d.key)
+def test_config_number_default_within_declared_range(description) -> None:
+    """A config number's shipped default must sit inside its own min/max.
+
+    Otherwise the value shown on a fresh install is one HA's ``number.set_value``
+    rejects with ``ServiceValidationError`` (``value < min_value``), so it can
+    never be re-entered from the UI. Regression: ``export_electricity_fee``
+    shipped a ``-0.035090`` default with a ``0.0`` lower bound.
+    """
+    default = description.value_fn(SimpleNamespace(options={}))
+    assert description.native_min_value <= default <= description.native_max_value
