@@ -16,6 +16,7 @@ from python_frank_energie.domain import (
     SmartPvOperationalStatus,
     SmartPvSteeringStatus,
 )
+from python_frank_energie.models import PriceData
 
 from custom_components.frank_energie import const
 from tests.utils import ResponseMocks
@@ -356,6 +357,69 @@ async def test_sensors_hour_price_attr(
             "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
         ).attributes["prices"]
     )
+
+
+_HAS_QUARTER_HOUR_LIB_API = hasattr(PriceData, "previous_quarter_hour")
+
+_QUARTER_HOUR_SENSOR_KEYS = (
+    "previous_quarter_hour_electricity_price_all_in",
+    "next_quarter_hour_electricity_price_all_in",
+    "previous_quarter_hour_electricity_market_price",
+    "next_quarter_hour_electricity_market_price",
+)
+
+
+async def test_sensors_quarter_hour_prices(
+    freezer,
+    aioclient_responses: ResponseMocks,
+    frank_energie_config_entry: MockConfigEntry,
+    hass: HomeAssistant,
+):
+    """previous/next quarter-hour price sensors track the adjacent PT15M intervals.
+
+    They are only registered when the installed python-frank-energie exposes the
+    quarter-hour helpers; on an older pinned version they must be absent rather
+    than permanently unavailable.
+    """
+    import zoneinfo
+
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
+    now = datetime.now(tz).replace(hour=5, minute=7, second=0, microsecond=0)
+    freezer.move_to(now)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # 96 quarter-hour prices, one distinct value per interval (index == 15-min slot).
+    prices = [round(0.10 + i * 0.01, 2) for i in range(96)]
+    quarter = timedelta(minutes=15)
+    aioclient_responses.add(start_of_day, prices, [1.0] * 96, interval=quarter)
+    aioclient_responses.add(
+        start_of_day + timedelta(days=1), prices, [1.0] * 96, interval=quarter
+    )
+    aioclient_responses.cyclic()
+
+    await hass.config_entries.async_setup(frank_energie_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    def state(key: str):
+        return hass.states.get(f"sensor.frank_energie_electricity_prices_{key}")
+
+    if not _HAS_QUARTER_HOUR_LIB_API:
+        assert all(state(key) is None for key in _QUARTER_HOUR_SENSOR_KEYS)
+        return
+
+    # 05:07 -> slot 20 [05:00, 05:15) is current, 19 is previous, 21 is next.
+    assert state("previous_quarter_hour_electricity_price_all_in").state == "0.29"
+    assert state("next_quarter_hour_electricity_price_all_in").state == "0.31"
+    assert state("previous_quarter_hour_electricity_market_price").state == "0.203"
+    assert state("next_quarter_hour_electricity_market_price").state == "0.217"
+
+    # Cross into the next interval: previous/next both shift by one slot.
+    freezer.move_to(now.replace(minute=22))
+    await trigger_update(hass, 7 * 3600)
+
+    assert state("previous_quarter_hour_electricity_price_all_in").state == "0.3"
+    assert state("next_quarter_hour_electricity_price_all_in").state == "0.32"
 
 
 @pytest.mark.asyncio

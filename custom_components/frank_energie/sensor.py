@@ -45,7 +45,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 from homeassistant.util import dt as dt_util
-from python_frank_energie.models import EnodeCharger
+from python_frank_energie.models import EnodeCharger, PriceData
 
 from .const import (
     ATTR_FROM_TIME,
@@ -2097,6 +2097,34 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         entity_registry_enabled_default=True,
     ),
     FrankEnergieEntityDescription(
+        key="elec_previousquarterhour",
+        translation_key="elec_previousquarterhour",
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=3,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=lambda data: (
+            data[DATA_ELECTRICITY].previous_quarter_hour.total
+            if data[DATA_ELECTRICITY].previous_quarter_hour
+            else None
+        ),
+        entity_registry_enabled_default=True,
+    ),
+    FrankEnergieEntityDescription(
+        key="elec_nextquarterhour",
+        translation_key="elec_nextquarterhour",
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=3,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=lambda data: (
+            data[DATA_ELECTRICITY].next_quarter_hour.total
+            if data[DATA_ELECTRICITY].next_quarter_hour
+            else None
+        ),
+        entity_registry_enabled_default=True,
+    ),
+    FrankEnergieEntityDescription(
         key="elec_market_percent_tax",
         translation_key="elec_market_percent_tax",
         native_unit_of_measurement=PERCENTAGE,
@@ -2501,6 +2529,34 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         value_fn=lambda data: (
             data[DATA_ELECTRICITY].next_hour.market_price
             if data[DATA_ELECTRICITY].next_hour
+            else None
+        ),
+        entity_registry_enabled_default=True,
+    ),
+    FrankEnergieEntityDescription(
+        key="elec_previousquarterhour_market",
+        translation_key="elec_previousquarterhour_market",
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=3,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=lambda data: (
+            data[DATA_ELECTRICITY].previous_quarter_hour.market_price
+            if data[DATA_ELECTRICITY].previous_quarter_hour
+            else None
+        ),
+        entity_registry_enabled_default=True,
+    ),
+    FrankEnergieEntityDescription(
+        key="elec_nextquarterhour_market",
+        translation_key="elec_nextquarterhour_market",
+        native_unit_of_measurement=UNIT_ELECTRICITY,
+        suggested_display_precision=3,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=lambda data: (
+            data[DATA_ELECTRICITY].next_quarter_hour.market_price
+            if data[DATA_ELECTRICITY].next_quarter_hour
             else None
         ),
         entity_registry_enabled_default=True,
@@ -4959,6 +5015,21 @@ def _service_parent_device_id(
     )
 
 
+# The previous/next quarter-hour price sensors rely on PriceData helpers added
+# in a later python-frank-energie release. Skip registering them on an older
+# pinned version so users don't get permanently-unavailable entities before the
+# dependency is bumped; they appear automatically once the library supports it.
+_QUARTER_HOUR_PRICE_KEYS: Final = frozenset(
+    {
+        "elec_previousquarterhour",
+        "elec_nextquarterhour",
+        "elec_previousquarterhour_market",
+        "elec_nextquarterhour_market",
+    }
+)
+_LIB_HAS_QUARTER_HOUR_PRICES: Final = hasattr(PriceData, "previous_quarter_hour")
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -5090,6 +5161,10 @@ async def async_setup_entry(
         for description in SENSOR_TYPES
         if (
             (
+                description.key not in _QUARTER_HOUR_PRICE_KEYS
+                or _LIB_HAS_QUARTER_HOUR_PRICES
+            )
+            and (
                 not description.authenticated
                 or _get_coordinator_for_description(description).api.is_authenticated
             )

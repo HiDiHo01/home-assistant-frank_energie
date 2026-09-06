@@ -170,11 +170,23 @@
       "elec_nexthour": {
         "name": "Elektriciteitsprijs volgend uur (All-in)"
       },
+      "elec_previousquarterhour": {
+        "name": "Elektriciteitsprijs vorig kwartier (All-in)"
+      },
+      "elec_nextquarterhour": {
+        "name": "Elektriciteitsprijs volgend kwartier (All-in)"
+      },
       "elec_previoushour_market": {
         "name": "Elektriciteit inkoopprijs vorig uur"
       },
       "elec_nexthour_market": {
         "name": "Elektriciteit inkoopprijs volgend uur"
+      },
+      "elec_previousquarterhour_market": {
+        "name": "Elektriciteit inkoopprijs vorig kwartier"
+      },
+      "elec_nextquarterhour_market": {
+        "name": "Elektriciteit inkoopprijs volgend kwartier"
       },
       "average_electricity_market_price_today": {
         "name": "Gemiddelde elektriciteit inkoopprijs vandaag"
