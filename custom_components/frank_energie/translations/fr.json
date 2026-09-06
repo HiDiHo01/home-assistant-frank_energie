@@ -539,11 +539,23 @@
       "elec_nexthour_market": {
         "name": "Prix du marché de l'électricité heure suivante"
       },
+      "elec_nextquarterhour": {
+        "name": "Prix de l'électricité quart d'heure suivant (Tout compris)"
+      },
+      "elec_nextquarterhour_market": {
+        "name": "Prix du marché de l'électricité quart d'heure suivant"
+      },
       "elec_previoushour": {
         "name": "Prix de l'électricité heure précédente (Tout compris)"
       },
       "elec_previoushour_market": {
         "name": "Prix du marché de l'électricité heure précédente"
+      },
+      "elec_previousquarterhour": {
+        "name": "Prix de l'électricité quart d'heure précédent (Tout compris)"
+      },
+      "elec_previousquarterhour_market": {
+        "name": "Prix du marché de l'électricité quart d'heure précédent"
       },
       "elec_tax_only": {
         "name": "Taxe actuelle sur l'électricité uniquement"

@@ -539,11 +539,23 @@
       "elec_nexthour_market": {
         "name": "Next hour electricity market price"
       },
+      "elec_nextquarterhour": {
+        "name": "Next quarter-hour electricity price (All-in)"
+      },
+      "elec_nextquarterhour_market": {
+        "name": "Next quarter-hour electricity market price"
+      },
       "elec_previoushour": {
         "name": "Previous hour electricity price (All-in)"
       },
       "elec_previoushour_market": {
         "name": "Previous hour electricity market price"
+      },
+      "elec_previousquarterhour": {
+        "name": "Previous quarter-hour electricity price (All-in)"
+      },
+      "elec_previousquarterhour_market": {
+        "name": "Previous quarter-hour electricity market price"
       },
       "elec_tax_only": {
         "name": "Current electricity tax only"

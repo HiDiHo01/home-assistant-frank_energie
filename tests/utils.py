@@ -40,8 +40,13 @@ class ResponseMocks:
         electricity_prices: list,
         gas_prices: list,
         http_status: int = HTTPStatus.OK,
+        interval: timedelta = timedelta(hours=1),
     ):
-        """Add a response mock."""
+        """Add a response mock.
+
+        ``interval`` is the width of each price entry; pass
+        ``timedelta(minutes=15)`` to emit PT15M data.
+        """
         self._responses.append(
             AiohttpClientMockResponse(
                 "POST",
@@ -50,10 +55,10 @@ class ResponseMocks:
                     "data": {
                         "marketPrices": {
                             "electricityPrices": self._generate_prices_response(
-                                start_date, electricity_prices
+                                start_date, electricity_prices, interval
                             ),
                             "gasPrices": self._generate_prices_response(
-                                start_date, gas_prices
+                                start_date, gas_prices, interval
                             ),
                         }
                     }
@@ -63,13 +68,18 @@ class ResponseMocks:
             )
         )
 
-    def _generate_prices_response(self, start: datetime, all_in_prices: list | range):
+    def _generate_prices_response(
+        self,
+        start: datetime,
+        all_in_prices: list[float] | range,
+        interval: timedelta,
+    ) -> list[dict[str, str | float]]:
         """Generate a list of prices."""
         start = start.replace(second=0, microsecond=0)
         return [
             {
-                "from": (start + timedelta(hours=i)).astimezone().isoformat(),
-                "till": (start + timedelta(hours=i + 1)).astimezone().isoformat(),
+                "from": (start + i * interval).astimezone().isoformat(),
+                "till": (start + (i + 1) * interval).astimezone().isoformat(),
                 "marketPrice": 0.7 * price,
                 "marketPriceTax": 0.05 * price,
                 "sourcingMarkupPrice": 0.1 * price,
