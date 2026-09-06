@@ -1,13 +1,25 @@
+from types import SimpleNamespace
+
 from python_frank_energie.domain import SmartBatteryMode
 import pytest
 from unittest.mock import MagicMock, AsyncMock
+
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.frank_energie.const import (
     DATA_BATTERY_DETAILS,
     DATA_ENODE_VEHICLES,
     DATA_ENODE_CHARGERS,
+    DEFAULT_ENERGY_TAX_ODE,
+    DEFAULT_ENERGY_TAX_REDUCTION,
+    DEFAULT_EXPORT_ELECTRICITY_FEE,
+    DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
+    DEFAULT_NETWORK_CHARGES,
 )
 from custom_components.frank_energie.number import (
+    CONFIG_NUMBER_DESCRIPTIONS,
     FrankEnergieBatteryThresholdNumber,
     FrankEnergieEnodeChargeLimitNumber,
 )
@@ -210,3 +222,130 @@ async def test_enode_charge_limit_validation(mock_coordinator):
     mock_coordinator.async_update_enode_charge_settings.assert_called_once_with(
         charger_id, False, {"maxChargeLimit": 85}
     )
+
+
+@pytest.mark.parametrize("description", CONFIG_NUMBER_DESCRIPTIONS, ids=lambda d: d.key)
+def test_config_number_default_within_declared_range(description) -> None:
+    """A config number's shipped default must sit inside its own min/max.
+
+    Otherwise the value shown on a fresh install is one HA's ``number.set_value``
+    rejects with ``ServiceValidationError`` (``value < min_value``), so it can
+    never be re-entered from the UI. Regression: ``export_electricity_fee``
+    shipped a ``-0.035090`` default with a ``0.0`` lower bound.
+    """
+    default = description.value_fn(SimpleNamespace(options={}))
+    assert description.native_min_value <= default <= description.native_max_value
+
+
+# --- Real-hass layer -------------------------------------------------------
+#
+# The tests above build entities against a hand-rolled ``mock_coordinator`` and
+# call ``entity.async_set_native_value`` directly, which never reaches Home
+# Assistant's own ``number.set_value`` range validation. These drive the real
+# NUMBER platform through a full ``async_setup`` so that validation runs.
+
+# option key, entity_id, shipped default, an in-range value, an out-of-range value
+_CONFIG_NUMBERS = [
+    (
+        "monthly_subscription_fee",
+        "number.frank_energie_costs_monthly_subscription_fee",
+        DEFAULT_MONTHLY_SUBSCRIPTION_FEE,
+        5.5,
+        20.0,
+    ),
+    (
+        "energy_tax_ode",
+        "number.frank_energie_costs_energy_tax_ode",
+        DEFAULT_ENERGY_TAX_ODE,
+        30.0,
+        60.0,
+    ),
+    (
+        "energy_tax_reduction",
+        "number.frank_energie_costs_energy_tax_reduction",
+        DEFAULT_ENERGY_TAX_REDUCTION,
+        -40.0,
+        20.0,
+    ),
+    (
+        "network_charges",
+        "number.frank_energie_costs_network_charges",
+        DEFAULT_NETWORK_CHARGES,
+        40.0,
+        60.0,
+    ),
+    (
+        "export_electricity_fee",
+        "number.frank_energie_costs_export_electricity_fee",
+        DEFAULT_EXPORT_ELECTRICITY_FEE,
+        -0.02,
+        100.0,
+    ),
+]
+
+
+async def test_config_numbers_register_with_real_hass(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """The always-present cost-configuration numbers reach the state machine at
+    their option-backed shipped defaults and are tied to the config entry."""
+    entry = await frank_energie_setup()
+    reg = er.async_get(hass)
+
+    for _, entity_id, default, _, _ in _CONFIG_NUMBERS:
+        state = hass.states.get(entity_id)
+        assert state is not None, entity_id
+        assert float(state.state) == default
+        registry_entry = reg.async_get(entity_id)
+        assert registry_entry is not None, entity_id
+        assert registry_entry.config_entry_id == entry.entry_id
+
+
+@pytest.mark.parametrize(
+    ("option_key", "entity_id", "in_range", "out_of_range"),
+    [(k, eid, lo, hi) for k, eid, _, lo, hi in _CONFIG_NUMBERS],
+)
+async def test_config_number_set_value_goes_through_ha_range_validation(
+    hass: HomeAssistant,
+    frank_energie_setup,
+    option_key: str,
+    entity_id: str,
+    in_range: float,
+    out_of_range: float,
+) -> None:
+    """``number.set_value`` persists an in-range value to the entry options and
+    rejects an out-of-range one with ``ServiceValidationError`` -- the check
+    the direct ``async_set_native_value`` unit tests bypass."""
+    entry = await frank_energie_setup()
+
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {"entity_id": entity_id, "value": in_range},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == str(in_range)
+    assert entry.options[option_key] == in_range
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": entity_id, "value": out_of_range},
+            blocking=True,
+        )
+    # The rejected write left the in-range value untouched.
+    assert hass.states.get(entity_id).state == str(in_range)
+
+
+# TODO: real-hass coverage for the auth-gated number entities
+# (FrankEnergieBatteryThresholdNumber, FrankEnergieEnodeChargeLimitNumber).
+# Those are only reachable once the battery/vehicle/charger coordinators have
+# authenticated data, so a full async_setup here needs an operationName->JSON
+# dispatcher on aioclient_mock fed by python-frank-energie's own response
+# fixtures (smart_battery_details.json, enode_vehicles.json, ...), or a lighter
+# variant that patches custom_components.frank_energie.FrankEnergie and adds the
+# entities via MockEntityPlatform (see test_binary_sensor.py). Until then the
+# range/step checks on those two classes stay at the direct-call unit level
+# above and never see HA's own number.set_value validation.

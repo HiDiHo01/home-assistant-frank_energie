@@ -167,7 +167,8 @@ EXPORT_ELECTRICITY_FEE = FrankEnergieNumberEntityDescription(
     translation_key="export_electricity_fee",
     option_key=CONF_EXPORT_ELECTRICITY_FEE,
     service_name=SERVICE_NAME_COSTS,
-    native_min_value=0.00,
+    # Default is a negative per-kWh credit -- the lower bound must contain it.
+    native_min_value=-50.00,
     native_max_value=50.00,
     native_step=0.000001,
     native_unit_of_measurement=UNIT_ELECTRICITY,
