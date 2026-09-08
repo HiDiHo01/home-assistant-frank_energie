@@ -2,7 +2,7 @@
 {
 	"name": "Frank Energie",
 	"content_in_root": false,
-	"country": ["NL", "BE"],
+	"country": ["NL", "BE", "FR"],
 	"filename": "frank_energie.zip",
 	"homeassistant": "2026.1.0",
 	"render_readme": true,
