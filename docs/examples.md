@@ -10,6 +10,27 @@ See:
 
 for information about available entities and features.
 
+## Calculate the costs
+
+```yaml
+template:
+  - sensor:
+      - name: "Elektriciteitskosten vorig kwartier"
+        unique_id: elektriciteitskosten_vorig_kwartier
+        device_class: monetary
+        unit_of_measurement: "€"
+        icon: mdi:currency-eur
+        availability: >
+          {{ states('sensor.frank_energie_stroomprijzen_elektriciteitsprijs_vorig_kwartier_all_in') | is_number
+             and state_attr('sensor.kwartier_energieverbruik', 'last_period') | is_number }}
+        state: >
+          {% set price = states('sensor.frank_energie_stroomprijzen_elektriciteitsprijs_vorig_kwartier_all_in') | float %}
+          {% set usage = state_attr('sensor.kwartier_energieverbruik', 'last_period') | float %}
+          {{ price * usage }}
+```
+Do not use state_class
+If you add this sensor using the user interfase(UI) add the sensor to Frank Energie > Kosten
+
 ## Tomorrow Prices Available Notification
 
 Receive a notification when tomorrow's prices become available.
