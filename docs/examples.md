@@ -31,7 +31,7 @@ template:
 Do not use state_class
 If you add this sensor using the user interfase(UI) add the sensor to Frank Energie > Kosten
 
-## Calculatie the costs per period, in this case per hour
+## Calculate the costs per period, in this case per hour
 
 ```yaml
 utility_meter:
@@ -43,7 +43,7 @@ utility_meter:
     delta_values: true
     net_consumption: true
 ```
-Change cycle to daily, weekly, monthly, yearly for more statics
+Change cycle to daily, weekly, monthly or yearly for more statistics
 
 ## Tomorrow Prices Available Notification
 
