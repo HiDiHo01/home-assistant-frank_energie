@@ -27,7 +27,7 @@ pytestmark = pytest.mark.asyncio
 
 def _find_device(
     device_registry: dr.DeviceRegistry, entry_id: str, identifier: tuple[str, str]
-):
+) -> dr.DeviceEntry | None:
     """Look up a device by identifier without relying on either
     async_get_device variant, so the assertion works regardless of which one
     the installed HA Core provides.
@@ -127,7 +127,9 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
         # Also remove the modern method itself: if setup ignored the flag
         # above and called it anyway, it should fail loudly here rather than
         # this test passing by accident.
-        monkeypatch.delattr(type(device_registry), "async_get_device_by_identifier")
+        monkeypatch.delattr(
+            type(device_registry), "async_get_device_by_identifier", raising=False
+        )
         spy = MagicMock(wraps=device_registry.async_get_device)
         monkeypatch.setattr(device_registry, "async_get_device", spy)
     else:
