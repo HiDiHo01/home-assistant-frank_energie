@@ -1,5 +1,12 @@
 name: Dependabot auto-merge
-on: pull_request
+# pull_request_target (not pull_request): GitHub hard-restricts GITHUB_TOKEN to
+# read-only for pull_request-triggered runs authored by dependabot[bot],
+# regardless of the permissions declared below, which made every "Enable
+# auto-merge" call below fail with "Resource not accessible by integration
+# (mergePullRequest)". pull_request_target grants the declared write
+# permissions instead. Safe here because this workflow never checks out the
+# PR's code - it only calls dependabot/fetch-metadata and `gh pr merge`.
+on: pull_request_target
 
 permissions:
   contents: write
@@ -7,9 +14,10 @@ permissions:
 
 jobs:
   dependabot:
-    permissions:
-      contents: read
-      pull-requests: write
+    # No job-level override: job-level `permissions:` fully replaces (rather
+    # than merges with) the workflow-level block above for this job, and the
+    # merge step below needs contents: write - inherit from workflow level
+    # instead of keeping a second, easily-out-of-sync copy here.
     runs-on: ubuntu-latest
     if: ${{ github.actor == 'dependabot[bot]' }}
     steps:

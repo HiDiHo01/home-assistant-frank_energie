@@ -3975,19 +3975,19 @@ six = ">=1.5"
 
 [[package]]
 name = "python-frank-energie"
-version = "2026.8.8"
-description = "Asynchronous Python client for the Frank Energie"
+version = "2026.9.9.post2"
+description = "Asynchronous Python client for the Frank Energie integration"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "python_frank_energie-2026.8.8-py3-none-any.whl", hash = "sha256:09d33819d28cb710d67e37f5c404ba7d71a64420e7f2df1059a2c6fa2a205f9e"},
-    {file = "python_frank_energie-2026.8.8.tar.gz", hash = "sha256:6adbfe1db793dd845aa665af1ba6011ed2b5f4c62f23d78b0656e5d23d2afa3c"},
+    {file = "python_frank_energie-2026.9.9.post2-py3-none-any.whl", hash = "sha256:695a424573ba8a46cf63ccca00a411cba446ee729a6d3443a5951a0564be4ce6"},
+    {file = "python_frank_energie-2026.9.9.post2.tar.gz", hash = "sha256:f7e815541cb34fdfb9fcf8ad8cd74bfeb824a9da84bee85df8b419b4b30176ac"},
 ]
 
 [package.dependencies]
 aiohttp = ">=3.13.5"
-cryptography = ">=44.0.1"
+cryptography = ">=48.0.0"
 idna = ">=3.7"
 pydantic = ">=2.0.0"
 PyJWT = ">=2.10.1"
@@ -5294,4 +5294,4 @@ ifaddr = ">=0.1.7"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14.2,<4.0"
-content-hash = "3d3a9a6f82ab90514d53d60db9b9605c302d905750fb2254634d6fba0b0a928a"
+content-hash = "051df37f91561a6163864562acf4b1cacbfbd10bed64cd05ef389a56c65b0f78"
