@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
 )
 from python_frank_energie.domain import (
+    SmartBatteryImbalanceStrategy,
     SmartPvOperationalStatus,
     SmartPvSteeringStatus,
 )
@@ -1088,31 +1089,23 @@ def _pv_sensor_description(key: str) -> object:
     return next(d for d in PV_SENSORS if d.key == key)
 
 
-@pytest.mark.parametrize(
-    ("sensor_key", "enum_cls"),
-    [
-        ("operational_status", SmartPvOperationalStatus),
-        ("steering_status", SmartPvSteeringStatus),
-    ],
-)
-def test_pv_enum_sensor_options_cover_domain_and_translations(
-    sensor_key: str, enum_cls: type[SmartPvOperationalStatus | SmartPvSteeringStatus]
+def _assert_enum_options_cover_domain_and_translations(
+    description: object, enum_cls: type
 ) -> None:
-    """PV ENUM sensor options must cover every python-frank-energie status value
+    """Assert an ENUM sensor's ``options`` cover every value of ``enum_cls``
     and have a matching shipped strings.json translation.
 
-    Regression guard for issue #277: python-frank-energie added
-    SmartPvSteeringStatus.INACTIVE, but the sensor's ``options`` list and the
-    translation files were missing it, which trips Home Assistant's
-    SensorEntity ENUM validation ("not in the list of options provided") and
-    leaves the sensor unavailable. The options list is allowed to run *ahead*
-    of the currently pinned library (forward-compat for an unreleased status),
-    but must never lag it, and every option must be translated.
+    Shared by the PV and battery-strategy regression guards below: both bugs
+    were the same shape - python-frank-energie added
+    an enum member, but a sensor's ``options`` list (and/or the translation
+    files) lagged behind, which trips Home Assistant's SensorEntity ENUM
+    validation ("not in the list of options provided") and leaves the sensor
+    unavailable. ``options`` is allowed to run *ahead* of the currently pinned
+    library (forward-compat for an unreleased value), but must never lag it,
+    and every option must be translated.
     """
     import json
     from pathlib import Path
-
-    description = _pv_sensor_description(sensor_key)
 
     strings = json.loads(
         Path(__file__)
@@ -1132,6 +1125,47 @@ def test_pv_enum_sensor_options_cover_domain_and_translations(
     )
 
 
+@pytest.mark.parametrize(
+    ("sensor_key", "enum_cls"),
+    [
+        ("operational_status", SmartPvOperationalStatus),
+        ("steering_status", SmartPvSteeringStatus),
+    ],
+)
+def test_pv_enum_sensor_options_cover_domain_and_translations(
+    sensor_key: str, enum_cls: type[SmartPvOperationalStatus | SmartPvSteeringStatus]
+) -> None:
+    """PV ENUM sensor options must cover every python-frank-energie status value
+    and have a matching shipped strings.json translation."""
+    _assert_enum_options_cover_domain_and_translations(
+        _pv_sensor_description(sensor_key), enum_cls
+    )
+
+
+async def _register_sensor_and_get_state(
+    hass: HomeAssistant, build_sensor: Callable[[MockConfigEntry], SensorEntity]
+) -> str | None:
+    """Register a sensor entity (built by ``build_sensor``) on a real entity
+    platform and return the state Home Assistant computed for it - running
+    the real SensorEntity validation (including ENUM ``options`` validation)
+    rather than a hand-rolled stand-in for it."""
+    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+
+    from custom_components.frank_energie.const import DOMAIN
+
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
+    platform.config_entry = entry
+
+    sensor = build_sensor(entry)
+    await platform.async_add_entities([sensor])
+
+    state = hass.states.get(sensor.entity_id)
+    return state.state if state else None
+
+
 async def _pv_steering_status_state(
     hass: HomeAssistant, coordinator_data: dict[str, object]
 ) -> str | None:
@@ -1140,14 +1174,11 @@ async def _pv_steering_status_state(
     SensorEntity ENUM ``options`` validation)."""
     from unittest.mock import MagicMock
 
-    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
-
-    from custom_components.frank_energie.const import DOMAIN
     from custom_components.frank_energie.sensor import FrankEnergiePvSensor
 
     coordinator = MagicMock()
     coordinator.data = coordinator_data
+    coordinator.last_update_success = True
     coordinator.get_pv_system_metadata.return_value = {
         "brand": "SolarEdge",
         "model": "SE3000",
@@ -1155,18 +1186,12 @@ async def _pv_steering_status_state(
         "serial_number": "SN1",
     }
 
-    entry = MockConfigEntry(domain=DOMAIN)
-    entry.add_to_hass(hass)
-    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
-    platform.config_entry = entry
-
-    sensor = FrankEnergiePvSensor(
-        coordinator, "pv_1", _pv_sensor_description("steering_status")
+    return await _register_sensor_and_get_state(
+        hass,
+        lambda _entry: FrankEnergiePvSensor(
+            coordinator, "pv_1", _pv_sensor_description("steering_status")
+        ),
     )
-    await platform.async_add_entities([sensor])
-
-    state = hass.states.get(sensor.entity_id)
-    return state.state if state else None
 
 
 @pytest.mark.asyncio
@@ -1229,3 +1254,97 @@ async def test_pv_steering_status_systems_fallback_passes_ha_enum_validation(
 
     state = await _pv_steering_status_state(hass, {DATA_PV_SYSTEMS: systems_obj})
     assert state == "active"
+
+
+def _battery_strategy_sensor_description() -> object:
+    """Return the smart_battery_0 imbalance_trading_strategy entity description
+    built by ``_build_single_smart_battery_descriptions``."""
+    from types import SimpleNamespace
+
+    from python_frank_energie.models import SmartBatterySettings
+
+    from custom_components.frank_energie.sensor import (
+        _build_single_smart_battery_descriptions,
+    )
+
+    battery = SimpleNamespace(
+        id="battery_1",
+        brand="AlphaESS",
+        capacity=9.3,
+        external_reference="ext-1",
+        max_charge_power=5.0,
+        max_discharge_power=5.0,
+        provider="AlphaESS",
+        created_at=None,
+        updated_at=None,
+        settings=SmartBatterySettings(),
+        summary=None,
+    )
+    descriptions = _build_single_smart_battery_descriptions(battery, 0)
+    return next(
+        d for d in descriptions if d.key == "smart_battery_0_imbalance_trading_strategy"
+    )
+
+
+def test_battery_strategy_sensor_options_cover_domain_and_translations() -> None:
+    """Battery imbalance-trading-strategy ENUM sensor options must cover every
+    python-frank-energie SmartBatteryImbalanceStrategy value and have a
+    matching shipped strings.json translation.
+
+    Regression guard: the API started returning the 'standard' strategy
+    value, but the sensor's ``options`` list - hardcoded separately
+    from (and out of sync with) BATTERY_STRATEGY_OPTIONS, which the select
+    entity already used - was missing it. That trips Home Assistant's
+    SensorEntity ENUM validation ("not in the list of options provided") and,
+    because the resulting exception breaks the coordinator listener update,
+    leaves every entity sharing that coordinator unavailable.
+    """
+    _assert_enum_options_cover_domain_and_translations(
+        _battery_strategy_sensor_description(), SmartBatteryImbalanceStrategy
+    )
+
+
+async def _battery_strategy_sensor_state(
+    hass: HomeAssistant, strategy: SmartBatteryImbalanceStrategy
+) -> str | None:
+    """Register the smart_battery_0 imbalance_trading_strategy sensor on a real
+    entity platform and return the state Home Assistant computed for it
+    (running the real SensorEntity ENUM ``options`` validation)."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import SmartBatterySettings
+
+    from custom_components.frank_energie.const import DATA_BATTERIES
+    from custom_components.frank_energie.sensor import FrankEnergieSmartBatterySensor
+
+    battery = SimpleNamespace(
+        settings=SmartBatterySettings(imbalance_trading_strategy=strategy)
+    )
+    coordinator = MagicMock()
+    coordinator.data = {DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
+    coordinator.last_update_success = True
+
+    return await _register_sensor_and_get_state(
+        hass,
+        lambda entry: FrankEnergieSmartBatterySensor(
+            coordinator,
+            _battery_strategy_sensor_description(),
+            entry,
+            battery_id="battery_1",
+            battery_name="Battery 1",
+            battery_brand="AlphaESS",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strategy", list(SmartBatteryImbalanceStrategy))
+async def test_battery_strategy_sensor_passes_ha_enum_validation(
+    hass: HomeAssistant, strategy: SmartBatteryImbalanceStrategy
+) -> None:
+    """Every real SmartBatteryImbalanceStrategy value - including 'standard' -
+    yields a state Home Assistant's ENUM ``options``
+    validation accepts."""
+    state = await _battery_strategy_sensor_state(hass, strategy)
+    assert state == strategy.value.lower()
