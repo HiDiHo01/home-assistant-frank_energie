@@ -7,10 +7,12 @@ import zoneinfo
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import device_registry as dr
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie.const import (
     DOMAIN,
     CONF_COORDINATOR,
+    SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
 )
 from custom_components.frank_energie.helpers import encrypt_password
@@ -57,6 +59,117 @@ async def test_setup_entry_success(
     assert result is True
     assert entry.state is ConfigEntryState.LOADED
     assert hass.data[DOMAIN][entry.entry_id][CONF_COORDINATOR]
+
+
+async def test_setup_entry_removes_obsolete_battery_sessions_device(
+    hass: HomeAssistant,
+    aioclient_responses: ResponseMocks,
+    freezer,
+    enable_custom_integrations,
+) -> None:
+    """Setup removes the obsolete Battery Sessions umbrella device."""
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
+    now = datetime.now(tz).replace(hour=10, minute=15, second=0, microsecond=0)
+    freezer.move_to(now)
+
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    aioclient_responses.add(
+        start_of_day,
+        [0.2] * 24,
+        [1.23] * 24,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "username": "test@example.com",
+        },
+        entry_id="1234abcd",
+    )
+    entry.add_to_hass(hass)
+
+    identifier = (DOMAIN, f"{entry.entry_id}_{SERVICE_NAME_BATTERY_SESSIONS}")
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={identifier},
+        name="Frank Energie - Battery Sessions",
+    )
+    assert device_registry.async_get_device_by_identifier(
+        identifier, config_entry_id=entry.entry_id
+    )
+
+    result = await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert result is True
+    assert (
+        device_registry.async_get_device_by_identifier(
+            identifier, config_entry_id=entry.entry_id
+        )
+        is None
+    )
+
+
+async def test_setup_entry_removes_obsolete_battery_sessions_device_on_older_ha_core(
+    hass: HomeAssistant,
+    aioclient_responses: ResponseMocks,
+    freezer,
+    enable_custom_integrations,
+    monkeypatch,
+) -> None:
+    """Setup still removes the device when async_get_device_by_identifier is missing.
+
+    Forces the older-HA-Core branch so this exercises the real fallback
+    lookup (async_get_device) against the real device registry.
+    """
+    import custom_components.frank_energie as frank_energie_init
+
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
+    now = datetime.now(tz).replace(hour=10, minute=15, second=0, microsecond=0)
+    freezer.move_to(now)
+
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    aioclient_responses.add(
+        start_of_day,
+        [0.2] * 24,
+        [1.23] * 24,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "username": "test@example.com",
+        },
+        entry_id="1234abcd",
+    )
+    entry.add_to_hass(hass)
+
+    identifier = (DOMAIN, f"{entry.entry_id}_{SERVICE_NAME_BATTERY_SESSIONS}")
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={identifier},
+        name="Frank Energie - Battery Sessions",
+    )
+    assert device_registry.async_get_device_by_identifier(
+        identifier, config_entry_id=entry.entry_id
+    )
+
+    monkeypatch.setattr(frank_energie_init, "_HAS_DEVICE_BY_IDENTIFIER", False)
+
+    result = await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert result is True
+    assert (
+        device_registry.async_get_device_by_identifier(
+            identifier, config_entry_id=entry.entry_id
+        )
+        is None
+    )
 
 
 async def test_setup_entry_auth_failure(

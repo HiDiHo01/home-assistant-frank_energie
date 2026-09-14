@@ -45,6 +45,9 @@ from .helpers import price_cache_store
 
 _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
+# HA Core versions before the config-entry-scoped device registry API don't
+# have this method.
+_HAS_DEVICE_BY_IDENTIFIER: Final = hasattr(dr.DeviceRegistry, "async_get_device_by_identifier")
 
 
 @dataclass
@@ -228,10 +231,17 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # NOT obsolete - they carry the aggregate sensors and are the parent the
         # per-battery / per-charger child devices link to via `via_device_id`.
         device_registry = dr.async_get(self.hass)
-        if device := device_registry.async_get_device_by_identifier(
-            (DOMAIN, f"{self.entry.entry_id}_{SERVICE_NAME_BATTERY_SESSIONS}"),
-            config_entry_id=self.entry.entry_id,
-        ):
+        identifier = (DOMAIN, f"{self.entry.entry_id}_{SERVICE_NAME_BATTERY_SESSIONS}")
+        if _HAS_DEVICE_BY_IDENTIFIER:
+            device = device_registry.async_get_device_by_identifier(
+                identifier, config_entry_id=self.entry.entry_id
+            )
+        else:
+            # Older HA Core: fall back to the deprecated lookup so setup
+            # doesn't crash.
+            device = device_registry.async_get_device(identifiers={identifier})
+
+        if device:
             device_registry.async_remove_device(device.id)
             _LOGGER.debug("Removed obsolete Battery Sessions umbrella device")
 
