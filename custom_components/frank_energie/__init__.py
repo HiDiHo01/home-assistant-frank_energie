@@ -47,7 +47,9 @@ _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
 # HA Core versions before the config-entry-scoped device registry API don't
 # have this method.
-_HAS_DEVICE_BY_IDENTIFIER: Final = hasattr(dr.DeviceRegistry, "async_get_device_by_identifier")
+_HAS_DEVICE_BY_IDENTIFIER: Final = hasattr(
+    dr.DeviceRegistry, "async_get_device_by_identifier"
+)
 
 
 @dataclass
