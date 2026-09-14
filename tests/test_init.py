@@ -7,10 +7,12 @@ import zoneinfo
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import device_registry as dr
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie.const import (
     DOMAIN,
     CONF_COORDINATOR,
+    SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
 )
 from custom_components.frank_energie.helpers import encrypt_password
@@ -21,6 +23,38 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tests.utils import ResponseMocks
 
 pytestmark = pytest.mark.asyncio
+
+
+def _find_device(
+    device_registry: dr.DeviceRegistry, entry_id: str, identifier: tuple[str, str]
+) -> dr.DeviceEntry | None:
+    """Look up a device by identifier without relying on either
+    async_get_device variant, so the assertion works regardless of which one
+    the installed HA Core provides.
+    """
+    entries = dr.async_entries_for_config_entry(device_registry, entry_id)
+    return next((d for d in entries if identifier in d.identifiers), None)
+
+
+async def _prepare_unauthenticated_entry(
+    hass: HomeAssistant, aioclient_responses: ResponseMocks, freezer
+) -> MockConfigEntry:
+    """Freeze time, seed cached prices, and add a fresh unauthenticated entry."""
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
+    now = datetime.now(tz).replace(hour=10, minute=15, second=0, microsecond=0)
+    freezer.move_to(now)
+
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    aioclient_responses.add(start_of_day, [0.2] * 24, [1.23] * 24)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"username": "test@example.com"},
+        entry_id="1234abcd",
+    )
+    entry.add_to_hass(hass)
+    return entry
 
 
 async def test_setup_entry_success(
@@ -57,6 +91,67 @@ async def test_setup_entry_success(
     assert result is True
     assert entry.state is ConfigEntryState.LOADED
     assert hass.data[DOMAIN][entry.entry_id][CONF_COORDINATOR]
+
+
+@pytest.mark.parametrize(
+    "force_fallback", [False, True], ids=["preferred-lookup", "older-ha-core-fallback"]
+)
+async def test_setup_entry_removes_obsolete_battery_sessions_device(
+    hass: HomeAssistant,
+    aioclient_responses: ResponseMocks,
+    freezer,
+    enable_custom_integrations,
+    monkeypatch,
+    force_fallback: bool,
+) -> None:
+    """Setup removes the obsolete Battery Sessions umbrella device.
+
+    Covers both the preferred registry lookup and the fallback used when
+    async_get_device_by_identifier is missing (older HA Core).
+    """
+    entry = await _prepare_unauthenticated_entry(hass, aioclient_responses, freezer)
+
+    identifier = (DOMAIN, f"{entry.entry_id}_{SERVICE_NAME_BATTERY_SESSIONS}")
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={identifier},
+        name="Frank Energie - Battery Sessions",
+    )
+    assert _find_device(device_registry, entry.entry_id, identifier)
+
+    if force_fallback:
+        import custom_components.frank_energie as frank_energie_init
+
+        monkeypatch.setattr(frank_energie_init, "_HAS_DEVICE_BY_IDENTIFIER", False)
+        # Also remove the modern method itself: if setup ignored the flag
+        # above and called it anyway, it should fail loudly here rather than
+        # this test passing by accident.
+        monkeypatch.delattr(
+            type(device_registry), "async_get_device_by_identifier", raising=False
+        )
+        spy = MagicMock(wraps=device_registry.async_get_device)
+        monkeypatch.setattr(device_registry, "async_get_device", spy)
+    else:
+        if not hasattr(device_registry, "async_get_device_by_identifier"):
+            pytest.skip(
+                "async_get_device_by_identifier is unavailable on this HA "
+                "Core; nothing to spy on for the preferred-lookup branch."
+            )
+        # Spy on the call itself rather than trusting the parametrize label:
+        # on an environment where the installed HA Core naturally lacks
+        # async_get_device_by_identifier, force_fallback=False would silently
+        # take the same branch as the fallback case above, and this test
+        # would pass without ever having exercised the preferred lookup.
+        spy = MagicMock(wraps=device_registry.async_get_device_by_identifier)
+        monkeypatch.setattr(device_registry, "async_get_device_by_identifier", spy)
+
+    result = await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert result is True
+    assert spy.called
+    assert _find_device(device_registry, entry.entry_id, identifier) is None
 
 
 async def test_setup_entry_auth_failure(
