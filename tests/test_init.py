@@ -124,6 +124,10 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
         import custom_components.frank_energie as frank_energie_init
 
         monkeypatch.setattr(frank_energie_init, "_HAS_DEVICE_BY_IDENTIFIER", False)
+        # Also remove the modern method itself: if setup ignored the flag
+        # above and called it anyway, it should fail loudly here rather than
+        # this test passing by accident.
+        monkeypatch.delattr(type(device_registry), "async_get_device_by_identifier")
 
     result = await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
