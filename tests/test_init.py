@@ -133,6 +133,11 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
         spy = MagicMock(wraps=device_registry.async_get_device)
         monkeypatch.setattr(device_registry, "async_get_device", spy)
     else:
+        if not hasattr(device_registry, "async_get_device_by_identifier"):
+            pytest.skip(
+                "async_get_device_by_identifier is unavailable on this HA "
+                "Core; nothing to spy on for the preferred-lookup branch."
+            )
         # Spy on the call itself rather than trusting the parametrize label:
         # on an environment where the installed HA Core naturally lacks
         # async_get_device_by_identifier, force_fallback=False would silently
