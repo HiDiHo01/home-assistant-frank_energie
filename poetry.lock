@@ -2016,14 +2016,14 @@ habluetooth = ">=4.0"
 
 [[package]]
 name = "homeassistant"
-version = "2026.9.1"
+version = "2026.9.2"
 description = "Open-source home automation platform running on Python 3."
 optional = false
 python-versions = ">=3.14.2"
 groups = ["dev"]
 files = [
-    {file = "homeassistant-2026.9.1-py3-none-any.whl", hash = "sha256:7f80a3bc2f6d7e570643e061066827e8375ef4e85306cc75b40b66a0e3901f4c"},
-    {file = "homeassistant-2026.9.1.tar.gz", hash = "sha256:cde0b3c16b95a15b8182d2f3eb874e73689f72e8bceeb6399d4295272408142b"},
+    {file = "homeassistant-2026.9.2-py3-none-any.whl", hash = "sha256:2fbe341e624cf61510c2f32b3830828675a0de0253f173aadda78efc44c29b6b"},
+    {file = "homeassistant-2026.9.2.tar.gz", hash = "sha256:0a79cd4f13642bea4ed18733699891a0da651f6b3be1fcc2bfb5c459dc6f77e1"},
 ]
 
 [package.dependencies]
@@ -3845,21 +3845,21 @@ pytest = ">=7.0.0"
 
 [[package]]
 name = "pytest-homeassistant-custom-component"
-version = "0.13.364"
+version = "0.13.365"
 description = "Experimental package to automatically extract test plugins for Home Assistant custom components"
 optional = false
 python-versions = ">=3.14"
 groups = ["dev"]
 files = [
-    {file = "pytest_homeassistant_custom_component-0.13.364-py3-none-any.whl", hash = "sha256:47b0a3545b32521e151ad5cf4a9a11033395f0f13215854006bec1070fd18e1d"},
-    {file = "pytest_homeassistant_custom_component-0.13.364.tar.gz", hash = "sha256:28d7de7c94b380a5668654efdb498e1dab4242bf23498bb23456f19a2e965fca"},
+    {file = "pytest_homeassistant_custom_component-0.13.365-py3-none-any.whl", hash = "sha256:b551f29962ef77c4590fa66f01835b725085468e8ac3c03b05a5a1a86734b48f"},
+    {file = "pytest_homeassistant_custom_component-0.13.365.tar.gz", hash = "sha256:52d746181ca59bbc893a01ea45f40482aa6b313c617dfc481ce3dc85eec51353"},
 ]
 
 [package.dependencies]
 aiohasupervisor = "0.6.0"
 coverage = "7.15.4"
 freezegun = "1.5.5"
-homeassistant = "2026.9.1"
+homeassistant = "2026.9.2"
 license-expression = "30.4.3"
 mock-open = "1.4.0"
 numpy = "2.3.2"
@@ -5303,4 +5303,4 @@ ifaddr = ">=0.1.7"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14.2,<4.0"
-content-hash = "051df37f91561a6163864562acf4b1cacbfbd10bed64cd05ef389a56c65b0f78"
+content-hash = "3ed187761e4e225473992f9efb7e82a5b7cae1ad9dae30b8469cbd1217ae8623"
