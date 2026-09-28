@@ -3984,14 +3984,14 @@ six = ">=1.5"
 
 [[package]]
 name = "python-frank-energie"
-version = "2026.9.9.post2"
+version = "2026.9.20"
 description = "Asynchronous Python client for the Frank Energie integration"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "python_frank_energie-2026.9.9.post2-py3-none-any.whl", hash = "sha256:695a424573ba8a46cf63ccca00a411cba446ee729a6d3443a5951a0564be4ce6"},
-    {file = "python_frank_energie-2026.9.9.post2.tar.gz", hash = "sha256:f7e815541cb34fdfb9fcf8ad8cd74bfeb824a9da84bee85df8b419b4b30176ac"},
+    {file = "python_frank_energie-2026.9.20-py3-none-any.whl", hash = "sha256:cf6df26a4c3f2fea0b9c47872b9dcba71bc76b55991b0a99400fac7289d007b2"},
+    {file = "python_frank_energie-2026.9.20.tar.gz", hash = "sha256:59ac062238371699d09037ef60af6d6d0af3ee31454e5df3b13d15330b2354f7"},
 ]
 
 [package.dependencies]
