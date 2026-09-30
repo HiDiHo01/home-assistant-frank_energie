@@ -459,7 +459,7 @@
         "name": "Current electricity sourcing markup"
       },
       "current_electricity_tax_price": {
-        "name": "Current electricity VAT price"
+        "name": "Current electricity VAT on market price"
       },
       "delivered_feed_in_yesterday": {
         "name": "Delivered feed-in yesterday"
@@ -558,7 +558,7 @@
         "name": "Previous quarter-hour electricity market price"
       },
       "elec_tax_only": {
-        "name": "Current electricity tax only"
+        "name": "Current electricity energy tax (incl. VAT)"
       },
       "elec_tomorrow_max": {
         "name": "Highest electricity price tomorrow (All-in)"
@@ -667,10 +667,10 @@
         "name": "Current gas price including tax and markup"
       },
       "gas_tax_only": {
-        "name": "Current gas VAT only"
+        "name": "Current gas VAT on market price"
       },
       "gas_tax_vat": {
-        "name": "Current gas energy tax"
+        "name": "Current gas energy tax (incl. VAT)"
       },
       "gas_today_avg_all_in": {
         "name": "Average gas price today (All-in)"
