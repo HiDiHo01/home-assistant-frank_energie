@@ -147,7 +147,7 @@
         "name": "Huidige elektriciteit inkoopprijs + BTW + inkoopvergoeding"
       },
       "current_electricity_tax_price": {
-        "name": "Huidige elektriciteit BTW prijs"
+        "name": "Huidige elektriciteit BTW over marktprijs"
       },
       "current_electricity_sourcing_markup": {
         "name": "Huidige elektriciteit inkoopvergoeding"
@@ -159,7 +159,7 @@
         "name": "Variabele elektriciteitsprijs per kWh"
       },
       "elec_tax_only": {
-        "name": "Elektriciteit energiebelasting per kWh"
+        "name": "Huidige elektriciteit energiebelasting incl. BTW"
       },
       "elec_market_percent_tax": {
         "name": "Elektriciteit procent BTW"
@@ -267,13 +267,13 @@
         "name": "Huidige gas marktprijs"
       },
       "gas_tax_vat": {
-        "name": "Huidige gas energiebelasting prijs"
+        "name": "Huidige gas energiebelasting incl. BTW"
       },
       "gas_sourcing": {
         "name": "Huidige gas inkoopvergoeding prijs"
       },
       "gas_tax_only": {
-        "name": "Huidige gas BTW prijs"
+        "name": "Huidige gas BTW over marktprijs"
       },
       "gas_today_avg_all_in": {
         "name": "Gemiddelde gasprijs vandaag (All-in)"
