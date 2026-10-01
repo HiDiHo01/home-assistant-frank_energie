@@ -936,16 +936,28 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Skipping user sites fetch because the client is not authenticated"
             )
             return None
+
         try:
             sites = await self.api.UserSites()
-            if "ELECTRICITY" in sites.segments:
-                self.user_electricity_enabled = True
-            if "GAS" in sites.segments:
-                self.user_gas_enabled = True
-            return sites
         except AuthException as ex:
-            _LOGGER.warning("Authentication failed while fetching user sites: %s", ex)
+            _LOGGER.warning(
+                "Authentication failed while fetching user sites: %s",
+                ex,
+            )
             return None
+        except RequestException as ex:
+            _LOGGER.warning(
+                "Failed to fetch user sites: %s",
+                ex,
+            )
+            return None
+
+        if "ELECTRICITY" in sites.segments:
+            self.user_electricity_enabled = True
+        if "GAS" in sites.segments:
+            self.user_gas_enabled = True
+
+        return sites
 
     async def _fetch_month_summary(self) -> MonthSummary | None:
         """Fetch month summary from the API."""
