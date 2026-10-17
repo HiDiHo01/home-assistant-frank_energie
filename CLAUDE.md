@@ -4,29 +4,35 @@
 
 - Python 3.14+
 - Use timezone-aware datetimes
-- Use datetime.UTC
+- Use `datetime.UTC`
 - Use type hints everywhere
-- Use object for internal helpers
-- Use Any only for Home Assistant public APIs
+- Use `object` for internal helpers
+- Use `Any` only for Home Assistant public APIs
 
 ## Home Assistant Standards
 
-- Use CoordinatorEntity
-- Use DataUpdateCoordinator
-- Use ConfigEntry.runtime_data
-- Use extra_state_attributes
-- Never use device_state_attributes
+- Use `CoordinatorEntity`
+- Use `DataUpdateCoordinator`
+- Use `ConfigEntry.runtime_data`
+- Use `extra_state_attributes`
+- Never use `device_state_attributes`
 - Use async APIs whenever available
 
 ## Logging
 
-- Use lazy formatting
+Use lazy formatting.
 
 GOOD:
+
+```python
 LOGGER.debug("Site reference: %s", site_reference)
+```
 
 BAD:
+
+```python
 LOGGER.debug(f"Site reference: {site_reference}")
+```
 
 ## Dataclasses
 
@@ -53,7 +59,6 @@ LOGGER.debug(f"Site reference: {site_reference}")
 - Improve type safety
 - Follow HA Core patterns
 
+## Frank Energie-Specific Guidance
 
-## Detailed Home Assistant Guidance
-
-Follow [`home-assistant.md`](home-assistant.md) for repository-specific Home Assistant architecture, lifecycle, async/coordinator, entity/device, testing, privacy, and Quality Scale requirements. Follow `AGENTS.md` and `AI_POLICY.md` for instruction precedence and review requirements.
+Follow [`home-assistant.md`](home-assistant.md) for integration-specific invariants: config-entry and site isolation, resource lifecycles, nullable upstream fields, UTC versus Amsterdam-local time, cache integrity, and accurate service claims. Use `AGENTS.md` and `AI_POLICY.md` for broader repository instructions.
