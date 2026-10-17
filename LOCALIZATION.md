@@ -32,7 +32,7 @@ Prefer Home Assistant's native translation mechanisms. Do not hard-code user-fac
 
 1. **Inspect the implementation.** Identify the relevant config-flow step, entity description, state attribute, option, or other user-facing behavior before editing translation files.
 2. **Update the canonical structure.** Add or change translation keys in `strings.json`.
-3. **Update every supported locale.** Apply the same key and nesting changes to all four files: `translations/en.json`, `translations/fr.json`, `translations/nl.json`, and `translations/nl-BE.json`. More generally, update every file matched by `translations/*.json), including any locale added in the future. Translate values naturally for each locale; do not copy English text into another language merely to satisfy key parity.
+3. **Update every supported locale.** Apply the same key and nesting changes to all four files: `translations/en.json`, `translations/fr.json`, `translations/nl.json`, and `translations/nl-BE.json`. More generally, update every file matched by `translations/*.json`, including any locale added in the future. Translate values naturally for each locale; do not copy English text into another language merely to satisfy key parity.
 4. **Keep the schema identical.** All nested keys and their paths must match `strings.json` exactly in every locale. Do not add locale-specific keys or leave unused/orphaned keys.
 5. **Check the code-to-translation mapping.** New entity descriptions must use the appropriate translation key. If code emits state attributes, ensure each user-visible attribute has a corresponding translation.
 6. **Validate the JSON and tests.** Run the focused translation tests and then the full test suite when practical (see below).
