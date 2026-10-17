@@ -44,9 +44,9 @@ AI-generated code should:
 - avoid dead code, duplicate logic, and unnecessary dependencies
 - maintain backwards compatibility unless a breaking change is intentional and documented
 
-## Home Assistant development guide
+## Frank Energie-specific guidance
 
-Follow the repository's [`home-assistant.md`](home-assistant.md) for detailed Home Assistant API, architecture, testing, privacy, and Quality Scale requirements. Verify the current official documentation before relying on API behavior.
+Follow [`home-assistant.md`](home-assistant.md) for integration-specific invariants: config-entry and site isolation, distinct resource lifecycles, nullable upstream data, UTC versus Amsterdam-local time, cache integrity, and accurate service claims. Use the official Home Assistant developer documentation to verify current APIs.
 
 ## Home Assistant specific requirements
 
