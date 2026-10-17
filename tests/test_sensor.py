@@ -703,12 +703,20 @@ async def _parent_and_child_devices_after_add(
     await platform.async_add_entities([sensor])
 
     dev_reg = dr.async_get(hass)
-    parent = dev_reg.async_get_device_by_identifier(
-        (DOMAIN, f"{entry.entry_id}_{service_name}"), config_entry_id=entry.entry_id
-    )
-    child = dev_reg.async_get_device_by_identifier(
-        next(iter(sensor.device_info["identifiers"])), config_entry_id=entry.entry_id
-    )
+    if hasattr(dev_reg, "async_get_device_by_identifier"):
+        parent = dev_reg.async_get_device_by_identifier(
+            (DOMAIN, f"{entry.entry_id}_{service_name}"), config_entry_id=entry.entry_id
+        )
+        child = dev_reg.async_get_device_by_identifier(
+            next(iter(sensor.device_info["identifiers"])), config_entry_id=entry.entry_id
+        )
+    else:
+        parent = dev_reg.async_get_device(
+            identifiers={(DOMAIN, f"{entry.entry_id}_{service_name}")}
+        )
+        child = dev_reg.async_get_device(
+            identifiers=sensor.device_info["identifiers"]
+        )
     return parent, child
 
 
@@ -732,11 +740,13 @@ async def test_enode_charger_device_nests_under_parent(
     from custom_components.frank_energie.sensor import (
         ENODE_CHARGER_SENSOR_TYPES,
         EnodeChargerSensor,
+        _HAS_VIA_DEVICE_ID,
     )
 
     entry = MockConfigEntry(domain=DOMAIN, unique_id="test")
     entry.add_to_hass(hass)
     coordinator = MagicMock()
+    coordinator.config_entry = entry
     coordinator.data = {}
     coordinator.last_update_success = True
 
@@ -746,7 +756,10 @@ async def test_enode_charger_device_nests_under_parent(
         d for d in ENODE_CHARGER_SENSOR_TYPES if d.key == "charger_brand"
     )
     sensor = EnodeChargerSensor(coordinator, description, charger, via_device_id)
-    assert "via_device" not in sensor.device_info
+    if _HAS_VIA_DEVICE_ID:
+        assert "via_device" not in sensor.device_info
+    else:
+        assert "via_device" in sensor.device_info
 
     parent, child = await _parent_and_child_devices_after_add(
         hass, entry, sensor, SERVICE_NAME_ENODE_CHARGERS
@@ -768,6 +781,7 @@ async def test_smart_battery_device_nests_under_parent(hass: HomeAssistant) -> N
     from custom_components.frank_energie.sensor import (
         STATIC_BATTERY_SENSOR_TYPES,
         FrankEnergieSmartBatterySensor,
+        _HAS_VIA_DEVICE_ID,
     )
 
     entry = MockConfigEntry(domain=DOMAIN, unique_id="test")
@@ -786,7 +800,10 @@ async def test_smart_battery_device_nests_under_parent(hass: HomeAssistant) -> N
         "Sessy",
         via_device_id,
     )
-    assert "via_device" not in sensor.device_info
+    if _HAS_VIA_DEVICE_ID:
+        assert "via_device" not in sensor.device_info
+    else:
+        assert "via_device" in sensor.device_info
 
     parent, child = await _parent_and_child_devices_after_add(
         hass, entry, sensor, SERVICE_NAME_BATTERIES
