@@ -37,13 +37,13 @@ def test_translation_keys_alignment():
     json_files.append(STRINGS_FILE)
 
     file_names = {file_path.name for file_path in json_files}
-    required_files = {"strings.json", "en.json", "fr.json", "nl.json"}
+    required_files = {"strings.json", "en.json", "fr.json", "nl.json", "nl-BE.json"}
 
     missing_files = required_files - file_names
     assert not missing_files, (
         "Missing required translation files: "
         f"{', '.join(sorted(missing_files))}. "
-        "Expected at least strings.json, en.json, and nl.json to be present."
+        "Expected strings.json and all supported locale files (en.json, fr.json, nl.json, nl-BE.json) to be present."
     )
 
     translations = {}
