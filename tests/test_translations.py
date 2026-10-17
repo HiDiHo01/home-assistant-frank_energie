@@ -37,7 +37,7 @@ def test_translation_keys_alignment():
     json_files.append(STRINGS_FILE)
 
     file_names = {file_path.name for file_path in json_files}
-    required_files = {"strings.json", "en.json", "nl.json"}
+    required_files = {"strings.json", "en.json", "fr.json", "nl.json"}
 
     missing_files = required_files - file_names
     assert not missing_files, (
