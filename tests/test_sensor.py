@@ -708,15 +708,14 @@ async def _parent_and_child_devices_after_add(
             (DOMAIN, f"{entry.entry_id}_{service_name}"), config_entry_id=entry.entry_id
         )
         child = dev_reg.async_get_device_by_identifier(
-            next(iter(sensor.device_info["identifiers"])), config_entry_id=entry.entry_id
+            next(iter(sensor.device_info["identifiers"])),
+            config_entry_id=entry.entry_id,
         )
     else:
         parent = dev_reg.async_get_device(
             identifiers={(DOMAIN, f"{entry.entry_id}_{service_name}")}
         )
-        child = dev_reg.async_get_device(
-            identifiers=sensor.device_info["identifiers"]
-        )
+        child = dev_reg.async_get_device(identifiers=sensor.device_info["identifiers"])
     return parent, child
 
 
