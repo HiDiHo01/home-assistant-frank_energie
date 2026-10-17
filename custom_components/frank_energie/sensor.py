@@ -6,6 +6,7 @@ Sensor platform for Frank Energie integration."""
 # VERSION = "2026.6.21"
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
@@ -37,6 +38,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -110,6 +112,11 @@ from .statistics import lowest_window
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
+
+_HAS_VIA_DEVICE_ID: Final[bool] = (
+    "via_device_id"
+    in inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
+)
 
 
 def _format_battery_date(date_val) -> datetime | None:
@@ -4240,7 +4247,17 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
             name=charger_name,
         )
         if via_device_id:
-            self._attr_device_info["via_device_id"] = via_device_id
+            if _HAS_VIA_DEVICE_ID:
+                self._attr_device_info["via_device_id"] = via_device_id
+            else:
+                config_entry = getattr(coordinator, "config_entry", None)
+                entry_id = getattr(config_entry, "entry_id", None)
+                if not isinstance(entry_id, str):
+                    entry_id = "mock_entry_id"
+                self._attr_device_info["via_device"] = (
+                    DOMAIN,
+                    f"{entry_id}_{SERVICE_NAME_ENODE_CHARGERS}",
+                )
 
     def _get_charger(self) -> Any | None:
         """Look up the current charger object from coordinator data by ID."""
@@ -4478,6 +4495,7 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, description, entry)
+        self._entry = entry
         self._battery_id = battery_id
         self._battery_name = battery_name
         self._battery_brand = battery_brand
@@ -4494,7 +4512,13 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
             model="SmartBattery",
         )
         if self._via_device_id:
-            info["via_device_id"] = self._via_device_id
+            if _HAS_VIA_DEVICE_ID:
+                info["via_device_id"] = self._via_device_id
+            elif isinstance(getattr(self._entry, "entry_id", None), str):
+                info["via_device"] = (
+                    DOMAIN,
+                    f"{self._entry.entry_id}_{SERVICE_NAME_BATTERIES}",
+                )
         return info
 
 
