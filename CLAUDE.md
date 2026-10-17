@@ -52,3 +52,8 @@ LOGGER.debug(f"Site reference: {site_reference}")
 - Minimize lambda complexity
 - Improve type safety
 - Follow HA Core patterns
+
+
+## Detailed Home Assistant Guidance
+
+Follow [`home-assistant.md`](home-assistant.md) for repository-specific Home Assistant architecture, lifecycle, async/coordinator, entity/device, testing, privacy, and Quality Scale requirements. Follow `AGENTS.md` and `AI_POLICY.md` for instruction precedence and review requirements.
