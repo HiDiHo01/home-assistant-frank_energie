@@ -7,9 +7,12 @@ This document defines how to maintain translations for the Frank Energie Home As
 The integration currently maintains these locales:
 
 - English: `custom_components/frank_energie/translations/en.json`
+- French: `custom_components/frank_energie/translations/fr.json`
 - Dutch: `custom_components/frank_energie/translations/nl.json`
 
-The integration's `custom_components/frank_energie/strings.json` is the canonical translation-key structure. Keep every locale structurally aligned with it. The repository's `tests/test_translations.py` explicitly requires `strings.json`, `en.json`, and `nl.json`.
+The integration's `custom_components/frank_energie/strings.json` is the canonical translation-key structure. Keep every locale structurally aligned with it. The repository's `tests/test_translations.py` explicitly requires `strings.json`, `en.json`, `fr.json`, and `nl.json`.
+
+Use `fr.json` for French-language users; keep labels idiomatic in French while preserving technical identifiers, API enum values, placeholders, and Home Assistant shared translation references.
 
 ## What must be localized
 
