@@ -24,7 +24,7 @@ Before changing any code:
 
 1. Inspect the repository structure and identify the integration domain.
 2. Read the root `AGENTS.md`, if present, and all applicable nested `AGENTS.md` files.
-3. Read `AI_POLICY.md` if present in the repository root, `.github/`, or `docs/`.
+3. Read `home-assistant.md` and `AI_POLICY.md` if present in the repository root, `.github/`, or `docs/`.
 4. Inspect `manifest.json`, `const.py`, `__init__.py`, `config_flow.py`, entity platforms, coordinators, translations, tests, dependency declarations, and CI workflows as relevant.
 5. Inspect the existing architecture and preserve established conventions unless there is a concrete reason to change them.
 6. Identify the latest stable Home Assistant version, supported Python version, relevant API changes, and applicable deprecations.
