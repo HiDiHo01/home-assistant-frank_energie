@@ -22,7 +22,9 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
-            developers.home-assistant.io
+            developers.home-assistant.io:443
+            contributors.home-assistant.io:443
+            analytics.home-assistant.io:443
             api.github.com:443
             raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
