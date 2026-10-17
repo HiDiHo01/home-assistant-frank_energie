@@ -44,6 +44,10 @@ AI-generated code should:
 - avoid dead code, duplicate logic, and unnecessary dependencies
 - maintain backwards compatibility unless a breaking change is intentional and documented
 
+## Home Assistant development guide
+
+Follow the repository's [`home-assistant.md`](home-assistant.md) for detailed Home Assistant API, architecture, testing, privacy, and Quality Scale requirements. Verify the current official documentation before relying on API behavior.
+
 ## Home Assistant specific requirements
 
 AI-assisted changes should:
