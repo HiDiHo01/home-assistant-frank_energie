@@ -67,6 +67,7 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
     SUPPORTED_COUNTRIES,
+    SUPPORTED_RESOLUTIONS,
     COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
@@ -2294,14 +2295,30 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     @property
     def resolution(self) -> str:
-        """Effective price resolution used for API queries."""
+        """Return a GraphQL-supported resolution, even for non-dynamic contracts.
+
+        An authenticated account can return an empty or unsupported
+        contractPriceResolutionState.activeOption. Never pass that value
+        straight into GraphQL's required PriceResolution enum.
+        """
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
 
-        if self._api_resolution_state and not self._resolution_change_pending:
-            return self._api_resolution_state.activeOption
+        configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        if configured not in SUPPORTED_RESOLUTIONS:
+            configured = DEFAULT_RESOLUTION
 
-        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        if self._api_resolution_state and not self._resolution_change_pending:
+            active = self._api_resolution_state.activeOption
+            if active in SUPPORTED_RESOLUTIONS:
+                return active
+            _LOGGER.debug(
+                "Ignoring unsupported contract price resolution %r; using %s",
+                active,
+                configured,
+            )
+
+        return configured
 
     @property
     def api_resolution(self) -> str | None:
