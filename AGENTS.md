@@ -429,17 +429,6 @@ Use `AsyncMock` for asynchronous dependencies where appropriate.
 
 Do not weaken assertions, skip meaningful tests, or mock the code under test so extensively that the test proves nothing.
 
-### Regression test preservation
-
-* Preserve existing regression tests during bug fixes, refactoring, merges, and conflict resolution.
-* Do not delete, weaken, skip, or replace a regression test unless equivalent or stronger coverage is retained and the reason is documented.
-* When migrating tests, preserve relevant parameterized scenarios, assertions, edge cases, and observable API behavior.
-* Test authenticated and unauthenticated paths when authentication changes behavior; cover supported, missing, empty, and invalid upstream values as applicable.
-* Assert the actual outbound API arguments when changing request construction, including price resolution sent to GraphQL.
-* Review removed test files and reduced parameterized coverage explicitly in the final PR diff against the target branch.
-* After merges or conflict resolution, confirm previously implemented fixes and regression tests remain present.
-* Run affected regression tests and configured validation checks; report any checks that could not be executed.
-
 ### Test quality
 
 * Test observable behavior rather than private implementation details wherever practical.
