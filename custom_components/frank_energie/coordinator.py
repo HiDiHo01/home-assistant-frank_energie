@@ -2295,23 +2295,30 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     @property
     def resolution(self) -> str:
-        """Effective price resolution used for API queries."""
+        """Return a supported effective price resolution."""
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
+
+        configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        if configured not in SUPPORTED_RESOLUTIONS:
+            configured = DEFAULT_RESOLUTION
 
         if (
             self.api.is_authenticated
             and self._api_resolution_state
             and not self._resolution_change_pending
         ):
-            res = self._api_resolution_state.activeOption
-        else:
-            res = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+            active = self._api_resolution_state.activeOption
+            if active in SUPPORTED_RESOLUTIONS:
+                return active
 
-        if res not in SUPPORTED_RESOLUTIONS:
-            return DEFAULT_RESOLUTION
+            _LOGGER.debug(
+                "Ignoring unsupported contract price resolution %r; using %s",
+                active,
+                configured,
+            )
 
-        return res
+        return configured
 
     @property
     def api_resolution(self) -> str | None:
