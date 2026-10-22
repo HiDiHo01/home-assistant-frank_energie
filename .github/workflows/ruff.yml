@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "custom_components/**/*.py"
+      - "tests/**/*.py"
       - "pyproject.toml"
+      - ".github/workflows/ruff.yml"
 
 permissions:
   contents: read
@@ -47,10 +49,10 @@ jobs:
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
           version: "0.15.18"
-          args: "check custom_components"
+          args: "check custom_components tests"
 
       - name: Ruff format check
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
           version: "0.15.18"
-          args: "format --check custom_components"
+          args: "format --check custom_components tests"
