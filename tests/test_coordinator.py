@@ -936,8 +936,7 @@ async def test_dynamic_fetch_non_network_errors_ignored(
 async def test_fetch_contract_price_resolution_state_skips_when_unauthenticated_or_no_conn_id(
     coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
 ) -> None:
-    """Test that _fetch_contract_price_resolution_state
-        None and skips API fetch when unauthenticated or connection_id is missing."""
+    """Test that unauthenticated or missing connection IDs skip API fetches."""
     mock_frank_energie.is_authenticated = False
     mock_frank_energie.contract_price_resolution_state = AsyncMock()
 
@@ -1244,8 +1243,7 @@ async def test_price_coordinator_before_window(
 async def test_price_coordinator_inside_window(
     mock_frank_energie, mock_config_entry, monkeypatch
 ) -> None:
-    """Test that price coordinator update interval is 5 minutes
-        local 13:00 to 15:00 when tomorrow's prices are not cached."""
+    """Test the five-minute update interval when tomorrow prices are not cached."""
     # Mock utcnow to 12:00 UTC (14:00 local time CEST on May 27th)
     mock_now = datetime(2026, 5, 27, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
     from homeassistant.util import dt as dt_util
