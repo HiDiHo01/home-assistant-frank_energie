@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
@@ -627,6 +628,33 @@ class TestReconcileResolution:
             mock_logger.warning.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("is_authenticated", "change_pending", "expected_resolution"),
+    [
+        (False, False, "PT60M"),
+        (False, True, "PT60M"),
+        (True, False, "PT15M"),
+        (True, True, "PT60M"),
+    ],
+)
+def test_resolution_uses_applicable_source(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    is_authenticated: bool,
+    change_pending: bool,
+    expected_resolution: str,
+) -> None:
+    """Only authenticated prices use API resolution when no change is pending."""
+    mock_frank_energie.is_authenticated = is_authenticated
+    coordinator.config_entry = MockConfigEntry(
+        domain="frank_energie", options={"resolution": "PT60M"}
+    )
+    coordinator._api_resolution_state = MagicMock(activeOption="PT15M")
+    coordinator._resolution_change_pending = change_pending
+
+    assert coordinator.resolution == expected_resolution
+
+
 class TestApiResolutionProperty:
     """Tests for the new api_resolution property."""
 
@@ -659,6 +687,34 @@ class TestApiResolutionProperty:
 
 class TestAsyncSetResolution:
     """Tests for the new async_set_resolution method."""
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_change_ignores_stale_api_resolution(
+        self,
+        hass: HomeAssistant,
+        coordinator: FrankEnergieCoordinator,
+        mock_config_entry: MockConfigEntry,
+        mock_frank_energie: AsyncMock,
+    ) -> None:
+        """Public price requests use the newly saved option despite stale API state."""
+        mock_config_entry.add_to_hass(hass)
+        coordinator.hass = hass
+        mock_frank_energie.is_authenticated = False
+        coordinator._api_resolution_state = MagicMock(activeOption="PT15M")
+        coordinator.async_request_refresh = AsyncMock()
+
+        await coordinator.async_set_resolution("PT60M")
+        start_date = date(2026, 10, 22)
+        await coordinator._fetch_public_prices_for_range(
+            start_date, start_date + timedelta(days=1), "NL"
+        )
+
+        assert mock_config_entry.options["resolution"] == "PT60M"
+        coordinator.async_request_refresh.assert_awaited_once()
+        mock_frank_energie.prices.assert_awaited_once_with(
+            start_date, resolution="PT60M"
+        )
+        mock_frank_energie.contract_price_resolution_request_change.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_raises_update_failed_when_no_connection_id(self, coordinator):

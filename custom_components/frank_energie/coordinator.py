@@ -2299,7 +2299,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
 
-        if self._api_resolution_state and not self._resolution_change_pending:
+        if (
+            self.api.is_authenticated
+            and self._api_resolution_state
+            and not self._resolution_change_pending
+        ):
             res = self._api_resolution_state.activeOption
         else:
             res = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
