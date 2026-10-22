@@ -475,6 +475,16 @@ If a tool cannot be run in the available environment, report that limitation and
 
 Do not add broad lint suppressions or typing ignores to conceal defects. Every necessary suppression must be narrow and justified.
 
+### Flake8, Ruff, and existing lint debt
+
+* Keep Flake8 and Ruff checks consistent with the repository's actual configuration. Run both lint and formatting checks against integration code **and tests**; ensure test-only changes trigger the applicable CI checks.
+* Preserve blocking checks for critical Flake8 errors (`E9`, `F63`, `F7`, `F82`). Do not use job-level `continue-on-error` to hide failures or prevent pytest from running unnecessarily.
+* Resolve existing `E501` line-length violations by wrapping expressions, strings, and comments without changing runtime behavior, log parameters, or assertions. Prefer focused formatting changes over unrelated refactors.
+* For `E203` slice-spacing diagnostics, align Flake8 with Ruff/Black-compatible formatting using a documented, targeted configuration exclusion instead of rewriting correctly formatted slices or broadly disabling linting.
+* Treat `C901` cyclomatic-complexity findings as refactoring work, not formatting defects. Extract cohesive helpers and reduce nesting while preserving async behavior, entity registration, error handling, and regression coverage. Do not weaken the configured complexity threshold merely to obtain green CI.
+* When enforcing a previously informational lint rule, first measure pre-existing violations. Keep the transition explicit and narrowly scoped, with a follow-up to make the full check blocking once the debt is resolved; do not silently suppress new violations.
+* Run the configured Python-version matrix and relevant pytest suites after lint changes. Review the complete diff and report checks that have not yet completed; never claim a PR is clean based only on the absence of current annotations.
+
 ## 17. Home Assistant Integration Quality Scale
 
 Use the official Integration Quality Scale as the architectural and user-experience benchmark.
