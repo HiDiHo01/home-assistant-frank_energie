@@ -630,9 +630,7 @@ class TestReconcileResolution:
 class TestResolutionProperty:
     """Tests for the resolution property."""
 
-    def test_resolution_uses_config_option_when_unauthenticated(
-        self, coordinator: FrankEnergieCoordinator
-    ) -> None:
+    def test_resolution_uses_config_option_when_unauthenticated(self, coordinator):
         """resolution property must use config_entry option when API is not authenticated."""
         from unittest.mock import PropertyMock
 
