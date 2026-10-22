@@ -87,6 +87,7 @@ from .const import (
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
     DEFAULT_RESOLUTION,
+    SUPPORTED_RESOLUTIONS,
     EVENT_FRANK_ENERGIE,
     CONF_INTERVAL_SETTINGS,
     CONF_INTERVAL_STATISTICS,
@@ -2299,9 +2300,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return DEFAULT_RESOLUTION
 
         if self._api_resolution_state and not self._resolution_change_pending:
-            return self._api_resolution_state.activeOption
+            res = self._api_resolution_state.activeOption
+        else:
+            res = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        if res not in SUPPORTED_RESOLUTIONS:
+            return DEFAULT_RESOLUTION
+
+        return res
 
     @property
     def api_resolution(self) -> str | None:
@@ -2564,7 +2570,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return True
 
         cached_res = price_series.resolution_minutes
-        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        config_value = self.resolution
         expected_res = 15 if config_value == "PT15M" else 60
 
         if cached_res != expected_res:
