@@ -2246,15 +2246,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             "Resolution change not possible at this time "
                             "(contract does not allow changes or cooling-off period active)"
                         )
+                        resolution_state = self._api_resolution_state
+                        upcoming_change = (
+                            resolution_state.upcomingChange if resolution_state else "unknown"
+                        )
+                        effective_date = (
+                            resolution_state.upcomingChangeEffectiveDate
+                            if resolution_state
+                            else "unknown"
+                        )
                         async_create(
                             self.hass,
                             message=(
                                 "Resolution change is not possible at this time. "
                                 "Your contract may not allow changes or a cooling-off period is active. "
-                                f"Upcoming change: "
-                                f"{self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
-                                f"(effective: "
-                                f"{self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
+                                f"Upcoming change: {upcoming_change} "
+                                f"(effective: {effective_date})"
                             ),
                             title="Frank Energie - Resolution Change Failed",
                             notification_id="frank_energie_resolution_change_failed",
