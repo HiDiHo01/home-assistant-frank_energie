@@ -5249,7 +5249,6 @@ async def async_setup_entry(
         batteries := battery_coordinator.data.get(DATA_BATTERIES)
     ) and batteries.batteries:
         _LOGGER.debug("Setting up smart battery sensors: %s", batteries)
-        # SmartBatteries(smart_batteries=[SmartBatteries.SmartBattery(brand='Sessy', capacity=5.2, external_reference='AJM6UPPP', id='cm3sunryl0000tc3nhygweghn', max_charge_power=2.2, max_discharge_power=1.7, provider='SESSY', created_at=datetime.datetime(2024, 11, 22, 14, 41, 47, 853000, tzinfo=datetime.timezone.utc), updated_at=datetime.datetime(2025, 2, 7, 22, 3, 21, 898000, tzinfo=datetime.timezone.utc))])
         # <class 'python_frank_energie.models.SmartBatteries'>
         _LOGGER.debug("Setting up smart battery type: %s", type(batteries))
         _LOGGER.debug("Number of smart battery sensors: %d", len(batteries.batteries))
@@ -5312,7 +5311,8 @@ async def async_setup_entry(
                 sessions_data = session_coordinator.data
                 if not sessions_data or not getattr(sessions_data, "sessions", None):
                     _LOGGER.debug(
-                        "No session data found in session coordinator for battery %s (entry %s). Sensors will still be created but report unknown state.",
+                        "No session data found in session coordinator for battery %s "
+                        "(entry %s). Sensors will still be created but report unknown state.",
                         battery_id,
                         config_entry.entry_id,
                     )
