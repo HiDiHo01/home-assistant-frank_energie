@@ -300,7 +300,8 @@ def _extract_electricity_connection_id(user_data: Any) -> str | None:
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
     # Python 3.14-3.16
     try:
-        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which is deprecated and can cause issues with aiohttp
+        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which
+        # is deprecated and can cause issues with aiohttp
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     except Exception:
         # fallback for Python 3.17+ where Proactor policy is default and Selector policy is deprecated
@@ -1326,7 +1327,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
         try:
-            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
+            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get
+            # unfinalized live data
             # Missing dynamic totals will be manually reconstructed in sensor.py
             today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
@@ -2249,8 +2251,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             message=(
                                 "Resolution change is not possible at this time. "
                                 "Your contract may not allow changes or a cooling-off period is active. "
-                                f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
-                                f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
+                                f"Upcoming change: "
+                                f"{self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
+                                f"(effective: "
+                                f"{self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
                             ),
                             title="Frank Energie - Resolution Change Failed",
                             notification_id="frank_energie_resolution_change_failed",
@@ -3304,7 +3308,8 @@ class FrankEnergieBatterySessionCoordinator(
             if not self.device_id:
                 raise UpdateFailed("No device ID provided for smart battery sessions.")
 
-            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
+            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get
+            # unfinalized live data
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
             return await self.api.smart_battery_sessions(
                 self.device_id, mtd_start, tomorrow
