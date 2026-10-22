@@ -627,6 +627,75 @@ class TestReconcileResolution:
             mock_logger.warning.assert_not_called()
 
 
+class TestResolutionProperty:
+    """Tests for resolution selection and public price query parameters."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        (
+            "is_authenticated",
+            "api_active_option",
+            "config_option",
+            "pending_change",
+            "expected_resolution",
+        ),
+        [
+            # Authenticated cases
+            (True, "PT60M", "PT15M", False, "PT60M"),
+            (True, "PT60M", "PT15M", True, "PT15M"),
+            (True, "UNSUPPORTED", "PT60M", False, "PT60M"),
+            (True, "UNSUPPORTED", "INVALID", False, "PT15M"),
+            (True, None, "PT60M", False, "PT60M"),
+            (True, "", "PT60M", False, "PT60M"),
+            # Unauthenticated cases
+            (False, "PT60M", "PT15M", False, "PT15M"),
+            (False, "PT15M", "INVALID", False, "PT15M"),
+        ],
+    )
+    async def test_resolution_selection_and_fetch_resolution_parameter(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        is_authenticated: bool,
+        api_active_option: str | None,
+        config_option: str,
+        pending_change: bool,
+        expected_resolution: str,
+    ) -> None:
+        """Verify resolution property selection and the resolution argument in public price queries."""
+        from datetime import date
+        from unittest.mock import PropertyMock
+
+        del coordinator.api.is_authenticated
+        type(coordinator.api).is_authenticated = PropertyMock(
+            return_value=is_authenticated
+        )
+
+        mock_config_entry = MagicMock()
+        mock_config_entry.options = {"resolution": config_option}
+        coordinator.config_entry = mock_config_entry
+
+        coordinator._resolution_change_pending = pending_change
+
+        if api_active_option is not None:
+            mock_state = MagicMock()
+            mock_state.activeOption = api_active_option
+            coordinator._api_resolution_state = mock_state
+        else:
+            coordinator._api_resolution_state = None
+
+        assert coordinator.resolution == expected_resolution
+
+        coordinator.api.prices = AsyncMock(return_value=MagicMock())
+        today = date(2026, 7, 20)
+        tomorrow = date(2026, 7, 21)
+
+        await coordinator._fetch_public_prices_for_range(today, tomorrow, "NL")
+
+        coordinator.api.prices.assert_called_once_with(
+            today, resolution=expected_resolution
+        )
+
+
 class TestApiResolutionProperty:
     """Tests for the new api_resolution property."""
 

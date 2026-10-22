@@ -18,24 +18,31 @@ from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
     (
         "account_resolution",
         "configured_resolution",
+        "authenticated",
         "change_pending",
         "expected_resolution",
     ),
     [
-        (None, "PT15M", False, "PT15M"),
-        (None, "PT60M", False, "PT60M"),
-        ("", "PT15M", False, "PT15M"),
-        ("PT1H", "PT15M", False, "PT15M"),
-        ("PT30M", "PT15M", False, "PT15M"),
-        ("PT15M", "PT60M", False, "PT15M"),
-        ("PT60M", "PT15M", False, "PT60M"),
-        (None, "NOT_A_RESOLUTION", False, "PT15M"),
-        ("PT60M", "PT15M", True, "PT15M"),
+        (None, "PT15M", True, False, "PT15M"),
+        (None, "PT60M", True, False, "PT60M"),
+        ("", "PT15M", True, False, "PT15M"),
+        ("PT1H", "PT15M", True, False, "PT15M"),
+        ("PT30M", "PT15M", True, False, "PT15M"),
+        ("PT15M", "PT60M", True, False, "PT15M"),
+        ("PT60M", "PT15M", True, False, "PT60M"),
+        (None, "NOT_A_RESOLUTION", True, False, "PT15M"),
+        ("PT60M", "PT15M", True, True, "PT15M"),
+        (None, "PT60M", False, False, "PT60M"),
+        ("PT15M", "PT60M", False, False, "PT60M"),
+        ("PT60M", "PT15M", False, False, "PT15M"),
+        ("PT30M", "PT60M", True, False, "PT60M"),
+        ("", "PT60M", True, False, "PT60M"),
     ],
 )
 async def test_public_market_prices_use_supported_resolution(
     account_resolution: str | None,
     configured_resolution: str,
+    authenticated: bool,
     change_pending: bool,
     expected_resolution: str,
 ) -> None:
@@ -43,6 +50,7 @@ async def test_public_market_prices_use_supported_resolution(
     entry = MagicMock()
     entry.options = {"resolution": configured_resolution}
     api = MagicMock()
+    api.is_authenticated = authenticated
     api.country_prices = AsyncMock(return_value=sentinel.public_prices)
     coordinator = FrankEnergieCoordinator(MagicMock(), entry, api)
     coordinator._api_resolution_state = ContractPriceResolutionState(

@@ -67,7 +67,6 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
     SUPPORTED_COUNTRIES,
-    SUPPORTED_RESOLUTIONS,
     COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
@@ -88,6 +87,7 @@ from .const import (
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
     DEFAULT_RESOLUTION,
+    SUPPORTED_RESOLUTIONS,
     EVENT_FRANK_ENERGIE,
     CONF_INTERVAL_SETTINGS,
     CONF_INTERVAL_STATISTICS,
@@ -2295,12 +2295,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     @property
     def resolution(self) -> str:
-        """Return a GraphQL-supported resolution, even for non-dynamic contracts.
-
-        An authenticated account can return an empty or unsupported
-        contractPriceResolutionState.activeOption. Never pass that value
-        straight into GraphQL's required PriceResolution enum.
-        """
+        """Return a supported effective price resolution."""
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
 
@@ -2308,10 +2303,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if configured not in SUPPORTED_RESOLUTIONS:
             configured = DEFAULT_RESOLUTION
 
-        if self._api_resolution_state and not self._resolution_change_pending:
+        if (
+            self.api.is_authenticated
+            and self._api_resolution_state
+            and not self._resolution_change_pending
+        ):
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
+
             _LOGGER.debug(
                 "Ignoring unsupported contract price resolution %r; using %s",
                 active,
@@ -2581,7 +2581,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return True
 
         cached_res = price_series.resolution_minutes
-        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        config_value = self.resolution
         expected_res = 15 if config_value == "PT15M" else 60
 
         if cached_res != expected_res:

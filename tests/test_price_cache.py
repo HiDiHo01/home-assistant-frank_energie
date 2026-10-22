@@ -229,3 +229,58 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
     assert price_coordinator.last_fetch_today == datetime.fromisoformat(
         "2026-06-26T07:30:00+00:00"
     )
+
+
+@pytest.mark.asyncio
+async def test_unsupported_resolution_invalidates_hourly_cache(
+    mock_store, mock_config_entry
+):
+    """Test that an unsupported resolution option falls back to PT15M and invalidates 60-minute disk cache."""
+    mock_config_entry.data = {}
+    mock_config_entry.options = {"resolution": "INVALID_RESOLUTION"}
+
+    raw_hourly_price = {
+        "from": "2026-06-26T07:00:00+00:00",
+        "till": "2026-06-26T08:00:00+00:00",
+        "marketPrice": 0.15,
+        "marketPriceTax": 0.03,
+        "sourcingMarkupPrice": 0.01,
+        "energyTaxPrice": 0.12,
+        "perUnit": "kwh",
+    }
+
+    cached_data = {
+        "prices_today": {
+            "electricity": [raw_hourly_price],
+            "gas": [],
+            "energy_country": "NL",
+            "energy_type": "electricity",
+            "electricity_resolution_minutes": 60,
+            "gas_resolution_minutes": 60,
+        },
+        "prices_tomorrow": None,
+        "contract_price_resolution_state": None,
+        "last_fetch_today": "2026-06-26T07:30:00+00:00",
+        "last_fetch_tomorrow": None,
+    }
+
+    mock_store.async_load = AsyncMock(return_value=cached_data)
+
+    hass = MagicMock(spec=HomeAssistant)
+    hass.config = MagicMock()
+    hass.config.country = "NL"
+
+    mock_api = MagicMock()
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        hass, mock_config_entry, mock_api
+    )
+
+    price_coordinator = FrankEnergiePriceCoordinator(
+        hass, mock_config_entry, mock_api, settings_coordinator
+    )
+
+    assert price_coordinator.resolution == "PT15M"
+
+    loaded = await price_coordinator._async_setup()
+    assert loaded is False
+    assert price_coordinator._static_prices_today is None
