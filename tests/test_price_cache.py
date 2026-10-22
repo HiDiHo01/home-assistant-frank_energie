@@ -232,7 +232,9 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_unsupported_resolution_invalidates_hourly_cache(mock_store, mock_config_entry):
+async def test_unsupported_resolution_invalidates_hourly_cache(
+    mock_store, mock_config_entry
+):
     """Test that an unsupported resolution option falls back to PT15M and invalidates 60-minute disk cache."""
     mock_config_entry.data = {}
     mock_config_entry.options = {"resolution": "INVALID_RESOLUTION"}
