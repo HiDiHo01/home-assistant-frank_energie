@@ -276,7 +276,10 @@ class ConfigFlow(config_entries.ConfigFlow):
                         getattr(site, "status", "NO_STATUS")
                         for site in user_sites.deliverySites
                     ]
-                    error_msg = f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, Statuses: {set(available_statuses)}"
+                    error_msg = (
+                        f"No suitable sites found. Available sites: {len(user_sites.deliverySites)}, "
+                        f"Statuses: {set(available_statuses)}"
+                    )
                     _LOGGER.error(error_msg)
                     raise NoSitesFoundError(error_msg)
 
