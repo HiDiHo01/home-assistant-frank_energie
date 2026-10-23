@@ -453,14 +453,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._country_code: str | None = self.hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
-        self._connection_id: str | None = (
-            None  # cache voor contractPriceResolutionState
-        )
+        self._connection_id: str | None = None  # cache voor contractPriceResolutionState
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = _empty_data()
-        # self._update_interval = timedelta(seconds=DEFAULT_REFRESH_INTERVAL)
         self.update_interval = timedelta(
             minutes=15 if self.resolution == "PT15M" else 60
         )
@@ -1067,6 +1064,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         self._country_code = country_code
             if not self._connection_id:
                 self._connection_id = _extract_electricity_connection_id(user_data)
+                _LOGGER.debug("Extracted electricity connection ID: %s", self._connection_id)
 
             return user_data
         except AuthException as ex:
@@ -2286,15 +2284,28 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
 
-        if self._api_resolution_state and not self._resolution_change_pending:
-            return self._api_resolution_state.activeOption
-
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        if configured not in SUPPORTED_RESOLUTIONS:
-            configured = DEFAULT_RESOLUTION
+        if self._api_resolution_state is not None:  # and not self._resolution_change_pending:
+            active = self._api_resolution_state.activeOption
+            if active in SUPPORTED_RESOLUTIONS:
+                return active
+            _LOGGER.debug(
+                "Ignoring unsupported contract price resolution %r; using %s",
+                active,
+                configured,
+            )
 
-        return configured
+        if configured in SUPPORTED_RESOLUTIONS:
+            return configured
+
+        _LOGGER.debug(
+            "Unsupported configured price resolution %r; "
+            "falling back to %s",
+            configured,
+            DEFAULT_RESOLUTION,
+        )
+        return DEFAULT_RESOLUTION
 
     @property
     def api_resolution(self) -> str | None:
