@@ -8,12 +8,11 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-
-# import secrets
 import sys
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
-from typing import Any, Awaitable, Callable, Final, TypedDict, cast
+from typing import Any, Final, TypedDict, cast
 from zoneinfo import ZoneInfo
 
 from aiohttp import ClientError
@@ -36,9 +35,9 @@ from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
     AuthException,
     AuthRequiredException,
-    NoMarketPricesAvailableException,
     FrankEnergieException,
     NetworkError,
+    NoMarketPricesAvailableException,
     RequestException,
 )
 from python_frank_energie.models import (
@@ -64,9 +63,13 @@ from python_frank_energie.models import (
 )
 
 from .const import (
-    TIMEZONE_AMSTERDAM,
-    TOMORROW_PUBLICATION_HOUR_LOCAL,
-    SUPPORTED_COUNTRIES,
+    CONF_INTERVAL_BATTERIES,
+    CONF_INTERVAL_BATTERY_SESSIONS,
+    CONF_INTERVAL_CHARGERS,
+    CONF_INTERVAL_PV,
+    CONF_INTERVAL_SETTINGS,
+    CONF_INTERVAL_STATISTICS,
+    CONF_INTERVAL_VEHICLES,
     COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
@@ -86,23 +89,20 @@ from .const import (
     DATA_USER,
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
-    DEFAULT_RESOLUTION,
-    EVENT_FRANK_ENERGIE,
-    CONF_INTERVAL_SETTINGS,
-    CONF_INTERVAL_STATISTICS,
-    CONF_INTERVAL_BATTERIES,
-    CONF_INTERVAL_BATTERY_SESSIONS,
-    CONF_INTERVAL_CHARGERS,
-    CONF_INTERVAL_VEHICLES,
-    CONF_INTERVAL_PV,
-    DEFAULT_INTERVAL_SETTINGS,
-    DEFAULT_INTERVAL_PRICES,
-    DEFAULT_INTERVAL_STATISTICS,
     DEFAULT_INTERVAL_BATTERIES,
     DEFAULT_INTERVAL_BATTERY_SESSIONS,
     DEFAULT_INTERVAL_CHARGERS,
-    DEFAULT_INTERVAL_VEHICLES,
+    DEFAULT_INTERVAL_PRICES,
     DEFAULT_INTERVAL_PV,
+    DEFAULT_INTERVAL_SETTINGS,
+    DEFAULT_INTERVAL_STATISTICS,
+    DEFAULT_INTERVAL_VEHICLES,
+    DEFAULT_RESOLUTION,
+    EVENT_FRANK_ENERGIE,
+    SUPPORTED_COUNTRIES,
+    SUPPORTED_RESOLUTIONS,
+    TIMEZONE_AMSTERDAM,
+    TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
 from .helpers import decrypt_password, price_cache_store
 from .mutation_queue import MutationQueue
@@ -495,7 +495,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lock = getattr(api, "_frank_energie_auth_lock", None)
         if lock is None:
             lock = asyncio.Lock()
-            setattr(api, "_frank_energie_auth_lock", lock)
+            api._frank_energie_auth_lock = lock
         return lock
 
     @property
@@ -2106,7 +2106,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index : index + window]
+            window_prices = prices[index: index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
@@ -2289,7 +2289,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if self._api_resolution_state and not self._resolution_change_pending:
             return self._api_resolution_state.activeOption
 
-        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+        configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
+
+        if configured not in SUPPORTED_RESOLUTIONS:
+            configured = DEFAULT_RESOLUTION
+
+        return configured
 
     @property
     def api_resolution(self) -> str | None:
