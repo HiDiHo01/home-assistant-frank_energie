@@ -2,7 +2,7 @@
 Fetching the latest data from Frank Energie and updating the states."""
 
 # coordinator.py
-# version 2026.06.15
+# version 2026.10.23
 from __future__ import annotations
 
 import asyncio
