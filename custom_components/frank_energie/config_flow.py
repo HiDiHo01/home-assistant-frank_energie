@@ -409,10 +409,10 @@ class ConfigFlow(config_entries.ConfigFlow):
         if not user_input:
             return self._show_login_form()
 
-        errors = self._validate_login_input(user_input)
+        validation_errors = self._validate_login_input(user_input)
 
-        if errors:
-            return self._show_login_form(errors=errors)
+        if validation_errors:
+            return self._show_login_form(errors=validation_errors)
 
         try:
             auth = await self._authenticate(user_input)
