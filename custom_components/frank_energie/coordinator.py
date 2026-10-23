@@ -87,7 +87,6 @@ from .const import (
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
     DEFAULT_RESOLUTION,
-    SUPPORTED_RESOLUTIONS,
     EVENT_FRANK_ENERGIE,
     CONF_INTERVAL_SETTINGS,
     CONF_INTERVAL_STATISTICS,
@@ -300,8 +299,7 @@ def _extract_electricity_connection_id(user_data: Any) -> str | None:
 if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
     # Python 3.14-3.16
     try:
-        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which
-        # is deprecated and can cause issues with aiohttp
+        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which is deprecated and can cause issues with aiohttp
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     except Exception:
         # fallback for Python 3.17+ where Proactor policy is default and Selector policy is deprecated
@@ -938,28 +936,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Skipping user sites fetch because the client is not authenticated"
             )
             return None
-
         try:
             sites = await self.api.UserSites()
+            if "ELECTRICITY" in sites.segments:
+                self.user_electricity_enabled = True
+            if "GAS" in sites.segments:
+                self.user_gas_enabled = True
+            return sites
         except AuthException as ex:
-            _LOGGER.warning(
-                "Authentication failed while fetching user sites: %s",
-                ex,
-            )
+            _LOGGER.warning("Authentication failed while fetching user sites: %s", ex)
             return None
-        except RequestException as ex:
-            _LOGGER.warning(
-                "Failed to fetch user sites: %s",
-                ex,
-            )
-            return None
-
-        if "ELECTRICITY" in sites.segments:
-            self.user_electricity_enabled = True
-        if "GAS" in sites.segments:
-            self.user_gas_enabled = True
-
-        return sites
 
     async def _fetch_month_summary(self) -> MonthSummary | None:
         """Fetch month summary from the API."""
@@ -1327,8 +1313,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
         try:
-            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get
-            # unfinalized live data
+            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
             # Missing dynamic totals will be manually reconstructed in sensor.py
             today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
@@ -2246,22 +2231,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             "Resolution change not possible at this time "
                             "(contract does not allow changes or cooling-off period active)"
                         )
-                        resolution_state = self._api_resolution_state
-                        upcoming_change = (
-                            resolution_state.upcomingChange if resolution_state else "unknown"
-                        )
-                        effective_date = (
-                            resolution_state.upcomingChangeEffectiveDate
-                            if resolution_state
-                            else "unknown"
-                        )
                         async_create(
                             self.hass,
                             message=(
                                 "Resolution change is not possible at this time. "
                                 "Your contract may not allow changes or a cooling-off period is active. "
-                                f"Upcoming change: {upcoming_change} "
-                                f"(effective: {effective_date})"
+                                f"Upcoming change: {self._api_resolution_state.upcomingChange if self._api_resolution_state else 'unknown'} "
+                                f"(effective: {self._api_resolution_state.upcomingChangeEffectiveDate if self._api_resolution_state else 'unknown'})"
                             ),
                             title="Frank Energie - Resolution Change Failed",
                             notification_id="frank_energie_resolution_change_failed",
@@ -2306,30 +2282,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     @property
     def resolution(self) -> str:
-        """Return a supported effective price resolution."""
+        """Effective price resolution used for API queries."""
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
 
-        configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
-        if configured not in SUPPORTED_RESOLUTIONS:
-            configured = DEFAULT_RESOLUTION
+        if self._api_resolution_state and not self._resolution_change_pending:
+            return self._api_resolution_state.activeOption
 
-        if (
-            self.api.is_authenticated
-            and self._api_resolution_state
-            and not self._resolution_change_pending
-        ):
-            active = self._api_resolution_state.activeOption
-            if active in SUPPORTED_RESOLUTIONS:
-                return active
-
-            _LOGGER.debug(
-                "Ignoring unsupported contract price resolution %r; using %s",
-                active,
-                configured,
-            )
-
-        return configured
+        return self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
     @property
     def api_resolution(self) -> str | None:
@@ -2592,7 +2552,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return True
 
         cached_res = price_series.resolution_minutes
-        config_value = self.resolution
+        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
         expected_res = 15 if config_value == "PT15M" else 60
 
         if cached_res != expected_res:
@@ -3315,8 +3275,7 @@ class FrankEnergieBatterySessionCoordinator(
             if not self.device_id:
                 raise UpdateFailed("No device ID provided for smart battery sessions.")
 
-            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get
-            # unfinalized live data
+            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
             return await self.api.smart_battery_sessions(
                 self.device_id, mtd_start, tomorrow
