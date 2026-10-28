@@ -2488,6 +2488,75 @@ def test_prices_cover_date_handles_missing_prices() -> None:
     )
 
 
+def _make_gas_price_data(*entry_date_isos: str):
+    """Build a minimal hourly gas PriceData with one entry per given ISO start."""
+    from datetime import timedelta as _timedelta
+
+    from python_frank_energie.models import PriceData
+
+    raw_prices = [
+        {
+            "from": entry_date_iso,
+            "till": (
+                datetime.fromisoformat(entry_date_iso.replace("Z", "+00:00"))
+                + _timedelta(hours=1)
+            ).isoformat(),
+            "marketPrice": 0.5,
+            "marketPriceTax": 0.1,
+            "sourcingMarkupPrice": 0.05,
+            "energyTaxPrice": 0.3,
+        }
+        for entry_date_iso in entry_date_isos
+    ]
+    return PriceData(raw_prices, energy_type="gas")
+
+
+@pytest.mark.parametrize(
+    ("gas_isos", "expected"),
+    [
+        (("2026-07-20T10:00:00.000Z",), True),  # both series cover today
+        (("2026-07-19T10:00:00.000Z",), False),  # gas is still yesterday's
+        ((), True),  # no gas contract: electricity alone decides
+    ],
+)
+def test_prices_cover_date_checks_each_series(
+    gas_isos: tuple[str, ...], expected: bool
+) -> None:
+    """Fresh electricity must not hide a stale gas series."""
+    from datetime import date
+
+    from python_frank_energie.models import MarketPrices
+
+    prices = MarketPrices(
+        electricity=_make_market_prices("2026-07-20T10:00:00.000Z").electricity,
+        gas=_make_gas_price_data(*gas_isos),
+        energy_country="NL",
+    )
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
+        is expected
+    )
+
+
+def test_prices_cover_date_gas_only_site() -> None:
+    """A gas-only site validates on its gas series alone."""
+    from datetime import date
+
+    from python_frank_energie.models import MarketPrices, PriceData
+
+    prices = MarketPrices(
+        electricity=PriceData([], energy_type="electricity"),
+        gas=_make_gas_price_data("2026-07-20T10:00:00.000Z"),
+        energy_country="NL",
+    )
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
+        is True
+    )
+
+
 @pytest.mark.asyncio
 async def test_is_cache_fresh_detects_stale_today_cache(
     mock_frank_energie, mock_config_entry

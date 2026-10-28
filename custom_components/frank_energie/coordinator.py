@@ -612,18 +612,25 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         alone would stamp that as today's fetch and keep every price sensor
         unavailable until the midnight promotion.
 
-        Electricity and gas are checked independently, so a site with only
-        one of the two contracts still validates.
+        Every non-empty series (electricity, gas) must hold an entry for
+        `day`, so fresh electricity can't hide stale gas. Empty series are
+        skipped, so a site with only one of the two contracts still validates.
         """
         if prices is None:
             return False
 
-        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
-        return any(
-            price.date_from.astimezone(tz_amsterdam).date() == day
+        price_series_list = [
+            price_series
             for price_series in (prices.electricity, prices.gas)
             if price_series and price_series.all
-            for price in price_series.all
+        ]
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+        return bool(price_series_list) and all(
+            any(
+                price.date_from.astimezone(tz_amsterdam).date() == day
+                for price in price_series.all
+            )
+            for price_series in price_series_list
         )
 
     async def _refresh_tomorrow_cache(
