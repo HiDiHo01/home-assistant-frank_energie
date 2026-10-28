@@ -1,7 +1,5 @@
 """Tests for Frank Energie diagnostics."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -12,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.frank_energie.const import DATA_INVOICES
 from custom_components.frank_energie.diagnostics import (
     _serialize,
     async_get_config_entry_diagnostics,
@@ -170,6 +169,11 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
 
     runtime_data = SimpleNamespace(
         coordinator=coordinator,
+        invoice_coordinator=SimpleNamespace(
+            last_update_success=False,
+            update_interval=timedelta(hours=1),
+            data={DATA_INVOICES: object()},
+        ),
         battery_session_coordinators=[],
     )
 
@@ -226,6 +230,11 @@ async def test_diagnostics_coordinator_metadata() -> None:
 
     runtime_data = SimpleNamespace(
         coordinator=coordinator,
+        invoice_coordinator=SimpleNamespace(
+            last_update_success=False,
+            update_interval=timedelta(hours=1),
+            data={DATA_INVOICES: object()},
+        ),
         battery_session_coordinators=[object(), object()],
     )
 
@@ -255,3 +264,8 @@ async def test_diagnostics_coordinator_metadata() -> None:
     assert coordinator_data["resolution_change_pending"] is True
 
     assert diagnostics["battery_session_coordinators"] == 2
+    assert diagnostics["invoice_coordinator"] == {
+        "last_update_success": False,
+        "update_interval": "1:00:00",
+        "has_cached_invoices": True,
+    }

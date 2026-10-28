@@ -1,7 +1,5 @@
 """Diagnostics support for the Frank Energie integration."""
 
-from __future__ import annotations
-
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -19,6 +17,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 
 from . import FrankEnergieEntryData
+from .const import DATA_INVOICES
 
 TO_REDACT: set[str] = {
     CONF_ACCESS_TOKEN,
@@ -163,6 +162,13 @@ async def async_get_config_entry_diagnostics(
                 coordinator,
                 "_resolution_change_pending",
                 False,
+            ),
+        },
+        "invoice_coordinator": {
+            "last_update_success": runtime_data.invoice_coordinator.last_update_success,
+            "update_interval": str(runtime_data.invoice_coordinator.update_interval),
+            "has_cached_invoices": (
+                runtime_data.invoice_coordinator.data.get(DATA_INVOICES) is not None
             ),
         },
         "data": _serialize(coordinator.data),

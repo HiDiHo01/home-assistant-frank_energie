@@ -3,7 +3,6 @@ Fetching the latest data from Frank Energie and updating the states."""
 
 # coordinator.py
 # version 2026.10.23
-from __future__ import annotations
 
 import asyncio
 import copy
@@ -39,6 +38,7 @@ from python_frank_energie.exceptions import (
     NetworkError,
     NoMarketPricesAvailableException,
     RequestException,
+    RateLimitException,
 )
 from python_frank_energie.models import (
     ContractPriceResolutionState,
@@ -106,6 +106,7 @@ from .const import (
 )
 from .helpers import decrypt_password, price_cache_store
 from .mutation_queue import MutationQueue
+from .rate_limit import get_rate_limit_state, rate_limit_update_failed
 
 _LOGGER = logging.getLogger(__name__)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
@@ -442,6 +443,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.hass = hass
         self.config_entry = config_entry
         self.api = api
+        self.rate_limits = get_rate_limit_state(hass, config_entry)
         self._today_prices_logged: bool = False
         self._tomorrow_prices_logged: bool = False
         self._cache: dict[str, object] = {}  # <--- hier cache je prijzen
@@ -453,7 +455,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._country_code: str | None = self.hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
-        self._connection_id: str | None = None  # cache voor contractPriceResolutionState
+        self._connection_id: str | None = (
+            None  # cache voor contractPriceResolutionState
+        )
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
@@ -485,6 +489,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # None = not yet checked; True/False = confirmed this session.
         # Reset to None daily so PV ownership is re-probed in case of new installation.
         self._has_pv_systems: bool | None = None
+
+    async def async_api_call[**P, T](
+        self,
+        resource: str,
+        method: Callable[P, Awaitable[T]],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> T:
+        """Apply the entry's cooldown before making a public client method call."""
+        return await self.rate_limits.async_call(
+            resource,
+            lambda: method(*args, **kwargs),
+            authenticated=self.api.is_authenticated and resource != "login",
+        )
 
     @staticmethod
     def _get_shared_auth_lock(api: FrankEnergie) -> asyncio.Lock:
@@ -934,7 +952,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            sites = await self.api.UserSites()
+            sites = await self.async_api_call(
+                "UserSites",
+                self.api.UserSites,
+            )
             if "ELECTRICITY" in sites.segments:
                 self.user_electricity_enabled = True
             if "GAS" in sites.segments:
@@ -957,7 +978,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
         try:
-            return await self.api.month_summary(self.site_reference)
+            return await self.async_api_call(
+                "month_summary", self.api.month_summary, self.site_reference
+            )
 
         except AuthException as ex:
             _LOGGER.debug(
@@ -967,6 +990,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             await self._try_renew_token()
             return None
 
+        except RateLimitException:
+            raise
         except (RequestException, FrankEnergieException, ClientError) as ex:
             _LOGGER.debug(
                 "Failed to fetch month summary: %s",
@@ -985,7 +1010,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch invoices.")
             return None
         try:
-            return await self.api.invoices(self.site_reference)
+            return await self.async_api_call(
+                "invoices", self.api.invoices, self.site_reference
+            )
+        except RateLimitException:
+            raise
         except AuthException as ex:
             _LOGGER.warning("Authentication failed while fetching invoices: %s", ex)
             return None
@@ -1014,9 +1043,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch period usage.")
             return None
         try:
-            return await self.api.period_usage_and_costs(
-                self.site_reference, start_date.isoformat()
+            return await self.async_api_call(
+                "period_usage_and_costs",
+                self.api.period_usage_and_costs,
+                self.site_reference,
+                start_date.isoformat(),
             )
+        except RateLimitException:
+            raise
         except AuthException as ex:
             _LOGGER.warning("Authentication failed while fetching period usage: %s", ex)
             return None
@@ -1045,12 +1079,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch user data.")
             return None
         try:
-            user_data = await self.api.user(self.site_reference)
+            user_data = await self.async_api_call(
+                "user", self.api.user, self.site_reference
+            )
             if user_data is not None:
                 try:
-                    smart_hvac = await self.api.smart_hvac_status()
+                    smart_hvac = await self.async_api_call(
+                        "smart_hvac_status",
+                        self.api.smart_hvac_status,
+                    )
                     if smart_hvac:
                         user_data.smartHvac = smart_hvac
+                except RateLimitException:
+                    # HVAC is optional; retain its last known flag while user
+                    # and site settings can still update independently.
+                    previous_user = self.data.get(DATA_USER)
+                    user_data.smartHvac = getattr(previous_user, "smartHvac", None)
                 except (RequestException, FrankEnergieException, ClientError) as ex:
                     _LOGGER.debug(
                         "Smart HVAC feature is not supported or accessible on this account: %s",
@@ -1064,12 +1108,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         self._country_code = country_code
             if not self._connection_id:
                 self._connection_id = _extract_electricity_connection_id(user_data)
-                _LOGGER.debug("Extracted electricity connection ID: %s", self._connection_id)
+                _LOGGER.debug(
+                    "Extracted electricity connection ID: %s", self._connection_id
+                )
 
             return user_data
         except AuthException as ex:
             _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
             return None
+        except RateLimitException:
+            raise
         except (RequestException, FrankEnergieException, ClientError) as ex:
             _LOGGER.warning("No user data available: %s", ex)
             return None
@@ -1093,8 +1141,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Fetching contract price resolution state for connection ID: %s",
                 connection_id,
             )
-            resolution_state = await self.api.contract_price_resolution_state(
-                connection_id
+            resolution_state = await self.async_api_call(
+                "contract_price_resolution_state",
+                self.api.contract_price_resolution_state,
+                connection_id,
             )
 
             self._api_resolution_state = resolution_state
@@ -1120,6 +1170,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return resolution_state
 
+        except RateLimitException as err:
+            raise rate_limit_update_failed(err, self.update_interval) from err
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -1129,7 +1181,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def _handle_dynamic_fetch_error(self, method_name: str, err: Exception) -> None:
         """Handle errors during dynamic fetches, propagating network errors on initial refresh."""
         if isinstance(
-            err, (AuthException, AuthRequiredException, asyncio.CancelledError)
+            err,
+            (
+                AuthException,
+                AuthRequiredException,
+                RateLimitException,
+                asyncio.CancelledError,
+            ),
         ):
             raise err
         if isinstance(
@@ -1168,7 +1226,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch Enode chargers.")
             return None
         try:
-            return await self.api.enode_chargers(self.site_reference, start_date)
+            return await self.async_api_call(
+                "enode_chargers",
+                self.api.enode_chargers,
+                self.site_reference,
+                start_date,
+            )
         except Exception as err:
             self._handle_dynamic_fetch_error("enode chargers", err)
             return None
@@ -1183,7 +1246,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Skipping smart batteries fetch: smart trading is disabled")
             return None
         try:
-            return await self.api.smart_batteries()
+            return await self.async_api_call(
+                "smart_batteries",
+                self.api.smart_batteries,
+            )
         except Exception as err:
             self._handle_dynamic_fetch_error("smart batteries", err)
             return None
@@ -1201,7 +1267,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
             return None
         try:
-            vehicles = await self.api.enode_vehicles()
+            vehicles = await self.async_api_call(
+                "enode_vehicles",
+                self.api.enode_vehicles,
+            )
             _LOGGER.debug("Fetched Enode vehicles: %s", vehicles)
             return vehicles
         except Exception as err:
@@ -1225,7 +1294,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if self._has_pv_systems is False:
             return None
         try:
-            result = await self.api.smart_pv_systems()
+            result = await self.async_api_call(
+                "smart_pv_systems",
+                self.api.smart_pv_systems,
+            )
             self._has_pv_systems = bool(result and result.systems)
             return result
         except Exception as err:
@@ -1244,7 +1316,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            return await self.api.smart_pv_system_summary(device_id)
+            return await self.async_api_call(
+                "smart_pv_system_summary", self.api.smart_pv_system_summary, device_id
+            )
         except Exception as err:
             self._handle_dynamic_fetch_error(
                 f"smart PV system summary for {device_id}", err
@@ -1259,7 +1333,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            return await self.api.user_smart_feed_in()
+            return await self.async_api_call(
+                "user_smart_feed_in",
+                self.api.user_smart_feed_in,
+            )
         except Exception as err:
             self._handle_dynamic_fetch_error("user smart feed-in status", err)
             return None
@@ -1277,7 +1354,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            details = await self.api.smart_battery_details(battery.id)
+            details = await self.async_api_call(
+                "smart_battery_details", self.api.smart_battery_details, battery.id
+            )
             if details:
                 # Merge settings from detailed response into battery object
                 if details.smart_battery and details.smart_battery.settings:
@@ -1315,8 +1394,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # Missing dynamic totals will be manually reconstructed in sensor.py
             today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
-            sessions = await self.api.smart_battery_sessions(
-                battery.id, mtd_start, tomorrow
+            sessions = await self.async_api_call(
+                "smart_battery_sessions",
+                self.api.smart_battery_sessions,
+                battery.id,
+                mtd_start,
+                tomorrow,
             )
             if sessions and isinstance(sessions.sessions, list):
                 _LOGGER.debug(
@@ -1400,6 +1483,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 tomorrow,
             )
             return None
+
+        except RateLimitException as err:
+            raise rate_limit_update_failed(err, self.update_interval) from err
 
         except UpdateFailed as err:
             _LOGGER.debug(
@@ -1797,11 +1883,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         try:
             if COUNTRY_USES_SIMPLE_MARKET_PRICES.get(country_code, False):
-                return await self.api.country_prices(
-                    country_code, start_date, end_date, self.resolution
+                return await self.async_api_call(
+                    "country_prices",
+                    self.api.country_prices,
+                    country_code,
+                    start_date,
+                    end_date,
+                    self.resolution,
                 )
 
-            return await self.api.prices(
+            return await self.async_api_call(
+                "prices",
+                self.api.prices,
                 start_date,
                 resolution=self.resolution,
             )
@@ -1851,7 +1944,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         try:
-            return await self.api.user_prices(
+            return await self.async_api_call(
+                "user_prices",
+                self.api.user_prices,
                 site_reference,
                 user_country,
                 start_date,
@@ -1970,13 +2065,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Normalize fetch exceptions for DataUpdateCoordinator callers."""
         if isinstance(ex, (ConfigEntryAuthFailed, AuthRequiredException)):
             raise ex
+        if isinstance(ex, RateLimitException):
+            raise rate_limit_update_failed(ex, self.update_interval) from ex
         if isinstance(ex, UpdateFailed):
             raise ex
         if isinstance(ex, RequestException) and str(ex).startswith("user-error:"):
             raise ConfigEntryAuthFailed from ex
         if isinstance(ex, AuthException):
             _LOGGER.debug(_LOG_AUTH_TOKENS_EXPIRED, ex)
-            await self._try_renew_token()
+            try:
+                await self._try_renew_token()
+            except RateLimitException as err:
+                raise rate_limit_update_failed(err, self.update_interval) from err
             raise UpdateFailed(ex) from ex
 
     async def _try_renew_token(self) -> None:
@@ -1984,7 +2084,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         async with self._auth_lock:
             try:
-                updated_tokens = await self.api.renew_token()
+                updated_tokens = await self.async_api_call(
+                    "renew_token",
+                    self.api.renew_token,
+                )
                 updated_data = {
                     **self.config_entry.data,
                     CONF_ACCESS_TOKEN: updated_tokens.authToken,
@@ -2017,7 +2120,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         decrypted_password = decrypt_password(self.hass, password)
                         if not decrypted_password:
                             raise AuthException("Decrypted password is empty")
-                        auth = await self.api.login(username, decrypted_password)
+                        auth = await self.async_api_call(
+                            "login", self.api.login, username, decrypted_password
+                        )
                         updated_data = {
                             **self.config_entry.data,
                             CONF_ACCESS_TOKEN: auth.authToken,
@@ -2033,6 +2138,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                             "Successfully re-authenticated silently using stored credentials"
                         )
                         return
+                    except RateLimitException:
+                        raise
                     except (AuthException, FrankEnergieException) as login_ex:
                         _LOGGER.warning(
                             "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
@@ -2065,13 +2172,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            result = await method(*args)
+            resource = getattr(method, "__name__", type(method).__name__)
+            result = await self.async_api_call(resource, method, *args)
             _LOGGER.debug(
                 "Fetched data from %s: %s",
                 getattr(method, "__name__", repr(method)),
                 result,
             )
             return result
+        except RateLimitException:
+            raise
         except asyncio.CancelledError:
             # Required for correct task cancellation handling in Home Assistant
             raise
@@ -2104,7 +2214,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index: index + window]
+            window_prices = prices[index : index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
@@ -2215,7 +2325,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         async def _mutation() -> None:
             try:
-                result = await self.api.contract_price_resolution_request_change(
+                result = await self.async_api_call(
+                    "contract_price_resolution_request_change",
+                    self.api.contract_price_resolution_request_change,
                     self._connection_id,
                     cast(Resolution, value),
                 )
@@ -2286,7 +2398,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        if self._api_resolution_state is not None:  # and not self._resolution_change_pending:
+        if (
+            self._api_resolution_state is not None
+        ):  # and not self._resolution_change_pending:
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
@@ -2300,8 +2414,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return configured
 
         _LOGGER.debug(
-            "Unsupported configured price resolution %r; "
-            "falling back to %s",
+            "Unsupported configured price resolution %r; falling back to %s",
             configured,
             DEFAULT_RESOLUTION,
         )
@@ -2369,12 +2482,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # Send to API
             try:
                 if is_vehicle:
-                    success = await self.api.enode_update_vehicle_charge_settings(
-                        input_data
+                    success = await self.async_api_call(
+                        "enode_update_vehicle_charge_settings",
+                        self.api.enode_update_vehicle_charge_settings,
+                        input_data,
                     )
                 else:
-                    success = await self.api.enode_update_charger_charge_settings(
-                        input_data
+                    success = await self.async_api_call(
+                        "enode_update_charger_charge_settings",
+                        self.api.enode_update_charger_charge_settings,
+                        input_data,
                     )
             except Exception:
                 _LOGGER.exception("Failed to update charge settings for %s", device_id)
@@ -3176,7 +3293,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
 
 
 class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
-    """Coordinator for historical statistics, billing, and invoices."""
+    """Coordinator for monthly statistics and usage, independent of invoices."""
 
     def __init__(
         self,
@@ -3210,9 +3327,8 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         start_date = yesterday
 
         try:
-            data_month_summary, data_invoices, data_period_usage = await asyncio.gather(
+            data_month_summary, data_period_usage = await asyncio.gather(
                 self._fetch_month_summary(),
-                self._fetch_invoices(),
                 self._fetch_period_usage(start_date),
             )
             result = _empty_data()
@@ -3222,12 +3338,45 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_MONTH_SUMMARY] = data_month_summary
-            result[DATA_INVOICES] = data_invoices
             result[DATA_USAGE] = data_period_usage
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
             raise UpdateFailed(f"Failed to fetch statistics data: {err}") from err
+
+
+class FrankEnergieInvoiceCoordinator(FrankEnergieStatisticsCoordinator):
+    """Poll invoices independently while using the existing statistics interval."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api: FrankEnergie,
+        settings_coordinator: FrankEnergieSettingsCoordinator,
+    ) -> None:
+        """Initialize invoice polling without adding another polling setting."""
+        super().__init__(hass, config_entry, api, settings_coordinator)
+        self.name = "Frank Energie invoice coordinator"
+
+    async def _async_update_data(self) -> FrankEnergieData:
+        """Keep previous invoices on a failed refresh and report unavailability."""
+        if self._should_skip_api_calls(datetime.now(ZoneInfo("UTC"))):
+            if self.last_update_success:
+                return self.data
+            raise UpdateFailed("Maintenance window active")
+        try:
+            invoices = await self._fetch_invoices()
+            result = _empty_data()
+            result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
+            result[DATA_USER_SITES] = self.settings_coordinator.data.get(
+                DATA_USER_SITES
+            )
+            result[DATA_INVOICES] = invoices
+            return result
+        except Exception as err:
+            await self._handle_fetch_exceptions(err)
+            raise UpdateFailed(f"Failed to fetch invoices: {err}") from err
 
 
 class FrankEnergieBatterySessionCoordinator(
@@ -3256,6 +3405,7 @@ class FrankEnergieBatterySessionCoordinator(
             device_id (str): The smart battery device ID.
         """
         self.api = api
+        self.rate_limits = get_rate_limit_state(hass, config_entry)
         self.site_reference = config_entry.data.get("site_reference")
         self.device_id = device_id
 
@@ -3293,8 +3443,11 @@ class FrankEnergieBatterySessionCoordinator(
 
             # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
-            return await self.api.smart_battery_sessions(
-                self.device_id, mtd_start, tomorrow
+            return await self.rate_limits.async_call(
+                "smart_battery_sessions",
+                lambda: self.api.smart_battery_sessions(
+                    self.device_id, mtd_start, tomorrow
+                ),
             )
 
         except UpdateFailed as ex:
@@ -3306,10 +3459,16 @@ class FrankEnergieBatterySessionCoordinator(
             _LOGGER.debug(
                 "Authentication tokens expired, attempting token renewal: %s", ex
             )
-            await self.api.renew_token()
+            try:
+                await self.rate_limits.async_call("renew_token", self.api.renew_token)
+            except RateLimitException as err:
+                raise rate_limit_update_failed(err, self.update_interval) from err
             raise UpdateFailed(
                 "Authentication failed and token was renewed. Retry update."
             ) from ex
+
+        except RateLimitException as ex:
+            raise rate_limit_update_failed(ex, self.update_interval) from ex
 
         except RequestException as ex:
             raise UpdateFailed(

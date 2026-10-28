@@ -4,7 +4,6 @@ Sensor platform for Frank Energie integration."""
 # sensor.py
 # -*- coding: utf-8 -*-
 # VERSION = "2026.6.21"
-from __future__ import annotations
 
 import inspect
 import logging
@@ -187,12 +186,12 @@ class FrankEnergieBaseSensor(
 ):
     """Base class for Frank Energie sensors with generic coordinator data."""
 
-    _entity_description: FrankEnergieEntityDescription[_DataT]
+    _entity_description: "FrankEnergieEntityDescription[_DataT]"
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator[_DataT],
-        description: FrankEnergieEntityDescription[_DataT],
+        description: "FrankEnergieEntityDescription[_DataT]",
     ) -> None:
         """Initialize sensor."""
         super().__init__(coordinator)
@@ -296,6 +295,7 @@ class FrankEnergieEntityDescription(
     is_electricity: bool = False
     is_feed_in: bool = False  # used to filter based on estimatedFeedIn
     is_battery_session: bool = False
+    invoice_based: bool = False
 
     def __post_init__(self):
         # Convert string device_class to enum if necessary
@@ -3255,6 +3255,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].previous_period_invoice.TotalAmount
             if data[DATA_INVOICES]
@@ -3286,6 +3287,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].current_period_invoice.TotalAmount
             if data[DATA_INVOICES]
@@ -3316,6 +3318,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].upcoming_period_invoice.TotalAmount
             if data[DATA_INVOICES]
@@ -3345,6 +3348,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].total_costs_this_year
             if data[DATA_INVOICES] and data[DATA_INVOICES].total_costs_this_year
@@ -3365,6 +3369,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             sum(
                 invoice.TotalAmount
@@ -3401,6 +3406,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_average_costs_per_month()
             if data[DATA_INVOICES] and data[DATA_INVOICES].all_periods_invoices
@@ -3416,6 +3422,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_average_costs_per_year()
             if data[DATA_INVOICES] and data[DATA_INVOICES].all_periods_invoices
@@ -3445,6 +3452,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_average_costs_per_month() * 12
             if data[DATA_INVOICES] and data[DATA_INVOICES].all_periods_invoices
@@ -3470,6 +3478,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_average_costs_per_month(
                 dt_util.now().year - 1
@@ -3487,6 +3496,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_average_costs_per_month(dt_util.now().year)
             if data[DATA_INVOICES] and data[DATA_INVOICES].all_periods_invoices
@@ -3502,6 +3512,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].calculate_expected_costs_this_year()
             if data[DATA_INVOICES] and data[DATA_INVOICES].all_periods_invoices
@@ -3517,6 +3528,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
+        invoice_based=True,
         value_fn=lambda data: (
             data[DATA_INVOICES].total_costs_previous_year
             if data[DATA_INVOICES] and data[DATA_INVOICES].total_costs_previous_year
@@ -4388,8 +4400,11 @@ class FrankEnergieSensor(
         coordinator: FrankEnergieCoordinator,
         description: FrankEnergieEntityDescription,
         entry: ConfigEntry,
+        *,
+        invoice_coordinator: FrankEnergieCoordinator | None = None,
     ) -> None:
         """Initialize the sensor."""
+        self._invoice_coordinator = invoice_coordinator
         self.entity_description: FrankEnergieEntityDescription = description
         if hasattr(self.entity_description, "state_class"):
             self._attr_state_class = getattr(
@@ -4449,6 +4464,16 @@ class FrankEnergieSensor(
 
         super().__init__(coordinator)
 
+    async def async_added_to_hass(self) -> None:
+        """Listen for optional invoice attribute updates independently of state."""
+        await super().async_added_to_hass()
+        if self._invoice_coordinator is not None:
+            self.async_on_remove(
+                self._invoice_coordinator.async_add_listener(
+                    self._handle_coordinator_update
+                )
+            )
+
     async def async_update(self) -> None:
         """Get the latest data and updates the states."""
         data = self.coordinator.data
@@ -4471,7 +4496,19 @@ class FrankEnergieSensor(
             return {}
 
         try:
-            return self.entity_description.attr_fn(self.coordinator.data) or {}
+            data = self.coordinator.data
+            if self._invoice_coordinator is not None:
+                invoice_data = self._invoice_coordinator.data
+                data = {
+                    **data,
+                    DATA_INVOICES: (
+                        invoice_data.get(DATA_INVOICES)
+                        if invoice_data
+                        and self._invoice_coordinator.last_update_success
+                        else None
+                    ),
+                }
+            return self.entity_description.attr_fn(data) or {}
         except Exception:
             return {}
 
@@ -5067,11 +5104,17 @@ async def async_setup_entry(
     pv_coordinator = runtime_data.pv_coordinator
     vehicle_coordinator = runtime_data.vehicle_coordinator
     statistics_coordinator = runtime_data.statistics_coordinator
+    invoice_coordinator = runtime_data.invoice_coordinator
 
     def _get_coordinator_for_description(
         description: FrankEnergieEntityDescription,
     ) -> FrankEnergieCoordinator:
         """Return the sub-coordinator responsible for the given sensor description."""
+        if (
+            description.invoice_based
+            or description.service_name == SERVICE_NAME_INVOICES
+        ):
+            return invoice_coordinator
         if description.key == "contract_price_resolution_state":
             return price_coordinator
         if description.service_name in (
@@ -5082,7 +5125,6 @@ async def async_setup_entry(
             return price_coordinator
         if description.service_name in (
             SERVICE_NAME_MONTH_SUMMARY,
-            SERVICE_NAME_INVOICES,
             SERVICE_NAME_COSTS,
             SERVICE_NAME_USAGE,
         ):
@@ -5176,6 +5218,12 @@ async def async_setup_entry(
             _get_coordinator_for_description(description),
             description,
             config_entry,
+            invoice_coordinator=(
+                invoice_coordinator
+                if description.service_name == SERVICE_NAME_COSTS
+                and not description.invoice_based
+                else None
+            ),
         )
         for description in SENSOR_TYPES
         if (
