@@ -2105,59 +2105,63 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 _LOGGER.debug("Successfully renewed token")
 
             except AuthException as ex:
-                _LOGGER.debug(
-                    "Token renewal failed, attempting silent re-login using stored credentials"
+                await self._async_reauthenticate(ex)
+
+    async def _async_reauthenticate(self, renewal_error: AuthException) -> None:
+        """Try stored credentials while the caller holds the shared auth lock."""
+        _LOGGER.debug(
+            "Token renewal failed, attempting silent re-login using stored credentials"
+        )
+        username = self.config_entry.options.get(
+            CONF_USERNAME
+        ) or self.config_entry.data.get(CONF_USERNAME)
+        password = self.config_entry.options.get(
+            CONF_PASSWORD
+        ) or self.config_entry.data.get(CONF_PASSWORD)
+
+        if username and password:
+            try:
+                decrypted_password = decrypt_password(self.hass, password)
+                if not decrypted_password:
+                    raise AuthException("Decrypted password is empty")
+                auth = await self.async_api_call(
+                    "login", self.api.login, username, decrypted_password
                 )
-                username = self.config_entry.options.get(
-                    CONF_USERNAME
-                ) or self.config_entry.data.get(CONF_USERNAME)
-                password = self.config_entry.options.get(
-                    CONF_PASSWORD
-                ) or self.config_entry.data.get(CONF_PASSWORD)
+                updated_data = {
+                    **self.config_entry.data,
+                    CONF_ACCESS_TOKEN: auth.authToken,
+                    CONF_TOKEN: auth.refreshToken,
+                }
+                updated_data.pop(CONF_USERNAME, None)
+                updated_data.pop(CONF_PASSWORD, None)
 
-                if username and password:
-                    try:
-                        decrypted_password = decrypt_password(self.hass, password)
-                        if not decrypted_password:
-                            raise AuthException("Decrypted password is empty")
-                        auth = await self.async_api_call(
-                            "login", self.api.login, username, decrypted_password
-                        )
-                        updated_data = {
-                            **self.config_entry.data,
-                            CONF_ACCESS_TOKEN: auth.authToken,
-                            CONF_TOKEN: auth.refreshToken,
-                        }
-                        updated_data.pop(CONF_USERNAME, None)
-                        updated_data.pop(CONF_PASSWORD, None)
-
-                        self.hass.config_entries.async_update_entry(
-                            self.config_entry, data=updated_data
-                        )
-                        _LOGGER.info(
-                            "Successfully re-authenticated silently using stored credentials"
-                        )
-                        return
-                    except RateLimitException:
-                        raise
-                    except (AuthException, FrankEnergieException) as login_ex:
-                        _LOGGER.warning(
-                            "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
-                            login_ex,
-                        )
-                    except Exception as login_ex:
-                        _LOGGER.exception(
-                            "Unexpected error during silent re-login: %s. Retrying later.",
-                            login_ex,
-                        )
-                        raise UpdateFailed(
-                            f"Unexpected error during silent re-login: {login_ex}"
-                        ) from login_ex
-
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=updated_data
+                )
+                _LOGGER.info(
+                    "Successfully re-authenticated silently using stored credentials"
+                )
+                return
+            except RateLimitException:
+                raise
+            except (AuthException, FrankEnergieException) as login_ex:
+                _LOGGER.warning(
+                    "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
+                    login_ex,
+                )
+            except Exception as login_ex:
                 _LOGGER.exception(
-                    "Failed to renew token: %s. Starting user reauth flow", ex
+                    "Unexpected error during silent re-login: %s. Retrying later.",
+                    login_ex,
                 )
-                raise ConfigEntryAuthFailed from ex
+                raise UpdateFailed(
+                    f"Unexpected error during silent re-login: {login_ex}"
+                ) from login_ex
+
+        _LOGGER.exception(
+            "Failed to renew token: %s. Starting user reauth flow", renewal_error
+        )
+        raise ConfigEntryAuthFailed from renewal_error
 
     async def _fetch_authenticated[T](
         self,

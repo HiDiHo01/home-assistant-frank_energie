@@ -16,6 +16,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -176,11 +177,11 @@ async def test_concurrent_responses_do_not_shorten_cooldown(clock: MagicMock) ->
 
     slow = asyncio.create_task(state.async_call("invoices", slow_request))
     await entered.wait()
+    throttled_request = AsyncMock(
+        side_effect=RateLimitException("Invoices", retry_after=120)
+    )
     with pytest.raises(RateLimitException):
-        await state.async_call(
-            "invoices",
-            AsyncMock(side_effect=RateLimitException("Invoices", retry_after=120)),
-        )
+        await state.async_call("invoices", throttled_request)
     release.set()
     with pytest.raises(RateLimitException):
         await slow
@@ -203,11 +204,11 @@ async def test_cancellation_is_not_a_rate_limit() -> None:
 async def test_automatic_renewal_throttle_is_shared(clock: MagicMock) -> None:
     """An error from implicit renewal also gates other authenticated resources."""
     state = RateLimitState()
+    throttled_request = AsyncMock(
+        side_effect=RateLimitException("RenewToken", retry_after=120)
+    )
     with pytest.raises(RateLimitException):
-        await state.async_call(
-            "invoices",
-            AsyncMock(side_effect=RateLimitException("RenewToken", retry_after=120)),
-        )
+        await state.async_call("invoices", throttled_request)
     request = AsyncMock(return_value="public data")
     with pytest.raises(RateLimitException) as blocked:
         await state.async_call("month_summary", request)
@@ -250,8 +251,9 @@ async def test_helpers_propagate_rate_limit(
     error = RateLimitException("Invoices", retry_after=120)
     api_method = "invoices" if method == "_fetch_invoices" else "month_summary"
     getattr(rate_api, api_method).side_effect = error
+    fetch_resource = getattr(settings, method)
     with pytest.raises(RateLimitException) as raised:
-        await getattr(settings, method)()
+        await fetch_resource()
     assert raised.value is error
 
 
@@ -337,8 +339,9 @@ async def test_renewal_throttle_does_not_reauthenticate(
     rate_api.login.assert_not_awaited()
     assert dict(rate_entry.data) == original_data
 
+    expired_error = AuthException("expired")
     with pytest.raises(UpdateFailed) as raised:
-        await sibling._handle_fetch_exceptions(AuthException("expired"))
+        await sibling._handle_fetch_exceptions(expired_error)
     assert raised.value.retry_after == 120
     rate_api.renew_token.assert_awaited_once()
 
@@ -367,6 +370,113 @@ async def test_silent_login_throttle_is_temporary(
     rate_api.login.assert_awaited_once()
     assert dict(rate_entry.data) == original_data
     assert dict(rate_entry.options) == original_options
+
+
+@pytest.mark.parametrize("credential_source", ["options", "legacy_data"])
+async def test_successful_silent_login_preserves_entry_configuration(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+    credential_source: str,
+) -> None:
+    """Persist replacement tokens and remove legacy plaintext credentials."""
+    legacy_data = {**rate_entry.data, **USER_INPUT}
+    login_options = USER_INPUT if credential_source == "options" else {}
+    hass.config_entries.async_update_entry(
+        rate_entry, data=legacy_data, options=login_options
+    )
+    original_options = dict(rate_entry.options)
+    rate_api.renew_token.side_effect = AuthException("expired")
+    rate_api.login.return_value = SimpleNamespace(
+        authToken="replacement access token", refreshToken="replacement refresh token"
+    )
+    with patch(
+        "custom_components.frank_energie.coordinator.decrypt_password",
+        return_value="decrypted password",
+    ):
+        await settings._try_renew_token()
+
+    rate_api.login.assert_awaited_once_with(
+        USER_INPUT[CONF_USERNAME], "decrypted password"
+    )
+    assert rate_entry.data[CONF_ACCESS_TOKEN] == "replacement access token"
+    assert rate_entry.data[CONF_TOKEN] == "replacement refresh token"
+    assert rate_entry.data["site_reference"] == "site-1"
+    assert CONF_USERNAME not in rate_entry.data
+    assert CONF_PASSWORD not in rate_entry.data
+    assert dict(rate_entry.options) == original_options
+    assert not settings._auth_lock.locked()
+
+
+@pytest.mark.parametrize(
+    "failure", ["missing_credentials", "empty_password", "invalid_auth"]
+)
+async def test_silent_login_authentication_failure_preserves_saved_state(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+    failure: str,
+) -> None:
+    """Require reauthentication without clearing existing tokens or credentials."""
+    if failure != "missing_credentials":
+        hass.config_entries.async_update_entry(rate_entry, options=USER_INPUT)
+    original_data = dict(rate_entry.data)
+    original_options = dict(rate_entry.options)
+    renewal_error = AuthException("expired")
+    rate_api.renew_token.side_effect = renewal_error
+    rate_api.login.side_effect = AuthException("invalid credentials")
+    decrypted_password = "" if failure == "empty_password" else "test password"
+    with (
+        patch(
+            "custom_components.frank_energie.coordinator.decrypt_password",
+            return_value=decrypted_password,
+        ),
+        pytest.raises(ConfigEntryAuthFailed) as raised,
+    ):
+        await settings._try_renew_token()
+
+    assert raised.value.__cause__ is renewal_error
+    assert dict(rate_entry.data) == original_data
+    assert dict(rate_entry.options) == original_options
+    assert not settings._auth_lock.locked()
+    if failure == "invalid_auth":
+        rate_api.login.assert_awaited_once()
+    else:
+        rate_api.login.assert_not_awaited()
+
+
+@pytest.mark.parametrize("failure_source", ["decryption", "login"])
+async def test_unexpected_silent_login_failure_remains_temporary(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+    failure_source: str,
+) -> None:
+    """Keep unexpected login errors retryable and release the shared auth lock."""
+    hass.config_entries.async_update_entry(rate_entry, options=USER_INPUT)
+    original_data = dict(rate_entry.data)
+    original_options = dict(rate_entry.options)
+    rate_api.renew_token.side_effect = AuthException("expired")
+    unexpected_error = RuntimeError("temporary login failure")
+    if failure_source == "login":
+        rate_api.login.side_effect = unexpected_error
+    with (
+        patch(
+            "custom_components.frank_energie.coordinator.decrypt_password",
+            return_value="test password",
+            side_effect=unexpected_error if failure_source == "decryption" else None,
+        ),
+        pytest.raises(UpdateFailed) as raised,
+    ):
+        await settings._try_renew_token()
+
+    assert raised.value.__cause__ is unexpected_error
+    assert dict(rate_entry.data) == original_data
+    assert dict(rate_entry.options) == original_options
+    assert not settings._auth_lock.locked()
 
 
 async def test_optional_hvac_throttle_keeps_user_settings(
@@ -608,11 +718,12 @@ async def test_setup_throttling_is_temporary_and_respects_reload(
         )
         assert not await hass.config_entries.async_reload(rate_entry.entry_id)
         await hass.async_block_till_done()
-        assert (
+        current_counts = (
             rate_api.UserSites.await_count,
             rate_api.renew_token.await_count,
             rate_api.login.await_count,
-        ) == counts
+        )
+        assert current_counts == counts
     assert dict(rate_entry.data) == original_data
     assert dict(rate_entry.options) == original_options
     assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
