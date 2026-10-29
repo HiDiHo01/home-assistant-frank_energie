@@ -29,6 +29,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import FrankEnergieException, RequestException
 from python_frank_energie.models import (
+    ContractPriceResolutionState,
     MonthSummary,
     Invoices,
     User,
@@ -640,16 +641,20 @@ class TestResolutionProperty:
             "expected_resolution",
         ),
         [
-            # Authenticated cases
+            # A valid API resolution wins even while a change is pending.
             (True, "PT60M", "PT15M", False, "PT60M"),
-            (True, "PT60M", "PT15M", True, "PT15M"),
+            (True, "PT60M", "PT15M", True, "PT60M"),
+            (True, "PT15M", "PT60M", True, "PT15M"),
             (True, "UNSUPPORTED", "PT60M", False, "PT60M"),
             (True, "UNSUPPORTED", "INVALID", False, "PT15M"),
             (True, None, "PT60M", False, "PT60M"),
             (True, "", "PT60M", False, "PT60M"),
-            # Unauthenticated cases
-            (False, "PT60M", "PT15M", False, "PT15M"),
+            (True, None, "INVALID", True, "PT15M"),
+            # Authentication does not change resolution precedence.
+            (False, "PT60M", "PT15M", False, "PT60M"),
+            (False, "PT60M", "PT15M", True, "PT60M"),
             (False, "PT15M", "INVALID", False, "PT15M"),
+            (False, "UNSUPPORTED", "PT60M", True, "PT60M"),
         ],
     )
     async def test_resolution_selection_and_fetch_resolution_parameter(
@@ -661,7 +666,7 @@ class TestResolutionProperty:
         pending_change: bool,
         expected_resolution: str,
     ) -> None:
-        """Verify resolution property selection and the resolution argument in public price queries."""
+        """Prefer valid API resolutions regardless of auth or pending changes."""
         from datetime import date
         from unittest.mock import PropertyMock
 
@@ -677,9 +682,9 @@ class TestResolutionProperty:
         coordinator._resolution_change_pending = pending_change
 
         if api_active_option is not None:
-            mock_state = MagicMock()
-            mock_state.activeOption = api_active_option
-            coordinator._api_resolution_state = mock_state
+            coordinator._api_resolution_state = ContractPriceResolutionState(
+                active_option=api_active_option
+            )
         else:
             coordinator._api_resolution_state = None
 
@@ -691,7 +696,7 @@ class TestResolutionProperty:
 
         await coordinator._fetch_public_prices_for_range(today, tomorrow, "NL")
 
-        coordinator.api.prices.assert_called_once_with(
+        coordinator.api.prices.assert_awaited_once_with(
             today, resolution=expected_resolution
         )
 
