@@ -3,7 +3,9 @@ language: "en-US"
 early_access: false
 
 reviews:
-profile: chill
+profile: assertive
+  auto_review:
+    drafts: true
 
 request_changes_workflow: false
 
