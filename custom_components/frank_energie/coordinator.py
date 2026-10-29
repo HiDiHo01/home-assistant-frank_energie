@@ -2286,6 +2286,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def resolution(self) -> str:
         """Prefer a valid API resolution, then configuration, then the default.
 
+        Normalize API values to uppercase for query and cache selection.
         Authentication and pending changes do not override an active API value.
         """
         if self.config_entry is None:
@@ -2295,8 +2296,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         if self._api_resolution_state is not None:
             active = self._api_resolution_state.activeOption
-            if active in SUPPORTED_RESOLUTIONS:
-                return active
+            if isinstance(active, str):
+                normalized_active = active.upper()
+                if normalized_active in SUPPORTED_RESOLUTIONS:
+                    return normalized_active
             _LOGGER.debug(
                 "Ignoring unsupported contract price resolution %r; using %s",
                 active,

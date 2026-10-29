@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
-from datetime import datetime, date, timedelta, timezone
+from datetime import UTC, datetime, date, timedelta
 from homeassistant.core import HomeAssistant
 from python_frank_energie.models import (
     MarketPrices,
@@ -132,7 +132,7 @@ async def test_resolution_state_serialization():
 async def test_resolution_state_serialization_from_date_types():
     """ContractPriceResolutionState serializes date/datetime fields to ISO strings and round-trips None."""
     change_request_date = date(2026, 7, 1)
-    upcoming_change_dt = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+    upcoming_change_dt = datetime(2026, 7, 1, 12, 0, 0, tzinfo=UTC)
 
     state = ContractPriceResolutionState(
         active_option="PT15M",
@@ -250,6 +250,10 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
         ("PT15M", "PT60M", 15, "PT60M", False),
         ("PT60M", "PT15M", 15, "PT15M", True),
         ("PT60M", "PT15M", 60, "PT15M", False),
+        ("INVALID_RESOLUTION", "pt60m", 60, "PT60M", True),
+        ("PT15M", "pT60m", 15, "PT60M", False),
+        ("PT60M", "pt15m", 15, "PT15M", True),
+        ("PT60M", "pT15m", 60, "PT15M", False),
         ("PT60M", "UNSUPPORTED", 60, "PT60M", True),
         ("PT60M", "UNSUPPORTED", 15, "PT60M", False),
         ("INVALID_RESOLUTION", "UNSUPPORTED", 60, "PT15M", False),
@@ -268,7 +272,7 @@ async def test_disk_cache_matches_effective_resolution(
     """Retain matching disk caches and reject resolutions that queries will not use."""
     mock_config_entry.data = {}
     mock_config_entry.options = {"resolution": configured_resolution}
-    cached_start = datetime(2026, 6, 26, 7, tzinfo=timezone.utc)
+    cached_start = datetime(2026, 6, 26, 7, tzinfo=UTC)
     cached_end = cached_start + timedelta(minutes=cached_resolution_minutes)
 
     raw_price = {

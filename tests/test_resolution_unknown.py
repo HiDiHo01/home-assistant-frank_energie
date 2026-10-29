@@ -62,6 +62,8 @@ async def _resolution_sensor(hass: HomeAssistant) -> FrankEnergieSensor:
         ("PT60M", "pt60m"),
         ("pt15m", "pt15m"),
         ("pt60m", "pt60m"),
+        ("pT15m", "pt15m"),
+        ("pT60m", "pt60m"),
     ],
 )
 async def test_resolution_sensor_accepts_unknown_and_known_states(

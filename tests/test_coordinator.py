@@ -645,6 +645,8 @@ class TestResolutionProperty:
             (True, "PT60M", "PT15M", False, "PT60M"),
             (True, "PT60M", "PT15M", True, "PT60M"),
             (True, "PT15M", "PT60M", True, "PT15M"),
+            (True, "pt60m", "PT15M", False, "PT60M"),
+            (True, "pT15m", "PT60M", True, "PT15M"),
             (True, "UNSUPPORTED", "PT60M", False, "PT60M"),
             (True, "UNSUPPORTED", "INVALID", False, "PT15M"),
             (True, None, "PT60M", False, "PT60M"),
@@ -654,6 +656,8 @@ class TestResolutionProperty:
             (False, "PT60M", "PT15M", False, "PT60M"),
             (False, "PT60M", "PT15M", True, "PT60M"),
             (False, "PT15M", "INVALID", False, "PT15M"),
+            (False, "pt15m", "PT60M", False, "PT15M"),
+            (False, "pT60m", "PT15M", True, "PT60M"),
             (False, "UNSUPPORTED", "PT60M", True, "PT60M"),
         ],
     )
@@ -699,6 +703,28 @@ class TestResolutionProperty:
         coordinator.api.prices.assert_awaited_once_with(
             today, resolution=expected_resolution
         )
+
+    @pytest.mark.parametrize(
+        "api_active_option", [None, 60, ["PT60M"], {"PT60M": True}]
+    )
+    @pytest.mark.parametrize(
+        ("config_option", "expected_resolution"),
+        [("PT60M", "PT60M"), ("INVALID", "PT15M")],
+    )
+    def test_non_string_api_resolution_uses_fallback(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        api_active_option: object,
+        config_option: str,
+        expected_resolution: str,
+    ) -> None:
+        """Reject malformed API fields without losing configured or default values."""
+        coordinator.config_entry.options = {"resolution": config_option}
+        coordinator._api_resolution_state = MagicMock(
+            spec=ContractPriceResolutionState, activeOption=api_active_option
+        )
+
+        assert coordinator.resolution == expected_resolution
 
 
 class TestApiResolutionProperty:
