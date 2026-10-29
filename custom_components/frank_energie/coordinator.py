@@ -453,7 +453,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._country_code: str | None = self.hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
-        self._connection_id: str | None = None  # cache voor contractPriceResolutionState
+        self._connection_id: str | None = (
+            None  # cache voor contractPriceResolutionState
+        )
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
@@ -1062,9 +1064,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     country_code = country_code_raw.upper()
                     if country_code in SUPPORTED_COUNTRIES:
                         self._country_code = country_code
-            if not self._connection_id:
+            if user_data is not None:
                 self._connection_id = _extract_electricity_connection_id(user_data)
-                _LOGGER.debug("Extracted electricity connection ID: %s", self._connection_id)
+                _LOGGER.debug(
+                    "Extracted electricity connection ID: %s", self._connection_id
+                )
 
             return user_data
         except AuthException as ex:
@@ -2104,7 +2108,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index: index + window]
+            window_prices = prices[index : index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
@@ -2286,7 +2290,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        if self._api_resolution_state is not None:  # and not self._resolution_change_pending:
+        if self._api_resolution_state is not None:
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
@@ -2300,8 +2304,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return configured
 
         _LOGGER.debug(
-            "Unsupported configured price resolution %r; "
-            "falling back to %s",
+            "Unsupported configured price resolution %r; falling back to %s",
             configured,
             DEFAULT_RESOLUTION,
         )
@@ -2468,6 +2471,18 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self.update_interval = None
         self.store = price_cache_store(hass, config_entry.entry_id)
 
+    def _sync_connection_id(self) -> None:
+        """Synchronize the electricity ID from the selected site's settings."""
+        settings_data = self.settings_coordinator.data
+        user_data = settings_data.get(DATA_USER) if settings_data is not None else None
+        if user_data is not None:
+            self._connection_id = _extract_electricity_connection_id(user_data)
+
+    async def async_set_resolution(self, value: str) -> None:
+        """Use the latest settings connection before requesting a resolution change."""
+        self._sync_connection_id()
+        await super().async_set_resolution(value)
+
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
         """Parse cached data dictionary into coordinator state."""
         if prices_today_dict := cached_data.get("prices_today"):
@@ -2617,6 +2632,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
+        self._sync_connection_id()
         cached_data_loaded = await self._async_setup()
         now_utc = dt_util.utcnow()
 
@@ -2747,9 +2763,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         ):
             self._tomorrow_prices_logged = False
 
-        user_data = self.settings_coordinator.data.get(DATA_USER)
-        if extracted_conn_id := _extract_electricity_connection_id(user_data):
-            self._connection_id = extracted_conn_id
+        self._sync_connection_id()
 
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")

@@ -140,6 +140,18 @@ The integration automatically switches back when the preferred resolution become
 
 No user action is required.
 
+## Resolution Change Has No Electricity Connection
+
+Resolution changes apply to the electricity connection at the selected delivery
+site. If the log reports that the electricity connection ID is unavailable,
+check that the selected site has an electricity connection in your Frank Energie
+account and that account settings have been retrieved successfully.
+
+Restoring cached prices after a restart does not require another price fetch
+before requesting a resolution change. A valid account update without an
+electricity connection stops requests to the old connection. Temporarily missing
+account data preserves the last known connection.
+
 ## Smart Battery Entities Unavailable
 
 Possible causes:
