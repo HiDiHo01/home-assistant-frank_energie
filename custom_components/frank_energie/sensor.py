@@ -92,6 +92,7 @@ from .const import (
     SERVICE_NAME_USER,
     SMART_BATTERY_STATUSES,
     SERVICE_STATUSES,
+    SUPPORTED_RESOLUTIONS,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
@@ -1700,6 +1701,16 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
 )
 
 
+def _get_contract_price_resolution(data: FrankEnergieData) -> str | None:
+    """Return a supported resolution, or None for missing or unknown API values."""
+    state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
+    if state is None or not isinstance(state.active_option, str):
+        return None
+
+    resolution = state.active_option.upper()
+    return resolution.lower() if resolution in SUPPORTED_RESOLUTIONS else None
+
+
 def _get_price_resolution_attributes(data: dict) -> dict:
     state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
     if not state:
@@ -1731,17 +1742,10 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:clock-digital",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        # Read-only sensor states; selectable resolutions are defined in select.py.
-        options=["pt15m", "pt60m", STATE_UNKNOWN],
-        value_fn=lambda data: (
-            data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
-            if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
-            and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
-            else STATE_UNKNOWN
-        ),
-        available_fn=lambda data: (
-            data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None
-        ),
+        options=["pt15m", "pt60m"],
+        value_fn=_get_contract_price_resolution,
+        # A missing resolution is unknown after a successful coordinator update.
+        available_fn=lambda _: True,
         attr_fn=_get_price_resolution_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -4478,7 +4482,13 @@ class FrankEnergieSensor(
 
     @property
     def available(self) -> bool:
-        return super().available and self.native_value is not None
+        """Apply the sensor's availability rule after coordinator success."""
+        if not super().available:
+            return False
+        if self.entity_description.available_fn is not None:
+            data = self.coordinator.data
+            return data is not None and self.entity_description.available_fn(data)
+        return self.native_value is not None
 
 
 class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
