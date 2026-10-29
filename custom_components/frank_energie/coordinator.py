@@ -600,6 +600,39 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             for price in price_series.all
         )
 
+    @staticmethod
+    def _prices_cover_date(prices: MarketPrices | None, day: date) -> bool:
+        """Check that `prices` holds at least one entry dated `day` (Amsterdam-local).
+
+        The today-side counterpart of `_tomorrow_cache_matches_date`:
+        `last_fetch_today` only records *when* a fetch happened, not *which
+        day* it returned. When both the user and public price fetches fail,
+        `_fetch_prices_with_fallback` returns `_cached_prices`, which at
+        startup is the previous day's disk cache. Trusting the timestamp
+        alone would stamp that as today's fetch and keep every price sensor
+        unavailable until the midnight promotion.
+
+        Every non-empty series (electricity, gas) must hold an entry for
+        `day`, so fresh electricity can't hide stale gas. Empty series are
+        skipped, so a site with only one of the two contracts still validates.
+        """
+        if prices is None:
+            return False
+
+        price_series_list = [
+            price_series
+            for price_series in (prices.electricity, prices.gas)
+            if price_series and price_series.all
+        ]
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+        return bool(price_series_list) and all(
+            any(
+                price.date_from.astimezone(tz_amsterdam).date() == day
+                for price in price_series.all
+            )
+            for price_series in price_series_list
+        )
+
     async def _refresh_tomorrow_cache(
         self,
         today: date,
@@ -2594,6 +2627,14 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if _amsterdam_date(self.last_fetch_today) != today:
             return False
 
+        if not self._prices_cover_date(self._static_prices_today, today):
+            _LOGGER.debug(
+                "Cached today prices claim to be fetched today but hold no "
+                "entries for %s — cache is not fresh",
+                today,
+            )
+            return False
+
         if (
             self.last_fetch_tomorrow
             and _amsterdam_date(self.last_fetch_tomorrow) == today
@@ -2765,6 +2806,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 self._static_prices_today is None
                 or self.last_fetch_today is None
                 or _amsterdam_date(self.last_fetch_today) != today
+                or not self._prices_cover_date(self._static_prices_today, today)
             ):
                 try:
                     fetched_prices_today = await self._fetch_prices_with_fallback(
@@ -2774,8 +2816,18 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                         fetched_prices_today, today
                     )
                     self._update_today_prices(prices_today)
-                    self.last_fetch_today = now_utc
-                    self._today_prices_logged = True
+                    if self._prices_cover_date(fetched_prices_today, today):
+                        self.last_fetch_today = now_utc
+                        self._today_prices_logged = True
+                    else:
+                        # A cache fallback, not a live update: leave
+                        # last_fetch_today alone so the next refresh retries.
+                        _LOGGER.warning(
+                            "Fetched today prices hold no entries for %s "
+                            "(cached data returned after a failed fetch); "
+                            "retrying on next refresh",
+                            today,
+                        )
                 except Exception as err:
                     await self._handle_fetch_exceptions(err)
                     if (
