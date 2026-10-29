@@ -1731,7 +1731,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:clock-digital",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        options=["pt15m", "pt60m"],
+        # Read-only sensor states; selectable resolutions are defined in select.py.
+        options=["pt15m", "pt60m", STATE_UNKNOWN],
         value_fn=lambda data: (
             data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
             if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
