@@ -4,9 +4,19 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_NO_INTERACTION: "1"
+  POETRY_VIRTUALENVS_IN_PROJECT: "true"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
   run:
@@ -14,6 +24,7 @@ jobs:
       contents: read
     name: Run flake8/pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +52,8 @@ jobs:
             test.pypi.org:443
             codecov.io:443
             uploader.codecov.io:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
 
@@ -51,29 +64,63 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+          cache-dependency-path: poetry.lock
 
       - name: Install Poetry
         run: |
-          set -o pipefail
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          python -m pip install "poetry==2.5.1"
+
+      - name: Validate lockfile
+        run: poetry check --lock
 
       - name: Install dependencies with Poetry
+        id: install
         run: |
-          poetry install
-          if [ -f requirements.txt ]; then poetry run pip install -r requirements.txt; fi
+          poetry env use python
+          poetry sync --with dev --no-root
+          poetry run python -m pip check
+
+      - name: Verify Home Assistant test environment
+        id: environment
+        run: |
+          poetry run python - <<'PY'
+          """Verify the supported interpreter and import the real test framework."""
+          import sys
+          from importlib import import_module
+          from importlib.metadata import version
+
+          if sys.version_info[:2] != (3, 14) or sys.version_info < (3, 14, 2):
+              raise SystemExit("Home Assistant tests require Python 3.14.2 or a newer 3.14 patch.")
+
+          import_module("homeassistant.core")
+          import_module("pytest_homeassistant_custom_component")
+          print(f"Python: {sys.version.split()[0]}")
+          for package_name in ("homeassistant", "pytest", "pytest-homeassistant-custom-component"):
+              print(f"{package_name}: {version(package_name)}")
+          PY
 
       - name: Register flake8 problem matcher
         run: echo "::add-matcher::.github/workflows/flake8-matchers.json"
 
       - name: Lint with flake8
         run: |
-          poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --select=E9,F63,F7,F82 --show-source --statistics
           # Keep the existing full-report pass informational until the pre-existing
           # E501/E203/C901 findings are resolved in a dedicated code-cleanup PR.
           # The critical-error pass above remains blocking.
-          poetry run flake8 . --count --max-complexity=10 --max-line-length=120 --statistics || true
+          poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --max-complexity=10 --max-line-length=120 --statistics || true
 
       - name: Test with pytest
+        id: pytest
+        if: ${{ !cancelled() && steps.environment.outcome == 'success' }}
         run: |
-          poetry run pytest -v --capture=no
+          poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
+
+      - name: Upload pytest report
+        if: ${{ !cancelled() && steps.pytest.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pytest-python-${{ matrix.python-version }}
+          path: pytest-results.xml
+          if-no-files-found: error
+          retention-days: 14

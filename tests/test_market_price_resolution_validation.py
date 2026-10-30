@@ -30,13 +30,20 @@ from custom_components.frank_energie.coordinator import FrankEnergieCoordinator
         ("PT30M", "PT15M", True, False, "PT15M"),
         ("PT15M", "PT60M", True, False, "PT15M"),
         ("PT60M", "PT15M", True, False, "PT60M"),
+        ("pt60m", "PT15M", True, False, "PT60M"),
+        ("pT15m", "PT60M", True, True, "PT15M"),
         (None, "NOT_A_RESOLUTION", True, False, "PT15M"),
-        ("PT60M", "PT15M", True, True, "PT15M"),
+        ("PT60M", "PT15M", True, True, "PT60M"),
         (None, "PT60M", False, False, "PT60M"),
-        ("PT15M", "PT60M", False, False, "PT60M"),
-        ("PT60M", "PT15M", False, False, "PT15M"),
+        ("PT15M", "PT60M", False, False, "PT15M"),
+        ("PT60M", "PT15M", False, False, "PT60M"),
+        ("pt15m", "PT60M", False, False, "PT15M"),
+        ("pT60m", "PT15M", False, True, "PT60M"),
         ("PT30M", "PT60M", True, False, "PT60M"),
         ("", "PT60M", True, False, "PT60M"),
+        (None, "PT60M", True, True, "PT60M"),
+        ("PT30M", "PT60M", False, True, "PT60M"),
+        ("PT15M", "PT60M", False, True, "PT15M"),
     ],
 )
 async def test_public_market_prices_use_supported_resolution(
@@ -46,7 +53,7 @@ async def test_public_market_prices_use_supported_resolution(
     change_pending: bool,
     expected_resolution: str,
 ) -> None:
-    """Never send a null or unsupported PriceResolution GraphQL enum."""
+    """Use valid API resolutions first and always send a supported GraphQL enum."""
     entry = MagicMock()
     entry.options = {"resolution": configured_resolution}
     api = MagicMock()

@@ -2,6 +2,34 @@
 
 This document provides information for contributors and developers working on the Frank Energie Home Assistant integration.
 
+## Home Assistant test environment
+
+Open the repository in GitHub Codespaces or use **Dev Containers: Reopen in Container** in VS Code. The committed container provides Python 3.14, Poetry 2.5.1, and the locked runtime and development dependencies in `.venv`. VS Code uses that interpreter and discovers the `tests` directory with pytest.
+
+For a host installation, use Python 3.14.2 or a newer 3.14 patch and run:
+
+```sh
+python3.14 -m pip install "poetry==2.5.1"
+poetry env use python3.14
+poetry sync --with dev --no-root
+poetry check --lock
+poetry run python -m pip check
+```
+
+If Python 3.14 is missing, install it with your interpreter manager or use the dev container before running these commands. Keep this environment separate from a production Home Assistant installation.
+
+Run the complete suite against the real Home Assistant test framework:
+
+```sh
+poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
+```
+
+`pytest-homeassistant-custom-component` is a required pytest plugin. Its Home Assistant fixtures exercise setup, config flows, entities, coordinator behavior, and cleanup. The suite mocks provider calls and requires no production credentials. Isolated checks with substitute Home Assistant objects are useful for diagnosis, but do not count as a complete Home Assistant test run.
+
+The existing **Flake8 and pytest** workflow runs the full suite on Python 3.14.2 and the latest 3.14 patch. It also supports **Run workflow** once this workflow revision is on the default branch. Each matrix job uploads its own JUnit report, including when pytest fails. Critical Flake8 errors remain blocking, while the full suite still runs after a lint failure when dependency installation and environment verification succeed.
+
+`poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant-custom-component` version together, regenerate the lockfile with the pinned Poetry version, and rerun both matrix entries. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
+
 ## Repository Structure
 
 ```text

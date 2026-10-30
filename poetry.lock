@@ -2077,14 +2077,14 @@ habluetooth = ">=4.0"
 
 [[package]]
 name = "homeassistant"
-version = "2026.10.2"
+version = "2026.10.4"
 description = "Open-source home automation platform running on Python 3."
 optional = false
 python-versions = ">=3.14.2"
 groups = ["dev"]
 files = [
-    {file = "homeassistant-2026.10.2-py3-none-any.whl", hash = "sha256:50478723a035c70d6c70b298f6135949b68b002d072b48996b2852decc55d318"},
-    {file = "homeassistant-2026.10.2.tar.gz", hash = "sha256:8ac170048d44c2c9993c2fa1ac0ee9ba892912aac74c655139ef5af7b0c216bb"},
+    {file = "homeassistant-2026.10.4-py3-none-any.whl", hash = "sha256:71843060980a763187d856a8ff170640f1e287a7b741334cd838c81404f1f452"},
+    {file = "homeassistant-2026.10.4.tar.gz", hash = "sha256:8410fecb434ab94b3f7724cd80584050f0ceeb856c16ee70202c24037d62238a"},
 ]
 
 [package.dependencies]
@@ -2132,7 +2132,7 @@ standard-telnetlib = "3.13.0"
 typing-extensions = ">=4.16.0,<5.0"
 ulid-transform = "2.2.9"
 urllib3 = ">=2.0"
-uv = "0.12.23"
+uv = "0.13.5"
 webrtc-models = "0.3.0"
 yarl = "1.25.1"
 zeroconf = "0.151.5"
@@ -4185,21 +4185,21 @@ pytest = ">=7.0.0"
 
 [[package]]
 name = "pytest-homeassistant-custom-component"
-version = "0.13.373"
+version = "0.13.375"
 description = "Experimental package to automatically extract test plugins for Home Assistant custom components"
 optional = false
 python-versions = ">=3.14"
 groups = ["dev"]
 files = [
-    {file = "pytest_homeassistant_custom_component-0.13.373-py3-none-any.whl", hash = "sha256:bdd22816780122def0451564c46b536c9889c14c04da98782ea5db4a40994dab"},
-    {file = "pytest_homeassistant_custom_component-0.13.373.tar.gz", hash = "sha256:9f60c292a3482a500e246e45f895660a198341ffd57658191899fa06885feeef"},
+    {file = "pytest_homeassistant_custom_component-0.13.375-py3-none-any.whl", hash = "sha256:ceed1b1928fcd5535490180866aeb92385b11e49ab28251c5cedbe6abd20aa35"},
+    {file = "pytest_homeassistant_custom_component-0.13.375.tar.gz", hash = "sha256:01e30574d448d8a0126f89d42e12ef0866bdc181fd136c706bc23458446df26c"},
 ]
 
 [package.dependencies]
 aiohasupervisor = "0.6.0"
 coverage = "7.16.2"
 freezegun = "1.5.5"
-homeassistant = "2026.10.2"
+homeassistant = "2026.10.4"
 license-expression = "30.4.4"
 mock-open = "1.4.0"
 numpy = "2.3.2"
@@ -5157,31 +5157,31 @@ files = [
 
 [[package]]
 name = "uv"
-version = "0.12.23"
+version = "0.13.5"
 description = "An extremely fast Python package and project manager, written in Rust."
 optional = false
 python-versions = ">=3.8"
 groups = ["dev"]
 files = [
-    {file = "uv-0.12.23-py3-none-linux_armv6l.whl", hash = "sha256:8f021dfbe5b6081021dd47fd8372cfba386fc5d39161e73d4f33cff90ce1760c"},
-    {file = "uv-0.12.23-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:4951286e68f116fa41897ecf8e248cc2836cb013be6d4f37afae4049f9ef4df7"},
-    {file = "uv-0.12.23-py3-none-macosx_11_0_arm64.whl", hash = "sha256:99197c022afbd1edd0a295e9fdac5078c61eddf2e77657a77294cfe8ea0d94b9"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:895137194d242cc8075c3006288b485af54feeae68512f4ffc96f75b27543cc0"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l.whl", hash = "sha256:c4d236bb220856027ba8e28ef693cac472ee2a740a61faef1ac2001165c7b3d5"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:02f2a0fd1cb90b5fc06b52e8cbc3169bdc4e53804e9d66ba0ad516be767424f4"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:855232fd95d456bd5ee17e262f73112967fbbb2803e745f1911c08ceb042e641"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:b70220be9056bd05908770179101a53687eb5c89f72a3edc1e20df0cd3f157c2"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:08b2fc8e250efdfc1e47da0483f3e19f433bb0934282361817f61c0b19cb3674"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:565c6e2874dbeae86c02f3dea97255e878fec672659a73d4930c6b93fcab2fff"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:9346c741175c7fc0d380f30fcfcb8d5e13f5f900b30536230c8d34208524e47a"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_31_riscv64.musllinux_1_1_riscv64.whl", hash = "sha256:b03b1c35b5f301e888671eb5d0e74b8789558905db1d411cb8e07ea4ec320268"},
-    {file = "uv-0.12.23-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:5b07cbea635177da0d6b902bcde9ce0304c1fa5b49a37b27ef7aa021c5c31697"},
-    {file = "uv-0.12.23-py3-none-musllinux_1_1_i686.whl", hash = "sha256:7a919e3420adf4cc03895b404af655c7229f646bffabbd9a16979683772a7d34"},
-    {file = "uv-0.12.23-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:11d18c1589d7907376b4f3fa31028e46cc609ac4b7d83eabc2b04cd8ca1433cc"},
-    {file = "uv-0.12.23-py3-none-win32.whl", hash = "sha256:f05c5ad8d6cb4b2659cb6368ed02c067539415b24a2b69effd8ada576fdbf303"},
-    {file = "uv-0.12.23-py3-none-win_amd64.whl", hash = "sha256:fb8a4117a5224d73abe2204a1e744ae34b544f1b9a0b761576851deaa7215c12"},
-    {file = "uv-0.12.23-py3-none-win_arm64.whl", hash = "sha256:9a65258535db432df51ca7d26338c01431820b94b634762f5718fc55895f974e"},
-    {file = "uv-0.12.23.tar.gz", hash = "sha256:e952162a5be6847deaccf3fd5b41a628506fd9ff1ea4363b8c975bd6f927d832"},
+    {file = "uv-0.13.5-py3-none-linux_armv6l.whl", hash = "sha256:8d092d07d2389909027c2ed4965ade1bd46bbcecceb26686ff40927684f8c457"},
+    {file = "uv-0.13.5-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:337a14829bb499e114989df4f908f134ff37f1fb6c33497541cfb05b28080e39"},
+    {file = "uv-0.13.5-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a42c85fa8156e1e5e2cecdbc77bb818ea1dcf5f78b8e2a8f84c7fe4f16f0702e"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:2386c2dc9b59fc1d39b1c500e4319d71d3268232eb3b38e29cd6775d6269e8d4"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l.whl", hash = "sha256:4f62680fe58c5a83fd539e38f1956c2b577b1f5939c9020aa4c7f0addda2f4ad"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:0e03f5717bdaaf5ab4e2df361d2395e36b515946f56ef4bed88801aeb9959fb0"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f867c5ec24c563afaae730a13e46cdf74a1a0b64c134286ff99762a96e2abf40"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:d3fd5db55c20feb672ea457361aba29ab68b9ae69a14d98ad6c138b5f86dcca4"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:e01481ae5212e45ee7c85fad5fc67f06b0ee0329a7c3c289dc529da884b03881"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fa8d26e08e34c29c0c4e820cf3181757086d547240b4f4d31ff1d8bd810ca946"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:91e58e304b63b6c91bac5561459ab0c3ea24f17bc01ea9359d69fed72142978f"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_31_riscv64.musllinux_1_1_riscv64.whl", hash = "sha256:309a74d3c488bfaa3ba7bff759da73193d8781729c0a01274f4940fd32bb5712"},
+    {file = "uv-0.13.5-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:469cca66de1b17c75b9b9de806a64cffb57cba5e42b1e30d0bba6fa72a146f58"},
+    {file = "uv-0.13.5-py3-none-musllinux_1_1_i686.whl", hash = "sha256:2386e8dbfe110ff2f8ec8bd344dd18bf39eb9eb54e1edeeb87c3b85c34229cd3"},
+    {file = "uv-0.13.5-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:d162669e3a7811c584b03690eaa11e796ad1d309aa8229d5dfe3cbcd68a90400"},
+    {file = "uv-0.13.5-py3-none-win32.whl", hash = "sha256:f4e55a6e2a1089fe74ed50fbdf2df0f6f336ee148ad232b05932db5deee8007e"},
+    {file = "uv-0.13.5-py3-none-win_amd64.whl", hash = "sha256:1fb29fc46ba12033e2ef95a95ac79d649e71bbb1358419bbbcbd19d86026ef2f"},
+    {file = "uv-0.13.5-py3-none-win_arm64.whl", hash = "sha256:0548460d46c8667488b1f089e936f29f0edfb1cc753f9152ffbd8bc84a46aa20"},
+    {file = "uv-0.13.5.tar.gz", hash = "sha256:979409b8c9a78df140ffb19c53f511b7a73526da8d1d5e36558833055e371c6c"},
 ]
 
 [[package]]
@@ -5771,4 +5771,4 @@ ifaddr = ">=0.1.7"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14.2,<4.0"
-content-hash = "3ed187761e4e225473992f9efb7e82a5b7cae1ad9dae30b8469cbd1217ae8623"
+content-hash = "668a3d879a2c056d91682f0f367164f293dade0cae65198c96e19854dc980842"

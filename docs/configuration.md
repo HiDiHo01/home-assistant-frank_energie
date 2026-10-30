@@ -76,6 +76,11 @@ Available resolutions may include:
 
 Resolution management is available through Home Assistant entities when supported by the account.
 
+The contract price resolution sensor is read-only. It displays `unknown` when a
+successful refresh contains no supported resolution, and `unavailable` when the
+coordinator refresh fails. The separate resolution select offers only `PT15M`
+and `PT60M`; `unknown` cannot be selected or sent as a resolution change.
+
 See:
 
 - [Entities](entities.md)
