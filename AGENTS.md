@@ -416,6 +416,16 @@ Use the testing framework and conventions already established in the repository,
 * Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
 * Report the interpreter, Home Assistant, test-plugin versions, pass/skip/failure counts, and any checks that could not run. Do not describe isolated method checks as a full Home Assistant suite.
 
+### Config-entry migration and reconfiguration regressions
+
+* Keep the config-entry schema version and minor version centralized in `const.py`; use them for the config flow and the integration-level `async_migrate_entry` hook.
+* Exercise migration through Home Assistant's real config-entry setup/reload APIs. Mock provider/platform setup at the integration boundary, without mocking the migration callback or config-entry manager.
+* Cover legacy, current, older minor and future versions; preserve credentials, site identity, unrelated options and other entries. Never downgrade a newer minor schema or accept an incompatible future major schema.
+* Exercise reconfiguration through the real flow manager with `SOURCE_RECONFIGURE`. Cover saved-username defaults, invalid input, provider failures, retries, cancellation, encrypted credential updates and target-entry isolation.
+* Verify that reconfigure and reauthentication complete with their distinct Home Assistant reasons and schedule one reload. Use the native update/reload helper so Home Assistant provides the appropriate shared translation.
+* Home Assistant awaits `async_migrate_entry` even when migration only uses the synchronous config-entry update callback. Preserve that async contract; document a necessary analyzer exception on the hook's declaration instead of adding a fake await or suppressing the rule across the file.
+* Run `poetry run python -m pytest tests/test_migration.py tests/test_reconfigure.py tests/test_config_flow.py tests/test_translations.py`, followed by the full suite and the configured lint/format checks.
+
 ### Required test coverage
 
 Test the relevant cases for:

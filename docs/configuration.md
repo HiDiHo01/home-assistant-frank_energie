@@ -63,7 +63,9 @@ When multiple eligible sites are detected:
 
 The integration retrieves data for the selected site only.
 
-The active site can be changed later through reconfiguration.
+Each configuration entry retains its selected delivery site. Reconfiguration
+updates the credentials for that entry. Add a separate integration entry when
+you want to configure another delivery site.
 
 ## Resolution Selection
 
@@ -88,17 +90,31 @@ See:
 
 ## Reconfiguration
 
-To change configuration settings:
+To update the credentials for an existing configuration:
 
 1. Open **Settings → Devices & Services**.
 2. Select the Frank Energie integration.
-3. Select **Configure**.
+3. Open the entry's menu and select **Reconfigure**.
+4. Enter the updated account credentials.
 
-Examples:
+The integration validates the credentials before saving them. Successful
+reconfiguration replaces the saved tokens, encrypts the password and reloads
+the selected entry once. The selected site, entry identity, resolution and
+other options are preserved. Failed validation or cancellation leaves the saved
+configuration unchanged.
 
-- Change the selected delivery site.
-- Update account information.
-- Review available configuration options.
+Use **Configure** for the integration's options, such as polling intervals.
+
+### Stored Configuration Upgrades
+
+Home Assistant automatically migrates version 1 entries to schema version 2.1
+before setup. The migration adds the default `PT15M` resolution only when that
+option is missing. Existing resolution values, credentials, site references,
+entry identities and other options are retained. New entries use schema 2.1.
+
+Newer minor versions remain intact; incompatible future major versions are
+refused instead of being overwritten. No manual recreation of existing entries
+is required for this migration.
 
 ## Reauthentication
 

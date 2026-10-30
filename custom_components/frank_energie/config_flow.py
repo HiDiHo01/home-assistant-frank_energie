@@ -29,6 +29,8 @@ from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import AuthException, ConnectionException
 
 from .const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
     CONF_SITE,
     DOMAIN,
     CONF_INTERVAL_SETTINGS,
@@ -54,27 +56,6 @@ from .helpers import decrypt_password, encrypt_password
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
-
-VERSION = 2
-MINOR_VERSION = 1
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old config entry format."""
-
-    if entry.version < 2:
-        new_options = dict(entry.options)
-
-        if "resolution" not in new_options:
-            new_options["resolution"] = "PT15M"
-
-        hass.config_entries.async_update_entry(
-            entry,
-            options=new_options,
-            version=2,
-        )
-
-    return True
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -112,7 +93,8 @@ async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> 
 class ConfigFlow(config_entries.ConfigFlow):
     """Handle the config flow for Frank Energie."""
 
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
+    MINOR_VERSION = CONFIG_ENTRY_MINOR_VERSION
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -400,30 +382,9 @@ class ConfigFlow(config_entries.ConfigFlow):
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None,
     ) -> ConfigFlowResult:
-        """Handle the reconfiguration step."""
-        if self._reauth_entry is None:
-            self._reauth_entry = self.hass.config_entries.async_get_entry(
-                self.context["entry_id"]
-            )
-
-        if not user_input:
-            return self._show_login_form()
-
-        validation_errors = self._validate_login_input(user_input)
-
-        if validation_errors:
-            return self._show_login_form(errors=validation_errors)
-
-        try:
-            auth = await self._authenticate(user_input)
-        except AuthException:
-            return await self._handle_authentication_failure(reason="invalid_auth")
-        except ConnectionException:
-            return await self._handle_authentication_failure(reason="connection_error")
-        except Exception:
-            return await self._handle_authentication_failure(reason="unknown_error")
-
-        return await self._handle_authentication_success(user_input, auth)
+        """Validate credentials for the entry selected by Home Assistant."""
+        self._reauth_entry = self._get_reconfigure_entry()
+        return await self.async_step_login(user_input, errors)
 
     async def _get_available_sites(self, username: str) -> list[dict[str, str]]:
         """Retrieve and normalize available delivery sites for the user."""
@@ -630,7 +591,9 @@ class ConfigFlow(config_entries.ConfigFlow):
         # Try to pre-fill username from reauth entry or last user input
         username = None
         if self._reauth_entry:
-            username = self._reauth_entry.data.get(CONF_USERNAME)
+            username = self._reauth_entry.options.get(
+                CONF_USERNAME
+            ) or self._reauth_entry.data.get(CONF_USERNAME)
         elif user_input:
             username = user_input.get(CONF_USERNAME)
 
@@ -701,13 +664,11 @@ class ConfigFlow(config_entries.ConfigFlow):
             updated_data.pop(CONF_USERNAME, None)
             updated_data.pop(CONF_PASSWORD, None)
 
-            self.hass.config_entries.async_update_entry(
-                self._reauth_entry, data=updated_data, options=updated_options
+            return self.async_update_reload_and_abort(
+                self._reauth_entry,
+                data=updated_data,
+                options=updated_options,
             )
-            self.hass.async_create_task(
-                self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
-            )
-            return self.async_abort(reason="reauth_successful")
         return await self.async_step_site(self.sign_in_data)
 
     async def _handle_authentication_failure(
