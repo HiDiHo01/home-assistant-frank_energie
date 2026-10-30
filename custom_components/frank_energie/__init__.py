@@ -83,7 +83,7 @@ PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
 
 
 # Home Assistant awaits this hook; config-entry updates are synchronous callbacks.
-async def async_migrate_entry(  # NOSONAR: Home Assistant requires this coroutine.
+async def async_migrate_entry(  # NOSONAR(S7503)
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
 ) -> bool:
