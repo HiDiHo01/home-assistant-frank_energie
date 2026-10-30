@@ -110,6 +110,9 @@
       "disabled_haptic_feedback": {
         "name": "Retour haptique désactivé"
       },
+      "electricity_price_lowest_today": {
+        "name": "Prix de l’électricité au plus bas aujourd’hui"
+      },
       "smart_feed_in": {
         "name": "Injection Intelligente"
       },
