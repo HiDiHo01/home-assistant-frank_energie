@@ -110,6 +110,9 @@
       "disabled_haptic_feedback": {
         "name": "Haptic feedback disabled"
       },
+      "electricity_price_lowest_today": {
+        "name": "Electricity price is lowest today"
+      },
       "smart_feed_in": {
         "name": "Smart feed-in"
       },

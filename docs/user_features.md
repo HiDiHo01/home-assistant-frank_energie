@@ -12,6 +12,7 @@ The following functionality is available without authentication:
 - Gas prices
 - Price statistics
 - Lowest price calculations
+- Binary sensor indicating whether the electricity price is today's lowest
 - Cheapest price windows
 - Tomorrow price availability detection
 - Frank Energie events

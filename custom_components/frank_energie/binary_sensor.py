@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, time, timedelta
 from enum import Enum
+from math import isfinite
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -25,16 +28,20 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_ELECTRICITY,
     DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
     DOMAIN,
+    ICON,
     SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_PRICES,
     SERVICE_NAME_USER,
+    TIMEZONE_AMSTERDAM,
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
-from .helpers import device_translation_key
+from .helpers import device_translation_key, service_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -222,6 +229,45 @@ def _smart_hvac_available(data: FrankEnergieData) -> bool:
         return feature.get("isActivated") is not None
 
     return getattr(feature, "isActivated", None) is not None
+
+
+def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
+    """Compare the active all-in price with today's Amsterdam-local minimum."""
+    electricity = data.get(DATA_ELECTRICITY)
+    if electricity is None:
+        return None
+
+    now_utc = datetime.now(UTC)
+    today_prices = electricity.today
+    resolution = electricity.resolution_minutes
+    if not resolution or resolution <= 0:
+        return None
+
+    local_date = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+    local_start = datetime.combine(local_date, time.min, ZoneInfo(TIMEZONE_AMSTERDAM))
+    local_end = datetime.combine(
+        local_date + timedelta(days=1), time.min, ZoneInfo(TIMEZONE_AMSTERDAM)
+    )
+    start_utc = local_start.astimezone(UTC)
+    end_utc = local_end.astimezone(UTC)
+    interval = timedelta(minutes=resolution)
+    actual_starts = {price.date_from for price in today_prices}
+    while start_utc < end_utc:
+        if start_utc not in actual_starts:
+            return None
+        start_utc += interval
+
+    current_price = next(
+        (price for price in today_prices if price.contains_time(now_utc)), None
+    )
+    if current_price is None:
+        return None
+
+    totals = [price.total for price in today_prices]
+    if not all(isfinite(total) for total in totals):
+        return None
+
+    return current_price.total == min(totals)
 
 
 def _disabled_haptic_feedback(
@@ -452,6 +498,10 @@ class FrankEnergieBinarySensor(
                 model=SERVICE_NAME_BATTERIES,
                 configuration_url=API_CONF_URL,
             )
+        elif description.service_name == SERVICE_NAME_PRICES:
+            self._attr_device_info = service_device_info(
+                config_entry.entry_id, SERVICE_NAME_PRICES
+            )
         else:
             self._attr_device_info = DeviceInfo(
                 identifiers={
@@ -620,6 +670,13 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
             else False
         ),
     ),
+    FrankEnergieBinarySensorDescription(
+        key="electricity_price_lowest_today",
+        translation_key="electricity_price_lowest_today",
+        icon=ICON,
+        service_name=SERVICE_NAME_PRICES,
+        value_fn=_electricity_price_lowest_today,
+    ),
 )
 
 
@@ -670,18 +727,21 @@ async def async_setup_entry(
 
     runtime_data = config_entry.runtime_data
     settings_coordinator = runtime_data.settings_coordinator
+    price_coordinator = runtime_data.price_coordinator
     pv_coordinator = runtime_data.pv_coordinator
     battery_coordinator = runtime_data.battery_coordinator
 
     entities: list[FrankEnergieBinarySensor] = []
 
     for description in BINARY_SENSOR_DESCRIPTIONS:
-        if description.key in ("smart_feed_in", "smart_pv_systems"):
+        if description.service_name == SERVICE_NAME_PRICES:
+            coord = price_coordinator
+        elif description.key in ("smart_feed_in", "smart_pv_systems"):
             coord = pv_coordinator
         else:
             coord = settings_coordinator
 
-        if coord.api.is_authenticated:
+        if not description.authenticated or coord.api.is_authenticated:
             entities.append(
                 FrankEnergieBinarySensor(
                     coord,

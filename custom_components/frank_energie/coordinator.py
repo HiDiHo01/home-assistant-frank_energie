@@ -453,7 +453,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._country_code: str | None = self.hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
-        self._connection_id: str | None = None  # cache voor contractPriceResolutionState
+        self._connection_id: str | None = (
+            None  # cache voor contractPriceResolutionState
+        )
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
@@ -1064,7 +1066,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         self._country_code = country_code
             if not self._connection_id:
                 self._connection_id = _extract_electricity_connection_id(user_data)
-                _LOGGER.debug("Extracted electricity connection ID: %s", self._connection_id)
+                _LOGGER.debug(
+                    "Extracted electricity connection ID: %s", self._connection_id
+                )
 
             return user_data
         except AuthException as ex:
@@ -2104,7 +2108,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index: index + window]
+            window_prices = prices[index : index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
@@ -2286,7 +2290,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        if self._api_resolution_state is not None:  # and not self._resolution_change_pending:
+        if (
+            self._api_resolution_state is not None
+        ):  # and not self._resolution_change_pending:
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
@@ -2300,8 +2306,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return configured
 
         _LOGGER.debug(
-            "Unsupported configured price resolution %r; "
-            "falling back to %s",
+            "Unsupported configured price resolution %r; falling back to %s",
             configured,
             DEFAULT_RESOLUTION,
         )
