@@ -24,7 +24,11 @@ from python_frank_energie.exceptions import AuthException
 from python_frank_energie.models import UserSites
 
 from .const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
     CONF_COORDINATOR,
+    CONF_RESOLUTION,
+    DEFAULT_RESOLUTION,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
@@ -76,6 +80,33 @@ _DEPENDENT_PLATFORMS: list[str] = [
     Platform.SELECT,
 ]
 PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+) -> bool:
+    """Upgrade stored options without changing credentials or entry identity."""
+    if entry.version > CONFIG_ENTRY_VERSION:
+        return False
+
+    if (
+        entry.version == CONFIG_ENTRY_VERSION
+        and entry.minor_version >= CONFIG_ENTRY_MINOR_VERSION
+    ):
+        return True
+
+    migrated_options = dict(entry.options)
+    if entry.version < CONFIG_ENTRY_VERSION:
+        migrated_options.setdefault(CONF_RESOLUTION, DEFAULT_RESOLUTION)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options=migrated_options,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+    )
+    return True
 
 
 async def async_setup_entry(
