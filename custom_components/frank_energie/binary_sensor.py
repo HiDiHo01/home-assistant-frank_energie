@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from enum import Enum
 from math import isfinite
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -36,6 +37,7 @@ from .const import (
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_PRICES,
     SERVICE_NAME_USER,
+    TIMEZONE_AMSTERDAM,
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
@@ -237,6 +239,24 @@ def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
 
     now_utc = datetime.now(UTC)
     today_prices = electricity.today
+    resolution = electricity.resolution_minutes
+    if not resolution or resolution <= 0:
+        return None
+
+    local_date = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+    local_start = datetime.combine(local_date, time.min, ZoneInfo(TIMEZONE_AMSTERDAM))
+    local_end = datetime.combine(
+        local_date + timedelta(days=1), time.min, ZoneInfo(TIMEZONE_AMSTERDAM)
+    )
+    start_utc = local_start.astimezone(UTC)
+    end_utc = local_end.astimezone(UTC)
+    interval = timedelta(minutes=resolution)
+    actual_starts = {price.date_from for price in today_prices}
+    while start_utc < end_utc:
+        if start_utc not in actual_starts:
+            return None
+        start_utc += interval
+
     current_price = next(
         (price for price in today_prices if price.contains_time(now_utc)), None
     )

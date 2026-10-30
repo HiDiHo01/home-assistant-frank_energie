@@ -57,6 +57,7 @@ def _price_data(
             for index, market_price in enumerate(market_prices)
         ],
         energy_type="electricity",
+        resolution_minutes=resolution_minutes,
     )
 
 
@@ -96,10 +97,16 @@ def test_lowest_price_state(
     expected: bool,
 ) -> None:
     """Compare actual interval prices without rounding or losing tied minima."""
-    start_time = datetime(2026, 10, 30, 9, tzinfo=UTC)
-    freezer.move_to(start_time + timedelta(minutes=active_index * resolution_minutes))
+    start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
+    first_index = 10 * 60 // resolution_minutes
+    prices = [1.0] * (24 * 60 // resolution_minutes)
+    prices[first_index : first_index + len(market_prices)] = market_prices
+    freezer.move_to(
+        start_time
+        + timedelta(minutes=(first_index + active_index) * resolution_minutes)
+    )
     lowest_price_sensor.coordinator.data = {
-        DATA_ELECTRICITY: _price_data(start_time, market_prices, resolution_minutes)
+        DATA_ELECTRICITY: _price_data(start_time, prices, resolution_minutes)
     }
 
     assert lowest_price_sensor.is_on is expected
@@ -110,10 +117,14 @@ def test_lowest_price_uses_all_in_total(
     lowest_price_sensor: FrankEnergieBinarySensor, freezer: FrozenDateTimeFactory
 ) -> None:
     """An interval with a higher market price can have the lowest all-in total."""
-    start_time = datetime(2026, 10, 30, 9, tzinfo=UTC)
-    freezer.move_to(start_time + timedelta(minutes=15))
+    start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
+    prices = [1.0] * 96
+    taxes = [0.0] * 96
+    prices[40:42] = [0.05, 0.2]
+    taxes[40] = 0.4
+    freezer.move_to(start_time + timedelta(minutes=15 * 41))
     lowest_price_sensor.coordinator.data = {
-        DATA_ELECTRICITY: _price_data(start_time, [0.05, 0.2], taxes=[0.4, 0.0])
+        DATA_ELECTRICITY: _price_data(start_time, prices, taxes=taxes)
     }
 
     assert lowest_price_sensor.is_on is True
@@ -128,16 +139,20 @@ def test_nonfinite_today_price_is_unknown(
     active_index: int,
 ) -> None:
     """An indeterminate daily minimum must never publish a confirmed on/off."""
-    start_time = datetime(2026, 10, 30, 9, tzinfo=UTC)
-    freezer.move_to(start_time + timedelta(minutes=15 * active_index))
+    start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
+    prices = [1.0] * 96
+    prices[40:42] = [0.0, invalid_price]
+    freezer.move_to(start_time + timedelta(minutes=15 * (40 + active_index)))
     lowest_price_sensor.coordinator.data = {
-        DATA_ELECTRICITY: _price_data(start_time, [0.0, invalid_price])
+        DATA_ELECTRICITY: _price_data(start_time, prices)
     }
 
     assert lowest_price_sensor.is_on is None
 
 
-@pytest.mark.parametrize("scenario", ["missing", "null", "empty", "expired", "future"])
+@pytest.mark.parametrize(
+    "scenario", ["missing", "null", "empty", "expired", "future", "partial"]
+)
 async def test_missing_current_price_reaches_unknown_state(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
@@ -161,6 +176,8 @@ async def test_missing_current_price_reaches_unknown_state(
         coordinator.data[DATA_ELECTRICITY] = _price_data(
             now_utc + timedelta(days=1), [0.1]
         )
+    elif scenario == "partial":
+        coordinator.data[DATA_ELECTRICITY] = _price_data(now_utc, [0.1])
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="test-prices")
     entry.add_to_hass(hass)
@@ -192,10 +209,7 @@ def test_lowest_price_uses_amsterdam_day(
     """Exclude yesterday and tomorrow even when the local date differs from UTC."""
     start_time = datetime(2026, 7, 31, 21, tzinfo=UTC)
     freezer.move_to(start_time + timedelta(hours=1, minutes=5))
-    electricity = _price_data(start_time, [-0.9, 0.2, 0.3], 60)
-    electricity.price_data.extend(
-        _price_data(start_time + timedelta(days=1, hours=1), [-1.0], 60).price_data
-    )
+    electricity = _price_data(start_time, [-0.9, 0.2, 0.3] + [0.5] * 22 + [-1.0], 60)
     lowest_price_sensor.coordinator.data = {DATA_ELECTRICITY: electricity}
 
     assert lowest_price_sensor.is_on is True
@@ -206,8 +220,10 @@ def test_midnight_recalculates_the_daily_minimum(
 ) -> None:
     """Recompute the daily minimum from cached prices across local midnight."""
     start_time = datetime(2026, 10, 30, 22, tzinfo=UTC)
+    prices = [0.5] * 48
+    prices[23:26] = [0.1, 0.3, 0.2]
     lowest_price_sensor.coordinator.data = {
-        DATA_ELECTRICITY: _price_data(start_time, [0.1, 0.3, 0.2], 60)
+        DATA_ELECTRICITY: _price_data(start_time - timedelta(hours=23), prices, 60)
     }
 
     for moment, expected in [
@@ -236,11 +252,76 @@ def test_repeated_dst_hour_uses_correct_interval(
     freezer.move_to(now_utc)
     lowest_price_sensor.coordinator.data = {
         DATA_ELECTRICITY: _price_data(
-            datetime(2026, 10, 25, tzinfo=UTC), [0.4, 0.1], 60
+            datetime(2026, 10, 24, 22, tzinfo=UTC),
+            [0.5, 0.5, 0.4, 0.1] + [0.5] * 21,
+            60,
         )
     }
 
     assert lowest_price_sensor.is_on is expected
+
+
+@pytest.mark.parametrize("resolution_minutes", [0, -15, None])
+def test_invalid_resolution_is_unknown(
+    lowest_price_sensor: FrankEnergieBinarySensor,
+    freezer: FrozenDateTimeFactory,
+    resolution_minutes: int | None,
+) -> None:
+    """Avoid comparing prices when expected intervals cannot be derived."""
+    start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
+    electricity = _price_data(start_time, [0.5] * 96)
+    electricity.resolution_minutes = resolution_minutes
+    freezer.move_to(start_time + timedelta(hours=1))
+    lowest_price_sensor.coordinator.data = {DATA_ELECTRICITY: electricity}
+
+    assert lowest_price_sensor.is_on is None
+
+
+def test_no_active_interval_in_complete_starts_is_unknown(
+    lowest_price_sensor: FrankEnergieBinarySensor, freezer: FrozenDateTimeFactory
+) -> None:
+    """The presence of every start does not guarantee an active interval."""
+    start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
+    electricity = _price_data(start_time, [0.5] * 96)
+    electricity.price_data[40].date_till = electricity.price_data[40].date_from
+    freezer.move_to(start_time + timedelta(minutes=40 * 15 + 1))
+    lowest_price_sensor.coordinator.data = {DATA_ELECTRICITY: electricity}
+
+    assert lowest_price_sensor.is_on is None
+
+
+@pytest.mark.parametrize("resolution_minutes", [15, 60])
+@pytest.mark.parametrize(
+    ("start_utc", "hours"),
+    [
+        ("2026-10-29T23:00:00+00:00", 24),
+        ("2026-03-28T23:00:00+00:00", 23),
+        ("2026-10-24T22:00:00+00:00", 25),
+    ],
+)
+@pytest.mark.parametrize("missing_position", [None, "first", "middle", "last"])
+def test_requires_every_interval_for_local_day(
+    lowest_price_sensor: FrankEnergieBinarySensor,
+    freezer: FrozenDateTimeFactory,
+    resolution_minutes: int,
+    start_utc: str,
+    hours: int,
+    missing_position: str | None,
+) -> None:
+    """Reject missing starts on ordinary and DST transition days."""
+    start_time = datetime.fromisoformat(start_utc)
+    count = hours * 60 // resolution_minutes
+    prices = [0.5] * count
+    prices[1] = 0.1
+    electricity = _price_data(start_time, prices, resolution_minutes)
+    if missing_position is not None:
+        index = {"first": 0, "middle": count // 2, "last": count - 1}[missing_position]
+        # A duplicate preserves the number of entries, so length alone cannot pass.
+        electricity.price_data[index] = electricity.price_data[1]
+    freezer.move_to(start_time + timedelta(minutes=resolution_minutes))
+    lowest_price_sensor.coordinator.data = {DATA_ELECTRICITY: electricity}
+
+    assert lowest_price_sensor.is_on is (True if missing_position is None else None)
 
 
 @pytest.mark.parametrize("authenticated", [False, True])
