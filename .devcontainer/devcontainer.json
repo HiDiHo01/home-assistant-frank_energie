@@ -1,0 +1,29 @@
+{
+  "name": "Frank Energie Home Assistant tests",
+  "image": "mcr.microsoft.com/devcontainers/python:3.3.2-3.14-bookworm",
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "POETRY_VIRTUALENVS_IN_PROJECT": "true",
+    "POETRY_NO_INTERACTION": "1"
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
+  },
+  "postCreateCommand": [
+    "bash",
+    "-c",
+    "python -m pip install --user poetry==2.5.1 && python -m poetry env use python && python -m poetry sync --with dev --no-root"
+  ],
+  "waitFor": "postCreateCommand",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"],
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  }
+}

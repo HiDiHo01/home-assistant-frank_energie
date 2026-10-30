@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
@@ -704,6 +705,7 @@ class TestResolutionProperty:
             today, resolution=expected_resolution
         )
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "api_active_option", [None, 60, ["PT60M"], {"PT60M": True}]
     )
@@ -711,15 +713,22 @@ class TestResolutionProperty:
         ("config_option", "expected_resolution"),
         [("PT60M", "PT60M"), ("INVALID", "PT15M")],
     )
-    def test_non_string_api_resolution_uses_fallback(
+    async def test_non_string_api_resolution_uses_fallback(
         self,
+        hass: HomeAssistant,
         coordinator: FrankEnergieCoordinator,
         api_active_option: object,
         config_option: str,
         expected_resolution: str,
     ) -> None:
         """Reject malformed API fields without losing configured or default values."""
-        coordinator.config_entry.options = {"resolution": config_option}
+        entry = coordinator.config_entry
+        assert isinstance(entry, MockConfigEntry)
+        entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={"resolution": config_option}
+        )
+        await hass.async_block_till_done()
         coordinator._api_resolution_state = MagicMock(
             spec=ContractPriceResolutionState, activeOption=api_active_option
         )

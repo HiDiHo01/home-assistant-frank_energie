@@ -401,6 +401,21 @@ Every behavior change must include appropriate automated tests.
 
 Use the testing framework and conventions already established in the repository, normally `pytest` and Home Assistant's test helpers.
 
+### Reproducible Home Assistant test environment
+
+* Use the committed dev container or Python 3.14.2 or a newer 3.14 patch. `.python-version` selects the 3.14 series; the CI matrix covers the minimum and the latest patch.
+* If Python 3.14 is absent, provision it with an available interpreter manager (for example, `uv python install 3.14`) or the committed dev container before declaring the full suite unavailable.
+* Use Poetry 2.5.1. Select the interpreter with `poetry env use python3.14` and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
+* Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
+* Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
+* Keep `pytest-homeassistant-custom-component` required in pytest configuration. Use its real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
+* Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
+* Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
+* Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.
+* Run Flake8 with `--jobs=1 --extend-exclude=.venv` so local virtual environments are excluded and checks work in environments with restricted process creation.
+* Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
+* Report the interpreter, Home Assistant, test-plugin versions, pass/skip/failure counts, and any checks that could not run. Do not describe isolated method checks as a full Home Assistant suite.
+
 ### Required test coverage
 
 Test the relevant cases for:

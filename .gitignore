@@ -5,6 +5,8 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .ruff_cache/
+.venv/
+pytest-results.xml
 .coverage
 coverage.xml
 htmlcov/
