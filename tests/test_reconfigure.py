@@ -97,7 +97,8 @@ async def test_reconfigure_form_prefills_saved_username(
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "login"
-    assert result["data_schema"]({CONF_PASSWORD: "supplied-password"}) == {
+    actual_form_data = result["data_schema"]({CONF_PASSWORD: "supplied-password"})
+    assert actual_form_data == {
         CONF_USERNAME: expected_username,
         CONF_PASSWORD: "supplied-password",
     }
@@ -172,17 +173,19 @@ async def test_credentials_update_only_the_selected_entry(
         decrypt_password(hass, reconfigure_entry.options[CONF_PASSWORD])
         == "new-password"
     )
-    assert (
+    actual_identity = (
         reconfigure_entry.entry_id,
         reconfigure_entry.unique_id,
         reconfigure_entry.title,
-    ) == original_identity
+    )
+    assert actual_identity == original_identity
     assert dict(other_entry.data) == {
         "site_reference": "site-beta",
         CONF_ACCESS_TOKEN: "other-token",
     }
     assert dict(other_entry.options) == {"resolution": "PT15M"}
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 2
+    actual_entry_count = len(hass.config_entries.async_entries(DOMAIN))
+    assert actual_entry_count == 2
 
 
 @pytest.mark.parametrize(

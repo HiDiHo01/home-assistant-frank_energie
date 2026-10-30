@@ -95,11 +95,13 @@ async def test_legacy_entry_migrates_during_setup(
     assert (entry.version, entry.minor_version) == (2, 1)
     assert entry.state is ConfigEntryState.LOADED
     assert dict(entry.data) == original_data
-    assert dict(entry.options) == {
+    expected_options = {
         "resolution": "PT15M",
         **original_options,
     }
-    assert (entry.entry_id, entry.unique_id, entry.title) == original_identity
+    assert dict(entry.options) == expected_options
+    actual_identity = (entry.entry_id, entry.unique_id, entry.title)
+    assert actual_identity == original_identity
     assert (other_entry.version, other_entry.minor_version) == (1, 1)
     assert dict(other_entry.data) == {"site_reference": "site-beta"}
     assert dict(other_entry.options) == {"resolution": "PT60M"}
