@@ -25,16 +25,19 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_ELECTRICITY,
     DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
     DOMAIN,
+    ICON,
     SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_PRICES,
     SERVICE_NAME_USER,
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
-from .helpers import device_translation_key
+from .helpers import device_translation_key, service_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -222,6 +225,18 @@ def _smart_hvac_available(data: FrankEnergieData) -> bool:
         return feature.get("isActivated") is not None
 
     return getattr(feature, "isActivated", None) is not None
+
+
+def _tomorrow_prices_available(data: FrankEnergieData | None) -> bool | None:
+    """Return whether electricity prices exist for tomorrow in Amsterdam."""
+    if data is None:
+        return None
+
+    electricity = data.get(DATA_ELECTRICITY)
+    if electricity is None:
+        return None
+
+    return bool(electricity.tomorrow)
 
 
 def _disabled_haptic_feedback(
@@ -452,6 +467,10 @@ class FrankEnergieBinarySensor(
                 model=SERVICE_NAME_BATTERIES,
                 configuration_url=API_CONF_URL,
             )
+        elif description.service_name == SERVICE_NAME_PRICES:
+            self._attr_device_info = service_device_info(
+                config_entry.entry_id, SERVICE_NAME_PRICES
+            )
         else:
             self._attr_device_info = DeviceInfo(
                 identifiers={
@@ -620,6 +639,13 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
             else False
         ),
     ),
+    FrankEnergieBinarySensorDescription(
+        key="tomorrow_prices_available",
+        translation_key="tomorrow_prices_available",
+        icon=ICON,
+        service_name=SERVICE_NAME_PRICES,
+        value_fn=_tomorrow_prices_available,
+    ),
 )
 
 
@@ -670,18 +696,21 @@ async def async_setup_entry(
 
     runtime_data = config_entry.runtime_data
     settings_coordinator = runtime_data.settings_coordinator
+    price_coordinator = runtime_data.price_coordinator
     pv_coordinator = runtime_data.pv_coordinator
     battery_coordinator = runtime_data.battery_coordinator
 
     entities: list[FrankEnergieBinarySensor] = []
 
     for description in BINARY_SENSOR_DESCRIPTIONS:
-        if description.key in ("smart_feed_in", "smart_pv_systems"):
+        if description.service_name == SERVICE_NAME_PRICES:
+            coord = price_coordinator
+        elif description.key in ("smart_feed_in", "smart_pv_systems"):
             coord = pv_coordinator
         else:
             coord = settings_coordinator
 
-        if coord.api.is_authenticated:
+        if not description.authenticated or coord.api.is_authenticated:
             entities.append(
                 FrankEnergieBinarySensor(
                     coord,
