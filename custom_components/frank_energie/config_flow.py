@@ -26,7 +26,11 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
 )
 from python_frank_energie import Authentication, FrankEnergie
-from python_frank_energie.exceptions import AuthException, ConnectionException
+from python_frank_energie.exceptions import (
+    AuthException,
+    ConnectionException,
+    RateLimitException,
+)
 
 from .const import (
     CONF_SITE,
@@ -51,6 +55,7 @@ from .const import (
     DATA_PV_SYSTEMS,
 )
 from .helpers import decrypt_password, encrypt_password
+from .rate_limit import RateLimitState, get_rate_limit_state
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
@@ -118,6 +123,13 @@ class ConfigFlow(config_entries.ConfigFlow):
         """Initialize the config flow."""
         self._reauth_entry: Optional[ConfigEntry] = None
         self.sign_in_data: dict[str, Any] = {}
+        self._rate_limits = RateLimitState()
+
+    def _get_rate_limits(self) -> RateLimitState:
+        """Share an existing entry's cooldowns during reauth and reconfigure."""
+        if self._reauth_entry is not None:
+            return get_rate_limit_state(self.hass, self._reauth_entry)
+        return self._rate_limits
 
     async def async_step_login(
         self,
@@ -140,6 +152,8 @@ class ConfigFlow(config_entries.ConfigFlow):
             # Successful login
             return await self._handle_authentication_success(user_input, auth)
 
+        except RateLimitException:
+            return await self._handle_authentication_failure(reason="rate_limited")
         except AuthException:
             # Wrong username/password
             return await self._handle_authentication_failure(reason="invalid_auth")
@@ -180,7 +194,9 @@ class ConfigFlow(config_entries.ConfigFlow):
                 auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
             ) as api:
-                user_sites = await api.UserSites()
+                user_sites = await self._get_rate_limits().async_call(
+                    "UserSites", api.UserSites
+                )
                 _LOGGER.debug("All user_sites: %s", user_sites)
 
                 # Check if the user has any delivery sites
@@ -329,6 +345,12 @@ class ConfigFlow(config_entries.ConfigFlow):
                     step_id="site", data_schema=vol.Schema(options), errors=errors
                 )
 
+        except RateLimitException:
+            return self.async_show_form(
+                step_id="site",
+                data_schema=self._site_error_schema(),
+                errors={"base": "rate_limited"},
+            )
         except AuthException:
             _LOGGER.error("Authentication failed during site fetch")
             return self.async_show_form(
@@ -416,6 +438,8 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         try:
             auth = await self._authenticate(user_input)
+        except RateLimitException:
+            return await self._handle_authentication_failure(reason="rate_limited")
         except AuthException:
             return await self._handle_authentication_failure(reason="invalid_auth")
         except ConnectionException:
@@ -469,6 +493,8 @@ class ConfigFlow(config_entries.ConfigFlow):
             )
             return []
 
+        except RateLimitException:
+            raise
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception(
                 "Unexpected error fetching sites for user %s: %s",
@@ -487,7 +513,9 @@ class ConfigFlow(config_entries.ConfigFlow):
 
             for attempt in range(2):
                 try:
-                    return await api.UserSites()
+                    return await self._get_rate_limits().async_call(
+                        "UserSites", api.UserSites
+                    )
                 except ConnectionException as err:
                     last_err = err
                     _LOGGER.warning(
@@ -656,9 +684,15 @@ class ConfigFlow(config_entries.ConfigFlow):
         """
         async with FrankEnergie() as api:
             try:
-                return await api.login(
-                    user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+                return await self._get_rate_limits().async_call(
+                    "login",
+                    lambda: api.login(
+                        user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+                    ),
+                    authenticated=False,
                 )
+            except RateLimitException:
+                raise
             except AuthException:
                 _LOGGER.warning(
                     "Authentication failed for user %s", user_input[CONF_USERNAME]
@@ -869,8 +903,12 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
             try:
                 async with FrankEnergie() as api:
-                    auth = await api.login(
-                        user_input[CONF_USERNAME], password_to_validate
+                    auth = await get_rate_limit_state(self.hass, entry).async_call(
+                        "login",
+                        lambda: api.login(
+                            user_input[CONF_USERNAME], password_to_validate
+                        ),
+                        authenticated=False,
                     )
 
                 # Encrypt password before storing in options
@@ -893,6 +931,8 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
                 return self.async_create_entry(title=entry.title, data=options)
 
+            except RateLimitException:
+                errors = {"base": "rate_limited"}
             except AuthException:
                 errors = {"base": "invalid_auth"}
             except ConnectionException:
@@ -908,7 +948,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         has_vehicles = True
         has_pv = True
 
-        if runtime_data:
+        if getattr(runtime_data, "battery_coordinator", None) is not None:
             battery_data = (
                 runtime_data.battery_coordinator.data.get(DATA_BATTERIES)
                 if runtime_data.battery_coordinator.data

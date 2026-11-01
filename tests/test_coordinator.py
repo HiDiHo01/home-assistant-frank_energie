@@ -60,11 +60,9 @@ async def test_no_suitable_sites_found():
     mock_api = AsyncMock(spec=FrankEnergie)
     mock_api.UserSites = AsyncMock(return_value=mock_user_sites)
 
-    mock_coordinator = MagicMock()
-    mock_coordinator.api = mock_api
-
-    mock_entry = MagicMock()
+    mock_entry = MockConfigEntry(domain="frank_energie", data={})
     mock_hass = MagicMock()
+    mock_coordinator = FrankEnergieCoordinator(mock_hass, mock_entry, mock_api)
 
     component = FrankEnergieComponent(mock_hass, mock_entry)
 

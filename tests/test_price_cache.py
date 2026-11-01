@@ -199,6 +199,7 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
     mock_store.async_load = AsyncMock(return_value=cached_data)
 
     hass = MagicMock(spec=HomeAssistant)
+    hass.data = {}
     hass.config = MagicMock()
     hass.config.country = "NL"
 
@@ -267,6 +268,7 @@ async def test_unsupported_resolution_invalidates_hourly_cache(
     mock_store.async_load = AsyncMock(return_value=cached_data)
 
     hass = MagicMock(spec=HomeAssistant)
+    hass.data = {}
     hass.config = MagicMock()
     hass.config.country = "NL"
 

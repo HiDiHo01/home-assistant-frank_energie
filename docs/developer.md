@@ -2,6 +2,31 @@
 
 This document provides information for contributors and developers working on the Frank Energie Home Assistant integration.
 
+## Rate-limit support: dependency release gate
+
+The rate-limit integration changes require the `RateLimitException` API from
+[python-frank-energie PR #206](https://github.com/HiDiHo01/python-frank-energie/pull/206).
+That API is not available in the currently published `2026.9.20` package.
+This companion change must remain a draft until the library fix is released.
+Before merging, update `manifest.json`, `pyproject.toml`, and `poetry.lock` to
+the actual release containing the fix and rerun the full checks. The existing
+dependency declarations are intentionally unchanged while that version is
+unknown; a normal install of the draft cannot import the new exception yet.
+
+For review before the release, install the exact library commit used for local
+verification after installing the normal development dependencies:
+
+```sh
+poetry install
+poetry run pip install --no-deps --force-reinstall "python-frank-energie @ https://github.com/HiDiHo01/python-frank-energie/archive/0cf5332e55167ef45461a46cbae4e0f7bede2d94.tar.gz"
+poetry run pytest
+```
+
+This is a development override, not a production dependency declaration.
+The library still converts some convenience-method failures into `None` or
+`False`; the integration can preserve retry metadata only for exceptions the
+library propagates.
+
 ## Repository Structure
 
 ```text

@@ -2,7 +2,7 @@
 
 This document describes the architecture of the Frank Energie Home Assistant integration.
 
-The integration follows Home Assistant best practices and is built around a central coordinator that manages all API communication, caching, event generation, and entity updates.
+The integration uses separate coordinators for prices, settings, statistics, invoices, batteries, chargers, vehicles, and PV systems. They share one API client per config entry while keeping their polling and availability independent.
 
 ## High-Level Architecture
 
@@ -70,6 +70,20 @@ Responsibilities include:
 All entities obtain their state from coordinator data.
 
 Entities should never communicate directly with the API.
+
+Invoices have their own coordinator so a billing rate limit cannot make monthly
+totals or usage unavailable. Invoice-derived cost sensors retain their existing
+unique IDs and service devices. Monthly cost sensors can listen to invoice
+updates for optional period descriptions without depending on invoice
+availability for their values.
+
+`rate_limit.py` guards public API method calls using the library's typed
+`RateLimitException`. Cooldowns belong to a config entry and resource; token
+renewal and silent-login cooldowns also gate that entry's subsequent authenticated coordinator polls.
+Only this small, in-memory state is retained outside `entry.runtime_data`,
+because Home Assistant deletes runtime data during unload. This preserves
+server deadlines across reloads and setup retries without retaining obsolete
+coordinators. Removing a config entry removes its cooldown state.
 
 ## API Layer
 

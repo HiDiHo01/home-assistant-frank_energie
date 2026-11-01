@@ -2,6 +2,26 @@
 
 This page describes how and when the Frank Energie integration retrieves and updates data.
 
+## API Rate Limits
+
+When the client reports `RateLimitException`, the affected coordinator reports
+a temporary update failure. Its last data remains cached, and its entities are
+unavailable until a successful refresh. An invoice throttle affects
+invoice-derived sensors independently of usage, monthly totals, and prices.
+Invoices continue to use the configured statistics polling interval.
+
+If the API provides a retry delay, automatic polling waits for at least that
+delay and does not run faster than its normal polling interval. Manual refreshes,
+entry reloads, and setup retries also respect an active server deadline. Other
+resources and config entries keep their own schedules. Authentication cooldowns
+are shared by the affected entry's authenticated polls, without discarding
+tokens or requesting new credentials.
+
+Without a retry hint, normal polling applies; the integration does not guess a
+provider quota or immediately retry a failed request. A zero delay permits the
+next explicit attempt and does not accelerate automatic polling. Cooldowns are
+in memory and survive entry reloads within the running Home Assistant process.
+
 ## Electricity Prices
 
 Electricity prices are retrieved from the Frank Energie API and updated automatically throughout the day.

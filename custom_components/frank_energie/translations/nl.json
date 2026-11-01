@@ -7,6 +7,7 @@
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
+      "rate_limited": "Frank Energie ontvangt te veel verzoeken. Wacht even en probeer het later opnieuw.",
       "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
       "connection_error": "Verbindingsfout met Frank Energie API.",
       "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
@@ -59,6 +60,9 @@
         "title": "Configuratie importeren"
       },
       "options": {
+    "error": {
+      "rate_limited": "Frank Energie ontvangt te veel verzoeken. Wacht even en probeer het later opnieuw."
+    },
         "description": "Configureer de opties voor Frank Energie.",
         "title": "Opties configureren"
       },
