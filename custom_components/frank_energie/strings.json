@@ -715,9 +715,11 @@
         "name": "Last meter reading date"
       },
       "meter_type": {
-        "name": "Meter Type",
+        "name": "Meter code (Frank API)",
         "state": {
-          "slm": "Smart meter"
+          "slm": "Smart meter",
+          "smr1": "SMR1",
+          "smr3": "SMR3"
         }
       },
       "phone_number": {
@@ -729,7 +731,8 @@
       "proposition_type": {
         "name": "Proposition type",
         "state": {
-          "dynamic": "Dynamic"
+          "dynamic": "Dynamic",
+          "model": "Model"
         }
       },
       "pv_operational_status": {
@@ -807,7 +810,7 @@
         "name": "Vehicle Name"
       },
       "costs_electricity_this_month": {
-        "name": "Costs electricity this month"
+        "name": "Legacy electricity monthly alias (unsupported)"
       },
       "elec_lowest_4p": {
         "name": "Lowest average electricity price (4 periods)"
@@ -1077,6 +1080,97 @@
       },
       "battery_last_update": {
         "name": "Last Update"
+      },
+      "finance_current_electricity_costs": {
+        "name": "Electricity costs — current month"
+      },
+      "finance_current_electricity_kwh": {
+        "name": "Electricity usage — current month"
+      },
+      "finance_current_gas_costs": {
+        "name": "Gas costs — current month"
+      },
+      "finance_current_gas_kwh": {
+        "name": "Gas usage in kWh — current month"
+      },
+      "finance_current_gas_m3": {
+        "name": "Gas usage in m³ — current month"
+      },
+      "finance_current_feed_in_costs": {
+        "name": "Feed-in financial balance — current month"
+      },
+      "finance_current_feed_in_kwh": {
+        "name": "Feed-in energy — current month"
+      },
+      "finance_current_actual_total": {
+        "name": "Actual total costs through latest meter reading — current month"
+      },
+      "finance_current_expected_to_reading": {
+        "name": "Expected costs through latest meter reading — current month"
+      },
+      "finance_current_expected_total": {
+        "name": "Expected total costs — current month"
+      },
+      "finance_current_expected_electricity": {
+        "name": "Expected electricity costs — current month"
+      },
+      "finance_current_expected_gas": {
+        "name": "Expected gas costs — current month"
+      },
+      "finance_current_expected_fixed": {
+        "name": "Expected fixed costs — current month"
+      },
+      "finance_current_expected_feed_in": {
+        "name": "Expected feed-in balance — current month"
+      },
+      "finance_previous_actual_total": {
+        "name": "Actual total costs through latest meter reading — previous month"
+      },
+      "finance_previous_expected_to_reading": {
+        "name": "Expected costs through latest meter reading — previous month"
+      },
+      "finance_previous_electricity_costs": {
+        "name": "Electricity costs — previous month"
+      },
+      "finance_previous_electricity_kwh": {
+        "name": "Electricity usage — previous month"
+      },
+      "finance_previous_gas_costs": {
+        "name": "Gas costs — previous month"
+      },
+      "finance_previous_gas_kwh": {
+        "name": "Gas usage in kWh — previous month"
+      },
+      "finance_previous_gas_m3": {
+        "name": "Gas usage in m³ — previous month"
+      },
+      "finance_previous_feed_in_costs": {
+        "name": "Feed-in financial balance — previous month"
+      },
+      "finance_previous_feed_in_kwh": {
+        "name": "Feed-in energy — previous month"
+      },
+      "finance_current_readiness": {
+        "name": "Financial source readiness — current month",
+        "state": {
+          "not_published": "No monthly data",
+          "contract_unverified": "Contract not verified",
+          "electricity_missing": "Electricity costs missing",
+          "gas_missing": "Gas costs missing",
+          "provider_total_missing": "Provider total missing",
+          "provider_components_present": "Provider components reported"
+        }
+      },
+      "finance_previous_readiness": {
+        "name": "Financial source readiness — previous month",
+        "state": {
+          "not_published": "No monthly data",
+          "contract_unverified": "Contract not verified",
+          "electricity_missing": "Electricity costs missing",
+          "gas_missing": "Gas costs missing",
+          "provider_total_missing": "Provider total missing",
+          "provider_components_present": "Provider components reported"
+        }
       }
     }
   },
@@ -1092,9 +1186,17 @@
           "interval_battery_sessions": "Polling Interval - Battery Sessions (5-1440 minutes, default: 60)",
           "interval_chargers": "Polling Interval - Chargers (5-60 minutes, default: 5)",
           "interval_vehicles": "Polling Interval - Vehicles (5-60 minutes, default: 15)",
-          "interval_pv": "Polling Interval - PV (5-60 minutes, default: 5)"
+          "interval_pv": "Polling Interval - PV (5-60 minutes, default: 5)",
+          "monthly_finance_enabled": "Collect monthly usage and costs (extra account API requests)",
+          "market_cheap_hours": "Cheapest market-price hours per day (1–12; default 4)"
         },
         "title": "Sign in to Frank Energie"
+      },
+      "init": {
+        "title": "Public market-price options",
+        "data": {
+          "market_cheap_hours": "Cheapest market-price hours per day (1–12; default 4)"
+        }
       }
     }
   },

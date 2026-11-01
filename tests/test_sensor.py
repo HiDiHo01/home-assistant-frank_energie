@@ -1364,3 +1364,407 @@ async def test_battery_strategy_sensor_passes_ha_enum_validation(
     validation accepts."""
     state = await _battery_strategy_sensor_state(hass, strategy)
     assert state == strategy.value.lower()
+
+
+# Regression: authenticated account enum data can be null, "unknown", or an
+# API value not declared in the integration's options. Home Assistant must
+# never raise "not in the list of options provided" while registering these.
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sensor_key", "api_value", "expected"),
+    [
+        ("contract_price_resolution_state", "PT15M", "pt15m"),
+        ("contract_price_resolution_state", "PT60M", "pt60m"),
+        ("contract_price_resolution_state", None, "unavailable"),
+        ("contract_price_resolution_state", "unknown", "unavailable"),
+        ("contract_price_resolution_state", "UNKNOWN", "unavailable"),
+        ("contract_price_resolution_state", "UNAVAILABLE", "unavailable"),
+        ("contract_price_resolution_state", "PT30M", "unavailable"),
+        ("propositionType", "DYNAMIC", "dynamic"),
+        ("propositionType", None, "unavailable"),
+        ("propositionType", "unknown", "unavailable"),
+        ("propositionType", "UNAVAILABLE", "unavailable"),
+        ("propositionType", "MODEL", "model"),
+        ("meterType", "SLM", "slm"),
+        ("meterType", None, "unavailable"),
+        ("meterType", "unknown", "unavailable"),
+        ("meterType", "UNAVAILABLE", "unavailable"),
+        ("meterType", "SMR1", "smr1"),
+        ("meterType", "SMR3", "smr3"),
+    ],
+)
+async def test_account_enum_sensors_pass_real_ha_validation(
+    hass: HomeAssistant, sensor_key: str, api_value: str | None, expected: str
+) -> None:
+    """Missing/unsupported contract values do not block HA entity creation."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieSensor,
+        SENSOR_TYPES,
+    )
+
+    description = next(d for d in SENSOR_TYPES if d.key == sensor_key)
+    if sensor_key == "contract_price_resolution_state":
+        data = {
+            const.DATA_CONTRACT_PRICE_RESOLUTION_STATE: SimpleNamespace(
+                active_option=api_value,
+                available_options=None,
+                upcoming_change=None,
+                change_request_effective_date=None,
+                is_change_request_possible=False,
+                upcoming_change_effective_date=None,
+            )
+        }
+    elif sensor_key == "propositionType":
+        data = {const.DATA_USER_SITES: SimpleNamespace(propositionType=api_value)}
+    else:
+        data = {
+            const.DATA_USER: SimpleNamespace(connections=[{"meterType": api_value}])
+        }
+
+    coordinator = MagicMock()
+    coordinator.data = data
+    coordinator.last_update_success = True
+
+    state = await _register_sensor_and_get_state(
+        hass,
+        lambda entry: FrankEnergieSensor(coordinator, description, entry),
+    )
+    assert state == expected
+
+
+@pytest.mark.asyncio
+async def test_account_enum_guard_preserves_valid_unknown_option(
+    hass: HomeAssistant,
+) -> None:
+    """An enum explicitly declaring 'unknown' is not forcibly hidden."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieEntityDescription,
+        FrankEnergieSensor,
+    )
+    from homeassistant.components.sensor import SensorDeviceClass
+
+    coordinator = MagicMock()
+    coordinator.data = {"test_enum": "UNKNOWN"}
+    coordinator.last_update_success = True
+    desc = FrankEnergieEntityDescription(
+        key="test_allowed_unknown",
+        device_class=SensorDeviceClass.ENUM,
+        options=["unknown", "valid"],
+        value_fn=lambda data: data["test_enum"],
+    )
+    state = await _register_sensor_and_get_state(
+        hass, lambda entry: FrankEnergieSensor(coordinator, desc, entry)
+    )
+    assert state == "unknown"
+
+
+def test_meter_type_preserves_electricity_and_gas_without_new_entities() -> None:
+    """The legacy single meter entity exposes actual per-segment raw types."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(d for d in SENSOR_TYPES if d.key == "meterType")
+    # Gas intentionally comes first; electricity is the primary sensor value.
+    data = {
+        const.DATA_USER: SimpleNamespace(
+            connections=[
+                {"segment": "GAS", "meterType": "SMR1"},
+                {"segment": "ELECTRICITY", "meterType": "SMR3"},
+            ]
+        )
+    }
+    assert description.value_fn(data) == "smr3"
+    assert description.attr_fn(data)["meter_types_by_segment"] == {
+        "gas": "smr1",
+        "electricity": "smr3",
+    }
+
+
+def test_real_client_connection_objects_populate_existing_meter_sensor() -> None:
+    """Installed pinned client returns Connection models, not dictionaries."""
+    from types import SimpleNamespace
+
+    from python_frank_energie.models import Connection
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(d for d in SENSOR_TYPES if d.key == "meterType")
+    gas = Connection.from_dict({"segment": "GAS", "meterType": "SMR1"})
+    electricity = Connection.from_dict({"segment": "ELECTRICITY", "meterType": "SMR3"})
+    source = {const.DATA_USER: SimpleNamespace(connections=[gas, electricity])}
+    assert description.value_fn(source) == "smr3"
+    assert description.attr_fn(source)["meter_types_by_segment"] == {
+        "gas": "smr1",
+        "electricity": "smr3",
+    }
+
+
+def test_unrecognized_connection_representation_is_safely_ignored() -> None:
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(d for d in SENSOR_TYPES if d.key == "meterType")
+    source = {
+        const.DATA_USER: SimpleNamespace(
+            connections=[
+                object(),
+                SimpleNamespace(segment="ELECTRICITY", meterType=None),
+            ]
+        )
+    }
+    assert description.value_fn(source) is None
+    assert description.attr_fn(source)["meter_types_by_segment"] == {}
+
+
+def test_account_enum_options_match_shipped_translations() -> None:
+    """HA enum options must have labels in every supported shipped language."""
+    import json
+    from pathlib import Path
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    root = Path(__file__).parents[1].joinpath("custom_components/frank_energie")
+    for key in ("propositionType", "meterType"):
+        description = next(d for d in SENSOR_TYPES if d.key == key)
+        for translation in [
+            root / "strings.json",
+            root / "translations/en.json",
+            root / "translations/nl.json",
+            root / "translations/nl-BE.json",
+            root / "translations/fr.json",
+        ]:
+            payload = json.loads(translation.read_text(encoding="utf-8"))
+            states = payload["entity"]["sensor"][description.translation_key]["state"]
+            assert set(states) == set(description.options), translation
+
+
+def test_service_device_version_matches_installed_manifest() -> None:
+    """Service device software version must never drift from HACS manifest."""
+    import json
+    from pathlib import Path
+
+    from custom_components.frank_energie.const import (
+        SERVICE_NAME_PRICES,
+        VERSION,
+    )
+    from custom_components.frank_energie.helpers import service_device_info
+
+    manifest = json.loads(
+        Path(__file__)
+        .parents[1]
+        .joinpath("custom_components/frank_energie/manifest.json")
+        .read_text(encoding="utf-8")
+    )
+    device = service_device_info("entry_1", SERVICE_NAME_PRICES)
+    assert manifest["version"] == VERSION == device["sw_version"]
+
+
+@pytest.mark.parametrize(
+    ("connections", "expected_primary", "expected_types"),
+    [
+        ([], None, {}),
+        ([{"segment": "ELECTRICITY", "meterType": None}], None, {}),
+        ([{"segment": "GAS", "meterType": "SMR1"}], "smr1", {"gas": "smr1"}),
+    ],
+)
+def test_meter_type_handles_empty_and_gas_only_connections(
+    connections: list[dict], expected_primary: str | None, expected_types: dict
+) -> None:
+    """Absent and single-segment account data must not invent meter values."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(d for d in SENSOR_TYPES if d.key == "meterType")
+    data = {const.DATA_USER: SimpleNamespace(connections=connections)}
+    assert description.value_fn(data) == expected_primary
+    assert description.attr_fn(data)["meter_types_by_segment"] == expected_types
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("selected", "expect_gas"),
+    [("site-electric", False), ("site-gas", True)],
+)
+async def test_gas_sensor_registration_follows_selected_site_not_first_site(
+    hass: HomeAssistant, selected: str, expect_gas: bool
+) -> None:
+    """No gas price/usage/forecast entities disappear behind the first site's flags."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import (
+        DATA_USER,
+        DATA_USER_SITES,
+        SERVICE_NAME_GAS_PRICES,
+        SERVICE_NAME_USAGE,
+    )
+    from custom_components.frank_energie.sensor import async_setup_entry
+
+    def coordinator() -> MagicMock:
+        value = MagicMock()
+        value.data = {}
+        value.api.is_authenticated = True
+        return value
+
+    runtime = MagicMock()
+    runtime.settings_coordinator = coordinator()
+    runtime.price_coordinator = coordinator()
+    runtime.price_coordinator.site_reference = selected
+    runtime.statistics_coordinator = coordinator()
+    runtime.battery_coordinator = coordinator()
+    runtime.charger_coordinator = coordinator()
+    runtime.pv_coordinator = coordinator()
+    runtime.vehicle_coordinator = coordinator()
+    runtime.settings_coordinator.data = {
+        DATA_USER_SITES: SimpleNamespace(
+            reference="site-electric",
+            segments=["ELECTRICITY"],
+            deliverySites=[
+                SimpleNamespace(reference="site-electric", segments=["ELECTRICITY"]),
+                SimpleNamespace(reference="site-gas", segments=["GAS"]),
+            ],
+        ),
+        DATA_USER: SimpleNamespace(connections=[]),
+    }
+
+    entry = MockConfigEntry(domain=const.DOMAIN, unique_id="selected-gas-test")
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    added = []
+
+    def collect(entities, update_before_add=False):
+        added.extend(entities)
+
+    await async_setup_entry(hass, entry, collect)
+
+    gas_price_keys = {
+        entity.entity_description.key
+        for entity in added
+        if (
+            getattr(getattr(entity, "entity_description", None), "service_name", None)
+            == SERVICE_NAME_GAS_PRICES
+        )
+    }
+    gas_usage_keys = {
+        entity.entity_description.key
+        for entity in added
+        if (
+            getattr(getattr(entity, "entity_description", None), "service_name", None)
+            == SERVICE_NAME_USAGE
+        )
+        and entity.entity_description.key
+        in (
+            "costs_gas_yesterday",
+            "usage_gas_yesterday",
+        )
+    }
+    assert ("gas_markup" in gas_price_keys) is expect_gas
+    assert ("gas_tomorrow_avg" in gas_price_keys) is expect_gas
+    assert (
+        gas_usage_keys == {"costs_gas_yesterday", "usage_gas_yesterday"}
+    ) is expect_gas
+
+
+def test_real_be_graphql_models_reach_gas_forecast_and_usage_sensors(freezer) -> None:
+    """Cross actual pinned GraphQL parsers, typed coordinators, sensor and device."""
+    from datetime import UTC
+    from unittest.mock import MagicMock
+    from zoneinfo import ZoneInfo
+
+    from python_frank_energie.models import MarketPrices, PeriodUsageAndCosts
+    from custom_components.frank_energie.const import DATA_GAS, DATA_USAGE
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieSensor,
+        SENSOR_TYPES,
+    )
+
+    freezer.move_to(datetime(2026, 7, 20, 13, 0, tzinfo=UTC))
+    first = datetime(2026, 7, 21, tzinfo=ZoneInfo("Europe/Brussels"))
+    gas_rows = [
+        {
+            "from": (first + timedelta(hours=i)).astimezone(UTC).isoformat(),
+            "till": (first + timedelta(hours=i + 1)).astimezone(UTC).isoformat(),
+            "marketPrice": 0.1,
+            "marketPriceTax": 0.02,
+            "sourcingMarkupPrice": 0.01,
+            "energyTaxPrice": 0.1,
+        }
+        for i in range(6)
+    ]
+
+    price_source = MarketPrices.from_userprices_dict(
+        {
+            "data": {
+                "customerMarketPrices": {
+                    "electricityPrices": [],
+                    "gasPrices": gas_rows,
+                }
+            }
+        },
+        "BE",
+    )
+    usage_source = PeriodUsageAndCosts.from_dict(
+        {
+            "data": {
+                "periodUsageAndCosts": {
+                    "_id": "synthetic",
+                    "gas": {
+                        "usageTotal": 12.5,
+                        "costsTotal": 4.75,
+                        "unit": "M3",
+                        "items": [],
+                    },
+                    "electricity": None,
+                    "feedIn": None,
+                }
+            }
+        }
+    )
+
+    price_coordinator = MagicMock()
+    price_coordinator.data = {DATA_GAS: price_source.gas}
+    price_coordinator.last_update_success = True
+    statistics_coordinator = MagicMock()
+    statistics_coordinator.data = {DATA_USAGE: usage_source}
+    statistics_coordinator.last_update_success = True
+    entry = MagicMock()
+    entry.entry_id = "synthetic-gas"
+    entry.unique_id = "synthetic-gas"
+
+    def entity(key, coordinator):
+        description = next(d for d in SENSOR_TYPES if d.key == key)
+        return FrankEnergieSensor(coordinator, description, entry)
+
+    forecast = entity("gas_tomorrow_avg", price_coordinator)
+    # Six source hours remain visible individually, not as a full-day average.
+    assert forecast.native_value is None
+    assert forecast.device_info["model"] == "Gasprices"
+    assert len(forecast.extra_state_attributes["tomorrow_prices"]) == 6
+
+    gas_usage = entity("usage_gas_yesterday", statistics_coordinator)
+    gas_costs = entity("costs_gas_yesterday", statistics_coordinator)
+    assert gas_usage.native_value == 12.5
+    assert gas_costs.native_value == 4.75
+    assert gas_usage.device_info["model"] == "Usage"
+    assert gas_costs.device_info["model"] == "Usage"
+
+    statistics_coordinator.data[DATA_USAGE] = PeriodUsageAndCosts.from_dict(
+        {
+            "data": {
+                "periodUsageAndCosts": {
+                    "_id": "synthetic-empty",
+                    "gas": None,
+                }
+            }
+        }
+    )
+    assert gas_usage.native_value is None
+    assert gas_costs.native_value is None

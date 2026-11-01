@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -685,13 +685,15 @@ class TestResolutionProperty:
 
         assert coordinator.resolution == expected_resolution
 
-        coordinator.api.prices = AsyncMock(return_value=MagicMock())
+        public_api = MagicMock()
+        public_api.prices = AsyncMock(return_value=MagicMock())
+        coordinator._public_api = public_api
         today = date(2026, 7, 20)
         tomorrow = date(2026, 7, 21)
 
         await coordinator._fetch_public_prices_for_range(today, tomorrow, "NL")
 
-        coordinator.api.prices.assert_called_once_with(
+        public_api.prices.assert_awaited_once_with(
             today, resolution=expected_resolution
         )
 
@@ -1080,16 +1082,20 @@ async def test_fetch_public_prices_for_range_uses_country_prices(
     start_date = date(2026, 7, 22)
     end_date = date(2026, 7, 23)
     expected = MagicMock()
-    mock_frank_energie.country_prices = AsyncMock(return_value=expected)
+    public_api = MagicMock()
+    public_api.country_prices = AsyncMock(return_value=expected)
+    public_api.prices = AsyncMock()
+    coordinator._public_api = public_api
 
     result = await coordinator._fetch_public_prices_for_range(
         start_date, end_date, country_code
     )
 
-    mock_frank_energie.country_prices.assert_awaited_once_with(
+    public_api.country_prices.assert_awaited_once_with(
         country_code, start_date, end_date, coordinator.resolution
     )
-    mock_frank_energie.prices.assert_not_awaited()
+    public_api.prices.assert_not_awaited()
+    mock_frank_energie.country_prices.assert_not_awaited()
     assert result is expected
 
 
@@ -1103,16 +1109,20 @@ async def test_fetch_public_prices_for_range_nl_uses_default_prices_query(
     start_date = date(2026, 7, 22)
     end_date = date(2026, 7, 23)
     expected = MagicMock()
-    mock_frank_energie.prices = AsyncMock(return_value=expected)
+    public_api = MagicMock()
+    public_api.prices = AsyncMock(return_value=expected)
+    public_api.country_prices = AsyncMock()
+    coordinator._public_api = public_api
 
     result = await coordinator._fetch_public_prices_for_range(
         start_date, end_date, "NL"
     )
 
-    mock_frank_energie.prices.assert_awaited_once_with(
+    public_api.prices.assert_awaited_once_with(
         start_date, resolution=coordinator.resolution
     )
-    mock_frank_energie.country_prices.assert_not_awaited()
+    public_api.country_prices.assert_not_awaited()
+    mock_frank_energie.prices.assert_not_awaited()
     assert result is expected
 
 
@@ -1171,6 +1181,9 @@ async def test_promote_tomorrow_prices_updates_all_caches(coordinator) -> None:
     tomorrow_prices.electricity = MagicMock()
     tomorrow_prices.gas = MagicMock()
     coordinator.cached_prices_tomorrow = tomorrow_prices
+    # This test isolates promotion/merge behavior. Real date validation is
+    # independently covered using typed PriceData fixtures below.
+    coordinator._tomorrow_cache_matches_date = MagicMock(return_value=True)
 
     # Mock current cached_prices / data
     coordinator.cached_prices = {
@@ -1343,6 +1356,8 @@ async def test_price_coordinator_midnight_rollover(
     tomorrow_prices.electricity = MagicMock()
     tomorrow_prices.gas = MagicMock()
     price_coordinator.cached_prices_tomorrow = tomorrow_prices
+    # Isolate the rollover merge: date validation has separate real-series tests.
+    price_coordinator._tomorrow_cache_matches_date = MagicMock(return_value=True)
 
     price_coordinator.cached_prices = {
         DATA_ELECTRICITY: MagicMock(),
@@ -1388,6 +1403,8 @@ async def test_price_coordinator_midnight_rollover_resolution_mismatch(
     tomorrow_prices.electricity = MagicMock(name="tomorrow_electricity")
     tomorrow_prices.gas = MagicMock(name="tomorrow_gas")
     price_coordinator.cached_prices_tomorrow = tomorrow_prices
+    # Isolate the rollover merge: date validation has separate real-series tests.
+    price_coordinator._tomorrow_cache_matches_date = MagicMock(return_value=True)
 
     price_coordinator.cached_prices = {
         DATA_ELECTRICITY: MagicMock(name="yesterday_electricity"),
@@ -1734,6 +1751,13 @@ async def test_async_update_data_falls_back_to_cached_today_on_fetch_failure(
 
     assert result[DATA_ELECTRICITY] is cached_today.electricity
     assert coordinator.last_fetch_today is None  # fallback path never updates it
+
+    # A successful request that returns no usable prices is still not a
+    # successful *source* refresh. It must not suppress the next API retry.
+    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=None)
+    result_with_empty_source = await coordinator._async_update_data()
+    assert result_with_empty_source[DATA_ELECTRICITY] is cached_today.electricity
+    assert coordinator.last_fetch_today is None
 
 
 @pytest.mark.asyncio
@@ -2438,7 +2462,14 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
     now_utc = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)
 
     price_coordinator.last_fetch_today = now_utc
-    price_coordinator._static_prices_today = None  # bypass resolution check
+    # A genuinely fresh restart must also have today's data; tomorrow alone
+    # cannot justify skipping the current-day fetch.
+    price_coordinator._static_prices_today = MarketPrices(
+        electricity=_day_prices(date(2026, 7, 20), segment="electricity"),
+        gas=None,
+        energy_country="BE",
+    )
+    price_coordinator._is_cache_resolution_valid = MagicMock(return_value=True)
 
     price_coordinator.last_fetch_tomorrow = now_utc
     price_coordinator.cached_prices_tomorrow = _make_market_prices(
@@ -2446,3 +2477,301 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
     )
 
     assert price_coordinator._is_cache_fresh(now_utc) is True
+
+
+def test_tomorrow_cache_date_validation_checks_gas_only_and_both_segments() -> None:
+    """Gas-only subscriptions work, but stale gas cannot hide behind valid electricity."""
+    tomorrow = date(2026, 7, 21)
+    future = _make_market_prices("2026-07-20T22:00:00.000Z")
+    past = _make_market_prices("2026-07-20T10:00:00.000Z")
+
+    gas_only = MarketPrices(
+        electricity=PriceData([], energy_type="electricity"),
+        gas=PriceData(future.electricity.prices, energy_type="gas"),
+        energy_country="BE",
+    )
+    assert FrankEnergieCoordinator._tomorrow_cache_matches_date(gas_only, tomorrow)
+
+    mixed_stale = MarketPrices(
+        electricity=future.electricity,
+        gas=PriceData(past.electricity.prices, energy_type="gas"),
+        energy_country="BE",
+    )
+    assert not FrankEnergieCoordinator._tomorrow_cache_matches_date(
+        mixed_stale, tomorrow
+    )
+
+    # Both source segments are checked even when electricity itself is stale.
+    mixed_stale.electricity = past.electricity
+    mixed_stale.gas = gas_only.gas
+    assert not FrankEnergieCoordinator._tomorrow_cache_matches_date(
+        mixed_stale, tomorrow
+    )
+
+
+def _day_prices(day: date, *, segment: str, hours: int | None = None) -> PriceData:
+    """Build real timestamped slots for a local day without assuming 24 DST hours."""
+    zone = ZoneInfo("Europe/Amsterdam")
+    start = datetime.combine(day, datetime.min.time(), tzinfo=zone).astimezone(UTC)
+    end = datetime.combine(
+        day + timedelta(days=1), datetime.min.time(), tzinfo=zone
+    ).astimezone(UTC)
+    count = int((end - start).total_seconds() // 3600)
+    if hours is not None:
+        count = min(count, hours)
+    slots = [
+        {
+            "from": (start + timedelta(hours=i)).isoformat(),
+            "till": (start + timedelta(hours=i + 1)).isoformat(),
+            "marketPrice": 0.1,
+            "marketPriceTax": 0.02,
+            "sourcingMarkupPrice": 0.01,
+            "energyTaxPrice": 0.1,
+        }
+        for i in range(count)
+    ]
+    return PriceData(slots, energy_type=segment)
+
+
+@pytest.mark.parametrize("day", [date(2026, 3, 29), date(2026, 10, 25)])
+def test_tomorrow_day_coverage_respects_dst_and_missing_slots(day: date) -> None:
+    """Both short and long DST days require actual interval coverage, not 24 points."""
+    complete = _day_prices(day, segment="electricity")
+    assert FrankEnergieCoordinator._covers_local_day(complete, day)
+    partial = _day_prices(day, segment="electricity", hours=6)
+    assert not FrankEnergieCoordinator._covers_local_day(partial, day)
+
+
+@pytest.mark.asyncio
+async def test_partial_subscribed_gas_tomorrow_cache_is_retried(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """Six available gas hours must not freeze a whole future day of prices."""
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+    coordinator.user_electricity_enabled = True
+    coordinator.user_gas_enabled = True
+    partial = MarketPrices(
+        electricity=_day_prices(tomorrow, segment="electricity"),
+        gas=_day_prices(tomorrow, segment="gas", hours=6),
+        energy_country="BE",
+    )
+    complete = MarketPrices(
+        electricity=_day_prices(tomorrow, segment="electricity"),
+        gas=_day_prices(tomorrow, segment="gas"),
+        energy_country="BE",
+    )
+    coordinator.cached_prices_tomorrow = partial
+    coordinator.last_fetch_tomorrow = now_utc
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=complete)
+
+    assert not coordinator._tomorrow_cache_covers_selected_site(partial, tomorrow)
+    assert coordinator._tomorrow_cache_covers_selected_site(complete, tomorrow)
+    assert (
+        await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc) is complete
+    )
+    coordinator._fetch_tomorrow_data.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_complete_subscribed_gas_tomorrow_cache_avoids_repeat_call(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """A full day remains cached without redundant requests."""
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+    coordinator.user_electricity_enabled = True
+    coordinator.user_gas_enabled = True
+    complete = MarketPrices(
+        electricity=_day_prices(tomorrow, segment="electricity"),
+        gas=_day_prices(tomorrow, segment="gas"),
+        energy_country="BE",
+    )
+    coordinator.cached_prices_tomorrow = complete
+    coordinator.last_fetch_tomorrow = now_utc
+    coordinator._fetch_tomorrow_data = AsyncMock()
+
+    assert (
+        await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc) is complete
+    )
+    coordinator._fetch_tomorrow_data.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_partial_tomorrow_retry_does_not_spam_available_event(
+    coordinator: FrankEnergieCoordinator,
+) -> None:
+    """Retrying incomplete gas coverage must not fire an event on every poll."""
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+    coordinator.user_electricity_enabled = True
+    coordinator.user_gas_enabled = True
+    partial = MarketPrices(
+        electricity=_day_prices(tomorrow, segment="electricity"),
+        gas=_day_prices(tomorrow, segment="gas", hours=6),
+        energy_country="BE",
+    )
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=partial)
+
+    await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+    await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    assert coordinator._fetch_tomorrow_data.await_count == 2
+    coordinator.hass.bus.async_fire.assert_called_once()
+
+
+def _selected_model_price_coordinator(
+    mock_frank_energie, mock_config_entry
+) -> FrankEnergiePriceCoordinator:
+    """Use the selected site's MODEL metadata, not the first unrelated site."""
+    from types import SimpleNamespace
+
+    mock_frank_energie.is_authenticated = True
+    # Empty options select the integration's PT15M default. MockConfigEntry
+    # exposes immutable mappingproxy options, as actual HA config entries do.
+    settings = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings.data = {
+        "user_sites": SimpleNamespace(
+            reference="test_reference",
+            propositionType="MODEL",
+            segments=["ELECTRICITY", "GAS"],
+            deliverySites=[
+                SimpleNamespace(
+                    reference="test_reference",
+                    propositionType="MODEL",
+                    segments=["ELECTRICITY", "GAS"],
+                )
+            ],
+        )
+    }
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings
+    )
+    coordinator.user_electricity_enabled = True
+    coordinator.user_gas_enabled = True
+    return coordinator
+
+
+def test_selected_model_hourly_customer_prices_are_not_invalidated_by_pt15m_query(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """MODEL customer hours remain valid when public query prefers quarters."""
+    from types import SimpleNamespace
+
+    today = date(2026, 11, 1)
+    coordinator = _selected_model_price_coordinator(
+        mock_frank_energie, mock_config_entry
+    )
+    coordinator._static_prices_today = MarketPrices(
+        electricity=_day_prices(today, segment="electricity"),
+        gas=_day_prices(today, segment="gas"),
+        energy_country="BE",
+    )
+    assert coordinator._is_cache_resolution_valid()
+
+    # First-site MODEL must not grant a different selected site's cache waiver.
+    coordinator.settings_coordinator.data["user_sites"].deliverySites = [
+        SimpleNamespace(
+            reference="another_site",
+            propositionType="MODEL",
+            segments=["ELECTRICITY", "GAS"],
+        ),
+        SimpleNamespace(
+            reference="test_reference",
+            propositionType="DYNAMIC",
+            segments=["ELECTRICITY", "GAS"],
+        ),
+    ]
+    assert not coordinator._is_cache_resolution_valid()
+
+
+def test_partial_current_gas_day_is_not_considered_a_fresh_cache(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Observed BE six-hour gas data must be re-fetched even after restart."""
+    coordinator = _selected_model_price_coordinator(
+        mock_frank_energie, mock_config_entry
+    )
+    today = date(2026, 11, 1)
+    # Before the next-day publication window, a fully covered today is cacheable.
+    now_utc = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
+    partial = MarketPrices(
+        electricity=_day_prices(today, segment="electricity"),
+        gas=_day_prices(today, segment="gas", hours=6),
+        energy_country="BE",
+    )
+    coordinator._static_prices_today = partial
+    coordinator.last_fetch_today = now_utc
+    assert coordinator._is_cache_resolution_valid()
+    assert not coordinator._today_cache_covers_selected_site(partial, today)
+    assert not coordinator._is_cache_fresh(now_utc)
+
+    coordinator._static_prices_today = MarketPrices(
+        electricity=_day_prices(today, segment="electricity"),
+        gas=_day_prices(today, segment="gas"),
+        energy_country="BE",
+    )
+    assert coordinator._today_cache_covers_selected_site(
+        coordinator._static_prices_today, today
+    )
+    assert coordinator._is_cache_fresh(now_utc)
+
+
+@pytest.mark.asyncio
+async def test_price_coordinator_retries_six_hour_gas_today_and_preserves_partial(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """The observed current-day gap is retried; a shorter fetch cannot erase it."""
+    coordinator = _selected_model_price_coordinator(
+        mock_frank_energie, mock_config_entry
+    )
+    today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+    coordinator.last_fetch_today = datetime.now(UTC)
+    partial = MarketPrices(
+        electricity=_day_prices(today, segment="electricity"),
+        gas=_day_prices(today, segment="gas", hours=6),
+        energy_country="BE",
+    )
+    complete = MarketPrices(
+        electricity=_day_prices(today, segment="electricity"),
+        gas=_day_prices(today, segment="gas"),
+        energy_country="BE",
+    )
+    coordinator._static_prices_today = partial
+    coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    coordinator._reconcile_resolution = MagicMock()
+    coordinator._adjust_update_interval = MagicMock()
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator._refresh_tomorrow_cache = AsyncMock(return_value=None)
+    coordinator._maybe_fire_lowest_price_event = MagicMock()
+    coordinator._maybe_fire_lowest_4p_event = MagicMock()
+    coordinator._maybe_fire_lowest_16p_event = MagicMock()
+    coordinator.store.async_save = AsyncMock()
+
+    # A transient shorter gas response must retain the six current-day hours.
+    shorter = MarketPrices(
+        electricity=_day_prices(today, segment="electricity"),
+        gas=PriceData([], energy_type="gas"),
+        energy_country="BE",
+    )
+    coordinator._fetch_prices_with_fallback = AsyncMock(side_effect=[shorter, complete])
+    first = await coordinator._async_update_data()
+    assert len(first[DATA_GAS].all) == 6
+
+    second = await coordinator._async_update_data()
+    assert len(second[DATA_GAS].all) == len(_day_prices(today, segment="gas").all)
+    assert coordinator._fetch_prices_with_fallback.await_count == 2
+    # The mock bypasses the real fetch function which records per-segment
+    # supplier provenance. Establish the same evidence that a real complete
+    # customer reply would have recorded before checking the cache shortcut.
+    coordinator._remember_price_sources(
+        today, complete, customer_electricity=True, customer_gas=True
+    )
+
+    await coordinator._async_update_data()
+    assert coordinator._fetch_prices_with_fallback.await_count == 2

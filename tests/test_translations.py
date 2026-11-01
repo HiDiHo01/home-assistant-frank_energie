@@ -266,9 +266,18 @@ def test_no_unused_or_missing_translation_keys():
         "pv_panel_group",
     }
 
+    # Runtime-generated finance descriptions use f-string keys. Verify the
+    # actual description factory rather than whitelisting unreferenced strings.
+    from custom_components.frank_energie.sensor import _monthly_finance_descriptions
+
+    finance_keys = {d.translation_key for d in _monthly_finance_descriptions()}
+
     # Verify that all translation keys in strings.json are used in the codebase
     all_used_entity_keys = (
-        extractor.translation_keys | extractor.button_keys | dynamic_whitelist
+        extractor.translation_keys
+        | extractor.button_keys
+        | dynamic_whitelist
+        | finance_keys
     )
     unused_entity_keys = strings_entity_keys - all_used_entity_keys
     assert not unused_entity_keys, (

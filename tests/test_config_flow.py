@@ -140,7 +140,13 @@ async def test_options_flow_without_site(hass: HomeAssistant, config_entry) -> N
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "init"
-    assert result["errors"] == {"base": "You do not have to login for this entry."}
+    assert result["errors"] is None
+
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"market_cheap_hours": 5}
+    )
+    assert result2["type"] == FlowResultType.CREATE_ENTRY
+    assert config_entry.options["market_cheap_hours"] == 5
 
 
 async def test_login_validation_errors(hass: HomeAssistant) -> None:
@@ -243,3 +249,158 @@ async def test_options_flow_submit_blank_password(
     # It should preserve the existing password (which decrypts to the original value)
     assert result2["data"]["username"] == "user@example.com"
     assert decrypt_password(hass, result2["data"]["password"]) == "original_secure_pwd"
+
+
+async def test_reconfigure_anonymous_entry_to_authenticated_site(
+    hass: HomeAssistant, mock_auth_success
+) -> None:
+    """Upgrade a public-price entry in place after validating the site."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from custom_components.frank_energie.helpers import decrypt_password
+
+    anonymous = MockConfigEntry(
+        domain=DOMAIN,
+        title="Frank Energie",
+        data={},
+        options={CONF_USERNAME: None, CONF_PASSWORD: None, "resolution": "PT15M"},
+        unique_id=DOMAIN,
+    )
+    anonymous.add_to_hass(hass)
+    original_id = anonymous.entry_id
+
+    flow = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": anonymous.entry_id,
+        },
+    )
+    assert flow["type"] == FlowResultType.FORM
+
+    site_form = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], user_input=USER_INPUT
+    )
+    assert site_form["type"] == FlowResultType.FORM
+    assert site_form["step_id"] == "site"
+    # An incomplete reconfigure must not damage the working public entry.
+    assert anonymous.data == {}
+    assert anonymous.options["resolution"] == "PT15M"
+
+    result = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], user_input={CONF_SITE: "site_ref_123"}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert anonymous.entry_id == original_id
+    assert anonymous.unique_id == DOMAIN
+    assert anonymous.title == "Main Street 123"
+    assert anonymous.data[CONF_SITE] == "site_ref_123"
+    assert anonymous.data["access_token"] == "mock_auth_token"
+    assert anonymous.data["token"] == "mock_refresh_token"
+    assert "username" not in anonymous.data
+    assert "password" not in anonymous.data
+    assert anonymous.options["username"] == USER_INPUT["username"]
+    assert (
+        decrypt_password(hass, anonymous.options["password"]) == USER_INPUT["password"]
+    )
+    assert anonymous.options["resolution"] == "PT15M"
+    await hass.async_block_till_done()
+
+
+async def test_reconfigure_anonymous_invalid_login_preserves_entry(
+    hass: HomeAssistant, mock_auth_failure
+) -> None:
+    """Failed credentials must not mutate an anonymous configuration."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    anonymous = MockConfigEntry(
+        domain=DOMAIN, title="Frank Energie", data={}, options={}, unique_id=DOMAIN
+    )
+    anonymous.add_to_hass(hass)
+    flow = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": anonymous.entry_id,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], user_input=USER_INPUT
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert anonymous.data == {}
+    assert anonymous.options == {}
+
+
+async def test_reconfigure_anonymous_no_delivery_sites_preserves_entry(
+    hass: HomeAssistant, mock_auth_success
+) -> None:
+    """A valid login without usable sites must not replace the public entry."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from unittest.mock import MagicMock
+
+    api = mock_auth_success.return_value.__aenter__.return_value
+    api.UserSites.return_value = MagicMock(deliverySites=[])
+    anonymous = MockConfigEntry(
+        domain=DOMAIN, title="Frank Energie", data={}, options={}, unique_id=DOMAIN
+    )
+    anonymous.add_to_hass(hass)
+    flow = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": anonymous.entry_id,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], user_input=USER_INPUT
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "site"
+    assert result["errors"] == {"base": "no_delivery_sites"}
+    assert anonymous.data == {}
+    assert anonymous.options == {}
+
+
+async def test_reconfigure_anonymous_multiple_sites_selects_explicit_site(
+    hass: HomeAssistant, mock_auth_success
+) -> None:
+    """Never default silently to the first site when adding authentication."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from unittest.mock import MagicMock
+
+    api = mock_auth_success.return_value.__aenter__.return_value
+    first_site = api.UserSites.return_value.deliverySites[0]
+    second = MagicMock()
+    second.status = "IN_DELIVERY"
+    second.reference = "site_ref_456"
+    second.address.street = "Second Street"
+    second.address.houseNumber = "45"
+    second.address.houseNumberAddition = ""
+    api.UserSites.return_value.deliverySites = [first_site, second]
+    anonymous = MockConfigEntry(
+        domain=DOMAIN, title="Frank Energie", data={}, options={}, unique_id=DOMAIN
+    )
+    anonymous.add_to_hass(hass)
+
+    flow = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": anonymous.entry_id,
+        },
+    )
+    site_form = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], user_input=USER_INPUT
+    )
+    assert site_form["step_id"] == "site"
+
+    result = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], user_input={CONF_SITE: "site_ref_456"}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert anonymous.data[CONF_SITE] == "site_ref_456"
+    assert anonymous.title == "Second Street 45"
+    await hass.async_block_till_done()

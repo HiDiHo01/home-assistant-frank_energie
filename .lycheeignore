@@ -1,1 +1,6 @@
 https://buymeacoffee.com/royarx
+# External donation destination: GitHub CI blocks/refuses the PayPal.me hop;
+# retain the existing support link without suppressing product/documentation links.
+https://www.paypal.me/royarx
+# Runner egress policy blocks the Belgian provider domain; verified via public browser.
+^https://www\.frankenergie\.be/nl/export-factuurdata$

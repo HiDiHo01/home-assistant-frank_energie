@@ -9,7 +9,7 @@ from __future__ import annotations
 import inspect
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
 
@@ -56,6 +56,7 @@ from .const import (
     ATTR_TILL_TIME,
     ATTRIBUTION,
     BATTERY_STRATEGY_OPTIONS,
+    CONF_MONTHLY_FINANCE_ENABLED,
     DATA_BATTERIES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_ELECTRICITY,
@@ -64,6 +65,8 @@ from .const import (
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
+    DATA_MONTH_INSIGHTS_CURRENT,
+    DATA_MONTH_INSIGHTS_PREVIOUS,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
     DATA_REFRESH_TOKEN_EXPIRES_AT,
@@ -101,17 +104,62 @@ from .coordinator import (
     FrankEnergieCoordinator,
     FrankEnergieData,
     SmartBatterySessions,
+    _site_segment_flags,
+)
+from .finance import (
+    finance_attributes,
+    finance_period_readiness,
+    finance_period_readiness_attributes,
+    finance_reading,
 )
 from .helpers import (
     register_service_device,
     resolve_gas_unit,
     service_device_info,
 )
+from .price_coverage import covers_local_day
+from .price_signal_entities import FrankEnergieMarketHourRankSensor
 from .statistics import lowest_window
+from .service_refresh import service_refreshes
+from .service_refresh_sensor import (
+    FrankEnergieLastApiCheckSensor,
+    FrankEnergieLastSuccessfulApiResponseSensor,
+    FrankEnergieRefreshIntervalSensor,
+    FrankEnergieServiceApiStatusSensor,
+)
 
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
+
+# Current price entities consumed by downstream dashboards need source semantics
+# alongside the numeric state; do not change their IDs or statistics.
+_PRICE_SOURCE_ENTITY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "elec_markup",
+        "elec_market",
+        "elec_tax",
+        "elec_tax_markup",
+        "elec_fixed_kwh",
+        "elec_var_kwh",
+        "gas_markup",
+        "gas_market",
+        "gas_tax",
+        "gas_tax_markup",
+    }
+)
+
+
+def _tomorrow_has_full_coverage(data: dict[str, Any], key: str) -> bool:
+    """Require actual local calendar-day coverage, including 23/25h DST."""
+    prices = data.get(key)
+    if prices is None:
+        return False
+    tomorrow = dt_util.now().astimezone(
+        ZoneInfo(TIMEZONE_AMSTERDAM)
+    ).date() + timedelta(days=1)
+    return covers_local_day(prices, tomorrow)
+
 
 _HAS_VIA_DEVICE_ID: Final[bool] = (
     "via_device_id"
@@ -170,6 +218,45 @@ def _parse_contract_date(date_val: datetime | str | None) -> str | None:
         return dt_util.as_local(parsed).strftime(FORMAT_DATE)
     except (ValueError, TypeError):
         return None
+
+
+def _current_month_summary(data: FrankEnergieData) -> object | None:
+    """Accept a 'this month' cost only for the current local calendar month.
+
+    Frank's MonthSummary is anchored to the last meter-reading date, which can
+    still belong to the previous month after midnight on the first. An
+    unverified month must be unavailable rather than shown under a new label.
+    """
+    summary = data.get(DATA_MONTH_SUMMARY)
+    last_reading = getattr(summary, "lastMeterReadingDate", None)
+    if isinstance(last_reading, datetime):
+        reading_day = (
+            last_reading.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+            if last_reading.tzinfo is not None
+            else last_reading.date()
+        )
+    elif isinstance(last_reading, date):
+        reading_day = last_reading
+    elif isinstance(last_reading, str):
+        try:
+            parsed = datetime.fromisoformat(last_reading.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        reading_day = (
+            parsed.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+            if parsed.tzinfo is not None
+            else parsed.date()
+        )
+    else:
+        return None
+
+    local_today = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+    if (reading_day.year, reading_day.month) != (
+        local_today.year,
+        local_today.month,
+    ):
+        return None
+    return summary
 
 
 # Battery session data type
@@ -1722,6 +1809,35 @@ def _get_price_resolution_attributes(data: dict) -> dict:
     }
 
 
+def _get_user_meter_types_by_segment(data: dict) -> dict[str, str]:
+    """Preserve independently reported electricity/gas meter types."""
+    user = data.get(DATA_USER)
+    connections = getattr(user, "connections", None) or []
+    types: dict[str, str] = {}
+    for index, connection in enumerate(connections, start=1):
+        # The pinned API client parses GraphQL connections as Connection
+        # dataclasses, not plain dicts. Retain support for both representations
+        # without exposing any IDs or altering the existing meter entity.
+        if isinstance(connection, dict):
+            raw_type = connection.get("meterType")
+            segment = connection.get("segment")
+        else:
+            raw_type = getattr(connection, "meterType", None)
+            segment = getattr(connection, "segment", None)
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            continue
+        if not isinstance(segment, str) or not segment.strip():
+            segment = f"connection_{index}"
+        types[segment.strip().lower()] = raw_type.strip().lower()
+    return types
+
+
+def _get_primary_user_meter_type(data: dict) -> str | None:
+    """Keep existing entity identity; prioritize electricity."""
+    types = _get_user_meter_types_by_segment(data)
+    return types.get("electricity") or next(iter(types.values()), None)
+
+
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="contract_price_resolution_state",
@@ -1736,7 +1852,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
             if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
             and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
-            else STATE_UNKNOWN
+            else None
         ),
         available_fn=lambda data: (
             data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None
@@ -2449,7 +2565,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
-            data[DATA_GAS].tomorrow_average_price if data[DATA_GAS] else None
+            data[DATA_GAS].tomorrow_average_price
+            if _tomorrow_has_full_coverage(data, DATA_GAS) and data[DATA_GAS]
+            else None
         ),
         # value_fn=lambda data: data[DATA_GAS].tomorrow_avg.total,
         # if data[DATA_GAS].tomorrow_avg else None,
@@ -2639,7 +2757,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             data[DATA_GAS].tomorrow_prices_market
-            if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market
+            if _tomorrow_has_full_coverage(data, DATA_GAS)
+            and data[DATA_GAS]
+            and data[DATA_GAS].tomorrow_prices_market
             else None
         ),
         attr_fn=lambda data: (
@@ -2662,7 +2782,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             data[DATA_GAS].tomorrow_prices_market_tax
-            if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax
+            if _tomorrow_has_full_coverage(data, DATA_GAS)
+            and data[DATA_GAS]
+            and data[DATA_GAS].tomorrow_prices_market_tax
             else None
         ),
         attr_fn=lambda data: (
@@ -2685,7 +2807,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             data[DATA_GAS].tomorrow_prices_market_tax_markup
-            if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_market_tax_markup
+            if _tomorrow_has_full_coverage(data, DATA_GAS)
+            and data[DATA_GAS]
+            and data[DATA_GAS].tomorrow_prices_market_tax_markup
             else None
         ),
         attr_fn=lambda data: (
@@ -2733,7 +2857,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             data[DATA_GAS].tomorrow_prices_total
-            if data[DATA_GAS] and data[DATA_GAS].tomorrow_prices_total
+            if _tomorrow_has_full_coverage(data, DATA_GAS)
+            and data[DATA_GAS]
+            and data[DATA_GAS].tomorrow_prices_total
             else None
         ),
         attr_fn=lambda data: (
@@ -2756,7 +2882,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             data[DATA_GAS].tomorrow_min.total
-            if data[DATA_GAS] and data[DATA_GAS].tomorrow_min
+            if _tomorrow_has_full_coverage(data, DATA_GAS)
+            and data[DATA_GAS]
+            and data[DATA_GAS].tomorrow_min
             else None
         ),
         attr_fn=lambda data: (
@@ -2778,7 +2906,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
             data[DATA_GAS].tomorrow_max.total
-            if data[DATA_GAS] and data[DATA_GAS].tomorrow_max
+            if _tomorrow_has_full_coverage(data, DATA_GAS)
+            and data[DATA_GAS]
+            and data[DATA_GAS].tomorrow_max
             else None
         ),
         attr_fn=lambda data: (
@@ -3084,16 +3214,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].actualCostsUntilLastMeterReadingDate
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].actualCostsUntilLastMeterReadingDate
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "actualCostsUntilLastMeterReadingDate", None
         ),
         attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3106,16 +3232,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].expectedCostsUntilLastMeterReadingDate
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].expectedCostsUntilLastMeterReadingDate
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "expectedCostsUntilLastMeterReadingDate", None
         ),
         attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3128,16 +3250,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDate
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDate
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "differenceUntilLastMeterReadingDate", None
         ),
         attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3150,16 +3268,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDateAvg
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDateAvg
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "differenceUntilLastMeterReadingDateAvg", None
         ),
         attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3172,20 +3286,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].expectedCosts
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].expectedCosts
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "expectedCosts", None
         ),
         attr_fn=lambda data: (
-            {
-                "Description": data[
-                    DATA_INVOICES
-                ].current_period_invoice.PeriodDescription,
-            }
-            if data[DATA_INVOICES]
-            and data[DATA_INVOICES].current_period_invoice
-            and data[DATA_INVOICES].current_period_invoice.PeriodDescription
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3198,21 +3304,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].expectedCostsPerDay
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].expectedCostsPerDay
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "expectedCostsPerDay", None
         ),
         attr_fn=lambda data: (
-            {
-                ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
-                "Description": data[
-                    DATA_INVOICES
-                ].current_period_invoice.PeriodDescription,
-            }
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_INVOICES]
-            and data[DATA_INVOICES].current_period_invoice
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3225,24 +3322,12 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].costs_per_day_till_now
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
-            else None
+        value_fn=lambda data: getattr(
+            _current_month_summary(data), "costs_per_day_till_now", None
         ),
         attr_fn=lambda data: (
-            {
-                ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate,
-                "Description": data[
-                    DATA_INVOICES
-                ].current_period_invoice.PeriodDescription,
-            }
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_INVOICES]
-            and data[DATA_INVOICES].current_period_invoice
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-            and data[DATA_INVOICES].current_period_invoice.PeriodDescription
+            {ATTR_LAST_UPDATE: summary.lastMeterReadingDate}
+            if (summary := _current_month_summary(data)) is not None
             else {}
         ),
     ),
@@ -3560,20 +3645,13 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
-        value_fn=lambda data: (
-            data[DATA_USAGE].electricity.costs_total
-            if data[DATA_USAGE]
-            and data[DATA_USAGE].electricity
-            and data[DATA_USAGE].electricity.costs_total
-            else None
-        ),
-        attr_fn=lambda data: (
-            {"Electricity costs total": data[DATA_USAGE].electricity.costs_total}
-            if data[DATA_USAGE]
-            and data[DATA_USAGE].electricity
-            and hasattr(data[DATA_USAGE].electricity, "costs_total")
-            else {}
-        ),
+        # This legacy key was a duplicate of *yesterday*, not a month
+        # total. Never relabel historical daily states as actual month costs.
+        value_fn=lambda data: None,
+        attr_fn=lambda data: {
+            "quality": "deprecated_daily_alias",
+            "replacement": "finance_current_electricity_costs",
+        },
         entity_registry_enabled_default=False,
     ),
     FrankEnergieEntityDescription(
@@ -3743,7 +3821,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="propositionType",
         translation_key="proposition_type",
         device_class=SensorDeviceClass.ENUM,
-        options=["dynamic"],
+        options=["dynamic", "model"],
         icon="mdi:file-document-check",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
@@ -3941,22 +4019,14 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="meterType",
         translation_key="meter_type",
         device_class=SensorDeviceClass.ENUM,
-        options=["slm"],
+        options=["slm", "smr1", "smr3"],
         icon="mdi:meter-electric",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: (
-            next(
-                (
-                    connection["meterType"].lower()
-                    for connection in data[DATA_USER].connections
-                    if connection.get("meterType")
-                ),
-                None,
-            )
-            if data[DATA_USER] and data[DATA_USER].connections
-            else None
-        ),
+        value_fn=_get_primary_user_meter_type,
+        attr_fn=lambda data: {
+            "meter_types_by_segment": _get_user_meter_types_by_segment(data)
+        },
     ),
     FrankEnergieEntityDescription(
         key="contractStartDate",
@@ -4312,14 +4382,38 @@ class FrankEnergieSensor(
     # _attr_device_class = SensorDeviceClass.MONETARY
     # _attr_state_class = SensorStateClass.MEASUREMENT
 
+    def _validated_enum_state(self, value: StateType) -> StateType:
+        """Do not publish unsupported contract enums into Home Assistant."""
+        if self.entity_description.device_class != SensorDeviceClass.ENUM:
+            return value
+
+        options = self.entity_description.options or ()
+        normalized = value.strip().lower() if isinstance(value, str) else None
+        if normalized in options:
+            self._last_invalid_enum_value = None
+            return normalized
+
+        if normalized and normalized not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            if value != self._last_invalid_enum_value:
+                _LOGGER.warning(
+                    "Frank Energie enum sensor %s received unsupported value %r; "
+                    "allowed options: %s. Marking unavailable.",
+                    self.entity_description.key,
+                    value,
+                    options,
+                )
+                self._last_invalid_enum_value = value
+        return None
+
     @property
     def native_value(self) -> StateType:
-        """Return the state of the sensor."""
+        """Return a Home Assistant-valid state from current source data."""
         if self.coordinator.data is None:
             return None
         try:
-            return self.entity_description.value_fn(self.coordinator.data)
-        except (TypeError, IndexError, ValueError, AttributeError):
+            value = self.entity_description.value_fn(self.coordinator.data)
+            return self._validated_enum_state(value)
+        except (TypeError, IndexError, ValueError, AttributeError, KeyError):
             return None
 
     @property
@@ -4391,6 +4485,7 @@ class FrankEnergieSensor(
     ) -> None:
         """Initialize the sensor."""
         self.entity_description: FrankEnergieEntityDescription = description
+        self._last_invalid_enum_value: object | None = None
         if hasattr(self.entity_description, "state_class"):
             self._attr_state_class = getattr(
                 self.entity_description, "state_class", None
@@ -4453,7 +4548,9 @@ class FrankEnergieSensor(
         """Get the latest data and updates the states."""
         data = self.coordinator.data
         try:
-            self._attr_native_value = self.entity_description.value_fn(data)
+            self._attr_native_value = self._validated_enum_state(
+                self.entity_description.value_fn(data)
+            )
         except (IndexError, ValueError):
             self._attr_native_value = None
         except (AttributeError, TypeError, KeyError):
@@ -4471,9 +4568,31 @@ class FrankEnergieSensor(
             return {}
 
         try:
-            return self.entity_description.attr_fn(self.coordinator.data) or {}
+            attrs = dict(self.entity_description.attr_fn(self.coordinator.data) or {})
         except Exception:
-            return {}
+            attrs = {}
+
+        # The selected supplier price may contain anonymous public fallback
+        # or restored disk data. Do not expose it as a verified MODEL customer
+        # invoice rate to downstream integrations or automations.
+        key = self.entity_description.key
+        if key in _PRICE_SOURCE_ENTITY_KEYS:
+            segment = "gas" if key.startswith("gas_") else "electricity"
+            get_source = getattr(self.coordinator, "price_source_for", None)
+            origin = (
+                get_source(segment, datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date())
+                if callable(get_source)
+                else "cached_or_unverified"
+            )
+            attrs.update(
+                {
+                    "selected_price_origin": origin,
+                    "selected_price_segment": segment,
+                    "customer_billing_rate_verified": False,
+                    "cost_scope": "provider_price_not_reconciled_invoice",
+                }
+            )
+        return attrs
 
     @property
     def available(self) -> bool:
@@ -5034,6 +5153,95 @@ def _service_parent_device_id(
     )
 
 
+# Opt-in current/previous *calendar month* snapshots from monthInsights.
+# Never register these on default installations: the feature introduces
+# additional authenticated API calls and deliberately does not write HA Energy
+# long-term statistics (month-to-date values can be revised or reset).
+_MONTHLY_FINANCE_METRICS: Final[dict[str, tuple[SensorDeviceClass, str]]] = {
+    "electricity_costs": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "electricity_kwh": (SensorDeviceClass.ENERGY, UnitOfEnergy.KILO_WATT_HOUR),
+    "gas_costs": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "gas_kwh": (SensorDeviceClass.ENERGY, UnitOfEnergy.KILO_WATT_HOUR),
+    "gas_m3": (SensorDeviceClass.GAS, UnitOfVolume.CUBIC_METERS),
+    "feed_in_costs": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "feed_in_kwh": (SensorDeviceClass.ENERGY, UnitOfEnergy.KILO_WATT_HOUR),
+    "actual_total": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "expected_to_reading": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "expected_total": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "expected_electricity": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "expected_gas": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "expected_fixed": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+    "expected_feed_in": (SensorDeviceClass.MONETARY, CURRENCY_EURO),
+}
+_MONTHLY_FINANCE_ACTUAL: Final[tuple[str, ...]] = (
+    "actual_total",
+    "expected_to_reading",
+    "electricity_costs",
+    "electricity_kwh",
+    "gas_costs",
+    "gas_kwh",
+    "gas_m3",
+    "feed_in_costs",
+    "feed_in_kwh",
+)
+
+
+def _monthly_finance_descriptions() -> tuple[FrankEnergieEntityDescription, ...]:
+    """Build stable per-period sensor keys for the user-enabled finance group."""
+    result: list[FrankEnergieEntityDescription] = []
+    for period, data_key, metrics in (
+        ("current", DATA_MONTH_INSIGHTS_CURRENT, tuple(_MONTHLY_FINANCE_METRICS)),
+        ("previous", DATA_MONTH_INSIGHTS_PREVIOUS, _MONTHLY_FINANCE_ACTUAL),
+    ):
+        for metric in metrics:
+            device_class, unit = _MONTHLY_FINANCE_METRICS[metric]
+            result.append(
+                FrankEnergieEntityDescription(
+                    key=f"finance_{period}_{metric}",
+                    translation_key=f"finance_{period}_{metric}",
+                    authenticated=True,
+                    service_name=SERVICE_NAME_COSTS,
+                    is_gas=metric.startswith("gas_"),
+                    device_class=device_class,
+                    native_unit_of_measurement=unit,
+                    # Windowed summaries reset and may be revised; not
+                    # TOTAL_INCREASING, no Recorder long-term statistic.
+                    suggested_display_precision=2,
+                    entity_registry_enabled_default=metric not in ("gas_kwh", "gas_m3"),
+                    value_fn=lambda data, k=data_key, m=metric: finance_reading(
+                        data.get(k), m
+                    )[0],
+                    attr_fn=lambda data, k=data_key, m=metric: finance_attributes(
+                        data.get(k), m
+                    ),
+                )
+            )
+        # A readable quality status remains even when money is missing.
+        # This is provider component coverage, NOT a complete home bill.
+        result.append(
+            FrankEnergieEntityDescription(
+                key=f"finance_{period}_readiness",
+                translation_key=f"finance_{period}_readiness",
+                authenticated=True,
+                service_name=SERVICE_NAME_COSTS,
+                device_class=SensorDeviceClass.ENUM,
+                options=[
+                    "not_published",
+                    "contract_unverified",
+                    "electricity_missing",
+                    "gas_missing",
+                    "provider_total_missing",
+                    "provider_components_present",
+                ],
+                value_fn=lambda data, k=data_key: finance_period_readiness(data.get(k)),
+                attr_fn=lambda data, k=data_key: finance_period_readiness_attributes(
+                    data.get(k)
+                ),
+            )
+        )
+    return tuple(result)
+
+
 # The previous/next quarter-hour price sensors rely on PriceData helpers added
 # in a later python-frank-energie release. Skip registering them on an older
 # pinned version so users don't get permanently-unavailable entities before the
@@ -5134,8 +5342,16 @@ async def async_setup_entry(
         config_entry.runtime_data.battery_session_coordinators = session_coordinators
 
     # Safely access user segments from DATA_USER_SITES
-    user_segments = getattr(
-        settings_coordinator.data.get(DATA_USER_SITES), "segments", []
+    # The UserSites top-level segments describe the *first* customer site,
+    # not necessarily the configured delivery site. Price selection already
+    # resolves the selected site; sensor registration must use that same
+    # contract truth or a multi-site account silently loses gas entities.
+    selected_electricity, selected_gas = _site_segment_flags(
+        settings_coordinator.data.get(DATA_USER_SITES),
+        price_coordinator.site_reference,
+    )
+    user_segments = (["ELECTRICITY"] if selected_electricity else []) + (
+        ["GAS"] if selected_gas else []
     )
 
     user_data: object = None
@@ -5205,6 +5421,16 @@ async def async_setup_entry(
             )
         )
     ]
+
+    if settings_coordinator.api.is_authenticated and config_entry.options.get(
+        CONF_MONTHLY_FINANCE_ENABLED, False
+    ):
+        for description in _monthly_finance_descriptions():
+            if description.is_gas and "GAS" not in user_segments:
+                continue
+            entities.append(
+                FrankEnergieSensor(statistics_coordinator, description, config_entry)
+            )
 
     if settings_coordinator.api.is_authenticated and "GAS" not in user_segments:
         await _disable_gas_price_sensors(hass, config_entry)
@@ -5383,6 +5609,26 @@ async def async_setup_entry(
 
     try:
         async_add_entities(entities, update_before_add=True)
+        # Keep diagnostic sensors out of the legacy update_before_add=True
+        # batch: a CoordinatorEntity.async_update() would otherwise cause
+        # avoidable network refreshes for each new cadence entity.
+        trace = getattr(price_coordinator, "_diagnostic_trace", None)
+        refresh_entities = []
+        for service in service_refreshes(runtime_data):
+            refresh_entities.extend(
+                (
+                    FrankEnergieRefreshIntervalSensor(service, config_entry, trace),
+                    FrankEnergieLastApiCheckSensor(service, config_entry, trace),
+                    FrankEnergieServiceApiStatusSensor(service, config_entry, trace),
+                    FrankEnergieLastSuccessfulApiResponseSensor(
+                        service, config_entry, trace
+                    ),
+                )
+            )
+        refresh_entities.append(
+            FrankEnergieMarketHourRankSensor(price_coordinator, config_entry)
+        )
+        async_add_entities(refresh_entities, update_before_add=False)
     except Exception:
         _LOGGER.exception("Failed to add entities for entry %s", config_entry.entry_id)
         raise

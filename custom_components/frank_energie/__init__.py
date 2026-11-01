@@ -6,7 +6,7 @@ import asyncio
 import logging
 import warnings
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
@@ -25,10 +25,15 @@ from python_frank_energie.models import UserSites
 
 from .const import (
     CONF_COORDINATOR,
+    DATA_ELECTRICITY,
+    DATA_GAS,
+    DATA_INVOICES,
+    DATA_MONTH_SUMMARY,
+    DATA_USAGE,
+    DATA_USER_SITES,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
-    TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
 from .coordinator import (
     FrankEnergieCoordinator,
@@ -40,6 +45,8 @@ from .coordinator import (
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
+from .diagnostic_trace import DiagnosticTrace, attach_graphql_trace
+from .auth_lifecycle import attach_token_persistence
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
 
@@ -84,17 +91,9 @@ async def async_setup_entry(
 ) -> bool:
     """Set up the Frank Energie component from a config entry."""
     _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
-    _LOGGER.debug("Setting up Frank Energie entry: %s", entry)
-    _LOGGER.debug(
-        "Setting up Frank Energie entry data: %s",
-        {
-            key: "**REDACTED**" if key in (CONF_ACCESS_TOKEN, CONF_TOKEN) else value
-            for key, value in entry.data.items()
-        },
-    )
+    # Never log config-entry repr, authentication metadata, or options: these
+    # can contain encrypted credentials, site references and personal fields.
     _LOGGER.debug("Setting up Frank Energie entry domain: %s", entry.domain)
-    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s", entry.unique_id)
-    _LOGGER.debug("Setting up Frank Energie entry options: %s", entry.options)
     component = FrankEnergieComponent(hass, entry)
     return await component.setup()
 
@@ -170,46 +169,114 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     ) -> None:
         """Schedule coordinator updates on aligned boundaries and handle midnight local rollover."""
 
-        async def _async_aligned_refresh(
-            _: datetime,
+        async def _recover(
+            coordinator: FrankEnergieCoordinator, operation: str
         ) -> None:
-            # Check for midnight local TIMEZONE_AMSTERDAM rollover
+            """Retry a missing core stream and record a redacted outcome."""
+            trace = price_coordinator._diagnostic_trace
+            trace.record("scheduler", "recovery_requested", operation=operation)
+            try:
+                await coordinator.async_request_refresh()
+            except Exception as err:
+                trace.record(
+                    "scheduler", "refresh_failed", operation=operation, error=err
+                )
+                _LOGGER.warning(
+                    "Automatic %s recovery failed (%s)", operation, type(err).__name__
+                )
+            else:
+                current = coordinator.data or {}
+                if operation == "Settings":
+                    source_healthy = current.get(DATA_USER_SITES) is not None
+                elif operation == "Statistics":
+                    source_healthy = any(
+                        current.get(key) is not None
+                        for key in (DATA_MONTH_SUMMARY, DATA_INVOICES, DATA_USAGE)
+                    )
+                else:
+                    source_healthy = any(
+                        getattr(current.get(key), "current", None) is not None
+                        for key in (DATA_ELECTRICITY, DATA_GAS)
+                    ) and coordinator._today_cache_covers_selected_site(
+                        coordinator._static_prices_today,
+                        dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date(),
+                    )
+                trace.record(
+                    "scheduler",
+                    "refresh_ok"
+                    if coordinator.last_update_success and source_healthy
+                    else "refresh_incomplete",
+                    operation=operation,
+                )
+
+        async def _async_aligned_refresh(_: datetime) -> None:
             now_local = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM))
+            now_utc = dt_util.utcnow()
             if now_local.hour == 0 and now_local.minute == 0:
                 _LOGGER.info(
                     "Midnight local time: promoting tomorrow's prices to today"
                 )
                 price_coordinator.promote_tomorrow_prices()
 
-            # Every aligned tick across the price release window explicitly
-            # triggers a refresh, not just the exact 13:00 one. A single
-            # exact-tick trigger is a single point of failure: if this
-            # listener's registration (the last step of a slow startup) loses
-            # the race against the exact 13:00:00 boundary, that tick is
-            # gone for good and nothing else was scheduled to try again until
-            # the next day. FrankEnergiePriceCoordinator's _async_update_data
-            # already short-circuits both today's and tomorrow's fetch to a
-            # no-op once genuinely up to date, so the extra calls on ticks
-            # where nothing changed cost nothing.
-            if (
-                time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
-                <= now_local.time()
-                < time(15, 0)
-            ):
-                # Debug, not info: this now fires up to 8x/day, and
-                # _refresh_tomorrow_cache already logs its own outcome
-                # (fetched vs. already cached, skip) at the appropriate level.
-                _LOGGER.debug(
-                    "Price release window local time: explicitly triggering price fetch"
-                )
-                await price_coordinator.async_request_refresh()
-            else:
-                # Trigger sensor state updates using cached data
-                price_coordinator.async_update_listeners()
-
-            # Skip non-hour ticks dynamically when resolution is hourly
-            if price_coordinator.resolution != "PT15M" and now_local.minute != 0:
+            # The provider maintenance window is 00:00-01:00 UTC. Never
+            # mistake a skipped refresh for a healthy new-day source.
+            if price_coordinator._should_skip_api_calls(now_utc):
+                if now_local.minute == 0:
+                    price_coordinator._diagnostic_trace.record(
+                        "scheduler", "skipped_maintenance", operation="HourlyRecovery"
+                    )
+                price_coordinator.publish_price_slot(now_utc)
                 return
+
+            # The price button requests a real coordinator refresh; outside
+            # the publication window the aligned timer previously only
+            # republished stale HA states. Recover missing settings, finance
+            # and prices hourly, including immediately after maintenance.
+            if now_local.minute == 0:
+                settings = price_coordinator.settings_coordinator
+                if (
+                    settings.api.is_authenticated
+                    and (settings.data or {}).get(DATA_USER_SITES) is None
+                ):
+                    await _recover(settings, "Settings")
+
+                statistics = self.entry.runtime_data.statistics_coordinator
+                stats = statistics.data or {}
+                if statistics.api.is_authenticated and all(
+                    stats.get(key) is None
+                    for key in (DATA_MONTH_SUMMARY, DATA_INVOICES, DATA_USAGE)
+                ):
+                    await _recover(statistics, "Statistics")
+
+                data = price_coordinator.data or {}
+                has_current_price = any(
+                    getattr(data.get(key), "current", None) is not None
+                    for key in (DATA_ELECTRICITY, DATA_GAS)
+                )
+                last_fetch = price_coordinator.last_fetch_today
+                stale_today = (
+                    last_fetch is None
+                    or last_fetch.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+                    != now_local.date()
+                )
+                missing_coverage = (
+                    not price_coordinator._today_cache_covers_selected_site(
+                        price_coordinator._static_prices_today, now_local.date()
+                    )
+                )
+                if (
+                    not price_coordinator.last_update_success
+                    or not has_current_price
+                    or stale_today
+                    or missing_coverage
+                ):
+                    await _recover(price_coordinator, "Prices")
+                    return
+
+            # The price coordinator's own dynamic update_interval is the
+            # single regular API polling mechanism. The aligned clock only
+            # advances cached tariff slots and fires time-based HA events.
+            price_coordinator.publish_price_slot(now_utc)
 
         unsub = async_track_utc_time_change(
             self.hass,
@@ -255,6 +322,13 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             auth_token=self.entry.data.get(CONF_ACCESS_TOKEN),
             refresh_token=self.entry.data.get(CONF_TOKEN),
         )
+
+        # Observe the actual authenticated GraphQL POST boundary, including
+        # source errors before the client parses them. No extra API calls and
+        # no query variables, HTTP headers or response values are retained.
+        diagnostic_trace = DiagnosticTrace()
+        attach_graphql_trace(api, diagnostic_trace, "graphql_account")
+        attach_token_persistence(self.hass, self.entry, api)
 
         settings_coordinator = FrankEnergieSettingsCoordinator(
             self.hass, self.entry, api

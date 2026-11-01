@@ -715,9 +715,11 @@
         "name": "Date de dernière relève de compteur"
       },
       "meter_type": {
-        "name": "Type de compteur",
+        "name": "Code compteur (API Frank)",
         "state": {
-          "slm": "Compteur intelligent"
+          "slm": "Compteur intelligent",
+          "smr1": "SMR1",
+          "smr3": "SMR3"
         }
       },
       "phone_number": {
@@ -729,7 +731,8 @@
       "proposition_type": {
         "name": "Type d'offre",
         "state": {
-          "dynamic": "Dynamique"
+          "dynamic": "Dynamique",
+          "model": "Modèle"
         }
       },
       "pv_operational_status": {
@@ -807,7 +810,7 @@
         "name": "Nom du véhicule"
       },
       "costs_electricity_this_month": {
-        "name": "Coût électricité ce mois-ci"
+        "name": "Ancien alias des coûts mensuels électriques (non pris en charge)"
       },
       "elec_lowest_4p": {
         "name": "Prix moyen le plus bas de l'électricité (4 périodes)"
@@ -1077,6 +1080,97 @@
       },
       "battery_last_update": {
         "name": "Dernière mise à jour"
+      },
+      "finance_current_electricity_costs": {
+        "name": "Coûts électricité — mois en cours"
+      },
+      "finance_current_electricity_kwh": {
+        "name": "Consommation électrique — mois en cours"
+      },
+      "finance_current_gas_costs": {
+        "name": "Coûts gaz — mois en cours"
+      },
+      "finance_current_gas_kwh": {
+        "name": "Consommation de gaz en kWh — mois en cours"
+      },
+      "finance_current_gas_m3": {
+        "name": "Consommation de gaz en m³ — mois en cours"
+      },
+      "finance_current_feed_in_costs": {
+        "name": "Solde financier injection — mois en cours"
+      },
+      "finance_current_feed_in_kwh": {
+        "name": "Énergie injectée — mois en cours"
+      },
+      "finance_current_actual_total": {
+        "name": "Coût total réel jusqu'au dernier relevé — mois en cours"
+      },
+      "finance_current_expected_to_reading": {
+        "name": "Coût prévu jusqu'au dernier relevé — mois en cours"
+      },
+      "finance_current_expected_total": {
+        "name": "Coût total prévu — mois en cours"
+      },
+      "finance_current_expected_electricity": {
+        "name": "Coût électricité prévu — mois en cours"
+      },
+      "finance_current_expected_gas": {
+        "name": "Coût gaz prévu — mois en cours"
+      },
+      "finance_current_expected_fixed": {
+        "name": "Frais fixes prévus — mois en cours"
+      },
+      "finance_current_expected_feed_in": {
+        "name": "Solde injection prévu — mois en cours"
+      },
+      "finance_previous_actual_total": {
+        "name": "Coût total réel jusqu'au dernier relevé — mois précédent"
+      },
+      "finance_previous_expected_to_reading": {
+        "name": "Coût prévu jusqu'au dernier relevé — mois précédent"
+      },
+      "finance_previous_electricity_costs": {
+        "name": "Coûts électricité — mois précédent"
+      },
+      "finance_previous_electricity_kwh": {
+        "name": "Consommation électrique — mois précédent"
+      },
+      "finance_previous_gas_costs": {
+        "name": "Coûts gaz — mois précédent"
+      },
+      "finance_previous_gas_kwh": {
+        "name": "Consommation de gaz en kWh — mois précédent"
+      },
+      "finance_previous_gas_m3": {
+        "name": "Consommation de gaz en m³ — mois précédent"
+      },
+      "finance_previous_feed_in_costs": {
+        "name": "Solde financier injection — mois précédent"
+      },
+      "finance_previous_feed_in_kwh": {
+        "name": "Énergie injectée — mois précédent"
+      },
+      "finance_current_readiness": {
+        "name": "Couverture financière — mois en cours",
+        "state": {
+          "not_published": "Aucune donnée mensuelle",
+          "contract_unverified": "Contrat non vérifié",
+          "electricity_missing": "Coûts électricité manquants",
+          "gas_missing": "Coûts gaz manquants",
+          "provider_total_missing": "Total fournisseur manquant",
+          "provider_components_present": "Composantes fournisseur disponibles"
+        }
+      },
+      "finance_previous_readiness": {
+        "name": "Couverture financière — mois précédent",
+        "state": {
+          "not_published": "Aucune donnée mensuelle",
+          "contract_unverified": "Contrat non vérifié",
+          "electricity_missing": "Coûts électricité manquants",
+          "gas_missing": "Coûts gaz manquants",
+          "provider_total_missing": "Total fournisseur manquant",
+          "provider_components_present": "Composantes fournisseur disponibles"
+        }
       }
     }
   },
@@ -1092,9 +1186,17 @@
           "interval_battery_sessions": "Intervalle d'interrogation - Sessions de batterie (5-1440 minutes, par défaut : 60)",
           "interval_chargers": "Intervalle d'interrogation - Chargeurs (5-60 minutes, par défaut : 5)",
           "interval_vehicles": "Intervalle d'interrogation - Véhicules (5-60 minutes, par défaut : 15)",
-          "interval_pv": "Intervalle d'interrogation - PV (5-60 minutes, par défaut : 5)"
+          "interval_pv": "Intervalle d'interrogation - PV (5-60 minutes, par défaut : 5)",
+          "monthly_finance_enabled": "Récupérer la consommation et les coûts mensuels (requêtes API supplémentaires)",
+          "market_cheap_hours": "Heures les moins chères du marché par jour (1–12, défaut 4)"
         },
         "title": "Se connecter à Frank Energie"
+      },
+      "init": {
+        "title": "Options des prix du marché public",
+        "data": {
+          "market_cheap_hours": "Heures les moins chères du marché par jour (1–12, défaut 4)"
+        }
       }
     }
   },

@@ -61,6 +61,11 @@ Information about polling intervals, market publication timing, maintenance wind
 
 Collect diagnostics, enable debug logging, and gather information for issue reports.
 
+### Price and financial data integrity
+
+- [Regional contracts, price provenance and monthly finance](belgium-and-data-integrity.md)
+- [Privacy-safe GraphQL diagnostics](diagnostic-observability.md)
+
 ### Troubleshooting
 
 - [Troubleshooting](troubleshooting.md)
@@ -98,6 +103,8 @@ Versioning, release workflow, validation, quality standards, and HACS release gu
 | Document | Description |
 |-----------|-------------|
 | architecture.md | Integration architecture |
+| belgium-and-data-integrity.md | Belgian contracts and source-backed prices/finance |
+| diagnostic-observability.md | Privacy-safe source diagnostics |
 | configuration.md | Setup and configuration |
 | developer.md | Developer guide |
 | diagnostics.md | Diagnostics and debugging |

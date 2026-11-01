@@ -1,7 +1,8 @@
 """Regression tests for price coordinator refresh scheduling."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from python_frank_energie.models import MarketPrices, PriceData
@@ -98,3 +99,86 @@ def test_fetch_just_after_local_midnight_counts_as_today(
     price_coordinator._adjust_update_interval(now_utc)
 
     assert price_coordinator.update_interval == timedelta(minutes=15)
+
+
+@pytest.mark.asyncio
+async def test_valid_disk_cache_installs_price_polling_fallback(
+    price_coordinator: FrankEnergiePriceCoordinator,
+) -> None:
+    """Skipping a live initial fetch cannot leave the polling interval unset."""
+    now = datetime(2026, 8, 31, 14, 0, tzinfo=UTC)
+    price_coordinator.settings_coordinator.data = {}
+    price_coordinator._async_setup = AsyncMock(return_value=True)
+    price_coordinator._is_cache_fresh = MagicMock(return_value=True)
+    price_coordinator.async_set_updated_data = MagicMock()
+
+    with patch(
+        "custom_components.frank_energie.coordinator.dt_util.utcnow",
+        return_value=now,
+    ):
+        await price_coordinator.async_config_entry_first_refresh()
+
+    assert price_coordinator.update_interval is not None
+    assert price_coordinator.update_interval.total_seconds() > 0
+    price_coordinator._is_cache_fresh.assert_called_once_with(now)
+    price_coordinator.async_set_updated_data.assert_called_once_with(
+        price_coordinator.data
+    )
+
+
+def test_hourly_customer_price_does_not_publish_every_quarter(
+    price_coordinator: FrankEnergiePriceCoordinator,
+) -> None:
+    """Source resolution, not PT15M public query, controls HA state transitions."""
+    price_coordinator._static_prices_today = SimpleNamespace(
+        electricity=SimpleNamespace(resolution_minutes=60, all=[object()]),
+        gas=None,
+    )
+    price_coordinator._maybe_fire_lowest_price_event = MagicMock()
+    price_coordinator._maybe_fire_lowest_4p_event = MagicMock()
+    price_coordinator._maybe_fire_lowest_16p_event = MagicMock()
+    price_coordinator.async_update_listeners = MagicMock()
+
+    price_coordinator.publish_price_slot(datetime(2026, 8, 31, 12, 15, tzinfo=UTC))
+    price_coordinator.async_update_listeners.assert_not_called()
+    price_coordinator.publish_price_slot(datetime(2026, 8, 31, 13, 0, tzinfo=UTC))
+    price_coordinator.async_update_listeners.assert_called_once()
+    price_coordinator._maybe_fire_lowest_price_event.assert_called_once()
+
+
+def test_quarter_hour_prices_publish_without_api_call(
+    price_coordinator: FrankEnergiePriceCoordinator,
+) -> None:
+    """The local slot clock publishes cached tariff changes independently."""
+    price_coordinator._static_prices_today = SimpleNamespace(
+        electricity=SimpleNamespace(resolution_minutes=15, all=[object()]),
+        gas=None,
+    )
+    price_coordinator._maybe_fire_lowest_price_event = MagicMock()
+    price_coordinator._maybe_fire_lowest_4p_event = MagicMock()
+    price_coordinator._maybe_fire_lowest_16p_event = MagicMock()
+    price_coordinator.async_update_listeners = MagicMock()
+    price_coordinator._fetch_prices_with_fallback = AsyncMock()
+
+    price_coordinator.publish_price_slot(datetime(2026, 8, 31, 12, 15, tzinfo=UTC))
+
+    price_coordinator.async_update_listeners.assert_called_once()
+    price_coordinator._fetch_prices_with_fallback.assert_not_awaited()
+
+
+def test_mixed_source_resolutions_do_not_skip_gas_slots(
+    price_coordinator: FrankEnergiePriceCoordinator,
+) -> None:
+    """A 15-minute gas price can change while the electricity tariff is hourly."""
+    price_coordinator._static_prices_today = SimpleNamespace(
+        electricity=SimpleNamespace(resolution_minutes=60, all=[object()]),
+        gas=SimpleNamespace(resolution_minutes=15, all=[object()]),
+    )
+    price_coordinator._maybe_fire_lowest_price_event = MagicMock()
+    price_coordinator._maybe_fire_lowest_4p_event = MagicMock()
+    price_coordinator._maybe_fire_lowest_16p_event = MagicMock()
+    price_coordinator.async_update_listeners = MagicMock()
+
+    price_coordinator.publish_price_slot(datetime(2026, 8, 31, 12, 15, tzinfo=UTC))
+
+    price_coordinator.async_update_listeners.assert_called_once()

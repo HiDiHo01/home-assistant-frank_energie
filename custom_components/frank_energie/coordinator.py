@@ -26,6 +26,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -47,6 +48,7 @@ from python_frank_energie.models import (
     EnodeVehicles,
     Invoices,
     MarketPrices,
+    MonthInsights,
     MonthSummary,
     PeriodUsageAndCosts,
     Price,
@@ -69,6 +71,7 @@ from .const import (
     CONF_INTERVAL_PV,
     CONF_INTERVAL_SETTINGS,
     CONF_INTERVAL_STATISTICS,
+    CONF_MONTHLY_FINANCE_ENABLED,
     CONF_INTERVAL_VEHICLES,
     COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
@@ -81,6 +84,8 @@ from .const import (
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
+    DATA_MONTH_INSIGHTS_CURRENT,
+    DATA_MONTH_INSIGHTS_PREVIOUS,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
     DATA_REFRESH_TOKEN_EXPIRES_AT,
@@ -104,7 +109,10 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
+from .diagnostic_trace import DiagnosticTrace, attach_graphql_trace
+from .finance import MonthlyFinanceSnapshot, month_keys
 from .helpers import decrypt_password, price_cache_store
+from .price_coverage import covered_seconds_in_local_day, covers_local_day
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
@@ -232,11 +240,77 @@ def _price_counts(market_prices: MarketPrices | None) -> tuple[int, int]:
     """
     if market_prices is None:
         return 0, 0
-    electricity_count = (
-        len(market_prices.electricity.all) if market_prices.electricity else 0
+    # Test doubles and partially parsed responses may be non-MarketPrices
+    # sentinel objects. Observability must NEVER break a provider call just
+    # because the returned object has no electricity/gas stream.
+    electricity = getattr(getattr(market_prices, "electricity", None), "all", None)
+    gas = getattr(getattr(market_prices, "gas", None), "all", None)
+    return (
+        len(electricity) if isinstance(electricity, (list, tuple)) else 0,
+        len(gas) if isinstance(gas, (list, tuple)) else 0,
     )
-    gas_count = len(market_prices.gas.all) if market_prices.gas else 0
-    return electricity_count, gas_count
+
+
+def _price_selection_outcome(
+    selected: MarketPrices | None,
+    *,
+    authenticated: bool,
+    customer_electricity: bool = False,
+    customer_gas: bool = False,
+    fallback_from_cache: bool = False,
+) -> str:
+    """Classify selected slots, not merely successful API requests.
+
+    Missing customer slots do not prove a public fallback: fallback must
+    provide actual data. A cache-only response is not a fresh market feed.
+    This affects diagnostic provenance, not selected price values.
+    """
+    electricity_slots, gas_slots = _price_counts(selected)
+    if not electricity_slots and not gas_slots:
+        return "not_available"
+    if not authenticated:
+        return "cached_fallback" if fallback_from_cache else "public"
+    has_customer = (customer_electricity and electricity_slots > 0) or (
+        customer_gas and gas_slots > 0
+    )
+    has_fallback = (not customer_electricity and electricity_slots > 0) or (
+        not customer_gas and gas_slots > 0
+    )
+    if has_customer and has_fallback:
+        return "mixed"
+    if has_fallback:
+        return "cached_fallback" if fallback_from_cache else "public_fallback"
+    return "customer"
+
+
+def _site_segment_flags(
+    user_sites: UserSites | None, site_reference: str | None
+) -> tuple[bool, bool]:
+    """Identify the selected site's electricity/gas subscription segments.
+
+    UserSites.segments belongs to the client's first site, so never reuse it
+    for a different selected delivery site. Missing/unmatched metadata must
+    not enable public price fallback for an unrelated site.
+    """
+    if user_sites is None or not site_reference:
+        return False, False
+
+    segments: object = None
+    delivery_sites = getattr(user_sites, "deliverySites", None)
+    if isinstance(delivery_sites, (list, tuple)):
+        for site in delivery_sites:
+            if getattr(site, "reference", None) == site_reference:
+                segments = getattr(site, "segments", None)
+                break
+
+    # The pinned client also exposes first-site fields at UserSites level.
+    if segments is None and getattr(user_sites, "reference", None) == site_reference:
+        segments = getattr(user_sites, "segments", None)
+    if not isinstance(segments, (list, tuple, set, frozenset)):
+        return False, False
+
+    normalized = {item.upper() for item in segments if isinstance(item, str)}
+    return "ELECTRICITY" in normalized, "GAS" in normalized
 
 
 def _resolution_state_to_dict(state: ContractPriceResolutionState) -> dict[str, Any]:
@@ -328,6 +402,12 @@ class FrankEnergieData(TypedDict):
     month_summary: MonthSummary | None
     """Optional summary data for the month."""
 
+    month_insights_current: MonthlyFinanceSnapshot | None
+    """Optional source-backed current calendar month finance details."""
+
+    month_insights_previous: MonthlyFinanceSnapshot | None
+    """Optional source-backed previous calendar month finance details."""
+
     invoices: Invoices | None
     """Optional invoices data."""
 
@@ -394,6 +474,8 @@ def _empty_data() -> FrankEnergieData:
         DATA_ELECTRICITY: None,
         DATA_GAS: None,
         DATA_MONTH_SUMMARY: None,
+        DATA_MONTH_INSIGHTS_CURRENT: None,
+        DATA_MONTH_INSIGHTS_PREVIOUS: None,
         DATA_INVOICES: None,
         DATA_USAGE: None,
         DATA_USER: None,
@@ -442,6 +524,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self.hass = hass
         self.config_entry = config_entry
         self.api = api
+        self._diagnostic_trace = getattr(
+            api, "_frank_diagnostic_trace", DiagnosticTrace()
+        )
         self._today_prices_logged: bool = False
         self._tomorrow_prices_logged: bool = False
         self._cache: dict[str, object] = {}  # <--- hier cache je prijzen
@@ -453,7 +538,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._country_code: str | None = self.hass.config.country
         self.hass_country_code: str | None = self.hass.config.country
         self._user_country: str | None = self.country_code
-        self._connection_id: str | None = None  # cache voor contractPriceResolutionState
+        # Cached electricity connection ID for contractPriceResolutionState.
+        self._connection_id: str | None = None
         self._api_resolution_state: ContractPriceResolutionState | None = None
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
@@ -464,6 +550,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_update_success = False
         self.user_electricity_enabled = False
         self.user_gas_enabled = False
+        # All coordinators inherit price selection for upstream compatibility.
+        # Only a live provider reply can establish process-local provenance.
+        self._price_sources_by_day: dict[str, dict[str, str]] = {}
 
         self.cached_prices: FrankEnergieData | None = None
         self.cached_prices_today: PricesTodayCache | None = None
@@ -485,6 +574,67 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         # None = not yet checked; True/False = confirmed this session.
         # Reset to None daily so PV ownership is re-probed in case of new installation.
         self._has_pv_systems: bool | None = None
+
+    def _remember_price_sources(
+        self,
+        day: date,
+        selected: MarketPrices | None,
+        *,
+        customer_electricity: bool = False,
+        customer_gas: bool = False,
+        public_fresh: bool = False,
+    ) -> None:
+        """Track selected segments separately without persisting false source proof."""
+        sources: dict[str, str] = {}
+        for segment, is_customer in (
+            ("electricity", customer_electricity),
+            ("gas", customer_gas),
+        ):
+            series = getattr(selected, segment, None)
+            if series is None or covered_seconds_in_local_day(series, day) <= 0:
+                sources[segment] = "unavailable"
+                continue
+            origin = (
+                "customer"
+                if is_customer
+                else "public"
+                if public_fresh
+                else "cached_unverified"
+            )
+            sources[segment] = (
+                origin if covers_local_day(series, day) else f"{origin}_partial"
+            )
+        self._price_sources_by_day[day.isoformat()] = sources
+        # Keep only the latest three local dates, not an unbounded history.
+        for previous in sorted(self._price_sources_by_day)[:-3]:
+            self._price_sources_by_day.pop(previous, None)
+
+    def price_source_for(self, segment: str, day: date) -> str:
+        """A public HA consumer can distinguish source evidence from a cache."""
+        if segment not in ("electricity", "gas"):
+            return "unverified"
+        return self._price_sources_by_day.get(day.isoformat(), {}).get(
+            segment, "cached_or_unverified"
+        )
+
+    def _record_price_fetch(
+        self,
+        source: str,
+        outcome: str,
+        period: date,
+        prices: MarketPrices | None = None,
+        error: BaseException | None = None,
+    ) -> None:
+        """Record post-parsing source coverage alongside real GraphQL evidence."""
+        electricity_slots, gas_slots = _price_counts(prices)
+        self._diagnostic_trace.record(
+            source,
+            outcome,
+            period=period,
+            electricity_slots=electricity_slots if prices is not None else None,
+            gas_slots=gas_slots if prices is not None else None,
+            error=error,
+        )
 
     @staticmethod
     def _get_shared_auth_lock(api: FrankEnergie) -> asyncio.Lock:
@@ -586,18 +736,108 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         that is stale, so rejecting anything past tomorrow would discard
         legitimately-cached multi-day data.
         """
-        price_series = (
-            cached_prices_tomorrow.electricity or cached_prices_tomorrow.gas
-            if cached_prices_tomorrow
-            else None
-        )
-        if not price_series or not price_series.all:
+        if cached_prices_tomorrow is None:
+            return False
+
+        # Both segments must be checked. An empty electricity PriceData is
+        # truthy, so the old "electricity or gas" expression hid valid gas-only
+        # data. It also trusted tomorrow-dated electricity even if the gas
+        # portion still contained yesterday's prices.
+        prices = [
+            price
+            for segment in (
+                cached_prices_tomorrow.electricity,
+                cached_prices_tomorrow.gas,
+            )
+            if segment is not None
+            for price in segment.all
+        ]
+        if not prices:
             return False
 
         tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
         return all(
-            price.date_from.astimezone(tz_amsterdam).date() >= tomorrow
-            for price in price_series.all
+            isinstance(price.date_from, datetime)
+            and price.date_from.tzinfo is not None
+            and price.date_from.astimezone(tz_amsterdam).date() >= tomorrow
+            for price in prices
+        )
+
+    @staticmethod
+    def _covers_local_day(prices: PriceData | None, day: date) -> bool:
+        """Require real gap-free interval coverage, including 23/25-hour days."""
+        return covers_local_day(prices, day)
+
+    def _today_cache_covers_selected_site(
+        self, cached: MarketPrices | None, today: date
+    ) -> bool:
+        """A partial subscribed gas day cannot freeze today's price cache.
+
+        A selected-site subscription is authoritative. Anonymous or unresolved
+        sites retain the existing date-based cache policy until a source
+        subscription can be established.
+        """
+        if cached is None:
+            return False
+        if not self.api.is_authenticated or not (
+            self.user_electricity_enabled or self.user_gas_enabled
+        ):
+            return True
+        return all(
+            not enabled or self._covers_local_day(series, today)
+            for enabled, series in (
+                (self.user_electricity_enabled, cached.electricity),
+                (self.user_gas_enabled, cached.gas),
+            )
+        )
+
+    @staticmethod
+    def _preserve_today_source_coverage(
+        previous: MarketPrices | None, fetched: MarketPrices, today: date
+    ) -> MarketPrices:
+        """Keep the segment covering more real time, not the one with more slots.
+
+        Hourly and quarter-hour source intervals can differ, and duplicate
+        records must never count as additional coverage. Equal time coverage
+        prefers the new provider reply, allowing legitimate price revisions.
+        """
+        if previous is None:
+            return fetched
+
+        electricity = (
+            previous.electricity
+            if covered_seconds_in_local_day(previous.electricity, today)
+            > covered_seconds_in_local_day(fetched.electricity, today)
+            else fetched.electricity
+        )
+        gas = (
+            previous.gas
+            if covered_seconds_in_local_day(previous.gas, today)
+            > covered_seconds_in_local_day(fetched.gas, today)
+            else fetched.gas
+        )
+        if electricity is fetched.electricity and gas is fetched.gas:
+            return fetched
+        return MarketPrices(
+            electricity=electricity,
+            gas=gas,
+            energy_country=fetched.energy_country,
+            energy_type=fetched.energy_type,
+        )
+
+    def _tomorrow_cache_covers_selected_site(
+        self, cached: MarketPrices, tomorrow: date
+    ) -> bool:
+        """Do not mistake six gas hours for a complete subscribed gas day."""
+        required = (
+            (self.user_electricity_enabled, cached.electricity),
+            (self.user_gas_enabled, cached.gas),
+        )
+        # Anonymous accounts do not have site subscription flags. Preserve
+        # their existing date-based cache policy.
+        return all(
+            not enabled or self._covers_local_day(series, tomorrow)
+            for enabled, series in required
         )
 
     async def _refresh_tomorrow_cache(
@@ -644,24 +884,31 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             and _amsterdam_date(self.last_fetch_tomorrow) == today
         ):
             if self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow):
+                if self._tomorrow_cache_covers_selected_site(
+                    self.cached_prices_tomorrow, tomorrow
+                ):
+                    _LOGGER.debug(
+                        "Tomorrow prices already cached (fetched %s), skipping API call",
+                        self.last_fetch_tomorrow,
+                    )
+                    return self.cached_prices_tomorrow
                 _LOGGER.debug(
-                    "Tomorrow prices already cached (fetched %s), skipping API call",
-                    self.last_fetch_tomorrow,
+                    "Tomorrow cache covers only part of the selected site; "
+                    "retrying without discarding available prices"
                 )
-                return self.cached_prices_tomorrow
-
-            # A live fetch now validates itself before caching (see the
-            # freshly-fetched check below), so reaching this branch means the
-            # bad data came from disk — e.g. state persisted by an older
-            # build. Kept at warning: that's a genuine anomaly, not routine.
-            _LOGGER.warning(
-                "Cached tomorrow prices claim to be fetched today but are not "
-                "actually dated for %s — discarding stale/incorrect cache and "
-                "fetching fresh data",
-                tomorrow,
-            )
-            self.cached_prices_tomorrow = None
-            self.last_fetch_tomorrow = None
+            else:
+                # A live fetch now validates itself before caching (see the
+                # freshly-fetched check below), so reaching this branch means the
+                # bad data came from disk — e.g. state persisted by an older
+                # build. Kept at warning: that's a genuine anomaly, not routine.
+                _LOGGER.warning(
+                    "Cached tomorrow prices claim to be fetched today but are not "
+                    "actually dated for %s — discarding stale/incorrect cache and "
+                    "fetching fresh data",
+                    tomorrow,
+                )
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
 
         _LOGGER.debug(
             "Tomorrow cache status: cached=%s last_fetch=%s",
@@ -724,18 +971,20 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self.cached_prices_tomorrow = prices_tomorrow
             self.last_fetch_tomorrow = now_utc
 
-            entry_title = self.config_entry.title or "no title"
-            if self.config_entry is not None:
+            # A partial day is deliberately retried. Do not emit another
+            # "available" event at every retry of the same local day.
+            if self.config_entry is not None and not self._tomorrow_prices_logged:
                 self.hass.bus.async_fire(
                     EVENT_FRANK_ENERGIE,
                     {
                         "entry_id": self.config_entry.entry_id,
-                        "entry_title": entry_title,
+                        "entry_title": self.config_entry.title or "no title",
                         "action": "tomorrow_prices_available",
                         "date": tomorrow.isoformat(),
                         "resolution": self.resolution,
                     },
                 )
+                self._tomorrow_prices_logged = True
         else:
             _LOGGER.debug("Tomorrow prices not yet available, retrying on next refresh")
 
@@ -1064,7 +1313,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         self._country_code = country_code
             if not self._connection_id:
                 self._connection_id = _extract_electricity_connection_id(user_data)
-                _LOGGER.debug("Extracted electricity connection ID: %s", self._connection_id)
+                _LOGGER.debug(
+                    "Extracted electricity connection ID: %s", self._connection_id
+                )
 
             return user_data
         except AuthException as ex:
@@ -1785,6 +2036,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             "serial_number": serial_number,
         }
 
+    def _get_public_api(self) -> FrankEnergie:
+        """Return a credential-free client for public market price queries.
+
+        Never propagate a customer's bearer token to the public GraphQL query.
+        Use the Home Assistant-managed HTTP session; create lazily.
+        """
+        client = getattr(self, "_public_api", None)
+        if client is None:
+            client = FrankEnergie(clientsession=async_get_clientsession(self.hass))
+            attach_graphql_trace(client, self._diagnostic_trace, "graphql_public")
+            self._public_api = client
+        return client
+
     async def _fetch_public_prices_for_range(
         self, start_date: date, end_date: date, country_code: str
     ) -> MarketPrices | None:
@@ -1795,16 +2059,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self.resolution,
         )
 
+        public_api = self._get_public_api()
         try:
             if COUNTRY_USES_SIMPLE_MARKET_PRICES.get(country_code, False):
-                return await self.api.country_prices(
+                prices = await public_api.country_prices(
                     country_code, start_date, end_date, self.resolution
                 )
-
-            return await self.api.prices(
+            else:
+                prices = await public_api.prices(
+                    start_date,
+                    resolution=self.resolution,
+                )
+            self._record_price_fetch(
+                "public_market",
+                "present" if any(_price_counts(prices)) else "empty",
                 start_date,
-                resolution=self.resolution,
+                prices,
             )
+            return prices
 
         except RequestException as ex:
             if not _is_no_market_prices_error(ex):
@@ -1815,10 +2087,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 start_date,
                 end_date,
             )
+            self._record_price_fetch(
+                "public_market", "not_published", start_date, error=ex
+            )
             return None
 
         except NetworkError as err:
-            _LOGGER.warning("Failed to fetch public prices: %s", err)
+            _LOGGER.warning("Failed to fetch public prices (%s)", type(err).__name__)
+            self._record_price_fetch(
+                "public_market", "network_error", start_date, error=err
+            )
             return None
 
     async def _fetch_user_prices_for_range(
@@ -1832,6 +2110,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug(
                 "Skipping user prices fetch because the client is not authenticated"
             )
+            self._record_price_fetch(
+                "customer_tariff", "skipped_unauthenticated", start_date
+            )
             return None
 
         site_reference = self.site_reference
@@ -1839,24 +2120,33 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug(
                 "Skipping user prices fetch because site_reference is not set"
             )
+            self._record_price_fetch(
+                "customer_tariff", "skipped_missing_site", start_date
+            )
             return None
 
         user_country = self._user_country or default_country
 
         _LOGGER.debug(
-            "Fetching user prices for site_reference=%s country=%s resolution=%s",
-            site_reference,
+            "Fetching user prices for country=%s resolution=%s",
             user_country,
             self.resolution,
         )
 
         try:
-            return await self.api.user_prices(
+            prices = await self.api.user_prices(
                 site_reference,
                 user_country,
                 start_date,
                 end_date,
             )
+            self._record_price_fetch(
+                "customer_tariff",
+                "present" if any(_price_counts(prices)) else "empty",
+                start_date,
+                prices,
+            )
+            return prices
 
         except RequestException as ex:
             if not _is_no_market_prices_error(ex):
@@ -1867,10 +2157,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 start_date,
                 end_date,
             )
+            self._record_price_fetch(
+                "customer_tariff", "not_published", start_date, error=ex
+            )
             return None
 
         except NetworkError as err:
-            _LOGGER.warning("Failed to fetch user prices: %s", err)
+            _LOGGER.warning("Failed to fetch user prices (%s)", type(err).__name__)
+            self._record_price_fetch(
+                "customer_tariff", "network_error", start_date, error=err
+            )
             return None
 
     async def _fetch_prices_with_fallback(
@@ -1896,6 +2192,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._fetch_user_prices_for_range(start_date, end_date, country_code),
         )
 
+        fallback_from_cache = public_prices is None
         if public_prices is None:
             if not use_fallback and not self.api.is_authenticated:
                 # e.g. tomorrow's prices not published yet — don't substitute
@@ -1904,6 +2201,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 _LOGGER.debug(
                     "No public prices available yet, skipping fallback to cached prices"
                 )
+                self._record_price_fetch("price_selection", "not_available", start_date)
                 return None
             public_prices = getattr(
                 self,
@@ -1916,6 +2214,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
 
         if not self.api.is_authenticated:
+            self._remember_price_sources(
+                start_date, public_prices, public_fresh=not fallback_from_cache
+            )
+            self._record_price_fetch(
+                "price_selection",
+                _price_selection_outcome(
+                    public_prices,
+                    authenticated=False,
+                    fallback_from_cache=fallback_from_cache,
+                ),
+                start_date,
+                public_prices,
+            )
             return public_prices
 
         if user_prices is None:
@@ -1924,6 +2235,19 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 return None
             _LOGGER.warning(
                 "Failed to fetch user prices, falling back to public prices"
+            )
+            self._remember_price_sources(
+                start_date, public_prices, public_fresh=not fallback_from_cache
+            )
+            self._record_price_fetch(
+                "price_selection",
+                _price_selection_outcome(
+                    public_prices,
+                    authenticated=True,
+                    fallback_from_cache=fallback_from_cache,
+                ),
+                start_date,
+                public_prices,
             )
             return public_prices
 
@@ -1934,7 +2258,16 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         has_gas = user_prices.gas is not None and getattr(user_prices.gas, "all", None)
 
         if has_electricity and has_gas:
+            self._remember_price_sources(
+                start_date,
+                user_prices,
+                customer_electricity=True,
+                customer_gas=True,
+            )
             self._cached_prices = user_prices
+            self._record_price_fetch(
+                "price_selection", "customer", start_date, user_prices
+            )
             return user_prices
 
         # No fallback for tomorrow — return what we have
@@ -1943,6 +2276,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "No complete user prices for tomorrow (electricity=%s gas=%s), skipping fallback",
                 bool(has_electricity),
                 bool(has_gas),
+            )
+            self._remember_price_sources(
+                start_date,
+                user_prices,
+                customer_electricity=bool(has_electricity),
+                customer_gas=bool(has_gas),
+            )
+            self._record_price_fetch(
+                "price_selection",
+                _price_selection_outcome(
+                    user_prices,
+                    authenticated=True,
+                    customer_electricity=bool(has_electricity),
+                    customer_gas=bool(has_gas),
+                ),
+                start_date,
+                user_prices,
             )
             return user_prices
 
@@ -1963,7 +2313,22 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 else PriceData([], "electricity")
             )
 
+        self._remember_price_sources(
+            start_date,
+            user_prices,
+            customer_electricity=bool(has_electricity),
+            customer_gas=bool(has_gas),
+            public_fresh=not fallback_from_cache,
+        )
         self._cached_prices = user_prices
+        outcome = _price_selection_outcome(
+            user_prices,
+            authenticated=True,
+            customer_electricity=bool(has_electricity),
+            customer_gas=bool(has_gas),
+            fallback_from_cache=fallback_from_cache,
+        )
+        self._record_price_fetch("price_selection", outcome, start_date, user_prices)
         return user_prices
 
     async def _handle_fetch_exceptions(self, ex: Exception) -> None:
@@ -1995,9 +2360,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 updated_data.pop(CONF_PASSWORD, None)
 
                 # Update the config entry with the new tokens
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=updated_data
-                )
+                if (
+                    self.config_entry.data.get(CONF_ACCESS_TOKEN)
+                    != updated_tokens.authToken
+                    or self.config_entry.data.get(CONF_TOKEN)
+                    != updated_tokens.refreshToken
+                ):
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, data=updated_data
+                    )
 
                 _LOGGER.debug("Successfully renewed token")
 
@@ -2104,7 +2475,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_end: Price | None = None
 
         for index in range(len(prices) - window + 1):
-            window_prices = prices[index: index + window]
+            window_prices = prices[index : index + window]
 
             avg_price = sum(price.total for price in window_prices) / window
 
@@ -2286,7 +2657,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        if self._api_resolution_state is not None:  # and not self._resolution_change_pending:
+        # An anonymous entry uses its own configured interval. During a pending
+        # change, use the selected option until the account API confirms it.
+        if (
+            self.api.is_authenticated
+            and not self._resolution_change_pending
+            and self._api_resolution_state is not None
+        ):
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
@@ -2300,8 +2677,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return configured
 
         _LOGGER.debug(
-            "Unsupported configured price resolution %r; "
-            "falling back to %s",
+            "Unsupported configured price resolution %r; falling back to %s",
             configured,
             DEFAULT_RESOLUTION,
         )
@@ -2438,7 +2814,12 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
                 self._fetch_user_data(),
             )
             result = _empty_data()
-            result[DATA_USER] = data_user
+            # A transient empty UserSites response must not silently turn an
+            # authenticated electricity/gas contract into no subscription.
+            # Keep earlier source-backed settings and retry on the next tick.
+            if self.api.is_authenticated and user_sites is None:
+                raise UpdateFailed("Authenticated delivery sites not available")
+            result[DATA_USER] = data_user or (self.data or {}).get(DATA_USER)
             result[DATA_USER_SITES] = user_sites
             result[DATA_TOKEN_EXPIRES_AT] = _get_token_expires_at(self.api)
             result[DATA_REFRESH_TOKEN_EXPIRES_AT] = _get_refresh_token_expires_at(
@@ -2467,6 +2848,19 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self.settings_coordinator = settings_coordinator
         self.update_interval = None
         self.store = price_cache_store(hass, config_entry.entry_id)
+
+    def _selected_customer_source_needs_retry(self, day: date) -> bool:
+        """A complete public fallback is not a complete customer tariff."""
+        if not self.api.is_authenticated:
+            return False
+        sources = self._price_sources_by_day.get(day.isoformat(), {})
+        return any(
+            enabled and sources.get(segment) != "customer"
+            for segment, enabled in (
+                ("electricity", self.user_electricity_enabled),
+                ("gas", self.user_gas_enabled),
+            )
+        )
 
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
         """Parse cached data dictionary into coordinator state."""
@@ -2557,29 +2951,60 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         return False
 
     def _is_cache_resolution_valid(self) -> bool:
-        """Check if the cached resolution matches the configured resolution."""
-        if not self._static_prices_today or not self.config_entry:
+        """Validate cache granularity without confusing market query and BE tariff.
+
+        Belgian MODEL customer prices can legitimately be hourly even when the
+        public market query is configured for 15-minute resolution. Only a
+        verified MODEL contract for the selected site allows that difference.
+        """
+        if self._static_prices_today is None or self.config_entry is None:
             return True
 
-        price_series = (
-            self._static_prices_today.electricity or self._static_prices_today.gas
+        series = (
+            self._static_prices_today.electricity,
+            self._static_prices_today.gas,
         )
-        if not price_series:
+        resolutions = {
+            segment.resolution_minutes
+            for segment in series
+            if segment is not None and segment.all
+        }
+        if not resolutions:
             return True
 
-        cached_res = price_series.resolution_minutes
-        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
-        expected_res = 15 if config_value == "PT15M" else 60
+        expected_res = 15 if self.resolution == "PT15M" else 60
+        if resolutions == {expected_res}:
+            return True
 
-        if cached_res != expected_res:
-            _LOGGER.debug(
-                "Cache resolution (%s) differs from config (%s), invalidating cache",
-                cached_res,
-                expected_res,
-            )
-            return False
+        selected_site = None
+        sites = (self.settings_coordinator.data or {}).get(DATA_USER_SITES)
+        if sites is not None:
+            for site in getattr(sites, "deliverySites", ()) or ():
+                if getattr(site, "reference", None) == self.site_reference:
+                    selected_site = site
+                    break
+            if (
+                selected_site is None
+                and getattr(sites, "reference", None) == self.site_reference
+            ):
+                selected_site = sites
 
-        return True
+        proposition = getattr(selected_site, "propositionType", None)
+        if (
+            self.api.is_authenticated
+            and isinstance(proposition, str)
+            and proposition.upper() == "MODEL"
+            and resolutions <= {15, 60}
+        ):
+            # These are source intervals, not the requested public resolution.
+            return True
+
+        _LOGGER.debug(
+            "Cached source resolutions %s do not match query resolution %s",
+            sorted(str(value) for value in resolutions),
+            expected_res,
+        )
+        return False
 
     def _is_cache_fresh(self, now_utc: datetime) -> bool:
         """Check if the loaded disk cache is fresh enough to skip API fetches."""
@@ -2593,16 +3018,21 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         today = now_local.date()
         if _amsterdam_date(self.last_fetch_today) != today:
             return False
+        if not self._today_cache_covers_selected_site(self._static_prices_today, today):
+            return False
 
         if (
             self.last_fetch_tomorrow
             and _amsterdam_date(self.last_fetch_tomorrow) == today
         ):
             tomorrow = today + timedelta(days=1)
-            if self._tomorrow_cache_matches_date(self.cached_prices_tomorrow, tomorrow):
+            if self._tomorrow_cache_matches_date(
+                self.cached_prices_tomorrow, tomorrow
+            ) and self._tomorrow_cache_covers_selected_site(
+                self.cached_prices_tomorrow, tomorrow
+            ):
                 _LOGGER.debug(
-                    "Cached tomorrow prices (fetched today) validated as "
-                    "genuinely dated for %s — cache is fresh",
+                    "Cached tomorrow prices have full required coverage for %s",
                     tomorrow,
                 )
                 return True
@@ -2617,14 +3047,28 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
     async def async_config_entry_first_refresh(self) -> None:
         """Perform first refresh."""
+        # Cache completeness is site-specific. Resolve subscribed segments
+        # before deciding whether a cached partial day can skip the first
+        # live refresh; _async_update_data has not executed yet on this path.
+        self.user_electricity_enabled, self.user_gas_enabled = _site_segment_flags(
+            (self.settings_coordinator.data or {}).get(DATA_USER_SITES),
+            self.site_reference,
+        )
         cached_data_loaded = await self._async_setup()
         now_utc = dt_util.utcnow()
+        # A fresh disk cache still needs a live HA polling schedule.
+        # Previously this return path left update_interval at None forever.
+        self._adjust_update_interval(now_utc)
 
         if not cached_data_loaded or not self._is_cache_fresh(now_utc):
             _LOGGER.debug("No fresh cache found, performing initial API fetch")
             await super().async_config_entry_first_refresh()
         else:
             _LOGGER.debug("Fresh cache loaded, skipping initial API fetch")
+            # A validated cached snapshot is usable HA state. Publish it with
+            # the supported coordinator API so entities are available at
+            # startup even though no provider request was needed yet.
+            self.async_set_updated_data(self.data)
 
     def _adjust_update_interval(self, now_utc: datetime) -> None:
         """Adjust the coordinator update interval based on cache and publication state."""
@@ -2639,6 +3083,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             and self._tomorrow_cache_matches_date(
                 self.cached_prices_tomorrow,
                 tomorrow,
+            )
+            and self._tomorrow_cache_covers_selected_site(
+                self.cached_prices_tomorrow, tomorrow
             )
         )
 
@@ -2666,6 +3113,36 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             new_interval,
         )
         self.update_interval = new_interval
+
+    def publish_price_slot(self, now_utc: datetime) -> None:
+        """Advance local tariff state and cheapest-price events without API I/O.
+
+        The aligned clock owns business transitions, while this coordinator's
+        update_interval is the only routine price-provider poller.
+        """
+        now_local = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM))
+        prices = self._static_prices_today
+        electricity = getattr(prices, "electricity", None)
+        gas = getattr(prices, "gas", None)
+        # Both fuels can have a different valid customer resolution. Publish
+        # at the shortest source interval so neither series misses a slot.
+        published_resolution = min(
+            (
+                minutes
+                for series in (electricity, gas)
+                if getattr(series, "all", None)
+                and (minutes := getattr(series, "resolution_minutes", None)) in (15, 60)
+            ),
+            default=15 if self.resolution == "PT15M" else 60,
+        )
+        if now_local.minute % published_resolution:
+            return
+
+        today = now_local.date()
+        self._maybe_fire_lowest_price_event(prices, today, now_utc)
+        self._maybe_fire_lowest_4p_event(prices, today, now_utc)
+        self._maybe_fire_lowest_16p_event(prices, today, now_utc)
+        self.async_update_listeners()
 
     def _carry_forward_previous_day(
         self, new_prices: MarketPrices | None, today: date
@@ -2748,6 +3225,13 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             self._tomorrow_prices_logged = False
 
         user_data = self.settings_coordinator.data.get(DATA_USER)
+        # The settings coordinator fetches UserSites; the price coordinator
+        # does not. Derive flags from that authoritative, selected-site object
+        # instead of retaining the price coordinator's default False values.
+        self.user_electricity_enabled, self.user_gas_enabled = _site_segment_flags(
+            self.settings_coordinator.data.get(DATA_USER_SITES),
+            self.site_reference,
+        )
         if extracted_conn_id := _extract_electricity_connection_id(user_data):
             self._connection_id = extracted_conn_id
 
@@ -2765,17 +3249,54 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 self._static_prices_today is None
                 or self.last_fetch_today is None
                 or _amsterdam_date(self.last_fetch_today) != today
+                or not self._today_cache_covers_selected_site(
+                    self._static_prices_today, today
+                )
+                or self._selected_customer_source_needs_retry(today)
             ):
                 try:
                     fetched_prices_today = await self._fetch_prices_with_fallback(
                         today, tomorrow, use_fallback=True
                     )
-                    prices_today = self._carry_forward_previous_day(
-                        fetched_prices_today, today
-                    )
-                    self._update_today_prices(prices_today)
-                    self.last_fetch_today = now_utc
-                    self._today_prices_logged = True
+                    if fetched_prices_today is None or not any(
+                        _price_counts(fetched_prices_today)
+                    ):
+                        # A failed retry must not erase partial but still usable
+                        # current-day prices. The next poll retries again.
+                        prices_today = self._static_prices_today
+                        if prices_today is None:
+                            raise UpdateFailed("No current-day prices available")
+                    else:
+                        current_prices = self._carry_forward_previous_day(
+                            fetched_prices_today, today
+                        )
+                        previous_prices = self._static_prices_today
+                        prices_today = self._preserve_today_source_coverage(
+                            previous_prices, current_prices, today
+                        )
+                        # If preservation chooses an older interval series, its
+                        # original source cannot be inferred from the new reply.
+                        if previous_prices is not None:
+                            selected_sources = self._price_sources_by_day.get(
+                                today.isoformat(), {}
+                            )
+                            for segment in ("electricity", "gas"):
+                                retained = getattr(prices_today, segment, None)
+                                prior = getattr(previous_prices, segment, None)
+                                fresh = getattr(current_prices, segment, None)
+                                if retained is prior and retained is not fresh:
+                                    selected_sources[segment] = "cached_unverified"
+                        self._update_today_prices(prices_today)
+                        sources = self._price_sources_by_day.get(today.isoformat())
+                        cache_only = bool(sources) and not any(
+                            source.startswith(("customer", "public"))
+                            for source in sources.values()
+                        )
+                        # Never treat a restored/cache-only selection as an API
+                        # success. Keep retrying until real provider evidence.
+                        if not cache_only:
+                            self.last_fetch_today = now_utc
+                            self._today_prices_logged = True
                 except Exception as err:
                     await self._handle_fetch_exceptions(err)
                     if (
@@ -3195,6 +3716,76 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
             )
         )
+        # Never share prior-month cache between delivery sites or months.
+        self._previous_finance_cache_key: tuple[str | None, str, date] | None = None
+        self._previous_finance_snapshot: MonthlyFinanceSnapshot | None = None
+
+    async def _fetch_monthly_insights(
+        self, period: str
+    ) -> MonthlyFinanceSnapshot | None:
+        """Get a named calendar month without exposing account identifiers."""
+        if not self.api.is_authenticated or not self.site_reference:
+            return None
+        try:
+            result: MonthInsights | None = await self.api.month_insights(
+                self.site_reference, period
+            )
+        except (
+            AuthException,
+            RequestException,
+            FrankEnergieException,
+            ClientError,
+            TimeoutError,
+            ValueError,
+            TypeError,
+            KeyError,
+        ) as ex:
+            # This optional endpoint may return incomplete or malformed data
+            # during publication lag. Do not take down existing daily usage,
+            # invoice, or month-summary sensors because parsing it failed.
+            _LOGGER.debug(
+                "Month insights unavailable for %s (%s)", period, type(ex).__name__
+            )
+            return None
+        if result is None:
+            return None
+        selected_electricity: bool | None = None
+        selected_gas: bool | None = None
+        if self.settings_coordinator.data:
+            selected_electricity, selected_gas = _site_segment_flags(
+                self.settings_coordinator.data.get(DATA_USER_SITES),
+                self.site_reference,
+            )
+        return MonthlyFinanceSnapshot(
+            month=period,
+            insights=result,
+            retrieved_at=datetime.now(ZoneInfo("UTC")),
+            source_states=self._diagnostic_trace.source_states_for_month(period),
+            gas_expected=selected_gas,
+            electricity_expected=selected_electricity,
+        )
+
+    async def _fetch_previous_finance(
+        self, period: str, today: date
+    ) -> MonthlyFinanceSnapshot | None:
+        """Refresh the historical month at most daily per site and month."""
+        key = (self.site_reference, period, today)
+        if key == self._previous_finance_cache_key:
+            return self._previous_finance_snapshot
+        snapshot = await self._fetch_monthly_insights(period)
+        if snapshot is None:
+            # Keep a previously observed month's provider reading across
+            # temporary outages, scoped to exactly this site and period.
+            # Do not cache the failed refresh as successful; retry next poll.
+            if (
+                self._previous_finance_cache_key is not None
+                and self._previous_finance_cache_key[:2] == key[:2]
+            ):
+                return self._previous_finance_snapshot
+            return None
+        self._previous_finance_snapshot = snapshot
+        self._previous_finance_cache_key = key
+        return snapshot
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch historical statistics data."""
@@ -3224,6 +3815,17 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
             result[DATA_MONTH_SUMMARY] = data_month_summary
             result[DATA_INVOICES] = data_invoices
             result[DATA_USAGE] = data_period_usage
+            # Explicit opt-in. Never increase API traffic for legacy installs.
+            # A period is carried with each snapshot so previous-month data
+            # cannot be displayed as the new month after local midnight.
+            if self.config_entry.options.get(CONF_MONTHLY_FINANCE_ENABLED, False):
+                current_month, previous_month = month_keys(today)
+                current_finance, previous_finance = await asyncio.gather(
+                    self._fetch_monthly_insights(current_month),
+                    self._fetch_previous_finance(previous_month, today),
+                )
+                result[DATA_MONTH_INSIGHTS_CURRENT] = current_finance
+                result[DATA_MONTH_INSIGHTS_PREVIOUS] = previous_finance
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

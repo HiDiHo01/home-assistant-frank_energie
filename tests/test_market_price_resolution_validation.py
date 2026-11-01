@@ -53,6 +53,9 @@ async def test_public_market_prices_use_supported_resolution(
     api.is_authenticated = authenticated
     api.country_prices = AsyncMock(return_value=sentinel.public_prices)
     coordinator = FrankEnergieCoordinator(MagicMock(), entry, api)
+    public_api = MagicMock()
+    public_api.country_prices = AsyncMock(return_value=sentinel.public_prices)
+    coordinator._public_api = public_api
     coordinator._api_resolution_state = ContractPriceResolutionState(
         active_option=account_resolution
     )
@@ -64,9 +67,10 @@ async def test_public_market_prices_use_supported_resolution(
 
     assert result is sentinel.public_prices
     assert coordinator.resolution == expected_resolution
-    api.country_prices.assert_awaited_once_with(
+    public_api.country_prices.assert_awaited_once_with(
         "BE", today, tomorrow, expected_resolution
     )
+    api.country_prices.assert_not_awaited()
 
 
 def test_no_config_entry_uses_supported_default_resolution() -> None:

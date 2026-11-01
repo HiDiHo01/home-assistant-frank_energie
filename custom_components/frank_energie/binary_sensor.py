@@ -35,6 +35,7 @@ from .const import (
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
 from .helpers import device_translation_key
+from .price_signal_entities import FrankEnergieCheapestMarketHoursBinarySensor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -673,7 +674,11 @@ async def async_setup_entry(
     pv_coordinator = runtime_data.pv_coordinator
     battery_coordinator = runtime_data.battery_coordinator
 
-    entities: list[FrankEnergieBinarySensor] = []
+    entities: list[BinarySensorEntity] = [
+        FrankEnergieCheapestMarketHoursBinarySensor(
+            runtime_data.price_coordinator, config_entry
+        )
+    ]
 
     for description in BINARY_SENSOR_DESCRIPTIONS:
         if description.key in ("smart_feed_in", "smart_pv_systems"):
