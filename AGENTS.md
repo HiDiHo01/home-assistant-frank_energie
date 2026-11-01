@@ -423,6 +423,12 @@ Test the relevant cases for:
 
 Use `pytest.mark.parametrize` for meaningful input variations.
 
+Workflow behavior is covered by `tests/test_workflow_labeler_gates.py`. Its inline
+`github-script` JavaScript is executed offline with mocked GitHub API calls using
+Node.js 24. CI installs Node.js and runs these cases as part of the existing full
+pytest suite on the configured Python matrix. For a focused local run, use
+`poetry run pytest -q tests/test_workflow_labeler_gates.py` with Node.js available.
+
 Mock external services and devices. Tests must not depend on live accounts, real hardware, external networks, or personal credentials unless an explicitly separate integration-test suite requires them.
 
 Use `AsyncMock` for asynchronous dependencies where appropriate.
