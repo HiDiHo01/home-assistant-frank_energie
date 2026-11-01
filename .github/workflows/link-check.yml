@@ -15,6 +15,7 @@ jobs:
       contents: read
     name: Validate Documentation Links
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Harden Runner
@@ -49,6 +50,24 @@ jobs:
             my.home-assistant.io:443
             chatgpt.com:443
             img.shields.io:443
+      # Harden Runner can briefly interrupt GitHub network access. A bounded
+      # preflight prevents checkout from failing during the transient window
+      # while keeping the exact same link-validation gate.
+      - name: Wait for GitHub checkout connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            if curl --silent --show-error --location --head \
+              --connect-timeout 5 --max-time 12 https://github.com >/dev/null; then
+              echo "PASS GitHub connectivity before checkout"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "BLOCK: GitHub checkout connectivity unavailable"
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
 
