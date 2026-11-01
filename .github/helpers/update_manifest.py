@@ -4,32 +4,57 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 MANIFEST_PATH = Path("custom_components") / "frank_energie" / "manifest.json"
 
 
-def update_manifest(version: str, manifest_path: Path = MANIFEST_PATH) -> str:
+def _reject_json_constant(constant: str) -> None:
+    """Reject nonstandard JSON constants before replacing the manifest."""
+    raise ValueError(f"Manifest contains an invalid JSON constant: {constant}.")
+
+
+def update_manifest(version: str) -> str:
     """Write the requested version, propagating invalid data and file errors."""
     normalized_version = version.strip().removeprefix("v")
     if not normalized_version:
         raise ValueError("The release version must not be empty after removing 'v'.")
 
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(
+            MANIFEST_PATH.read_text(encoding="utf-8"),
+            parse_constant=_reject_json_constant,
+        )
     except json.JSONDecodeError as error:
         raise ValueError(
-            f"Manifest '{manifest_path}' contains invalid JSON: {error.msg}."
+            f"Manifest '{MANIFEST_PATH}' contains invalid JSON: {error.msg}."
         ) from error
 
     if not isinstance(manifest, dict):
-        raise TypeError(f"Manifest '{manifest_path}' must contain a JSON object.")
+        raise TypeError(f"Manifest '{MANIFEST_PATH}' must contain a JSON object.")
 
     manifest["version"] = normalized_version
-    manifest_path.write_text(
-        json.dumps(manifest, indent=4, sort_keys=True), encoding="utf-8"
-    )
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=MANIFEST_PATH.parent,
+            prefix=".manifest-",
+            suffix=".json",
+            delete=False,
+        ) as temporary_manifest:
+            temporary_path = Path(temporary_manifest.name)
+            json.dump(
+                manifest, temporary_manifest, indent=4, sort_keys=True, allow_nan=False
+            )
+        temporary_path.chmod(MANIFEST_PATH.stat().st_mode)
+        temporary_path.replace(MANIFEST_PATH)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
     return normalized_version
 
 
@@ -39,7 +64,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--version",
         "-V",
-        default=datetime.now(timezone.utc).strftime("%Y.%m.%d"),
+        default=datetime.now(UTC).strftime("%Y.%m.%d"),
         help="Release version, optionally prefixed with v; defaults to the UTC date.",
     )
     parsed_arguments = parser.parse_args(arguments)

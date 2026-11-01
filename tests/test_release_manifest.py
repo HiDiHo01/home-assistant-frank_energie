@@ -4,9 +4,10 @@ import importlib.util
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
+from typing import TextIO
 from unittest.mock import patch
 
 import pytest
@@ -22,7 +23,8 @@ def _load_manifest_updater() -> ModuleType:
     specification = importlib.util.spec_from_file_location(
         "release_manifest_updater", SCRIPT_PATH
     )
-    assert specification is not None and specification.loader is not None
+    assert specification is not None
+    assert specification.loader is not None
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)
     return module
@@ -89,6 +91,10 @@ def test_release_manifest_updates_only_the_version(
         ("{", "invalid JSON"),
         ("[]", "JSON object"),
         ("null", "JSON object"),
+        ('{"value": NaN}', "invalid JSON constant"),
+        ('{"value": Infinity}', "invalid JSON constant"),
+        ('{"value": -Infinity}', "invalid JSON constant"),
+        ('{"value": 1e999}', "Out of range float values"),
     ),
 )
 def test_release_manifest_data_errors_return_failure(
@@ -135,21 +141,37 @@ def test_missing_version_argument_is_a_command_line_error(
     assert "expected one argument" in result.stderr
 
 
+@pytest.mark.parametrize("failure_stage", ("write", "replace"))
 def test_release_manifest_write_errors_return_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    failure_stage: str,
 ) -> None:
-    """Propagate a write failure through the command-line exit status."""
-    _write_manifest(tmp_path, '{"version": "2026.1.1"}')
+    """Preserve the original manifest on partial writes or failed replacements."""
+    original_contents = '{"version": "2026.1.1"}'
+    manifest_path = _write_manifest(tmp_path, original_contents)
     module = _load_manifest_updater()
     monkeypatch.chdir(tmp_path)
 
-    with patch.object(Path, "write_text", side_effect=OSError("Disk is full")):
-        result = module.main(["--version", "2026.11.2"])
+    def fail_after_partial_write(
+        _manifest: object, output: TextIO, **_options: object
+    ) -> None:
+        """Simulate the destination becoming unwritable after truncation."""
+        output.write('{"version":')
+        raise OSError("Disk is full")
+
+    if failure_stage == "write":
+        with patch.object(module.json, "dump", side_effect=fail_after_partial_write):
+            result = module.main(["--version", "2026.11.2"])
+    else:
+        with patch.object(Path, "replace", side_effect=OSError("Disk is full")):
+            result = module.main(["--version", "2026.11.2"])
 
     assert result == 1
     assert "Disk is full" in capsys.readouterr().err
+    assert manifest_path.read_text(encoding="utf-8") == original_contents
+    assert list(manifest_path.parent.iterdir()) == [manifest_path]
 
 
 def test_release_manifest_default_uses_a_timezone_aware_utc_date(
@@ -161,9 +183,9 @@ def test_release_manifest_default_uses_a_timezone_aware_utc_date(
     monkeypatch.chdir(tmp_path)
 
     with patch.object(module, "datetime") as clock:
-        clock.now.return_value = datetime(2026, 11, 2, tzinfo=timezone.utc)
+        clock.now.return_value = datetime(2026, 11, 2, tzinfo=UTC)
         result = module.main([])
-        clock.now.assert_called_once_with(timezone.utc)
+        clock.now.assert_called_once_with(UTC)
 
     assert result == 0
     assert (
