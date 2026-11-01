@@ -23,7 +23,8 @@ def _read_configuration(relative_path: str) -> dict[object, object]:
 def _changed_file_patterns(label_name: str) -> list[str]:
     """Extract the file patterns used by a label's changed-file matcher."""
     rules = _read_configuration(".github/labeler.yml")[label_name]
-    assert isinstance(rules, list) and rules
+    assert isinstance(rules, list)
+    assert rules
     patterns: list[str] = []
     for rule in rules:
         assert isinstance(rule, dict)
@@ -45,9 +46,11 @@ def test_labeler_rules_use_recognized_matchers() -> None:
     for label_name, rules in configuration.items():
         if label_name in {"changed-files-labels-limit", "max-files-changed"}:
             continue
-        assert isinstance(rules, list) and rules, label_name
+        assert isinstance(rules, list), label_name
+        assert rules, label_name
         for rule in rules:
-            assert isinstance(rule, dict) and rule, label_name
+            assert isinstance(rule, dict), label_name
+            assert rule, label_name
             assert rule.keys() <= allowed_keys, (label_name, rule)
 
 
