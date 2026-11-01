@@ -12,9 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  # A stuck old commit's checkout must not block a newer exact-source gate.
-  # Keep reruns for the same commit serialized without skipping any checks.
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  # Cancel superseded runs when another commit is pushed to the same PR.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

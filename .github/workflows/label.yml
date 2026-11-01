@@ -19,7 +19,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  # A closing event skips the PR labelers, so let any active run finish.
+  cancel-in-progress: ${{ github.event.action != 'closed' }}
 
 jobs:
   labeler:
@@ -76,7 +77,7 @@ jobs:
             }
       - name: Apply labels
         # This action requires PR file diffs; issues do not have PR files.
-        if: github.event_name == 'pull_request_target' && github.event.action != 'closed'
+        if: github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open'
         uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 #v7.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -84,8 +85,8 @@ jobs:
           sync-labels: true
 
       - name: Size label
-        # Closed PRs and issue events are not valid inputs for the PR-only API.
-        if: github.event_name == 'pull_request_target' && github.event.action != 'closed'
+        # Only update size labels while the pull request remains open.
+        if: github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open'
         uses: codelytv/pr-size-labeler@19c335e7695ba922de938806dd129f0a9b992644 #v1
         with:
           xs_label: size/xs

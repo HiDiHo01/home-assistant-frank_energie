@@ -58,7 +58,8 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 12); do
-            if curl --silent --show-error --location --head \
+            if curl --fail --silent --show-error --location --head \
+              --proto '=https' --proto-redir '=https' \
               --connect-timeout 5 --max-time 12 https://github.com >/dev/null; then
               echo "PASS GitHub connectivity before checkout"
               exit 0
