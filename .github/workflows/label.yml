@@ -19,7 +19,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  # Closing or editing a closed PR must not cancel an active labeling run.
+  cancel-in-progress: ${{ github.event.pull_request.state != 'closed' }}
 
 jobs:
   labeler:
@@ -47,7 +48,8 @@ jobs:
             test.pypi.org:443
             codecov.io:443
             uploader.codecov.io:443
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # @v9
+      - name: Label by title
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # @v9
         with:
           script: |
             const item = context.payload.issue || context.payload.pull_request;
@@ -74,14 +76,41 @@ jobs:
                 labels: [...labels],
               });
             }
+      - name: Check current PR state before file labels
+        id: file_label_state
+        if: github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # @v9
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            return pullRequest.state === "open";
       - name: Apply labels
+        # Event payloads can be stale; use the state fetched immediately above.
+        if: steps.file_label_state.outputs.result == 'true'
         uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 #v7.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           configuration-path: .github/labeler.yml
           sync-labels: true
 
+      - name: Check current PR state before size labels
+        id: size_label_state
+        if: github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # @v9
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            return pullRequest.state === "open";
       - name: Size label
+        if: steps.size_label_state.outputs.result == 'true'
         uses: codelytv/pr-size-labeler@19c335e7695ba922de938806dd129f0a9b992644 #v1
         with:
           xs_label: size/xs

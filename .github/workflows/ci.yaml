@@ -31,6 +31,7 @@ jobs:
             raw.githubusercontent.com:443
             github.com:443
             install.python-poetry.org:443
+            nodejs.org:443
             pypi.org:443
             files.pythonhosted.org:443
             sonarcloud.io:443
@@ -51,6 +52,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+
+      - name: Set up Node.js for workflow script regression tests
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # @v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
 
       - name: Install Poetry
         run: |
