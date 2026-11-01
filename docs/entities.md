@@ -45,6 +45,27 @@ Depending on the market configuration, electricity prices may be available as:
 - Hourly prices (24 prices per day)
 - Quarter-hourly prices (96 prices per day)
 
+### Tomorrow Price Availability
+
+The **Tomorrow electricity prices available** binary sensor (key
+`tomorrow_prices_available`) is enabled by default and works with or without a
+Frank Energie login. It belongs to the existing **Prices** service device.
+
+- `on`: at least one electricity price period for tomorrow is present.
+- `off`: electricity data is present, but contains no periods for tomorrow yet.
+- `unknown`: electricity data is missing.
+- `unavailable`: the price coordinator's last update failed.
+
+Tomorrow follows the Europe/Amsterdam calendar, including daylight-saving changes.
+Zero and negative prices count as available. Gas prices alone do not turn this
+electricity indicator on. A partial publication can turn it on; it does not
+guarantee a complete day of prices.
+
+The sensor follows the existing price coordinator and cached prices without extra
+API requests or a separate publication-hour cutoff. It resets at local midnight
+unless prices for the new tomorrow are already present. Use an `off` to `on` state
+trigger for notifications when tomorrow's electricity prices arrive.
+
 ### Gas Prices
 
 Gas price entities provide:

@@ -101,6 +101,9 @@
   },
   "entity": {
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Prix de l’électricité de demain disponibles"
+      },
       "battery_self_consumption_trading_allowed": {
         "name": "Trading en autoconsommation autorisé"
       },

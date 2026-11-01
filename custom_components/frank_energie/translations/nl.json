@@ -888,6 +888,9 @@
       }
     },
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Elektriciteitsprijzen morgen beschikbaar"
+      },
       "smartcharging_isactivated": {
         "name": "Slim laden",
         "state_attributes": {

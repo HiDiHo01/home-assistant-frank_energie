@@ -101,6 +101,9 @@
   },
   "entity": {
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Tomorrow electricity prices available"
+      },
       "battery_self_consumption_trading_allowed": {
         "name": "Self consumption trading allowed"
       },
