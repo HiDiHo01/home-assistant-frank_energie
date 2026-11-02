@@ -466,6 +466,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._last_update_success = False
         self.user_electricity_enabled = False
         self.user_gas_enabled = False
+        self._price_fetch_used_cache: bool = False
 
         self.cached_prices: FrankEnergieData | None = None
         self.cached_prices_today: PricesTodayCache | None = None
@@ -602,8 +603,31 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             for price in price_series.all
         )
 
+    def _price_contracts(self) -> set[str]:
+        """Return known energy contracts for the selected site's price fetch."""
+        if not self.api.is_authenticated:
+            return set()
+        settings = getattr(self, "settings_coordinator", self)
+        user = settings.data.get(DATA_USER)
+        segments = getattr(user, "userSegments", None)
+        if isinstance(segments, (list, tuple)):
+            return {kind for kind in ("ELECTRICITY", "GAS") if kind in segments}
+        return {
+            kind
+            for kind, enabled in (
+                ("ELECTRICITY", self.user_electricity_enabled),
+                ("GAS", self.user_gas_enabled),
+            )
+            if enabled
+        }
+
     @staticmethod
-    def _prices_cover_date(prices: MarketPrices | None, day: date) -> bool:
+    def _prices_cover_date(
+        prices: MarketPrices | None,
+        day: date,
+        *,
+        required_contracts: set[str] | None = None,
+    ) -> bool:
         """Check that `prices` holds at least one entry dated `day` (Amsterdam-local).
 
         The today-side counterpart of `_tomorrow_cache_matches_date`:
@@ -614,21 +638,29 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         alone would stamp that as today's fetch and keep every price sensor
         unavailable until the midnight promotion.
 
-        Every non-empty series (electricity, gas) must hold an entry for
-        `day`, so fresh electricity can't hide stale gas. Empty series are
-        skipped, so a site with only one of the two contracts still validates.
+        Known site contracts require a non-empty series for each commodity.
+        Without contract metadata, validate every non-empty series so public
+        prices and single-contract sites remain supported.
         """
         if prices is None:
             return False
 
         price_series_list = [
             price_series
-            for price_series in (prices.electricity, prices.gas)
-            if price_series and price_series.all
+            for kind, price_series in (
+                ("ELECTRICITY", prices.electricity),
+                ("GAS", prices.gas),
+            )
+            if (
+                kind in required_contracts
+                if required_contracts
+                else price_series is not None and price_series.all
+            )
         ]
         tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
         return bool(price_series_list) and all(
-            any(
+            price_series is not None
+            and any(
                 price.date_from.astimezone(tz_amsterdam).date() == day
                 for price in price_series.all
             )
@@ -1920,6 +1952,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         This method attempts to fetch user-specific prices first, and if they are not available,
         it falls back to public prices.
         """
+        self._price_fetch_used_cache = False
         # Ensure country_code is always a str (fallback to "NL" if None)
         country_code = (
             (self.hass.config.country or "NL")
@@ -1932,6 +1965,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._fetch_public_prices_for_range(start_date, end_date, country_code),
             self._fetch_user_prices_for_range(start_date, end_date, country_code),
         )
+        public_is_live = public_prices is not None
 
         if public_prices is None:
             if not use_fallback and not self.api.is_authenticated:
@@ -1942,17 +1976,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     "No public prices available yet, skipping fallback to cached prices"
                 )
                 return None
-            public_prices = getattr(
-                self,
-                "_cached_prices",
-                MarketPrices(
-                    electricity=PriceData([], "electricity"),
-                    gas=PriceData([], "gas"),
-                    energy_country=country_code or "NL",
-                ),
+            public_prices = getattr(self, "_cached_prices", None) or MarketPrices(
+                electricity=PriceData([], "electricity"),
+                gas=PriceData([], "gas"),
+                energy_country=country_code or "NL",
             )
 
         if not self.api.is_authenticated:
+            self._price_fetch_used_cache = not public_is_live
             return public_prices
 
         if user_prices is None:
@@ -1962,6 +1993,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning(
                 "Failed to fetch user prices, falling back to public prices"
             )
+            self._price_fetch_used_cache = not public_is_live
             return public_prices
 
         # Use user prices if both gas and electricity have data
@@ -1984,10 +2016,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return user_prices
 
         # Fallback logic for today
+        contracts = self._price_contracts()
         if not has_gas:
             _LOGGER.info("No gas prices for user, falling back to public prices")
             user_prices.gas = (
-                public_prices.gas if self.user_gas_enabled else PriceData([], "gas")
+                public_prices.gas if "GAS" in contracts else PriceData([], "gas")
             )
 
         if not has_electricity:
@@ -1996,10 +2029,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             user_prices.electricity = (
                 public_prices.electricity
-                if self.user_electricity_enabled
+                if "ELECTRICITY" in contracts
                 else PriceData([], "electricity")
             )
 
+        self._price_fetch_used_cache = not public_is_live and (
+            (not has_gas and "GAS" in contracts)
+            or (not has_electricity and "ELECTRICITY" in contracts)
+        )
         self._cached_prices = user_prices
         return user_prices
 
@@ -2633,7 +2670,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if _amsterdam_date(self.last_fetch_today) != today:
             return False
 
-        if not self._prices_cover_date(self._static_prices_today, today):
+        if not self._prices_cover_date(
+            self._static_prices_today,
+            today,
+            required_contracts=self._price_contracts(),
+        ):
             _LOGGER.debug(
                 "Cached today prices claim to be fetched today but hold no "
                 "entries for %s — cache is not fresh",
@@ -2717,7 +2758,10 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
     def _carry_forward_previous_day(
         self, new_prices: MarketPrices | None, today: date
     ) -> MarketPrices | None:
-        """Preserve yesterday's cached prices when a live fetch crosses local midnight.
+        """Preserve omitted commodities and history across local midnight.
+
+        An empty series in a partial response must not erase usable cached
+        prices for that commodity, including when resolutions differ.
 
         Normally `promote_tomorrow_prices` merges the previous day's prices
         with the already-cached tomorrow prices at exactly 00:00 local time,
@@ -2735,38 +2779,44 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
 
-        def is_from_before_today(price_data: PriceData | None) -> bool:
-            return bool(
-                price_data
-                and price_data.all
-                and price_data.all[-1].date_from.astimezone(tz_amsterdam).date() < today
-            )
-
-        if not (
-            is_from_before_today(previous.electricity)
-            or is_from_before_today(previous.gas)
-        ):
-            return new_prices
-
-        try:
-            merged_electricity = self._merge_prices(
-                previous.electricity, new_prices.electricity
-            )
-            merged_gas = self._merge_prices(previous.gas, new_prices.gas)
-        except ValueError:
-            _LOGGER.debug(
-                "Cannot carry yesterday's prices over local midnight "
-                "(resolution or energy-type mismatch); using freshly "
-                "fetched today prices only"
-            )
-            return new_prices
-
         # Keep yesterday + today only; anything older would just accumulate.
         cutoff = today - timedelta(days=2)
+
+        def preserve_series(
+            cached: PriceData | None, fetched: PriceData | None
+        ) -> PriceData | None:
+            """Preserve an omitted commodity independently of other series."""
+            if fetched is None or not fetched.all:
+                return cached if cached is not None and cached.all else fetched
+            if (
+                cached is None
+                or not cached.all
+                or cached.all[-1].date_from.astimezone(tz_amsterdam).date() >= today
+            ):
+                return fetched
+            try:
+                merged = self._merge_prices(cached, fetched)
+            except ValueError:
+                _LOGGER.debug(
+                    "Cannot carry yesterday's prices over local midnight "
+                    "(resolution or energy-type mismatch); using freshly "
+                    "fetched prices for this commodity"
+                )
+                return fetched
+            return self._price_data_after(merged, cutoff) or merged
+
+        merged_electricity = preserve_series(
+            previous.electricity, new_prices.electricity
+        )
+        merged_gas = preserve_series(previous.gas, new_prices.gas)
+        if (
+            merged_electricity is new_prices.electricity
+            and merged_gas is new_prices.gas
+        ):
+            return new_prices
         return MarketPrices(
-            electricity=self._price_data_after(merged_electricity, cutoff)
-            or merged_electricity,
-            gas=self._price_data_after(merged_gas, cutoff) or merged_gas,
+            electricity=merged_electricity,
+            gas=merged_gas,
             energy_country=new_prices.energy_country,
             energy_type=new_prices.energy_type,
         )
@@ -2778,6 +2828,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         tomorrow = today + timedelta(days=1)
 
         skip_api_calls = self._should_skip_api_calls(now_utc)
+        required_contracts = self._price_contracts()
         self._reconcile_resolution()
         self._adjust_update_interval(now_utc)
 
@@ -2812,7 +2863,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 self._static_prices_today is None
                 or self.last_fetch_today is None
                 or _amsterdam_date(self.last_fetch_today) != today
-                or not self._prices_cover_date(self._static_prices_today, today)
+                or not self._prices_cover_date(
+                    self._static_prices_today,
+                    today,
+                    required_contracts=required_contracts,
+                )
             ):
                 try:
                     fetched_prices_today = await self._fetch_prices_with_fallback(
@@ -2822,15 +2877,18 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                         fetched_prices_today, today
                     )
                     self._update_today_prices(prices_today)
-                    if self._prices_cover_date(fetched_prices_today, today):
+                    if not self._price_fetch_used_cache and self._prices_cover_date(
+                        fetched_prices_today,
+                        today,
+                        required_contracts=required_contracts,
+                    ):
                         self.last_fetch_today = now_utc
                         self._today_prices_logged = True
                     else:
-                        # A cache fallback, not a live update: leave
-                        # last_fetch_today alone so the next refresh retries.
+                        self.last_fetch_today = None
+                        self._today_prices_logged = False
                         _LOGGER.warning(
-                            "Fetched today prices hold no entries for %s "
-                            "(cached data returned after a failed fetch); "
+                            "Today's prices for %s are incomplete or came from cache; "
                             "retrying on next refresh",
                             today,
                         )
