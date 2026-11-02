@@ -688,6 +688,35 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             prices, tomorrow, required_contracts=self._price_contracts()
         )
 
+    @staticmethod
+    def _filter_tomorrow_prices(
+        prices: MarketPrices | None, tomorrow: date
+    ) -> MarketPrices | None:
+        """Discard stale commodities independently, retaining published prices."""
+        if prices is None:
+            return None
+        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+        def valid_series(series: PriceData | None) -> PriceData | None:
+            """Reject a commodity if any entry precedes tomorrow's local date."""
+            if series is None or all(
+                price.date_from.astimezone(tz_amsterdam).date() >= tomorrow
+                for price in series.all
+            ):
+                return series
+            return None
+
+        electricity = valid_series(prices.electricity)
+        gas = valid_series(prices.gas)
+        if not (
+            (electricity is not None and electricity.all)
+            or (gas is not None and gas.all)
+        ):
+            return None
+        if electricity is prices.electricity and gas is prices.gas:
+            return prices
+        return replace(prices, electricity=electricity, gas=gas)
+
     def _cached_prices_active(
         self, prices: MarketPrices | None, moment: datetime
     ) -> bool:
@@ -748,11 +777,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # build. Kept at warning: that's a genuine anomaly, not routine.
             _LOGGER.warning(
                 "Cached tomorrow prices claim to be fetched today but are not "
-                "actually dated for %s — discarding stale/incorrect cache and "
+                "actually dated for %s — discarding stale/incorrect commodities and "
                 "fetching fresh data",
                 tomorrow,
             )
-            self.cached_prices_tomorrow = None
+            self.cached_prices_tomorrow = self._filter_tomorrow_prices(
+                self.cached_prices_tomorrow, tomorrow
+            )
             self.last_fetch_tomorrow = None
 
         if (
@@ -776,7 +807,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             tomorrow,
         )
 
-        prices_tomorrow = await self._fetch_tomorrow_data(tomorrow)
+        # The provider can echo today's gas while electricity is already
+        # published for tomorrow, or vice versa. Keep the valid commodity and
+        # retry the other rather than discarding the complete response.
+        prices_tomorrow = self._filter_tomorrow_prices(
+            await self._fetch_tomorrow_data(tomorrow), tomorrow
+        )
 
         has_electricity = bool(
             prices_tomorrow
@@ -793,30 +829,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             has_electricity,
             has_gas,
         )
-
-        if (has_electricity or has_gas) and not self._tomorrow_cache_matches_date(
-            prices_tomorrow, tomorrow
-        ):
-            # Same poisoning this method's self-heal check guards against, but
-            # caught immediately instead of one cycle later: a freshly fetched
-            # response can itself come back non-empty but dated for today
-            # instead of tomorrow (e.g. the API echoing the latest available
-            # day back for a not-yet-published date — routinely the case in
-            # the few minutes right around 13:00, since prices are typically
-            # published closer to 13:15-13:20 than exactly on the hour).
-            # Accepting it here would cache it as a genuine fetch and (via
-            # _adjust_update_interval) go idle for the rest of the day,
-            # silently repeating the exact same poisoning next time with no
-            # further warning. Logged at debug, not warning: this is the
-            # expected shape of "not published yet", not an anomaly.
-            _LOGGER.debug(
-                "Freshly fetched tomorrow prices are not actually dated for "
-                "%s — treating as not yet available and retrying on next "
-                "refresh",
-                tomorrow,
-            )
-            prices_tomorrow = None
-            has_electricity = has_gas = False
 
         if has_electricity or has_gas:
             self._cache_tomorrow_prices(prices_tomorrow, tomorrow, now_utc)

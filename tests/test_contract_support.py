@@ -306,6 +306,51 @@ async def test_cache_resolution_applies_only_to_electricity(
     assert prices._is_cache_resolution_valid()
 
 
+@pytest.mark.parametrize("published", ["ELECTRICITY", "GAS"])
+@pytest.mark.parametrize("source", ["live", "cache"])
+async def test_tomorrow_keeps_valid_commodity_when_other_is_stale(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    published: str,
+    source: str,
+) -> None:
+    """Discard an echoed commodity independently in both live and stored prices."""
+    freezer.move_to("2026-07-20T12:15:00Z")
+    prices = _coordinator(hass, ("ELECTRICITY", "GAS"))
+    today = date(2026, 7, 20)
+    tomorrow = today + timedelta(days=1)
+    remaining = "GAS" if published == "ELECTRICITY" else "ELECTRICITY"
+    valid = _market_prices(tomorrow, (published,))
+    stale = _market_prices(today, (remaining,))
+    mixed = replace(valid, **{remaining.lower(): getattr(stale, remaining.lower())})
+    now = datetime.now(UTC)
+    if source == "cache":
+        prices.cached_prices_tomorrow = mixed
+        prices.last_fetch_tomorrow = now
+    prices._fetch_tomorrow_data = AsyncMock(
+        side_effect=[
+            mixed if source == "live" else None,
+            _market_prices(tomorrow, (remaining,)),
+        ]
+    )
+
+    result = await prices._refresh_tomorrow_cache(today, tomorrow, now)
+    assert result is not None
+    assert (
+        getattr(result, published.lower()).all == getattr(valid, published.lower()).all
+    )
+    other = getattr(result, remaining.lower())
+    assert other is None or not other.all
+    assert prices.last_fetch_tomorrow is None
+    prices._adjust_update_interval(now)
+    assert prices.update_interval == timedelta(minutes=5)
+
+    result = await prices._refresh_tomorrow_cache(today, tomorrow, now)
+    assert result.electricity.all and result.gas.all
+    assert prices.last_fetch_tomorrow == now
+    assert prices._fetch_tomorrow_data.await_count == 2
+
+
 @pytest.mark.parametrize("supported", [False, True])
 @pytest.mark.parametrize("entity_domain", ["sensor", "binary_sensor", "select"])
 @pytest.mark.parametrize("default_enabled", [False, True])
