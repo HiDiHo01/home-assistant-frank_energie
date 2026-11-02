@@ -52,6 +52,26 @@ Examples include:
 
 During setup, provide your Frank Energie account credentials when prompted.
 
+### Supported Contracts
+
+Contract-specific entities follow the selected delivery site's contracts:
+
+| Contracts | Electricity entities | Gas entities | Electricity resolution selector |
+| --- | --- | --- | --- |
+| Electricity only | Available | Hidden | Available |
+| Gas only | Hidden | Available | Hidden |
+| Electricity and gas | Available | Available | Available |
+
+Gas prices use their own provider intervals and do not depend on an electricity
+resolution setting. Missing data for a contracted commodity is retried without
+requiring an absent second contract. Published prices for tomorrow remain
+available while the integration waits for another contracted commodity.
+
+On reload, the integration disables entities for absent contracts and restores
+applicable entities that are enabled by default. Manually disabled entities and
+optional diagnostics stay disabled. Public mode continues to provide both
+electricity and gas prices without a contract selection.
+
 ## Multi-Site Accounts
 
 Some Frank Energie accounts have multiple delivery sites.

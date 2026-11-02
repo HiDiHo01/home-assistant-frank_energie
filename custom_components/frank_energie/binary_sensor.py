@@ -41,7 +41,12 @@ from .const import (
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
-from .helpers import device_translation_key, service_device_info
+from .helpers import (
+    async_sync_contract_entities,
+    device_translation_key,
+    known_site_contracts,
+    service_device_info,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -734,8 +739,33 @@ async def async_setup_entry(
 
     entities: list[FrankEnergieBinarySensor] = []
 
+    contracts = (
+        known_site_contracts(settings_coordinator.data.get(DATA_USER))
+        if settings_coordinator.api.is_authenticated
+        else None
+    )
+    electricity_supported = contracts is None or "ELECTRICITY" in contracts
+    if contracts is not None or not settings_coordinator.api.is_authenticated:
+        async_sync_contract_entities(
+            hass,
+            config_entry,
+            "binary_sensor",
+            {
+                f"{config_entry.unique_id}_{description.key}": electricity_supported
+                for description in BINARY_SENSOR_DESCRIPTIONS
+                if description.service_name == SERVICE_NAME_PRICES
+            },
+            enabled_by_default={
+                f"{config_entry.unique_id}_{description.key}"
+                for description in BINARY_SENSOR_DESCRIPTIONS
+                if description.service_name == SERVICE_NAME_PRICES
+                and description.entity_registry_enabled_default
+            },
+        )
     for description in BINARY_SENSOR_DESCRIPTIONS:
         if description.service_name == SERVICE_NAME_PRICES:
+            if not electricity_supported:
+                continue
             coord = price_coordinator
         elif description.key in ("smart_feed_in", "smart_pv_systems"):
             coord = pv_coordinator
