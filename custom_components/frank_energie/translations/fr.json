@@ -11,7 +11,8 @@
       "no_delivery_sites": "Aucun site de livraison trouvé pour ce compte.",
       "no_suitable_sites": "Aucun site de livraison approprié trouvé. Vérifiez que votre compte dispose de contrats de livraison actifs.",
       "site_retrieval_failed": "Erreur lors de la récupération des sites de livraison. Veuillez réessayer plus tard.",
-      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails."
+      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
+      "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -109,6 +110,9 @@
       },
       "disabled_haptic_feedback": {
         "name": "Retour haptique désactivé"
+      },
+      "electricity_price_lowest_today": {
+        "name": "Prix de l’électricité au plus bas aujourd’hui"
       },
       "smart_feed_in": {
         "name": "Injection Intelligente"
@@ -1096,6 +1100,9 @@
         },
         "title": "Se connecter à Frank Energie"
       }
+    },
+    "error": {
+      "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     }
   },
   "title": "Frank Energie"

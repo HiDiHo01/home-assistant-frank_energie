@@ -40,6 +40,20 @@ Electricity price entities provide information such as:
 - Cheapest consecutive price periods
 - Price statistics
 
+The **Electricity price is lowest today** binary sensor is enabled by default
+under the electricity prices device, with or without authentication. It is `on`
+when the current all-in electricity price equals the lowest all-in price for the
+current calendar day in `Europe/Amsterdam`, and `off` during other price periods.
+Every period tied for the minimum switches it on, including zero or negative
+prices. It follows the available hourly or quarter-hourly intervals without
+rounding prices or making additional API requests.
+
+Today's intervals must cover the whole local day without gaps or overlaps.
+Changing between hourly and quarter-hourly prices tomorrow does not affect
+today's comparison. The state is `unknown` if today's coverage is incomplete or
+invalid, the active interval is missing, or any of today's prices is non-finite.
+A failed price coordinator makes the entity `unavailable`.
+
 Depending on the market configuration, electricity prices may be available as:
 
 - Hourly prices (24 prices per day)

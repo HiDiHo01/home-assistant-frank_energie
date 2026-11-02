@@ -11,7 +11,8 @@
       "no_delivery_sites": "No delivery sites found for this account.",
       "no_suitable_sites": "No suitable delivery sites found. Please check if your account has active delivery contracts.",
       "site_retrieval_failed": "Error retrieving delivery sites. Please try again later.",
-      "unknown_error": "Unknown error occurred. Please consult logs for details."
+      "unknown_error": "Unknown error occurred. Please consult logs for details.",
+      "wrong_account": "The signed-in account cannot access the configured delivery site. Sign in with the account associated with this entry."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -109,6 +110,9 @@
       },
       "disabled_haptic_feedback": {
         "name": "Haptic feedback disabled"
+      },
+      "electricity_price_lowest_today": {
+        "name": "Electricity price is lowest today"
       },
       "smart_feed_in": {
         "name": "Smart Feed-In"
@@ -1096,6 +1100,9 @@
         },
         "title": "Sign in to Frank Energie"
       }
+    },
+    "error": {
+      "wrong_account": "The signed-in account cannot access the configured delivery site. Sign in with the account associated with this entry."
     }
   },
   "title": "Frank Energie"

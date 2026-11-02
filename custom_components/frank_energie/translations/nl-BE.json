@@ -12,7 +12,8 @@
       "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
       "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
       "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw.",
-      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie."
+      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
+      "wrong_account": "Dit account heeft geen toegang tot het ingestelde leveringsadres. Meld je aan met het account dat bij deze configuratie hoort."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -84,6 +85,9 @@
           "interval_pv": "Ophaalinterval - PV (5-60 minuten, standaard: 5)"
         }
       }
+    },
+    "error": {
+      "wrong_account": "Dit account heeft geen toegang tot het ingestelde leveringsadres. Meld je aan met het account dat bij deze configuratie hoort."
     }
   },
   "device": {
@@ -951,6 +955,9 @@
       },
       "disabled_haptic_feedback": {
         "name": "Haptische feedback uitgeschakeld"
+      },
+      "electricity_price_lowest_today": {
+        "name": "Elektriciteitsprijs is vandaag het laagst"
       },
       "battery_self_consumption_trading_allowed": {
         "name": "Zelfconsumptie handelen toegestaan"

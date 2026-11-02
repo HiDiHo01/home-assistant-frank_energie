@@ -37,7 +37,6 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -92,7 +91,6 @@ from .const import (
     SERVICE_NAME_USER,
     SMART_BATTERY_STATUSES,
     SERVICE_STATUSES,
-    SUPPORTED_RESOLUTIONS,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
@@ -104,6 +102,8 @@ from .coordinator import (
     SmartBatterySessions,
 )
 from .helpers import (
+    async_sync_contract_entities,
+    known_site_contracts,
     register_service_device,
     resolve_gas_unit,
     service_device_info,
@@ -1701,16 +1701,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
 )
 
 
-def _get_contract_price_resolution(data: FrankEnergieData) -> str | None:
-    """Return a supported resolution, or None for missing or unknown API values."""
-    state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
-    if state is None or not isinstance(state.active_option, str):
-        return None
-
-    resolution = state.active_option.upper()
-    return resolution.lower() if resolution in SUPPORTED_RESOLUTIONS else None
-
-
 def _get_price_resolution_attributes(data: dict) -> dict:
     state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
     if not state:
@@ -1733,9 +1723,16 @@ def _get_price_resolution_attributes(data: dict) -> dict:
     }
 
 
+def _get_site_segments(data: FrankEnergieData) -> str | None:
+    """Format the selected site's known contracts for its diagnostic sensor."""
+    contracts = known_site_contracts(data.get(DATA_USER))
+    return ", ".join(sorted(contracts)) if contracts else None
+
+
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="contract_price_resolution_state",
+        is_electricity=True,
         translation_key="contract_price_resolution_state",
         device_class=SensorDeviceClass.ENUM,
         state_class=None,
@@ -1743,9 +1740,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         options=["pt15m", "pt60m"],
-        value_fn=_get_contract_price_resolution,
-        # A missing resolution is unknown after a successful coordinator update.
-        available_fn=lambda _: True,
+        value_fn=lambda data: (
+            data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
+            if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
+            and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
+            else STATE_UNKNOWN
+        ),
+        available_fn=lambda data: (
+            data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None
+        ),
         attr_fn=_get_price_resolution_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3536,6 +3539,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_electricity_yesterday",
+        is_electricity=True,
         translation_key="costs_electricity_yesterday",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3558,6 +3562,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="costs_electricity_this_month",
+        is_electricity=True,
         translation_key="costs_electricity_this_month",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -3583,6 +3588,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="usage_electricity_yesterday",
+        is_electricity=True,
         translation_key="usage_electricity_yesterday",
         icon="mdi:transmission-tower-export",
         device_class=SensorDeviceClass.ENERGY,
@@ -3896,11 +3902,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:segment",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: (
-            ", ".join(data[DATA_USER_SITES].segments)
-            if data[DATA_USER_SITES] and data[DATA_USER_SITES].segments
-            else None
-        ),
+        value_fn=_get_site_segments,
         attr_fn=lambda data: ({"available_segments": ["electricity", "gas"]}),
     ),
     FrankEnergieEntityDescription(
@@ -3990,6 +3992,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="EleccontractStatus",
+        is_electricity=True,
         translation_key="elec_contract_status",
         device_class=SensorDeviceClass.ENUM,
         options=list(SERVICE_STATUSES),
@@ -4016,6 +4019,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     ),
     FrankEnergieEntityDescription(
         key="GascontractStatus",
+        is_gas=True,
         translation_key="gas_contract_status",
         device_class=SensorDeviceClass.ENUM,
         options=list(SERVICE_STATUSES),
@@ -4482,13 +4486,7 @@ class FrankEnergieSensor(
 
     @property
     def available(self) -> bool:
-        """Apply the sensor's availability rule after coordinator success."""
-        if not super().available:
-            return False
-        if self.entity_description.available_fn is not None:
-            data = self.coordinator.data
-            return data is not None and self.entity_description.available_fn(data)
-        return self.native_value is not None
+        return super().available and self.native_value is not None
 
 
 class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
@@ -5060,6 +5058,19 @@ _QUARTER_HOUR_PRICE_KEYS: Final = frozenset(
 _LIB_HAS_QUARTER_HOUR_PRICES: Final = hasattr(PriceData, "previous_quarter_hour")
 
 
+def _sensor_energy_contract(description: FrankEnergieEntityDescription) -> str | None:
+    """Identify commodity-specific sensors while preserving shared account sensors."""
+    if description.is_gas or description.service_name == SERVICE_NAME_GAS_PRICES:
+        return "GAS"
+    if (
+        description.is_electricity
+        or description.is_feed_in
+        or description.service_name == SERVICE_NAME_PRICES
+    ):
+        return "ELECTRICITY"
+    return None
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -5144,14 +5155,34 @@ async def async_setup_entry(
 
         config_entry.runtime_data.battery_session_coordinators = session_coordinators
 
-    # Safely access user segments from DATA_USER_SITES
-    user_segments = getattr(
-        settings_coordinator.data.get(DATA_USER_SITES), "segments", []
-    )
-
     user_data: object = None
     if settings_coordinator.api.is_authenticated:
         user_data = settings_coordinator.data.get(DATA_USER)
+    contracts = (
+        known_site_contracts(user_data)
+        if settings_coordinator.api.is_authenticated
+        else None
+    )
+    if contracts is not None or not settings_coordinator.api.is_authenticated:
+        async_sync_contract_entities(
+            hass,
+            config_entry,
+            "sensor",
+            {
+                f"{config_entry.unique_id}.{description.key}": (
+                    contracts is None
+                    or _sensor_energy_contract(description) in contracts
+                )
+                for description in SENSOR_TYPES
+                if _sensor_energy_contract(description) is not None
+            },
+            enabled_by_default={
+                f"{config_entry.unique_id}.{description.key}"
+                for description in SENSOR_TYPES
+                if _sensor_energy_contract(description) is not None
+                and description.entity_registry_enabled_default
+            },
+        )
 
     connections: list[dict] = []
     first_connection = None
@@ -5199,26 +5230,16 @@ async def async_setup_entry(
                 or _get_coordinator_for_description(description).api.is_authenticated
             )
             and (
-                not description.is_gas
-                or not _get_coordinator_for_description(
-                    description
-                ).api.is_authenticated
-                or "GAS" in user_segments
+                contracts is None
+                or _sensor_energy_contract(description) is None
+                or _sensor_energy_contract(description) in contracts
             )
             and (
                 not description.is_feed_in
                 or (estimated_feed_in is not None and estimated_feed_in > 0)
             )
-            and not (
-                description.service_name == SERVICE_NAME_GAS_PRICES
-                and _get_coordinator_for_description(description).api.is_authenticated
-                and "GAS" not in user_segments
-            )
         )
     ]
-
-    if settings_coordinator.api.is_authenticated and "GAS" not in user_segments:
-        await _disable_gas_price_sensors(hass, config_entry)
 
     if (enode := charger_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
         _LOGGER.debug(
@@ -5446,25 +5467,6 @@ def _next_weekday_datetime(weekday: int, hour: int, minute: int) -> datetime:
         days_ahead = 7
     target_date = now + timedelta(days=days_ahead)
     return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-
-async def _disable_gas_price_sensors(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Disable gas price sensors if user is authenticated but has no gas contract."""
-    entity_registry = er.async_get(hass)
-
-    for entity_id, entity_entry in entity_registry.entities.items():
-        if (
-            entity_entry.platform == DOMAIN
-            and entity_entry.config_entry_id == entry.entry_id
-            and entity_entry.domain == "sensor"
-            and SERVICE_NAME_GAS_PRICES in entity_entry.unique_id.lower()
-            and not entity_entry.disabled
-        ):
-            _LOGGER.info("Disabling gas price sensor '%s' (no gas contract)", entity_id)
-            entity_registry.async_update_entity(
-                entity_id=entity_id,
-                disabled_by=er.RegistryEntryDisabler.INTEGRATION,
-            )
 
 
 def _parse_contract_product_name(code: str) -> dict[str, str]:

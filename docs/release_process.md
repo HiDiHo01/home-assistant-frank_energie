@@ -251,6 +251,13 @@ Release requirements:
 
 Users receive updates through HACS after publication.
 
+The release workflow updates the manifest from the release tag before creating
+the ZIP asset. The update helper writes errors to standard error and exits with
+a nonzero status if the manifest is missing, unreadable, invalid, or cannot be
+written. It rejects nonstandard JSON constants and replaces the fixed integration
+manifest atomically, preserving the original file if writing or replacement fails.
+Packaging and upload must stop when this step fails.
+
 ## Breaking Changes
 
 Breaking changes should be minimized.

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 import voluptuous as vol
+from aiohttp import ClientError
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.const import (
@@ -17,6 +18,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -26,7 +28,12 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
 )
 from python_frank_energie import Authentication, FrankEnergie
-from python_frank_energie.exceptions import AuthException, ConnectionException
+from python_frank_energie.exceptions import (
+    AuthException,
+    AuthRequiredException,
+    ConnectionException,
+    NetworkError,
+)
 
 from .const import (
     CONFIG_ENTRY_MINOR_VERSION,
@@ -56,6 +63,47 @@ from .helpers import decrypt_password, encrypt_password
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
+
+
+async def _async_account_matches_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    auth: Authentication,
+    username: str,
+) -> bool:
+    """Verify site access before replacing credentials, preserving legacy account identity."""
+    if CONF_SITE not in entry.data:
+        saved_username = entry.options.get(CONF_USERNAME) or entry.data.get(
+            CONF_USERNAME
+        )
+        return (
+            isinstance(saved_username, str)
+            and bool(saved_username)
+            and saved_username.casefold() == username.casefold()
+        )
+
+    site_reference = entry.data[CONF_SITE]
+    if not isinstance(site_reference, str) or not site_reference:
+        return False
+
+    try:
+        async with FrankEnergie(
+            clientsession=async_get_clientsession(hass),
+            auth_token=auth.authToken,
+            refresh_token=auth.refreshToken,
+        ) as api:
+            user_sites = await api.UserSites()
+    except AuthRequiredException as err:
+        raise AuthException("Site verification requires valid credentials") from err
+    except (ClientError, NetworkError, TimeoutError) as err:
+        raise ConnectionException(
+            "Unable to verify the configured delivery site"
+        ) from err
+
+    return user_sites is not None and any(
+        getattr(site, "reference", None) == site_reference
+        for site in user_sites.deliverySites
+    )
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -119,6 +167,10 @@ class ConfigFlow(config_entries.ConfigFlow):
         try:
             # Attempt authentication with the API
             auth = await self._authenticate(user_input)
+            if self._reauth_entry and not await _async_account_matches_entry(
+                self.hass, self._reauth_entry, auth, user_input[CONF_USERNAME]
+            ):
+                return self._show_login_form(errors={"base": "wrong_account"})
             # Successful login
             return await self._handle_authentication_success(user_input, auth)
 
@@ -130,11 +182,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             return await self._handle_authentication_failure(reason="connection_error")
         except Exception as ex:
             # Catch-all for unexpected errors
-            _LOGGER.exception(
-                "Unexpected error during login for user %s: %s",
-                user_input.get(CONF_USERNAME, "UNKNOWN"),
-                ex,
-            )
+            _LOGGER.error("Unexpected error during login (%s)", type(ex).__name__)
             return await self._handle_authentication_failure(reason="unknown_error")
 
     async def async_step_site(
@@ -833,6 +881,10 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     auth = await api.login(
                         user_input[CONF_USERNAME], password_to_validate
                     )
+                if not await _async_account_matches_entry(
+                    self.hass, entry, auth, user_input[CONF_USERNAME]
+                ):
+                    return await self.async_step_user(errors={"base": "wrong_account"})
 
                 # Encrypt password before storing in options
                 encrypted_password = encrypt_password(self.hass, password_to_validate)
@@ -859,7 +911,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:
-                _LOGGER.exception("Unexpected error in options flow: %s", ex)
+                _LOGGER.error(
+                    "Unexpected error in options flow (%s)", type(ex).__name__
+                )
                 errors = {"base": "unknown_error"}
 
         runtime_data = getattr(entry, "runtime_data", None)

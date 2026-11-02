@@ -401,21 +401,6 @@ Every behavior change must include appropriate automated tests.
 
 Use the testing framework and conventions already established in the repository, normally `pytest` and Home Assistant's test helpers.
 
-### Reproducible Home Assistant test environment
-
-* Use the committed dev container or Python 3.14.2 or a newer 3.14 patch. `.python-version` selects the 3.14 series; the CI matrix covers the minimum and the latest patch.
-* If Python 3.14 is absent, provision it with an available interpreter manager (for example, `uv python install 3.14`) or the committed dev container before declaring the full suite unavailable.
-* Use Poetry 2.5.1. Select the interpreter with `poetry env use python3.14` and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
-* Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
-* Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
-* Keep `pytest-homeassistant-custom-component` required in pytest configuration. Use its real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
-* Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
-* Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
-* Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.
-* Run Flake8 with `--jobs=1 --extend-exclude=.venv` so local virtual environments are excluded and checks work in environments with restricted process creation.
-* Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
-* Report the interpreter, Home Assistant, test-plugin versions, pass/skip/failure counts, and any checks that could not run. Do not describe isolated method checks as a full Home Assistant suite.
-
 ### Config-entry migration and reconfiguration regressions
 
 * Keep the config-entry schema version and minor version centralized in `const.py`; use them for the config flow and the integration-level `async_migrate_entry` hook.
@@ -423,6 +408,7 @@ Use the testing framework and conventions already established in the repository,
 * Cover legacy, current, older minor and future versions; preserve credentials, site identity, unrelated options and other entries. Never downgrade a newer minor schema or accept an incompatible future major schema.
 * Exercise reconfiguration through the real flow manager with `SOURCE_RECONFIGURE`. Cover saved-username defaults, invalid input, provider failures, retries, cancellation, encrypted credential updates and target-entry isolation.
 * Verify that reconfigure and reauthentication complete with their distinct Home Assistant reasons and schedule one reload. Use the native update/reload helper so Home Assistant provides the appropriate shared translation.
+* Verify the existing delivery-site reference against the new account's complete site inventory before persisting credentials through reauth, reconfigure or options. Include inactive/multiple sites, mismatched accounts with unchanged email, missing inventories, provider failures and successful retries. Preserve entry, entity and device identities on rejected changes. Legacy entries without a site retain their existing account username; do not silently bind them to another account.
 * Home Assistant awaits `async_migrate_entry` even when migration only uses the synchronous config-entry update callback. Preserve that async contract; document a necessary analyzer exception on the hook's declaration instead of adding a fake await or suppressing the rule across the file.
 * Run `poetry run python -m pytest tests/test_migration.py tests/test_reconfigure.py tests/test_config_flow.py tests/test_translations.py`, followed by the full suite and the configured lint/format checks.
 
@@ -447,6 +433,16 @@ Test the relevant cases for:
 * Regression scenarios associated with the reported issue.
 
 Use `pytest.mark.parametrize` for meaningful input variations.
+
+Workflow behavior is covered by `tests/test_workflow_*.py`, and release manifest
+updates are covered by `tests/test_release_manifest.py`. Inline
+`github-script` JavaScript is executed offline with mocked GitHub API calls using
+Node.js 24. CI installs Node.js and runs these cases as part of the existing full
+pytest suite on the configured Python matrix. For a focused local run, use
+`poetry run pytest -q tests/test_workflow_*.py tests/test_release_manifest.py`
+with Node.js available. Only configure package-update and deployment jobs for
+build projects that exist in the repository. Keep authorization and command
+filters on the job when they determine whether a runner is needed.
 
 Mock external services and devices. Tests must not depend on live accounts, real hardware, external networks, or personal credentials unless an explicitly separate integration-test suite requires them.
 
@@ -499,6 +495,20 @@ Never fabricate test results or claim a command succeeded when it was not execut
 If a tool cannot be run in the available environment, report that limitation and identify the exact unverified check.
 
 Do not add broad lint suppressions or typing ignores to conceal defects. Every necessary suppression must be narrow and justified.
+
+### GitHub Actions SHA pinning
+
+* Always pin every external, repository-based GitHub Action and reusable workflow to a verified, full 40-character hexadecimal commit SHA. This includes `step-security/harden-runner` and actions used by composite actions.
+* Never use version tags, branch names, or abbreviated SHAs as the executable reference, including `@v2`, `@v2.22.3`, `@main`, or `@master`. Local `./...` references remain local paths and do not take a separate ref.
+* Resolve the SHA from the official upstream repository and verify that it belongs to the intended release or commit. Never guess a SHA or copy an unverified value.
+* Add a readable version comment beside the SHA, such as `# @v2.22.3`, only after verifying that the upstream tag resolves to that SHA. If no release tag points to the pinned commit, use `# upstream commit YYYY-MM-DD` with its verified upstream commit date instead. Never invent a release label or change the SHA merely to obtain one. Keep comments aligned with the verified pin during updates.
+* Preserve full SHA pinning in manual, Dependabot, and Renovate updates. Before completing any workflow change, inspect all workflow and composite-action YAML files for unpinned external action or reusable-workflow references.
+
+Example:
+
+```yaml
+uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+```
 
 ### Flake8, Ruff, and existing lint debt
 
