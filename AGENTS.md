@@ -490,7 +490,7 @@ Do not add broad lint suppressions or typing ignores to conceal defects. Every n
 * Always pin every external, repository-based GitHub Action and reusable workflow to a verified, full 40-character hexadecimal commit SHA. This includes `step-security/harden-runner` and actions used by composite actions.
 * Never use version tags, branch names, or abbreviated SHAs as the executable reference, including `@v2`, `@v2.22.3`, `@main`, or `@master`. Local `./...` references remain local paths and do not take a separate ref.
 * Resolve the SHA from the official upstream repository and verify that it belongs to the intended release or commit. Never guess a SHA or copy an unverified value.
-* Add a readable version comment beside the SHA, such as `# @v2.22.3`, and keep that comment aligned with the pinned release during updates.
+* Add a readable version comment beside the SHA, such as `# @v2.22.3`, only after verifying that the upstream tag resolves to that SHA. If no release tag points to the pinned commit, use `# upstream commit YYYY-MM-DD` with its verified upstream commit date instead. Never invent a release label or change the SHA merely to obtain one. Keep comments aligned with the verified pin during updates.
 * Preserve full SHA pinning in manual, Dependabot, and Renovate updates. Before completing any workflow change, inspect all workflow and composite-action YAML files for unpinned external action or reusable-workflow references.
 
 Example:
