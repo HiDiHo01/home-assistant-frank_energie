@@ -9,7 +9,6 @@ from enum import Enum
 from uuid import UUID
 
 from homeassistant.components.diagnostics import async_redact_data
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
     CONF_PASSWORD,
@@ -18,7 +17,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 
-from . import FrankEnergieEntryData
+from .runtime_data import FrankEnergieConfigEntry
 
 TO_REDACT: set[str] = {
     CONF_ACCESS_TOKEN,
@@ -130,11 +129,11 @@ def _serialize(value: object) -> object:
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: FrankEnergieConfigEntry,
 ) -> dict[str, object]:
     """Return diagnostics for a config entry."""
 
-    runtime_data: FrankEnergieEntryData = entry.runtime_data
+    runtime_data = entry.runtime_data
     coordinator = runtime_data.coordinator
 
     diagnostics: dict[str, object] = {

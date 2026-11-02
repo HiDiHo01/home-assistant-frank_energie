@@ -4,37 +4,21 @@ These issue drafts convert the coordinator architecture review findings into act
 
 ## Issue 1: Make setup runtime-data registration failure-safe
 
-**Labels:** `type: backlog`, `area: setup`, `area: coordinator`, `priority: high`
+**Status:** Implemented by the runtime/lifecycle follow-up; retained here as
+review history, not as an open implementation task.
 
-### Description
+Entry-specific coordinators are stored exclusively in the typed
+`ConfigEntry.runtime_data` record. The legacy `hass.data` alias and its setup and
+cleanup helpers have been removed. Setup failure or cancellation removes the
+runtime and propagates the original Home Assistant exception. Concurrent initial
+refreshes are cancelled and awaited before cleanup, and failed platform
+forwarding rolls back already-created entities.
 
-The integration currently saves coordinator references into `hass.data` and `entry.runtime_data` before the initial coordinator refreshes complete. This makes coordinators visible earlier during setup, but if a first refresh fails with `ConfigEntryAuthFailed`, `ConfigEntryNotReady`, or another setup exception, Home Assistant can be left with partially initialized runtime data for an entry that did not finish setup.
-
-### Context / motivation
-
-Home Assistant config entry setup should be transactional from the integration's perspective: either setup completes and runtime data is valid, or setup fails and no partially initialized coordinators remain registered. Early runtime-data registration is useful only if failure cleanup is guaranteed.
-
-Relevant code paths:
-
-- `FrankEnergieComponent.setup()` creates all coordinators, calls `_save_coordinator_to_hass_data()`, then performs initial refreshes.
-- `_save_coordinator_to_hass_data()` writes both `hass.data[DOMAIN][entry_id]` and `entry.runtime_data`.
-- `_remove_entry_from_hass_data()` exists but is not used to clean up failed first-refresh setup.
-
-### Proposed solution
-
-Either:
-
-1. Move `_save_coordinator_to_hass_data()` back to after all required initial refreshes succeed; or
-2. Keep early registration, but wrap the initial refresh block in `try/except` and call `_remove_entry_from_hass_data()` before re-raising setup exceptions.
-
-Option 2 preserves early runtime-data visibility while making failed setup safe.
-
-### Acceptance criteria
-
-- If any required `async_config_entry_first_refresh()` raises during setup, the integration removes `hass.data[DOMAIN][entry_id]` before re-raising.
-- Failed setup does not leave stale `entry.runtime_data` or stale coordinator references reachable by services/diagnostics.
-- Successful setup still forwards platforms only after required first refreshes complete.
-- Tests cover both successful setup and first-refresh failure cleanup.
+`tests/test_runtime_lifecycle.py` covers authentication, retryable and unexpected
+setup failures, cancellation, pending sibling requests, partial platform setup,
+reload, refused unload, multi-entry isolation and all resource polling cleanup.
+The architecture and evidence are recorded in `docs/architecture.md` and
+`docs/quality_readiness.md`.
 
 ---
 

@@ -2,12 +2,12 @@ import logging
 from dataclasses import dataclass
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
@@ -30,7 +30,9 @@ class FrankEnergieButtonEntityDescription(ButtonEntityDescription):
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: FrankEnergieConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up refresh buttons for Frank Energie coordinators."""
     runtime_data = entry.runtime_data
@@ -82,7 +84,7 @@ class FrankEnergieRefreshButton(ButtonEntity):
         self,
         coordinator: DataUpdateCoordinator,  # at runtime any coordinator type
         description: FrankEnergieButtonEntityDescription,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
     ) -> None:
         self.entity_description = description  # type: ignore[override]
         self._attr_translation_key = description.translation_key or description.key

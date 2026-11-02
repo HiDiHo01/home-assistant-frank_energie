@@ -11,7 +11,6 @@ from homeassistant.helpers import device_registry as dr
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie.const import (
     DOMAIN,
-    CONF_COORDINATOR,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
 )
@@ -90,7 +89,8 @@ async def test_setup_entry_success(
 
     assert result is True
     assert entry.state is ConfigEntryState.LOADED
-    assert hass.data[DOMAIN][entry.entry_id][CONF_COORDINATOR]
+    assert entry.runtime_data.price_coordinator.config_entry is entry
+    assert entry.entry_id not in hass.data.get(DOMAIN, {})
 
 
 @pytest.mark.parametrize(
@@ -220,7 +220,8 @@ async def test_unload_entry(
 
     assert unload_result is True
     assert entry.state is ConfigEntryState.NOT_LOADED
-    assert entry.entry_id not in hass.data[DOMAIN]
+    assert entry.entry_id not in hass.data.get(DOMAIN, {})
+    assert not hasattr(entry, "runtime_data")
 
 
 async def test_remove_entry_deletes_price_cache_store(
@@ -402,7 +403,6 @@ async def test_get_fernet_key_raises_when_core_uuid_missing(
         real_get_fernet_key(hass)
 
 
-@pytest.mark.skip(reason="Lingering timer false positive during mock teardown")
 async def test_setup_entry_recovery_via_renew(
     hass: HomeAssistant,
     aioclient_responses: ResponseMocks,
@@ -480,9 +480,11 @@ async def test_setup_entry_recovery_via_renew(
         assert result is True
         assert entry.state is ConfigEntryState.LOADED
         assert entry.data["access_token"] == "new_auth_token"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert not hasattr(entry, "runtime_data")
 
 
-@pytest.mark.skip(reason="Lingering timer false positive during mock teardown")
 async def test_setup_entry_recovery_via_login(
     hass: HomeAssistant,
     aioclient_responses: ResponseMocks,
@@ -565,9 +567,11 @@ async def test_setup_entry_recovery_via_login(
         assert result is True
         assert entry.state is ConfigEntryState.LOADED
         assert entry.data["access_token"] == "logged_in_auth_token"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert not hasattr(entry, "runtime_data")
 
 
-@pytest.mark.skip(reason="Lingering timer false positive during mock teardown")
 async def test_setup_entry_restores_title(
     hass: HomeAssistant,
     aioclient_responses: ResponseMocks,
@@ -629,3 +633,6 @@ async def test_setup_entry_restores_title(
         assert entry.state is ConfigEntryState.LOADED
         # Title should be healed back to the address
         assert entry.title == "Main Street 123"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert not hasattr(entry, "runtime_data")

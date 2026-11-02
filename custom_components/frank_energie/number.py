@@ -14,7 +14,6 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CURRENCY_EURO,
     PERCENTAGE,
@@ -27,7 +26,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from python_frank_energie.domain import SmartBatteryMode
 from python_frank_energie.models import EnodeVehicle, EnodeCharger, SmartBatteryDetails
 
-from . import FrankEnergieEntryData
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
@@ -75,7 +74,7 @@ class FrankEnergieNumberEntityDescription(NumberEntityDescription):
 
     value_fn: (
         Callable[
-            [ConfigEntry[FrankEnergieEntryData]],
+            [FrankEnergieConfigEntry],
             float,
         ]
         | None
@@ -195,7 +194,7 @@ CONFIG_NUMBER_DESCRIPTIONS: Final = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry[FrankEnergieEntryData],
+    config_entry: FrankEnergieConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie number entities."""
@@ -297,7 +296,7 @@ class FrankEnergieBatteryThresholdNumber(
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        config_entry: ConfigEntry[FrankEnergieEntryData],
+        config_entry: FrankEnergieConfigEntry,
         battery_id: str,
     ) -> None:
         """Initialize the number entity."""
@@ -452,7 +451,7 @@ class FrankEnergieFixedMonthlyCostsNumber(
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry[FrankEnergieEntryData],
+        entry: FrankEnergieConfigEntry,
         description: FrankEnergieNumberEntityDescription,
     ) -> None:
         super().__init__(coordinator)

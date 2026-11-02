@@ -8,16 +8,14 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
-from typing import Any, Final, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Final, TypedDict, cast
 from zoneinfo import ZoneInfo
 
 from aiohttp import ClientError
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
     CONF_PASSWORD,
@@ -107,6 +105,9 @@ from .const import (
 )
 from .helpers import decrypt_password, known_site_contracts, price_cache_store
 from .mutation_queue import MutationQueue
+
+if TYPE_CHECKING:
+    from .runtime_data import FrankEnergieConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
@@ -298,16 +299,6 @@ def _extract_electricity_connection_id(user_data: Any) -> str | None:
     return None
 
 
-if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
-    # Python 3.14-3.16
-    try:
-        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which is deprecated and can cause issues with aiohttp
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    except Exception:
-        # fallback for Python 3.17+ where Proactor policy is default and Selector policy is deprecated
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-
 ERROR_NO_MARKET_PRICES: Final[str] = "No marketprices found"
 
 
@@ -424,12 +415,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     # This means that if the current time is after 12:00 UTC, the coordinator will fetch tomorrow's prices
     # at 12:00 UTC,
     # which corresponds to 14:00 in UTC+2 timezone (e.g., Central European Summer Time).
+    config_entry: FrankEnergieConfigEntry
+
     FETCH_TOMORROW_HOUR_UTC: Final[int] = 11
     PRICE_RELEASE_START_UTC: Final[time] = time(11, 0)
     PRICE_RELEASE_END_UTC: Final[time] = time(13, 0)
 
     def __init__(
-        self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
+        self,
+        hass: HomeAssistant,
+        config_entry: FrankEnergieConfigEntry,
+        api: FrankEnergie,
     ) -> None:
         """Initialize the data object."""
         super().__init__(
@@ -2559,7 +2555,10 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
     """Coordinator for user configuration and site settings."""
 
     def __init__(
-        self, hass: HomeAssistant, config_entry: ConfigEntry, api: FrankEnergie
+        self,
+        hass: HomeAssistant,
+        config_entry: FrankEnergieConfigEntry,
+        api: FrankEnergie,
     ) -> None:
         """Initialize the settings coordinator."""
         super().__init__(hass, config_entry, api)
@@ -2604,7 +2603,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
@@ -3073,7 +3072,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
@@ -3145,7 +3144,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
@@ -3215,7 +3214,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
@@ -3293,7 +3292,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
@@ -3364,7 +3363,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         settings_coordinator: FrankEnergieSettingsCoordinator,
     ) -> None:
@@ -3425,7 +3424,7 @@ class FrankEnergieBatterySessionCoordinator(
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         api: FrankEnergie,
         device_id: str,
     ) -> None:
@@ -3434,7 +3433,7 @@ class FrankEnergieBatterySessionCoordinator(
 
         Args:
             hass (HomeAssistant): Home Assistant instance.
-            entry (ConfigEntry): Config entry containing integration settings.
+            entry (FrankEnergieConfigEntry): Config entry containing integration settings.
             api (FrankEnergie): Instance of the FrankEnergie API.
             device_id (str): The smart battery device ID.
         """

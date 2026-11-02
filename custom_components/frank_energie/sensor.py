@@ -23,7 +23,6 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CURRENCY_EURO,
     PERCENTAGE,
@@ -48,6 +47,7 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 from python_frank_energie.models import EnodeCharger, PriceData
 
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     ATTR_FROM_TIME,
     ATTR_LAST_UPDATE,
@@ -4396,7 +4396,7 @@ class FrankEnergieSensor(
         self,
         coordinator: FrankEnergieCoordinator,
         description: FrankEnergieEntityDescription,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
     ) -> None:
         """Initialize the sensor."""
         self.entity_description: FrankEnergieEntityDescription = description
@@ -4496,7 +4496,7 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
         self,
         coordinator: FrankEnergieCoordinator,
         description: FrankEnergieEntityDescription,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
         battery_id: str,
         battery_name: str,
         battery_brand: str,
@@ -5022,7 +5022,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
 
 def _service_parent_device_id(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: FrankEnergieConfigEntry,
     coordinator: FrankEnergieCoordinator,
     service_name: str,
     user_data: object,
@@ -5073,7 +5073,7 @@ def _sensor_energy_contract(description: FrankEnergieEntityDescription) -> str |
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: FrankEnergieConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie sensor entries."""

@@ -28,7 +28,7 @@ from .const import (
 from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
+    from .runtime_data import FrankEnergieConfigEntry
     from python_frank_energie.models import ChargeSettings
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ def known_site_contracts(user: object) -> set[str] | None:
 @callback
 def async_sync_contract_entities(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: FrankEnergieConfigEntry,
     entity_domain: str,
     supported_unique_ids: dict[str, bool],
     *,
@@ -218,7 +218,7 @@ def service_device_info(
 
 def register_service_device(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: FrankEnergieConfigEntry,
     service_name: str,
     *,
     configuration_url: str | None = None,

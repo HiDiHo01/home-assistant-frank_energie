@@ -18,12 +18,12 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
@@ -478,7 +478,7 @@ class FrankEnergieBinarySensor(
         self,
         coordinator: FrankEnergieCoordinator,
         description: FrankEnergieBinarySensorDescription,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
     ) -> None:
         """Initialize entity."""
         super().__init__(coordinator)
@@ -726,7 +726,7 @@ def _build_battery_descriptions(
 
 def _sync_price_contract_entities(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: FrankEnergieConfigEntry,
     settings_coordinator: FrankEnergieCoordinator,
 ) -> bool:
     """Sync price-entity registry state and return electricity support."""
@@ -758,7 +758,7 @@ def _sync_price_contract_entities(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: FrankEnergieConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie binary sensors."""

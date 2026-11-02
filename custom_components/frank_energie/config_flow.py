@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
     CONF_AUTHENTICATION,
@@ -29,6 +29,7 @@ from homeassistant.helpers.selector import (
 from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import AuthException, ConnectionException
 
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     CONF_SITE,
     DOMAIN,
@@ -60,7 +61,9 @@ VERSION = 2
 MINOR_VERSION = 1
 
 
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: FrankEnergieConfigEntry
+) -> bool:
     """Migrate old config entry format."""
 
     if entry.version < 2:
@@ -79,7 +82,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 @callback
-def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
+def async_handle_auth_failure(
+    hass: HomeAssistant, entry: FrankEnergieConfigEntry
+) -> None:
     """Start reauthentication for an existing entry on Home Assistant's event loop.
 
     This function attempts to start a reauthentication flow for the given config entry.
@@ -115,7 +120,7 @@ class ConfigFlow(config_entries.ConfigFlow):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._reauth_entry: Optional[ConfigEntry] = None
+        self._reauth_entry: FrankEnergieConfigEntry | None = None
         self.sign_in_data: dict[str, Any] = {}
 
     async def async_step_login(
@@ -707,7 +712,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
     ) -> Optional[config_entries.OptionsFlow]:
         """Get options flow handler only if a site is selected."""
         _LOGGER.debug("Preparing options flow for entry %s", config_entry.entry_id)
