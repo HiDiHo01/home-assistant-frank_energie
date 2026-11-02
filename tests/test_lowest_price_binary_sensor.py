@@ -30,6 +30,7 @@ from custom_components.frank_energie.const import (
     DOMAIN,
     TIMEZONE_AMSTERDAM,
 )
+from custom_components.frank_energie.coordinator import FrankEnergiePriceCoordinator
 from tests.utils import ResponseMocks
 
 SENSOR_KEY = "electricity_price_lowest_today"
@@ -261,16 +262,54 @@ def test_repeated_dst_hour_uses_correct_interval(
     assert lowest_price_sensor.is_on is expected
 
 
-@pytest.mark.parametrize("resolution_minutes", [0, -15, None])
-def test_invalid_resolution_is_unknown(
+@pytest.mark.parametrize(
+    ("today_resolution", "tomorrow_resolution"), [(60, 15), (15, 60)]
+)
+def test_mixed_resolution_days_preserve_current_minimum(
     lowest_price_sensor: FrankEnergieBinarySensor,
     freezer: FrozenDateTimeFactory,
-    resolution_minutes: int | None,
+    today_resolution: int,
+    tomorrow_resolution: int,
 ) -> None:
-    """Avoid comparing prices when expected intervals cannot be derived."""
+    """Tomorrow's contract resolution must not change today's coverage check."""
+    start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
+    today_prices = [0.5] * (24 * 60 // today_resolution)
+    today_prices[10 * 60 // today_resolution] = 0.1
+    today = _price_data(start_time, today_prices, today_resolution)
+    tomorrow = _price_data(
+        start_time + timedelta(days=1),
+        [-1.0] * (24 * 60 // tomorrow_resolution),
+        tomorrow_resolution,
+    )
+    merged = FrankEnergiePriceCoordinator._resolve_price_data_merge_conflict(
+        today, tomorrow, ValueError("Contract resolution changed")
+    )
+    assert merged.resolution_minutes == 15
+    lowest_price_sensor.coordinator.data = {DATA_ELECTRICITY: merged}
+
+    for offset, expected in [(-1, False), (0, True), (1, False)]:
+        freezer.move_to(
+            start_time + timedelta(hours=10, minutes=offset * today_resolution)
+        )
+        assert lowest_price_sensor.is_on is expected
+
+
+@pytest.mark.parametrize(
+    ("price_index", "end_offset_minutes"),
+    [(40, -1), (40, 1), (40, -15), (40, -30), (-1, 1)],
+)
+def test_invalid_daily_interval_boundaries_are_unknown(
+    lowest_price_sensor: FrankEnergieBinarySensor,
+    freezer: FrozenDateTimeFactory,
+    price_index: int,
+    end_offset_minutes: int,
+) -> None:
+    """Reject gaps, overlaps and invalid ends even outside the active interval."""
     start_time = datetime(2026, 10, 29, 23, tzinfo=UTC)
     electricity = _price_data(start_time, [0.5] * 96)
-    electricity.resolution_minutes = resolution_minutes
+    electricity.price_data[price_index].date_till += timedelta(
+        minutes=end_offset_minutes
+    )
     freezer.move_to(start_time + timedelta(hours=1))
     lowest_price_sensor.coordinator.data = {DATA_ELECTRICITY: electricity}
 

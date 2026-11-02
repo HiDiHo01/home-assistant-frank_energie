@@ -48,9 +48,11 @@ Every period tied for the minimum switches it on, including zero or negative
 prices. It follows the available hourly or quarter-hourly intervals without
 rounding prices or making additional API requests.
 
-The state is `unknown` if any expected interval for today or the active interval
-is missing, or if any of today's prices is non-finite. A failed price coordinator
-makes the entity `unavailable`.
+Today's intervals must cover the whole local day without gaps or overlaps.
+Changing between hourly and quarter-hourly prices tomorrow does not affect
+today's comparison. The state is `unknown` if today's coverage is incomplete or
+invalid, the active interval is missing, or any of today's prices is non-finite.
+A failed price coordinator makes the entity `unavailable`.
 
 Depending on the market configuration, electricity prices may be available as:
 

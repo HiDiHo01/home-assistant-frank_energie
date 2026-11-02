@@ -239,23 +239,24 @@ def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
 
     now_utc = datetime.now(UTC)
     today_prices = electricity.today
-    resolution = electricity.resolution_minutes
-    if not resolution or resolution <= 0:
-        return None
-
-    local_date = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
-    local_start = datetime.combine(local_date, time.min, ZoneInfo(TIMEZONE_AMSTERDAM))
+    local_timezone = ZoneInfo(TIMEZONE_AMSTERDAM)
+    local_date = now_utc.astimezone(local_timezone).date()
+    local_start = datetime.combine(local_date, time.min, local_timezone)
     local_end = datetime.combine(
-        local_date + timedelta(days=1), time.min, ZoneInfo(TIMEZONE_AMSTERDAM)
+        local_date + timedelta(days=1), time.min, local_timezone
     )
     start_utc = local_start.astimezone(UTC)
     end_utc = local_end.astimezone(UTC)
-    interval = timedelta(minutes=resolution)
-    actual_starts = {price.date_from for price in today_prices}
-    while start_utc < end_utc:
-        if start_utc not in actual_starts:
+
+    # The merged series can include a different contract resolution for tomorrow.
+    for price in sorted(today_prices, key=lambda item: item.date_from.astimezone(UTC)):
+        price_start = price.date_from.astimezone(UTC)
+        price_end = price.date_till.astimezone(UTC)
+        if price_start != start_utc or price_end <= price_start or price_end > end_utc:
             return None
-        start_utc += interval
+        start_utc = price_end
+    if start_utc != end_utc:
+        return None
 
     current_price = next(
         (price for price in today_prices if price.contains_time(now_utc)), None
