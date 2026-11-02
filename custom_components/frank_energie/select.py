@@ -9,7 +9,6 @@ from typing import Any
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from dataclasses import dataclass
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -19,6 +18,7 @@ from python_frank_energie.domain import SmartBatteryMode
 from python_frank_energie.models import EnodeCharger
 
 
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     API_CONF_URL,
     BATTERY_MODE_OPTIONS,
@@ -82,7 +82,7 @@ SELECT_DESCRIPTIONS: tuple[FrankEnergieSelectEntityDescription, ...] = (
 
 
 def _setup_battery_entities(
-    coordinator: FrankEnergieCoordinator, entry: ConfigEntry
+    coordinator: FrankEnergieCoordinator, entry: FrankEnergieConfigEntry
 ) -> list[SelectEntity]:
     """Create and return smart battery select entities."""
     entities: list[SelectEntity] = []
@@ -116,7 +116,7 @@ def _setup_enode_entities(
     hass: HomeAssistant,
     vehicle_coordinator: FrankEnergieCoordinator,
     charger_coordinator: FrankEnergieCoordinator,
-    entry: ConfigEntry,
+    entry: FrankEnergieConfigEntry,
 ) -> list[SelectEntity]:
     """Create and return Enode vehicle and charger select entities."""
     entities: list[SelectEntity] = []
@@ -157,7 +157,7 @@ def _setup_enode_entities(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: FrankEnergieConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie select entities."""
@@ -309,7 +309,7 @@ class FrankEnergieBatteryBaseSelect(
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
         battery_id: str,
         description: FrankEnergieSelectEntityDescription,
     ) -> None:
@@ -348,7 +348,7 @@ class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
         battery_id: str,
         description: FrankEnergieSelectEntityDescription,
     ) -> None:
@@ -388,7 +388,7 @@ class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
         battery_id: str,
         description: FrankEnergieSelectEntityDescription,
     ) -> None:
@@ -445,7 +445,7 @@ class FrankEnergieEnodeChargingModeSelect(
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
         vehicle_id: str,
         description: FrankEnergieSelectEntityDescription,
     ) -> None:
@@ -546,7 +546,7 @@ class FrankEnergieEnodeChargerChargingModeSelect(
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        entry: ConfigEntry,
+        entry: FrankEnergieConfigEntry,
         charger_id: str,
         description: FrankEnergieSelectEntityDescription,
     ) -> None:

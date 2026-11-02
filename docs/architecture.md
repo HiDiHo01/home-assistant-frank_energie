@@ -2,7 +2,9 @@
 
 This document describes the architecture of the Frank Energie Home Assistant integration.
 
-The integration follows Home Assistant best practices and is built around a central coordinator that manages all API communication, caching, event generation, and entity updates.
+The integration uses separate resource coordinators for prices, settings,
+statistics, batteries, chargers, PV systems, vehicles and battery sessions.
+Their data and update intervals belong to one config entry and selected site.
 
 ## High-Level Architecture
 
@@ -44,6 +46,29 @@ Responsibilities:
 - Reconfiguration
 
 The integration does not support YAML configuration.
+
+### Runtime Ownership and Lifecycle
+
+`runtime_data.py` defines `FrankEnergieEntryData` and the typed
+`FrankEnergieConfigEntry` alias used by setup, platforms, coordinators, flows and
+diagnostics. `async_setup_entry` assigns the runtime directly to the entry.
+There is no additional entry-ID coordinator dictionary in `hass.data`.
+
+`FrankEnergieComponent.async_prepare()` creates coordinators and selects the
+delivery site. `async_setup()` refreshes settings first, then starts the six
+independent resource refreshes concurrently. If a refresh fails or setup is
+cancelled, pending refresh tasks are cancelled and awaited before the original
+exception propagates. Failed setup removes the unpublished runtime.
+
+Sensors register parent devices before dependent platforms load. A forwarding
+failure rolls back already-created platforms. On successful unload, Home
+Assistant removes the runtime and runs registered coordinator and aligned-timer
+cleanup callbacks. A refused platform unload retains the active runtime.
+Reloading replaces only that entry's runtime and preserves entity identifiers.
+The shared HTTP session remains owned by Home Assistant.
+
+Home Assistant also owns the process event loop. Importing the integration does
+not change the Windows event-loop policy.
 
 ### Coordinator
 

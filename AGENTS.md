@@ -160,6 +160,7 @@ Do not add dependency pins without a demonstrated compatibility or reproducibili
 * Prefer config entries for integration setup.
 * Use `ConfigEntry.runtime_data` for entry-specific runtime objects when supported by the target Home Assistant API.
 * Define a precise runtime-data type.
+* Assign the typed `entry.runtime_data` in `async_setup_entry` itself. Remove it before propagating setup failure or cancellation; Home Assistant clears it after a successful unload of a loaded entry.
 * Do not store runtime objects in global dictionaries keyed by entry ID when `runtime_data` is the appropriate solution.
 * Use `entry.data` for configuration required to establish the integration.
 * Use `entry.options` for user-adjustable settings.
@@ -199,6 +200,8 @@ This includes network requests, database access, subprocess interaction, device 
 * Use asynchronous dependency APIs instead of synchronous wrappers.
 * Use `asyncio.timeout()` for bounded asynchronous operations when appropriate.
 * Handle cancellation correctly; do not swallow `asyncio.CancelledError`.
+* Scope concurrent initial refreshes to setup: cancel and await pending siblings before propagating the original failure. Preserve Home Assistant's authentication and retry exception types.
+* Leave the host event loop and its policy under Home Assistant's control; importing an integration must not replace the process-wide Windows event-loop policy.
 * Do not use `time.sleep()` in asynchronous code.
 * Do not use synchronous HTTP clients in Home Assistant's event loop.
 * Do not use synchronous file or subprocess operations in performance-sensitive asynchronous paths.

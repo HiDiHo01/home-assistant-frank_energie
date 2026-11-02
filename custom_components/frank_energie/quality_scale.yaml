@@ -1,4 +1,4 @@
-# Evidence review: 2026-11-02, main a691e348 plus the session/privacy changes.
+# Evidence review: 2026-11-02, PR 369 head 169cfcc plus the runtime/lifecycle changes.
 # This custom integration targets Platinum; no tier is currently certified.
 # todo means incomplete or not yet fully verified, not necessarily absent.
 # See docs/quality_readiness.md for measurements, limitations and priorities.
@@ -45,7 +45,7 @@ rules:
     comment: No integration-specific trigger platform exists; bus events and generic event triggers are documented in docs/events.md.
   entity-event-setup:
     status: todo
-    comment: CoordinatorEntity owns listeners, but complete lifecycle verification still includes three skipped teardown tests.
+    comment: CoordinatorEntity owns listeners and lifecycle tests have no skips; complete the dynamic-entity subscription audit.
   entity-unique-id:
     status: todo
     comment: Entry/device identifiers exist; finish cross-entry and dynamic-device identifier verification across all platforms.
@@ -53,8 +53,8 @@ rules:
     status: todo
     comment: Active entity classes generally set has_entity_name; complete the description/name audit before certification.
   runtime-data:
-    status: todo
-    comment: Typed runtime_data exists, but a legacy price-coordinator alias remains in hass.data[DOMAIN][entry_id]; remove it and verify lifecycle/consumers.
+    status: done
+    comment: runtime_data.py defines the typed entry and per-site coordinators; setup assigns runtime directly, all consumers use it, and failure/cancellation/reload tests verify ownership.
   test-before-configure:
     status: todo
     comment: Authenticated setup checks login and sites; verify the public path and all failure/identity cases.
@@ -69,8 +69,8 @@ rules:
     status: todo
     comment: Review entity commands that currently return after failed mutations or raise plain ValueError.
   config-entry-unloading:
-    status: todo
-    comment: Unload/cache-removal tests exist; resolve or specifically justify the three existing timer-related skips.
+    status: done
+    comment: All six platforms unload; HA owns coordinator/timer cleanup and runtime removal. Tests cover reload, multiple entries, refused unload, failed/cancelled setup and every resource including battery sessions; the three auth/title tests are active.
   docs-configuration-parameters:
     status: todo
     comment: Document every current polling/feature option with defaults and constraints.

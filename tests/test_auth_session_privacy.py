@@ -357,7 +357,10 @@ async def test_setup_does_not_log_stored_credentials(
     """Exercise the real setup entry point without polling unrelated resources."""
     caplog.set_level(logging.DEBUG, logger="custom_components.frank_energie")
     entry = _entry(hass)
-    with patch.object(FrankEnergieComponent, "setup", return_value=True):
+    with (
+        patch.object(FrankEnergieComponent, "async_prepare", return_value=MagicMock()),
+        patch.object(FrankEnergieComponent, "async_setup", return_value=None),
+    ):
         assert await async_integration_setup_entry(hass, entry)
     assert any(entry.entry_id in record.getMessage() for record in caplog.records)
     _assert_private_logs(caplog, entry.options[CONF_PASSWORD])

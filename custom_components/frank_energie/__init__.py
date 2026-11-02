@@ -4,19 +4,15 @@
 
 import asyncio
 import logging
-import warnings
-from dataclasses import dataclass, field
 from datetime import datetime, time
-from typing import Any, Final
+from typing import Final
 from zoneinfo import ZoneInfo
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
@@ -24,7 +20,6 @@ from python_frank_energie.exceptions import AuthException
 from python_frank_energie.models import UserSites
 
 from .const import (
-    CONF_COORDINATOR,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
@@ -41,7 +36,8 @@ from .coordinator import (
     FrankEnergieStatisticsCoordinator,
 )
 from .exceptions import NoSuitableSitesFoundError
-from .helpers import price_cache_store
+from .helpers import log_api_exception, price_cache_store
+from .runtime_data import FrankEnergieConfigEntry, FrankEnergieEntryData
 
 _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
@@ -50,21 +46,6 @@ PRICE_RELEASE_HOUR_UTC: Final[int] = 11
 _HAS_DEVICE_BY_IDENTIFIER: Final = hasattr(
     dr.DeviceRegistry, "async_get_device_by_identifier"
 )
-
-
-@dataclass
-class FrankEnergieEntryData:
-    """Runtime data stored on a ConfigEntry."""
-
-    coordinator: FrankEnergieCoordinator
-    settings_coordinator: FrankEnergieSettingsCoordinator
-    price_coordinator: FrankEnergiePriceCoordinator
-    battery_coordinator: FrankEnergieBatteryCoordinator
-    charger_coordinator: FrankEnergieChargerCoordinator
-    pv_coordinator: FrankEnergiePVCoordinator
-    vehicle_coordinator: FrankEnergieVehicleCoordinator
-    statistics_coordinator: FrankEnergieStatisticsCoordinator
-    battery_session_coordinators: dict[str, object] = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -80,63 +61,38 @@ PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry[FrankEnergieEntryData],
+    entry: FrankEnergieConfigEntry,
 ) -> bool:
     """Set up the Frank Energie component from a config entry."""
     _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
     component = FrankEnergieComponent(hass, entry)
-    return await component.setup()
-
-
-async def async_setup_platform(
-    hass: HomeAssistant,
-    config: dict[str, Any],
-    async_add_entities,
-) -> bool:
-    """Set up the Frank Energie sensor platform.
-    Deprecated for new development because Home Assistant encourages the use of
-    config entries and UI-driven setup.
-    """
-    warnings.warn(
-        "async_setup_platform is deprecated; use config entries instead.",
-        DeprecationWarning,
-    )
-    _LOGGER.debug("Setting up Frank Energie sensor platform")
-    timezone = hass.config.time_zone  # Get the configured time zone
-    _LOGGER.debug("Configured Time Zone: %s", timezone)
-    # Pass the timezone to a platform
-    hass.data[DOMAIN] = {
-        "timezone": timezone,
-    }
-    coordinator = hass.data[DOMAIN][CONF_COORDINATOR]
-    api = coordinator.api
-    sensor = FrankEnergieDiagnosticSensor(api)
-    async_add_entities([sensor])
+    entry.runtime_data = await component.async_prepare()
+    try:
+        await component.async_setup()
+    except BaseException:
+        # HA runs registered unload callbacks after a failed setup, but only
+        # deletes runtime_data after a successful unload of a loaded entry.
+        del entry.runtime_data
+        raise
     return True
 
 
 async def async_unload_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry[FrankEnergieEntryData],
+    entry: FrankEnergieConfigEntry,
 ) -> bool:
     """Handle removal of an entry."""
     _LOGGER.debug("Unloading entry: %s", entry.entry_id)
 
-    if unload_ok := await hass.config_entries.async_unload_platforms(
+    return await hass.config_entries.async_unload_platforms(
         entry,
         PLATFORMS,
-    ):
-        hass.data.setdefault(DOMAIN, {}).pop(
-            entry.entry_id,
-            None,
-        )
-
-    return unload_ok
+    )
 
 
 async def async_remove_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry[FrankEnergieEntryData],
+    entry: FrankEnergieConfigEntry,
 ) -> None:
     """Clean up persistent storage when a config entry is removed."""
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
@@ -146,9 +102,7 @@ async def async_remove_entry(
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
 
-    def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry[FrankEnergieEntryData]
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry: FrankEnergieConfigEntry) -> None:
         """Initialize the Frank Energie component."""
         self.hass = hass
         self.entry = entry
@@ -209,8 +163,8 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         self.entry.async_on_unload(unsub)
 
-    async def setup(self) -> bool:
-        """Set up the Frank Energie component from a config entry."""
+    async def async_prepare(self) -> FrankEnergieEntryData:
+        """Create site-specific coordinators before publishing the entry runtime."""
         _LOGGER.debug("Setting up Frank Energie component")
 
         # For backwards compatibility, update the unique ID
@@ -270,45 +224,51 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         # Awaiting the site reference selection using settings coordinator
         await self._select_site_reference(settings_coordinator)
 
-        # Make runtime data available before refreshes, so diagnostics, services,
-        # and error paths can resolve the coordinators during setup.
-        await self._save_coordinator_to_hass_data(
-            settings_coordinator,
-            price_coordinator,
-            battery_coordinator,
-            charger_coordinator,
-            pv_coordinator,
-            vehicle_coordinator,
-            statistics_coordinator,
+        return FrankEnergieEntryData(
+            coordinator=price_coordinator,
+            settings_coordinator=settings_coordinator,
+            price_coordinator=price_coordinator,
+            battery_coordinator=battery_coordinator,
+            charger_coordinator=charger_coordinator,
+            pv_coordinator=pv_coordinator,
+            vehicle_coordinator=vehicle_coordinator,
+            statistics_coordinator=statistics_coordinator,
         )
 
-        try:
-            # settings_coordinator refreshes first; the other six only read its
-            # data and not each other's, so they refresh concurrently.
-            _LOGGER.debug("Performing initial refresh for sub-coordinators")
-            await settings_coordinator.async_config_entry_first_refresh()
-            await asyncio.gather(
-                price_coordinator.async_config_entry_first_refresh(),
-                statistics_coordinator.async_config_entry_first_refresh(),
-                battery_coordinator.async_config_entry_first_refresh(),
-                charger_coordinator.async_config_entry_first_refresh(),
-                pv_coordinator.async_config_entry_first_refresh(),
-                vehicle_coordinator.async_config_entry_first_refresh(),
+    async def async_setup(self) -> None:
+        """Refresh all resources, register platforms and schedule aligned updates."""
+        _LOGGER.debug("Performing initial refresh for sub-coordinators")
+        await self._async_refresh_coordinators()
+        await self._async_forward_entry_setups()
+        await self._schedule_aligned_updates(self.entry.runtime_data.price_coordinator)
+
+    async def _async_refresh_coordinators(self) -> None:
+        """Refresh settings first and finish or cancel every dependent refresh."""
+        runtime = self.entry.runtime_data
+        await runtime.settings_coordinator.async_config_entry_first_refresh()
+        coordinators = (
+            runtime.price_coordinator,
+            runtime.statistics_coordinator,
+            runtime.battery_coordinator,
+            runtime.charger_coordinator,
+            runtime.pv_coordinator,
+            runtime.vehicle_coordinator,
+        )
+        tasks = [
+            self.hass.async_create_task(
+                coordinator.async_config_entry_first_refresh(),
+                f"{DOMAIN} initial refresh {coordinator.name}",
             )
-
-            # Forward entry setups to platforms
-            _LOGGER.debug("Forwarding entry setups to platforms")
-            await self._async_forward_entry_setups()
-            _LOGGER.debug("Finished forwarding entry setups to platforms")
-
-            # Schedule updates aligned to price slot boundaries for price coordinator
-            _LOGGER.debug("Scheduling aligned updates for price coordinator")
-            await self._schedule_aligned_updates(price_coordinator)
-            return True
-        except Exception:
-            if DOMAIN in self.hass.data:
-                self.hass.data[DOMAIN].pop(self.entry.entry_id, None)
-            self.entry.runtime_data = None
+            for coordinator in coordinators
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        except BaseException:
+            # gather propagates the first error without cancelling siblings.
+            # Drain them before HA tears down coordinators or retries setup.
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             raise
 
     def _update_unique_id(self) -> None:
@@ -451,82 +411,12 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 self.entry, _DEPENDENT_PLATFORMS
             )
             _LOGGER.debug("Successfully forwarded entry setups to platforms")
-        except Exception as e:
-            _LOGGER.error("Error forwarding entry setups to platforms: %s", str(e))
+        except BaseException:
+            try:
+                if not await self.hass.config_entries.async_unload_platforms(
+                    self.entry, PLATFORMS
+                ):
+                    _LOGGER.error("Could not unload all platforms after setup failed")
+            except Exception as err:
+                log_api_exception(_LOGGER, "Failed to roll back platform setup", err)
             raise
-
-    async def _save_coordinator_to_hass_data(
-        self,
-        settings_coordinator: FrankEnergieSettingsCoordinator,
-        price_coordinator: FrankEnergiePriceCoordinator,
-        battery_coordinator: FrankEnergieBatteryCoordinator,
-        charger_coordinator: FrankEnergieChargerCoordinator,
-        pv_coordinator: FrankEnergiePVCoordinator,
-        vehicle_coordinator: FrankEnergieVehicleCoordinator,
-        statistics_coordinator: FrankEnergieStatisticsCoordinator,
-    ) -> None:
-        """Save the coordinators to the Home Assistant data."""
-        _LOGGER.debug("Saving coordinators to Home Assistant data (entry.runtime_data)")
-        hass_data = self.hass.data.setdefault(DOMAIN, {})
-        hass_data[self.entry.entry_id] = {
-            CONF_COORDINATOR: price_coordinator,
-        }
-
-        self.entry.runtime_data = FrankEnergieEntryData(
-            coordinator=price_coordinator,
-            settings_coordinator=settings_coordinator,
-            price_coordinator=price_coordinator,
-            battery_coordinator=battery_coordinator,
-            charger_coordinator=charger_coordinator,
-            pv_coordinator=pv_coordinator,
-            vehicle_coordinator=vehicle_coordinator,
-            statistics_coordinator=statistics_coordinator,
-        )
-
-    def _remove_entry_from_hass_data(self) -> None:
-        """Remove the entry from the Home Assistant data."""
-        _LOGGER.debug("Removing entry from Home Assistant data")
-        self.hass.data[DOMAIN].pop(
-            self.entry.entry_id, None
-        )  # Ensure no KeyError if entry_id does not exist
-
-
-class FrankEnergieDiagnosticSensor(Entity):
-    """Class representing the Frank Energie diagnostic sensor."""
-
-    def __init__(self, frank_energie: FrankEnergie) -> None:
-        """Initialize the sensor."""
-        self._frank_energie = frank_energie
-        self._state: str | None = None
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        # return "Frank Energie Diagnostic Sensor"
-        return "frank_energie_diagnostic_sensor"
-
-    @property
-    def state(self) -> str | None:
-        """Return the sensor state."""
-        return self._state
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return optional state attributes."""
-        return {}
-
-    async def async_update(self) -> None:
-        """Fetch latest state from the Frank Energie API."""
-        _LOGGER.debug("Updating FrankEnergieDiagnosticSensor")
-        # Implement the logic to update the sensor state
-        # You can use the FrankEnergie API client instance (self._frank_energie)
-        # to fetch diagnostic data and update the sensor state accordingly
-        try:
-            self._state = await self._frank_energie.get_diagnostic_data()
-        except Exception as err:
-            # Handle specific exceptions and raise more descriptive ones if necessary
-            _LOGGER.exception("Failed to update diagnostic sensor: %s", str(err))
-            self._state = "error"
-            raise ValueError(
-                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}"
-            ) from err

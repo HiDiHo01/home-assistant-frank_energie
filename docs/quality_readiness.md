@@ -1,8 +1,10 @@
 # Quality Readiness
 
-Evidence reviewed on **2 November 2026**, using `main` commit
-`a691e3482926dc8dd0bef25dfc7436e2d90f1b82` and the accompanying session/privacy
-changes. This is a custom-integration readiness assessment, not a Home Assistant
+Evidence reviewed on **2 November 2026**. The initial audit used `main`
+`a691e3482926dc8dd0bef25dfc7436e2d90f1b82`. The runtime/lifecycle follow-up builds
+on PR #369 at `169cfcc306dbdd2e40bc43c705f05524581e8098`, which includes the
+contract-support changes merged into `main` at `a90c37ba`.
+This is a custom-integration readiness assessment, not a Home Assistant
 quality-tier award. **Platinum remains a target.**
 
 The previous manifest declared Platinum without complete evidence. That field
@@ -38,7 +40,7 @@ use synthetic account data and mock external endpoints, not production accounts.
 The audit does not certify every upstream dependency log or all possible
 provider error payloads as safe for public sharing.
 
-## Reproducible baseline
+## Initial audit baseline
 
 The complete, unchanged-main suite passed: **443 passed, 3 skipped**.
 
@@ -67,8 +69,8 @@ unused modules. No new exclusions or skips were added to obtain these results.
 
 These package-wide percentages do not satisfy the official requirement of more
 than 95% coverage in **every** module. Full config-flow coverage is also still
-required. The three existing `tests/test_init.py` skips cite lingering timers;
-they remain visible and need a specific resolution or justification.
+required. This historical baseline had three timer-related skips in
+`tests/test_init.py`; the runtime/lifecycle follow-up below reactivates them.
 
 Reproduce a measurement in the repository's Python 3.14 environment with
 `pytest-cov` available:
@@ -83,7 +85,7 @@ Dependency/test-plugin patch versions can change the result. Record the exact
 environment and commit when updating evidence. The measurements above describe
 the unchanged baseline, not the complete rule status after future merges.
 
-## Validation after the fixes
+## Initial session/privacy validation
 
 The updated suite passes: **470 passed, 3 existing skips**, including 27 new
 account-flow, session-ownership, log-privacy and reauth-helper cases. The focused
@@ -102,19 +104,55 @@ Flake8 report has the same existing 21 findings as the unchanged baseline:
 long lines. The report remains informational in the existing workflow; this
 change neither suppresses those findings nor fixes unrelated lint debt.
 
-The rule matrix matches all 54 rule IDs in Core 2026.10.4's validator: six
-verified `done` entries, six justified `exempt` entries and 42 `todo` entries.
-The latter include both implemented-but-incompletely-verified behavior and
-known remaining work, rather than representing 42 newly discovered bugs.
+## Runtime and lifecycle follow-up
 
-Typed `entry.runtime_data` is already present, but the price coordinator is also
-stored in the legacy `hass.data[DOMAIN][entry_id]` dictionary. The `runtime-data`
-rule remains `todo` until that alias and its consumers are removed and lifecycle
-cleanup is verified.
+The exact parent, PR #369 at `169cfcc`, passes **533 tests with 3 skips**.
+The updated candidate passes **552 tests with no skips**, including 16 new
+runtime/lifecycle cases and the three reactivated authentication/title tests.
+Both full suites were measured in the environment above, including the offline
+Node.js workflow tests. The contract regression suite is part of this actual
+parent and candidate, covering single electricity, single gas and dual contracts.
+An additional complete run using the lockfile's Home Assistant 2026.10.4 and
+pytest-homeassistant-custom-component 0.13.375 also passes all 552 tests.
 
-The patch also applies cleanly to PR #368 at `3378bd3`. An isolated combination
-of both changes passes **533 tests, with the same 3 skips**, plus Ruff lint and
-format checks. This is local compatibility evidence, not a merged-main result.
+- `runtime_data.py` defines one typed record and config-entry alias shared across
+  setup, flows, coordinators, all six platforms and diagnostics. The entrypoint
+  assigns runtime data directly; no legacy entry-ID coordinator dictionary remains.
+- Failed or cancelled setup removes runtime data. Concurrent initial refreshes
+  are cancelled and awaited before the original exception propagates, preserving
+  Home Assistant's authentication and setup-retry handling.
+- Failed platform forwarding unloads already-created sensors. Real HA reload and
+  unload tests verify entry isolation, stable entity IDs, refused-unload retention
+  and stopped polling for every resource, including per-battery sessions.
+- The three auth/title tests now explicitly unload their entries and verify runtime
+  removal. The integration no longer changes the host's Windows event-loop policy
+  at import. The unused, broken YAML setup path and its diagnostic class are removed;
+  YAML configuration was already unsupported.
+
+| Metric | Exact parent `169cfcc` | Runtime/lifecycle candidate |
+| --- | --- | --- |
+| Statements | 2,998 / 4,171, **71.88%** | 3,039 / 4,135, **73.49%** |
+| Branches | 693 / 1,258, **55.09%** | 703 / 1,256, **55.97%** |
+| Combined coverage.py metric | **67.99%** | **69.41%** |
+| Setup module statements | **75.00%** | **97.62%** |
+| Config-flow statements | **68.69%** | **68.77%** |
+
+Runtime-data and diagnostics modules have 100% statement coverage in this run.
+Removing unused legacy setup code changes the package denominator; these numbers
+are measured results, not a claim that every module reaches the quality target.
+No coverage configuration or test assertions were relaxed.
+
+Ruff lint/format, critical Flake8, JSON/YAML parsing and whitespace checks pass.
+The full informational Flake8 report decreases from 21 to 20 existing findings:
+12 complexity findings, four slice-spacing findings and four long lines. No
+lint thresholds or workflow settings changed. The official Core 2026.10.4
+runtime-data assignment helper and 12 typed-entry interface checks pass against
+the source; this is separate from full hassfest validation.
+
+The matrix contains all 54 Core 2026.10.4 rule IDs: **8 done, 6 exempt, 40 todo**.
+`runtime-data` and `config-entry-unloading` now have code and lifecycle evidence.
+The remaining entries include implemented behavior awaiting a complete audit;
+they do not represent 40 newly discovered bugs.
 
 ## Remaining priorities
 
@@ -124,7 +162,7 @@ format checks. This is local compatibility evidence, not a merged-main result.
 | High | Complete config-flow and per-resource failure coverage | Full flow coverage; more than 95% in each module; no artificial exclusions or relaxed assertions |
 | High | Enforce strict typing and type the dependency | A strict checker in CI with no broad ignores, and a released client with appropriate PEP 561 typing support |
 | Medium | Finish entity command/error behavior | Explicit failure reporting and translated exceptions for failed control operations |
-| Medium | Complete unload, parallel-update and dynamic-device ownership | Verified cancellation/cleanup, declared platform concurrency, and tested device addition/removal |
+| Medium | Complete parallel-update and dynamic-device ownership | Declared platform concurrency and tested device addition/removal and subscriptions |
 | Medium | Reconcile documentation and entity metadata | Current options/defaults, UTC/local timing, all forwarded platforms, supported capabilities and translations |
 
 The installed `python-frank-energie 2026.9.20` distribution has no `py.typed`
@@ -134,20 +172,12 @@ type-checker configuration. These remain blockers for `strict-typing`.
 
 ## Open changes are not merged evidence
 
-At the review checkpoint, main was `a691e348` and these PRs were still open:
-
-| PR | Scope | Assessment treatment |
-| --- | --- | --- |
-| [#368](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/368) | Single/dual contract entities, cache and retries | Candidate had 506 passing tests and a clean SonarCloud analysis; not counted as main behavior |
-| [#355](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/355) | Regional prices, provenance and monthly finance | Review current regional/source behavior before merging |
-| [#354](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/354) | Tomorrow-price availability binary sensor | Review against contract completeness after #368 |
-| [#352](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/352) | Migration and reconfiguration lifecycle tests | Retest against its actual target branch and current main |
-| [#351](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/351) | Electricity connection selection | Reconcile with resolution/contract changes |
-| [#350](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/350) | Resolution/cache behavior | Verify remaining changes against current main |
-| [#349](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/349) | Rate limits and invoice isolation | Verify the released dependency gate and backoff behavior |
-
-No PR was merged or closed as part of this assessment. Closed historical Bronze
-or Silver trackers do not replace current rule evidence.
+PR #368 is merged into `main` at `a90c37ba`. PR #369 remains open at the
+follow-up checkpoint; the runtime/lifecycle changes build on its current head,
+including the merged contract support. Measurements of this candidate describe
+proposed code, not a completed merge or an awarded quality tier. Dedicated
+reconfiguration work and the other overlapping open PRs require their own review
+before they can count as merged evidence.
 
 ## What the existing checks prove
 
@@ -168,6 +198,8 @@ coverage thresholds were weakened by these changes.
 - [All 54 quality rules](https://contributors.home-assistant.io/core/quality-scale/rules/)
 - [Tier prerequisites](https://contributors.home-assistant.io/core/quality-scale/tiers/)
 - [Quality scale file format](https://contributors.home-assistant.io/core/quality-scale/quality-scale-file/)
+- [Typed runtime data](https://contributors.home-assistant.io/core/quality-scale/runtime-data/)
+- [Config-entry unloading](https://contributors.home-assistant.io/core/quality-scale/config-entry-unloading/)
 - [Shared web sessions](https://contributors.home-assistant.io/core/quality-scale/inject-websession/)
 - [Strict typing](https://contributors.home-assistant.io/core/quality-scale/strict-typing/)
 - [Per-module test coverage](https://contributors.home-assistant.io/core/quality-scale/test-coverage/)

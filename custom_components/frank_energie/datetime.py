@@ -9,12 +9,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.components.datetime import DateTimeEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .runtime_data import FrankEnergieConfigEntry
 from .const import (
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: FrankEnergieConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Frank Energie datetime entities."""
@@ -74,7 +74,7 @@ class FrankEnergieEnodeDeadlineEntity(
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         device_id: str,
         unique_id_suffix: str,
     ) -> None:
@@ -144,7 +144,7 @@ class FrankEnergieVehicleDeadlineEntity(FrankEnergieEnodeDeadlineEntity):
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         vehicle_id: str,
     ) -> None:
         """Initialize the datetime entity."""
@@ -191,7 +191,7 @@ class FrankEnergieChargerDeadlineEntity(FrankEnergieEnodeDeadlineEntity):
     def __init__(
         self,
         coordinator: FrankEnergieCoordinator,
-        config_entry: ConfigEntry,
+        config_entry: FrankEnergieConfigEntry,
         charger_id: str,
     ) -> None:
         """Initialize the datetime entity."""
