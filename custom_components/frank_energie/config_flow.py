@@ -61,7 +61,7 @@ VERSION = 2
 MINOR_VERSION = 1
 
 
-async def async_migrate_entry(
+async def async_migrate_entry(  # NOSONAR: HA migration callbacks must remain awaitable.
     hass: HomeAssistant, entry: FrankEnergieConfigEntry
 ) -> bool:
     """Migrate old config entry format."""
