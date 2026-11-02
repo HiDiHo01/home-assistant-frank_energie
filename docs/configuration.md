@@ -105,6 +105,16 @@ If authentication expires or credentials change:
 
 The integration automatically attempts token renewal before requiring user intervention.
 
+## Removing the Integration
+
+1. Open **Settings → Devices & Services** and find **Frank Energie**.
+2. Open the menu for the configured entry and select **Delete**.
+3. Repeat for other Frank Energie delivery-site entries you want to remove.
+
+Removing an entry unloads its entities and removes its persistent price cache.
+To remove the integration's installed files as well, remove Frank Energie from
+HACS after deleting its configured entries, then restart Home Assistant.
+
 ## Dynamic Entities
 
 The integration dynamically creates entities based on:
