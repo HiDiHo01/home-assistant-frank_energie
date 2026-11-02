@@ -181,8 +181,12 @@ class ConfigFlow(config_entries.ConfigFlow):
             # Network/API issues
             return await self._handle_authentication_failure(reason="connection_error")
         except Exception as ex:
-            # Catch-all for unexpected errors
-            _LOGGER.error("Unexpected error during login (%s)", type(ex).__name__)
+            # Keep traceback frames without exposing provider messages or chained errors.
+            sanitized_exception = RuntimeError(type(ex).__name__)
+            _LOGGER.exception(
+                "Unexpected error during login",
+                exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
+            )
             return await self._handle_authentication_failure(reason="unknown_error")
 
     async def async_step_site(
@@ -911,8 +915,10 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:
-                _LOGGER.error(
-                    "Unexpected error in options flow (%s)", type(ex).__name__
+                sanitized_exception = RuntimeError(type(ex).__name__)
+                _LOGGER.exception(
+                    "Unexpected error in options flow",
+                    exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
                 )
                 errors = {"base": "unknown_error"}
 

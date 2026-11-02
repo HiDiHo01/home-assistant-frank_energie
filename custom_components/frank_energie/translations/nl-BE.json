@@ -87,6 +87,9 @@
       }
     },
     "error": {
+      "connection_error": "Verbindingsfout met Frank Energie API.",
+      "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
+      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
       "wrong_account": "Dit account heeft geen toegang tot het ingestelde leveringsadres. Meld je aan met het account dat bij deze configuratie hoort."
     }
   },

@@ -1102,6 +1102,9 @@
       }
     },
     "error": {
+      "connection_error": "Erreur de connexion à l'API Frank Energie.",
+      "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
+      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
       "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     }
   },

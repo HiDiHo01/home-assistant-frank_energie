@@ -444,6 +444,7 @@ async def test_site_verification_failure_keeps_credentials_and_allows_retry(
     """Commit no credentials or reload until the selected site's ownership is verified."""
     original_data = dict(reconfigure_entry.data)
     original_options = dict(reconfigure_entry.options)
+    failure.__cause__ = RuntimeError("synthetic-private-provider-cause")
     provider_api.UserSites.side_effect = failure
 
     with patch.object(
@@ -462,6 +463,7 @@ async def test_site_verification_failure_keeps_credentials_and_allows_retry(
         assert dict(reconfigure_entry.data) == original_data
         assert dict(reconfigure_entry.options) == original_options
         assert "synthetic-private-provider-message" not in caplog.text
+        assert "synthetic-private-provider-cause" not in caplog.text
         reload_entry.assert_not_awaited()
 
         provider_api.UserSites.side_effect = None
@@ -667,6 +669,7 @@ async def test_options_site_check_failure_preserves_credentials_and_allows_retry
     """Keep options and tokens unchanged on verification failure, then recover normally."""
     original_data = dict(reconfigure_entry.data)
     original_options = dict(reconfigure_entry.options)
+    failure.__cause__ = RuntimeError("synthetic-private-provider-cause")
     provider_api.UserSites.side_effect = failure
     result = await hass.config_entries.options.async_init(reconfigure_entry.entry_id)
     failed = await hass.config_entries.options.async_configure(
@@ -678,6 +681,7 @@ async def test_options_site_check_failure_preserves_credentials_and_allows_retry
     assert dict(reconfigure_entry.data) == original_data
     assert dict(reconfigure_entry.options) == original_options
     assert "synthetic-private-provider-message" not in caplog.text
+    assert "synthetic-private-provider-cause" not in caplog.text
     provider_api.UserSites.side_effect = None
     recovered = await hass.config_entries.options.async_configure(
         result["flow_id"], dict(_CREDENTIALS)
