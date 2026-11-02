@@ -111,6 +111,7 @@ _LOGGER = logging.getLogger(__name__)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
     "Authentication tokens expired, trying to renew them (%s)"
 )
+_DEFAULT_ENTRY_TITLE: Final[str] = "no title"
 
 
 def _get_token_expires_at(api: Any) -> datetime | None:
@@ -897,7 +898,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 EVENT_FRANK_ENERGIE,
                 {
                     "entry_id": self.config_entry.entry_id,
-                    "entry_title": self.config_entry.title or "no title",
+                    "entry_title": self.config_entry.title or _DEFAULT_ENTRY_TITLE,
                     "action": "tomorrow_prices_available",
                     "date": tomorrow.isoformat(),
                     "resolution": self.resolution,
@@ -925,7 +926,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not (start <= now_utc < end):
             return
 
-        entry_title = self.config_entry.title or "no title"
+        entry_title = self.config_entry.title or _DEFAULT_ENTRY_TITLE
         self.hass.bus.async_fire(
             EVENT_FRANK_ENERGIE,
             {
@@ -980,7 +981,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not (start <= now_utc < end):
             return
 
-        entry_title = self.config_entry.title or "no title"
+        entry_title = self.config_entry.title or _DEFAULT_ENTRY_TITLE
         self.hass.bus.async_fire(
             EVENT_FRANK_ENERGIE,
             {
@@ -1041,7 +1042,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not (start <= now_utc < end):
             return
 
-        entry_title = self.config_entry.title or "no title"
+        entry_title = self.config_entry.title or _DEFAULT_ENTRY_TITLE
         self.hass.bus.async_fire(
             EVENT_FRANK_ENERGIE,
             {

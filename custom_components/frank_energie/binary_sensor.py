@@ -724,21 +724,12 @@ def _build_battery_descriptions(
     return descriptions
 
 
-async def async_setup_entry(
+def _sync_price_contract_entities(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up Frank Energie binary sensors."""
-
-    runtime_data = config_entry.runtime_data
-    settings_coordinator = runtime_data.settings_coordinator
-    price_coordinator = runtime_data.price_coordinator
-    pv_coordinator = runtime_data.pv_coordinator
-    battery_coordinator = runtime_data.battery_coordinator
-
-    entities: list[FrankEnergieBinarySensor] = []
-
+    settings_coordinator: FrankEnergieCoordinator,
+) -> bool:
+    """Sync price-entity registry state and return electricity support."""
     contracts = (
         known_site_contracts(settings_coordinator.data.get(DATA_USER))
         if settings_coordinator.api.is_authenticated
@@ -762,6 +753,26 @@ async def async_setup_entry(
                 and description.entity_registry_enabled_default
             },
         )
+    return electricity_supported
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Frank Energie binary sensors."""
+
+    runtime_data = config_entry.runtime_data
+    settings_coordinator = runtime_data.settings_coordinator
+    price_coordinator = runtime_data.price_coordinator
+    pv_coordinator = runtime_data.pv_coordinator
+    battery_coordinator = runtime_data.battery_coordinator
+
+    entities: list[FrankEnergieBinarySensor] = []
+    electricity_supported = _sync_price_contract_entities(
+        hass, config_entry, settings_coordinator
+    )
     for description in BINARY_SENSOR_DESCRIPTIONS:
         if description.service_name == SERVICE_NAME_PRICES:
             if not electricity_supported:
