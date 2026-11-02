@@ -952,6 +952,9 @@
       "disabled_haptic_feedback": {
         "name": "Haptische feedback uitgeschakeld"
       },
+      "electricity_price_lowest_today": {
+        "name": "Elektriciteitsprijs is vandaag het laagst"
+      },
       "battery_self_consumption_trading_allowed": {
         "name": "Zelfconsumptie handelen toegestaan"
       },

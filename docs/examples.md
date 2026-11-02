@@ -79,6 +79,19 @@ actions:
       message: Lowest electricity price period has started.
 ```
 
+## Only Run at Today's Lowest Electricity Price
+
+Use the **Electricity price is lowest today** binary sensor as a condition in an
+automation. Replace the placeholder with the entity selected in Home Assistant.
+The condition also matches later periods tied for today's minimum price.
+
+```yaml
+conditions:
+  - condition: state
+    entity_id: binary_sensor.<your_lowest_electricity_price_today_entity>
+    state: "on"
+```
+
 ## Cheapest 4-Period Window Notification
 
 Notify when the cheapest 4-period electricity window starts.
