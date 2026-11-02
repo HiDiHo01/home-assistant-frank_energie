@@ -62,6 +62,7 @@ from python_frank_energie.models import (
     UserSmartFeedInStatus,
 )
 
+from . import helpers
 from .const import (
     CONF_INTERVAL_BATTERIES,
     CONF_INTERVAL_BATTERY_SESSIONS,
@@ -2142,10 +2143,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             # Required for correct task cancellation handling in Home Assistant
             raise
         except Exception as err:
-            _LOGGER.exception(
-                "Failed to fetch data using %s: %s",
-                getattr(method, "__name__", type(method).__name__),
+            helpers.log_api_exception(
+                _LOGGER,
+                "Failed to fetch data using %s",
                 err,
+                getattr(method, "__name__", type(method).__name__),
             )
             return None
 

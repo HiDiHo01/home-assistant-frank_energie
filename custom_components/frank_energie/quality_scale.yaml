@@ -53,8 +53,8 @@ rules:
     status: todo
     comment: Active entity classes generally set has_entity_name; complete the description/name audit before certification.
   runtime-data:
-    status: done
-    comment: __init__.py defines FrankEnergieEntryData and stores per-entry coordinators in ConfigEntry.runtime_data.
+    status: todo
+    comment: Typed runtime_data exists, but a legacy price-coordinator alias remains in hass.data[DOMAIN][entry_id]; remove it and verify lifecycle/consumers.
   test-before-configure:
     status: todo
     comment: Authenticated setup checks login and sites; verify the public path and all failure/identity cases.

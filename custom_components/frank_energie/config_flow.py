@@ -51,7 +51,7 @@ from .const import (
     DATA_ENODE_VEHICLES,
     DATA_PV_SYSTEMS,
 )
-from .helpers import decrypt_password, encrypt_password
+from .helpers import decrypt_password, encrypt_password, log_api_exception
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
@@ -78,8 +78,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle an authentication failure by triggering reauthentication.
+@callback
+def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Start reauthentication for an existing entry on Home Assistant's event loop.
 
     This function attempts to start a reauthentication flow for the given config entry.
     If the entry is not found or reauth initiation fails, it logs the error.
@@ -98,10 +99,11 @@ async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> 
         )
         current_entry.async_start_reauth(hass)
     except Exception as err:
-        _LOGGER.error(
-            "Failed to initiate reauthentication for entry %s (%s)",
+        log_api_exception(
+            _LOGGER,
+            "Failed to initiate reauthentication for entry %s",
+            err,
             entry.entry_id,
-            type(err).__name__,
         )
 
 
@@ -145,10 +147,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             return await self._handle_authentication_failure(reason="connection_error")
         except Exception as ex:
             # Catch-all for unexpected errors
-            _LOGGER.error(
-                "Unexpected error during login (%s)",
-                type(ex).__name__,
-            )
+            log_api_exception(_LOGGER, "Unexpected error during login", ex)
             return await self._handle_authentication_failure(reason="unknown_error")
 
     async def async_step_site(
@@ -356,7 +355,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 errors=errors,
             )
         except Exception as err:
-            _LOGGER.error("Failed to retrieve delivery sites (%s)", type(err).__name__)
+            log_api_exception(_LOGGER, "Failed to retrieve delivery sites", err)
             errors = {"base": "site_retrieval_failed"}
             return self.async_show_form(
                 step_id="site",
@@ -464,10 +463,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             return []
 
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error(
-                "Unexpected error fetching delivery sites (%s)",
-                type(err).__name__,
-            )
+            log_api_exception(_LOGGER, "Unexpected error fetching delivery sites", err)
             return []
 
     async def _fetch_user_sites_with_retry(self) -> object:
@@ -663,7 +659,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 _LOGGER.error("Connection error during authentication")
                 raise ConnectionException("connection_error")
             except Exception as ex:
-                _LOGGER.error("Unexpected authentication error (%s)", type(ex).__name__)
+                log_api_exception(_LOGGER, "Unexpected authentication error", ex)
                 raise RuntimeError("unknown_error") from ex
 
     async def _handle_authentication_success(
@@ -888,9 +884,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:
-                _LOGGER.error(
-                    "Unexpected error in options flow (%s)", type(ex).__name__
-                )
+                log_api_exception(_LOGGER, "Unexpected error in options flow", ex)
                 errors = {"base": "unknown_error"}
 
         runtime_data = getattr(entry, "runtime_data", None)

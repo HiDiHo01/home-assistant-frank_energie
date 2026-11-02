@@ -20,12 +20,13 @@ feature is absent or defective.
   including failures, and leave the shared session open.
 - Setup and options logs no longer print stored credential dictionaries. Site
   selection and setup omit delivery addresses and account models. Authentication
-  error logs retain the exception type without echoing private provider messages.
+  error logs retain useful traceback frames and the exception type without
+  echoing private provider messages or chained exception values.
 - Coordinator fetch logs omit raw account, vehicle and battery models, and
   resolution changes no longer print all saved options. Event payloads and
   returned models retain their existing values.
 - The authentication-failure helper now starts reauthentication through
-  `ConfigEntry.async_start_reauth(hass)`. The removed
+  `ConfigEntry.async_start_reauth(hass)` through a synchronous HA callback. The removed
   `hass.config_entries.async_start_reauth(...)` API was not available in the
   inspected Home Assistant release. The helper had no active repository callers;
   its repair does not replace the coordinator's existing `ConfigEntryAuthFailed`
@@ -84,16 +85,16 @@ the unchanged baseline, not the complete rule status after future merges.
 
 ## Validation after the fixes
 
-The updated suite passes: **468 passed, 3 existing skips**, including 25 new
+The updated suite passes: **470 passed, 3 existing skips**, including 27 new
 account-flow, session-ownership, log-privacy and reauth-helper cases. The focused
-new/existing config-flow suite passes all 35 cases.
+new/existing config-flow suite passes all 37 cases.
 
 | Metric | Baseline | Updated candidate |
 | --- | --- | --- |
-| Statement coverage | 67.63% | 69.55% |
-| Branch coverage | 48.69% | 50.16% |
-| Combined coverage.py metric | 63.28% | 65.09% |
-| Config-flow statement coverage | 57.47% | 68.61% |
+| Statement coverage | 67.63% | 71.49% |
+| Branch coverage | 48.69% | 50.25% |
+| Combined coverage.py metric | 63.28% | 66.60% |
+| Config-flow statement coverage | 57.47% | 73.99% |
 
 Ruff lint/format, critical Flake8 and whitespace checks pass. The full configured
 Flake8 report has the same existing 21 findings as the unchanged baseline:
@@ -101,13 +102,18 @@ Flake8 report has the same existing 21 findings as the unchanged baseline:
 long lines. The report remains informational in the existing workflow; this
 change neither suppresses those findings nor fixes unrelated lint debt.
 
-The rule matrix matches all 54 rule IDs in Core 2026.10.4's validator: seven
-verified `done` entries, six justified `exempt` entries and 41 `todo` entries.
+The rule matrix matches all 54 rule IDs in Core 2026.10.4's validator: six
+verified `done` entries, six justified `exempt` entries and 42 `todo` entries.
 The latter include both implemented-but-incompletely-verified behavior and
-known remaining work, rather than representing 41 newly discovered bugs.
+known remaining work, rather than representing 42 newly discovered bugs.
+
+Typed `entry.runtime_data` is already present, but the price coordinator is also
+stored in the legacy `hass.data[DOMAIN][entry_id]` dictionary. The `runtime-data`
+rule remains `todo` until that alias and its consumers are removed and lifecycle
+cleanup is verified.
 
 The patch also applies cleanly to PR #368 at `3378bd3`. An isolated combination
-of both changes passes **531 tests, with the same 3 skips**, plus Ruff lint and
+of both changes passes **533 tests, with the same 3 skips**, plus Ruff lint and
 format checks. This is local compatibility evidence, not a merged-main result.
 
 ## Remaining priorities

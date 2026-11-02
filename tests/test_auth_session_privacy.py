@@ -18,7 +18,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from python_frank_energie import Authentication, FrankEnergie
-from python_frank_energie.exceptions import AuthException, ConnectionException
+from python_frank_energie.exceptions import (
+    AuthException,
+    ConnectionException,
+    RequestException,
+)
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.frank_energie import FrankEnergieComponent
@@ -307,7 +311,7 @@ async def test_auth_failure_uses_the_current_entry_reauth_callback(
         if registered
         else MockConfigEntry(domain=DOMAIN, title=USERNAME, data={})
     )
-    await async_handle_auth_failure(hass, entry)
+    async_handle_auth_failure(hass, entry)
     await hass.async_block_till_done()
     flows = hass.config_entries.flow.async_progress()
     if registered:
@@ -317,6 +321,34 @@ async def test_auth_failure_uses_the_current_entry_reauth_callback(
     else:
         assert not flows
     _assert_private_logs(caplog, entry.title)
+
+
+async def test_error_logs_retain_traceback_without_private_exception_chain(
+    hass: HomeAssistant,
+    account_api: tuple[MagicMock, AsyncMock, AsyncMock],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Keep useful frames without printing a provider's message or chained cause."""
+    caplog.set_level(logging.DEBUG, logger="custom_components.frank_energie")
+    failure = RuntimeError(f"Provider echoed {USERNAME}")
+    failure.__cause__ = ValueError(f"Credentials: {PASSWORD} {ACCESS_TOKEN}")
+    account_api[1].side_effect = failure
+    result = await _start_login(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
+    )
+    assert result["errors"] == {"base": "unknown_error"}
+    error_records = [
+        record
+        for record in caplog.records
+        if record.name.startswith("custom_components.frank_energie") and record.exc_info
+    ]
+    assert error_records
+    rendered = "\n".join(logging.Formatter().format(record) for record in error_records)
+    assert "Traceback (most recent call last)" in rendered
+    assert "RuntimeError" in rendered
+    _assert_private_logs(caplog)
 
 
 async def test_setup_does_not_log_stored_credentials(
@@ -360,6 +392,33 @@ async def test_authenticated_fetch_does_not_log_the_response(
         return payload
 
     assert await coordinator._fetch_authenticated(account_endpoint) is payload
+    _assert_private_logs(caplog)
+
+
+async def test_authenticated_fetch_failure_omits_private_provider_exception(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Retain useful endpoint frames without printing its message or cause."""
+    caplog.set_level(logging.DEBUG, logger="custom_components.frank_energie")
+    api = MagicMock(spec=FrankEnergie)
+    api.is_authenticated = True
+    coordinator = FrankEnergieCoordinator(hass, _entry(hass), api)
+    failure = RequestException(f"Provider returned {USERNAME} {PASSWORD}")
+    failure.__cause__ = ValueError(f"Refresh token: {REFRESH_TOKEN}")
+
+    async def account_endpoint() -> None:
+        """Raise a realistic provider error containing synthetic private values."""
+        raise failure
+
+    assert await coordinator._fetch_authenticated(account_endpoint) is None
+    rendered = "\n".join(
+        logging.Formatter().format(record)
+        for record in caplog.records
+        if record.name.startswith("custom_components.frank_energie")
+    )
+    assert "account_endpoint" in rendered
+    assert "Traceback (most recent call last)" in rendered
+    assert "RequestException" in rendered
     _assert_private_logs(caplog)
 
 
