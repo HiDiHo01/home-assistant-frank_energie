@@ -2291,8 +2291,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
         if (
-            self._api_resolution_state is not None
-        ):  # and not self._resolution_change_pending:
+            self.api.is_authenticated
+            and self._api_resolution_state is not None
+            and not self._resolution_change_pending
+        ):
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
@@ -2573,8 +2575,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return True
 
         cached_res = price_series.resolution_minutes
-        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
-        expected_res = 15 if config_value == "PT15M" else 60
+        expected_res = 15 if self.resolution == "PT15M" else 60
 
         if cached_res != expected_res:
             _LOGGER.debug(

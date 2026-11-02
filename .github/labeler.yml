@@ -8,9 +8,10 @@ integration:
 tests:
   - changed-files:
       - any-glob-to-any-file:
-          - "custom_components/frank_energie/tests/**"
+          - "tests/**"
 
 translation:
+  - changed-files:
       - any-glob-to-any-file:
           - "custom_components/frank_energie/translations/**"
           - "custom_components/frank_energie/strings.json"
@@ -18,7 +19,7 @@ translation:
 blueprint:
   - changed-files:
       - any-glob-to-any-file:
-          - "blueprints/**"
+          - "config/blueprints/**"
 
 documentation:
   - changed-files:
@@ -31,8 +32,8 @@ dependencies:
   - changed-files:
       - any-glob-to-any-file:
           - "custom_components/frank_energie/manifest.json"
-          - "package.json"
-          - "package-lock.json"
+          - "pyproject.toml"
+          - "poetry.lock"
 
 ci:
   - changed-files:
