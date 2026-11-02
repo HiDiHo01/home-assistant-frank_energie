@@ -1723,6 +1723,12 @@ def _get_price_resolution_attributes(data: dict) -> dict:
     }
 
 
+def _get_site_segments(data: FrankEnergieData) -> str | None:
+    """Format the selected site's known contracts for its diagnostic sensor."""
+    contracts = known_site_contracts(data.get(DATA_USER))
+    return ", ".join(sorted(contracts)) if contracts else None
+
+
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="contract_price_resolution_state",
@@ -3896,11 +3902,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         icon="mdi:segment",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: (
-            ", ".join(sorted(contracts))
-            if (contracts := known_site_contracts(data.get(DATA_USER)))
-            else None
-        ),
+        value_fn=_get_site_segments,
         attr_fn=lambda data: ({"available_segments": ["electricity", "gas"]}),
     ),
     FrankEnergieEntityDescription(

@@ -287,7 +287,8 @@ async def test_dual_contract_partial_tomorrow_keeps_retrying(
 
     assert await prices._refresh_tomorrow_cache(today, tomorrow, now) is first_result
     result = await prices._refresh_tomorrow_cache(today, tomorrow, now)
-    assert result.electricity.all and result.gas.all
+    assert result.electricity.all
+    assert result.gas.all
     assert prices.last_fetch_tomorrow == now
     await prices._refresh_tomorrow_cache(today, tomorrow, now)
     assert prices._fetch_tomorrow_data.await_count == 3
@@ -346,7 +347,8 @@ async def test_tomorrow_keeps_valid_commodity_when_other_is_stale(
     assert prices.update_interval == timedelta(minutes=5)
 
     result = await prices._refresh_tomorrow_cache(today, tomorrow, now)
-    assert result.electricity.all and result.gas.all
+    assert result.electricity.all
+    assert result.gas.all
     assert prices.last_fetch_tomorrow == now
     assert prices._fetch_tomorrow_data.await_count == 2
 
