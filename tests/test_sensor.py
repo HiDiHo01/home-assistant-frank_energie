@@ -200,8 +200,8 @@ async def test_sensors(
     [
         ("elec_tax_only", "energy_tax_price", 0.7268),
         ("elec_tax_vat", "market_price_tax", 0.1895),
-        ("gas_tax_only", "energy_tax_price", 0.7268),
-        ("gas_tax_vat", "market_price_tax", 0.1895),
+        ("gas_energy_tax", "energy_tax_price", 0.7268),
+        ("gas_market_vat", "market_price_tax", 0.1895),
     ],
 )
 def test_current_tax_sensor_price_component_mapping(
@@ -226,7 +226,7 @@ def test_current_tax_sensor_price_component_mapping(
     assert description.value_fn(data) == pytest.approx(expected_value)
 
 
-@pytest.mark.parametrize("sensor_key", ["gas_tax_only", "gas_tax_vat"])
+@pytest.mark.parametrize("sensor_key", ["gas_energy_tax", "gas_market_vat"])
 @pytest.mark.parametrize("has_gas_prices", [False, True])
 def test_gas_tax_sensor_missing_current_hour_is_unknown(
     sensor_key: str, has_gas_prices: bool
@@ -240,6 +240,39 @@ def test_gas_tax_sensor_missing_current_hour_is_unknown(
     description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
 
     assert description.value_fn({const.DATA_GAS: gas_prices}) is None
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "historical_key"),
+    [
+        ("gas_energy_tax", "gas_tax_only"),
+        ("gas_market_vat", "gas_tax_vat"),
+    ],
+)
+def test_gas_sensor_keys_keep_registry_unique_ids(
+    sensor_key: str, historical_key: str
+) -> None:
+    """Preserve existing entity registry identities after renaming sensor keys."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieSensor,
+        SENSOR_TYPES,
+        _sensor_unique_id,
+    )
+
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    entry = MagicMock()
+    entry.entry_id = "existing_entry"
+    entry.unique_id = "site_id"
+    coordinator = MagicMock()
+    coordinator.data = {}
+
+    sensor = FrankEnergieSensor(coordinator, description, entry)
+
+    assert description.translation_key == sensor_key
+    assert sensor.unique_id == f"site_id.{historical_key}"
+    assert _sensor_unique_id(entry, description) == sensor.unique_id
 
 
 async def test_sensors_get_data_of_current_hour(
