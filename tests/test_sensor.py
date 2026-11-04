@@ -181,7 +181,7 @@ async def test_sensors(
     )
     assert (
         hass.states.get("sensor.frank_energie_gas_prices_current_gas_vat_price").state
-        == "0.1845"
+        == "0.0615"
     )
     assert (
         hass.states.get(
@@ -191,8 +191,55 @@ async def test_sensors(
     )
     assert (
         hass.states.get("sensor.frank_energie_gas_prices_current_gas_tax_only").state
-        == "0.0615"
+        == "0.1845"
     )
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "price_component", "expected_value"),
+    [
+        ("elec_tax_only", "energy_tax_price", 0.7268),
+        ("elec_tax_vat", "market_price_tax", 0.1895),
+        ("gas_tax_only", "energy_tax_price", 0.7268),
+        ("gas_tax_vat", "market_price_tax", 0.1895),
+    ],
+)
+def test_current_tax_sensor_price_component_mapping(
+    sensor_key: str, price_component: str, expected_value: float
+) -> None:
+    """Map energy tax and market-price VAT consistently for both fuels."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    current_hour = SimpleNamespace(
+        energy_tax_price=0.7268,
+        market_price_tax=0.1895,
+    )
+    data = {
+        const.DATA_ELECTRICITY: SimpleNamespace(current_hour=current_hour),
+        const.DATA_GAS: SimpleNamespace(current_hour=current_hour),
+    }
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert getattr(current_hour, price_component) == expected_value
+    assert description.value_fn(data) == pytest.approx(expected_value)
+
+
+@pytest.mark.parametrize("sensor_key", ["gas_tax_only", "gas_tax_vat"])
+@pytest.mark.parametrize("has_gas_prices", [False, True])
+def test_gas_tax_sensor_missing_current_hour_is_unknown(
+    sensor_key: str, has_gas_prices: bool
+) -> None:
+    """Return None when gas prices or the current gas period are absent."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    gas_prices = SimpleNamespace(current_hour=None) if has_gas_prices else None
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert description.value_fn({const.DATA_GAS: gas_prices}) is None
 
 
 async def test_sensors_get_data_of_current_hour(
