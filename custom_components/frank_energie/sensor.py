@@ -1960,7 +1960,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
-            data[DATA_GAS].current_hour.energy_tax_price
+            data[DATA_GAS].current_hour.market_price_tax
             if data[DATA_GAS] and data[DATA_GAS].current_hour
             else None
         ),
@@ -1990,7 +1990,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
-            data[DATA_GAS].current_hour.market_price_tax
+            data[DATA_GAS].current_hour.energy_tax_price
             if data[DATA_GAS] and data[DATA_GAS].current_hour
             else None
         ),
