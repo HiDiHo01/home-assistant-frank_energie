@@ -179,20 +179,23 @@ async def test_sensors(
         ).state
         == "0.0225"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_vat_price").state
-        == "0.0615"
+    gas_registry = entity_registry.async_get(hass)
+    gas_vat_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_vat"
     )
+    gas_energy_tax_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_only"
+    )
+    assert gas_vat_entity_id is not None
+    assert gas_energy_tax_entity_id is not None
+    assert hass.states.get(gas_vat_entity_id).state == "0.0615"
     assert (
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_sourcing_price"
         ).state
         == "0.123"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_tax_only").state
-        == "0.1845"
-    )
+    assert hass.states.get(gas_energy_tax_entity_id).state == "0.1845"
 
 
 @pytest.mark.parametrize(
