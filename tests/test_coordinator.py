@@ -2876,3 +2876,56 @@ async def test_partial_today_response_without_cache_remains_retryable(
     assert not result[missing_commodity].all
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+
+class TestFindLowestConsecutiveHours:
+    """Tests for FrankEnergieCoordinator._find_lowest_consecutive_hours."""
+
+    def test_fewer_prices_than_window_returns_none(self, coordinator) -> None:
+        """When total prices are fewer than requested window, return None."""
+        prices = [MagicMock(total=1.0), MagicMock(total=2.0)]
+        assert coordinator._find_lowest_consecutive_hours(prices, window=3) is None
+
+    def test_empty_prices_returns_none(self, coordinator) -> None:
+        """When prices list is empty, return None."""
+        assert coordinator._find_lowest_consecutive_hours([], window=1) is None
+
+    def test_window_exact_length(self, coordinator) -> None:
+        """When prices list equals window size, return the average and both boundary prices."""
+        p1, p2, p3 = MagicMock(total=1.0), MagicMock(total=2.0), MagicMock(total=3.0)
+        result = coordinator._find_lowest_consecutive_hours([p1, p2, p3], window=3)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is p1
+        assert end is p3
+
+    def test_finds_lowest_window_in_middle(self, coordinator) -> None:
+        """Finds the window with the lowest average when it occurs in the middle."""
+        p = [
+            MagicMock(total=10.0),
+            MagicMock(total=1.0),
+            MagicMock(total=2.0),
+            MagicMock(total=9.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(p, window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 1.5
+        assert start is p[1]
+        assert end is p[2]
+
+    def test_tie_breaking_preserves_first_occurrence(self, coordinator) -> None:
+        """When multiple windows have the same lowest sum, keep the first occurrence."""
+        p = [
+            MagicMock(total=2.0),
+            MagicMock(total=2.0),
+            MagicMock(total=2.0),
+            MagicMock(total=2.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(p, window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is p[0]
+        assert end is p[1]
