@@ -589,3 +589,45 @@ async def test_battery_selects_keep_each_batterys_own_options(
     assert options("battery_mode", "bat_t1") == ["trading", "self_consumption"]
     assert options("battery_strategy", "bat_t2") == ["standard", "aggressive"]
     assert options("battery_strategy", "bat_t1") == ["balanced", "conservative"]
+
+
+@pytest.mark.asyncio
+async def test_failed_battery_change_is_reported(mock_coordinator, mock_config_entry):
+    """A change Frank Energie did not accept raises instead of silently succeeding."""
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.SELF_CONSUMPTION_MIX)]
+    }
+    mock_coordinator.async_update_battery_settings.return_value = False
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    with pytest.raises(HomeAssistantError, match="did not accept"):
+        await entity.async_select_option("trading")
+
+
+async def test_failed_battery_change_fails_the_service_call(
+    hass: HomeAssistant,
+) -> None:
+    """``select.select_option`` reports a change Frank Energie did not accept."""
+    coordinator = await _add_battery_selects(
+        hass,
+        {
+            DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.SELF_CONSUMPTION_MIX)],
+            DATA_BATTERY_SETTINGS: {_BATTERY_ID: _adjustable()},
+        },
+    )
+    coordinator.async_update_battery_settings.return_value = False
+    entity_id = _battery_entity_id(hass, "battery_mode")
+
+    with pytest.raises(HomeAssistantError, match="did not accept"):
+        await hass.services.async_call(
+            SELECT_DOMAIN,
+            "select_option",
+            {"entity_id": entity_id, "option": "imbalance_trading"},
+            blocking=True,
+        )
+    assert hass.states.get(entity_id).state == "self_consumption_mix"

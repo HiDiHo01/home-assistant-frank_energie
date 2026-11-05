@@ -2988,27 +2988,62 @@ async def _settings_after_refresh(
 
 
 @pytest.mark.asyncio
-async def test_battery_settings_change_during_fetch_is_not_marked_fresh(
+async def test_battery_settings_response_after_invalidation_is_discarded(
     mock_config_entry,
 ) -> None:
-    """A fetch that overlaps a change still publishes its result, but the next
-    refresh refetches instead of trusting a possibly pre-change response."""
+    """A response for a request that overlapped an invalidation is discarded:
+    the known settings stay authoritative and the next refresh refetches."""
     api = AsyncMock()
     coordinator = _battery_coordinator_for(api, mock_config_entry)
+    api.smart_battery_settings.side_effect = ["settings-0"]
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-0"
+    }
 
     async def fetch(battery_id: str) -> str:
         coordinator.invalidate_battery_settings(battery_id)  # change lands mid-request
-        return f"settings-{api.smart_battery_settings.await_count}"
+        return "pre-change"
 
     api.smart_battery_settings.side_effect = fetch
-
+    coordinator.invalidate_battery_settings("bat_1")
     assert await _settings_after_refresh(coordinator, "bat_1") == {
-        "bat_1": "settings-1"
+        "bat_1": "settings-0"
     }
+
     api.smart_battery_settings.side_effect = ["settings-2"]
     assert await _settings_after_refresh(coordinator, "bat_1") == {
         "bat_1": "settings-2"
     }
+    assert api.smart_battery_settings.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_older_battery_settings_response_never_overwrites_newer(
+    mock_config_entry,
+) -> None:
+    """When an older request completes after a newer one was recorded, the
+    newer settings stay authoritative."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    older_started = asyncio.Event()
+    older_may_finish = asyncio.Event()
+
+    async def fetch(battery_id: str) -> str:
+        if api.smart_battery_settings.await_count == 1:
+            older_started.set()
+            await older_may_finish.wait()
+            return "older"
+        return "newer"
+
+    api.smart_battery_settings.side_effect = fetch
+
+    older = asyncio.create_task(_settings_after_refresh(coordinator, "bat_1"))
+    await older_started.wait()
+    assert await _settings_after_refresh(coordinator, "bat_1") == {"bat_1": "newer"}
+
+    older_may_finish.set()
+    assert await older == {"bat_1": "newer"}
+    assert await _settings_after_refresh(coordinator, "bat_1") == {"bat_1": "newer"}
     assert api.smart_battery_settings.await_count == 2
 
 

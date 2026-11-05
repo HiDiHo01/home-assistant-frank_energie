@@ -440,8 +440,9 @@ class FrankEnergieBatteryBaseSelect(
             self._battery_id, {api_key: option.upper()}
         )
         if not success:
-            _LOGGER.error(
-                "Failed to set battery %s %s to %s", self._battery_id, api_key, option
+            raise HomeAssistantError(
+                f"Frank Energie did not accept setting smart battery "
+                f"{self._battery_id} {api_key} to {option}"
             )
 
 

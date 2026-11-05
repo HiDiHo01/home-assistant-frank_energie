@@ -3065,6 +3065,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         self._battery_settings: dict[str, object | None] = {}
         self._battery_settings_fetched_at: dict[str, datetime] = {}
         self._battery_settings_generation: dict[str, int] = {}
+        # Per-battery request numbers: the last one issued and the last one
+        # recorded, so an older response can never overwrite a newer one.
+        self._battery_settings_requested: dict[str, int] = {}
+        self._battery_settings_recorded: dict[str, int] = {}
 
     async def async_update_battery_settings(
         self, battery_id: str, settings: dict[str, object]
@@ -3164,23 +3168,35 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         battery_id: str,
         fetched: bool,
         settings: object | None,
-        generation: int,
+        request: tuple[int, int],
         now: datetime,
     ) -> object | None:
         """Record a battery's fetched settings and return its known settings.
 
-        The library also returns None for GraphQL errors and malformed
-        responses, so None only replaces settings when none are known. A result
-        is only marked fresh when the battery was not invalidated while it was
-        in flight (its generation is unchanged).
+        ``request`` is the battery's ``(generation, request number)`` when the
+        fetch started. A result is discarded when the battery was invalidated
+        while it was in flight, or when a newer request was already recorded,
+        so newer state stays authoritative. The library also returns None for
+        GraphQL errors and malformed responses, so None only replaces settings
+        when none are known.
         """
-        if fetched and (
-            settings is not None or self._battery_settings.get(battery_id) is None
+        generation, request_number = request
+        if (
+            fetched
+            and self._battery_settings_generation.get(battery_id, 0) == generation
+            and request_number > self._battery_settings_recorded.get(battery_id, 0)
+            and (settings is not None or self._battery_settings.get(battery_id) is None)
         ):
             self._battery_settings[battery_id] = settings
-            if self._battery_settings_generation.get(battery_id, 0) == generation:
-                self._battery_settings_fetched_at[battery_id] = now
+            self._battery_settings_recorded[battery_id] = request_number
+            self._battery_settings_fetched_at[battery_id] = now
         return self._battery_settings.get(battery_id)
+
+    def _start_battery_settings_request(self, battery_id: str) -> tuple[int, int]:
+        """Return the battery's generation and a new, increasing request number."""
+        request_number = self._battery_settings_requested.get(battery_id, 0) + 1
+        self._battery_settings_requested[battery_id] = request_number
+        return (self._battery_settings_generation.get(battery_id, 0), request_number)
 
     async def _get_battery_data(
         self,
@@ -3214,8 +3230,8 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             return details_list, sessions_list, settings_by_battery
 
         now = datetime.now(UTC)
-        generations = {
-            battery.id: self._battery_settings_generation.get(battery.id, 0)
+        requests = {
+            battery.id: self._start_battery_settings_request(battery.id)
             for battery in batteries
         }
         results = await asyncio.gather(
@@ -3232,7 +3248,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             if sessions:
                 sessions_list.append(sessions)
             known = self._record_battery_settings(
-                battery.id, fetched, settings, generations[battery.id], now
+                battery.id, fetched, settings, requests[battery.id], now
             )
             if known is not None:
                 settings_by_battery[battery.id] = known
