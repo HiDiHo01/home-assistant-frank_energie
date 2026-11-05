@@ -1171,7 +1171,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return resolution_state
 
         except RateLimitException as err:
-            raise rate_limit_update_failed(err, self.update_interval) from err
+            _LOGGER.debug("Contract price resolution state rate limited: %s", err)
+            return self._api_resolution_state
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -1485,7 +1486,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
         except RateLimitException as err:
-            raise rate_limit_update_failed(err, self.update_interval) from err
+            _LOGGER.debug("Tomorrow prices rate limited: %s", err)
+            return None
 
         except UpdateFailed as err:
             _LOGGER.debug(
@@ -2898,7 +2900,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     self.last_fetch_today = now_utc
                     self._today_prices_logged = True
                 except Exception as err:
-                    await self._handle_fetch_exceptions(err)
+                    rate_limited = isinstance(err, RateLimitException)
+                    if not rate_limited:
+                        await self._handle_fetch_exceptions(err)
                     if (
                         self._static_prices_today is not None
                         and self._static_prices_today.electricity is not None
@@ -2911,6 +2915,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                             err,
                         )
                         prices_today = self._static_prices_today
+                    elif rate_limited:
+                        raise rate_limit_update_failed(err, self.update_interval) from err
                     else:
                         raise UpdateFailed(
                             f"Failed to fetch today prices: {err}"
