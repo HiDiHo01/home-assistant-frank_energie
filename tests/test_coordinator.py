@@ -2486,3 +2486,56 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
     )
 
     assert price_coordinator._is_cache_fresh(now_utc) is True
+
+
+@pytest.mark.asyncio
+async def test_api_resolution_change_invalidates_same_day_price_cache(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Refetch prices when the account resolution changes after today's cache."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    now_utc = datetime.now(UTC)
+    cached_prices = _make_market_prices_with_resolution(
+        15, now_utc.isoformat()
+    )
+    refreshed_prices = _make_market_prices_with_resolution(
+        60, now_utc.isoformat()
+    )
+    price_coordinator._static_prices_today = cached_prices
+    price_coordinator.last_fetch_today = now_utc
+    price_coordinator.cached_prices_tomorrow = cached_prices
+    price_coordinator.last_fetch_tomorrow = now_utc
+
+    resolution_state = MagicMock(spec=ContractPriceResolutionState)
+    resolution_state.activeOption = "PT60M"
+
+    async def fetch_resolution(_connection_id: str | None):
+        """Simulate the API updating the coordinator's active resolution."""
+        price_coordinator._api_resolution_state = resolution_state
+        return resolution_state
+
+    price_coordinator._fetch_contract_price_resolution_state = AsyncMock(
+        side_effect=fetch_resolution
+    )
+    price_coordinator._fetch_prices_with_fallback = AsyncMock(
+        return_value=refreshed_prices
+    )
+    price_coordinator._refresh_tomorrow_cache = AsyncMock(return_value=None)
+    price_coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    price_coordinator.store.async_save = AsyncMock()
+
+    await price_coordinator._async_update_data()
+
+    price_coordinator._fetch_prices_with_fallback.assert_awaited_once()
+    assert price_coordinator._static_prices_today is refreshed_prices
+    assert price_coordinator._static_prices_today.electricity.resolution_minutes == 60
+    assert price_coordinator.last_fetch_today is not None
+    assert price_coordinator.cached_prices_tomorrow is None
+    assert price_coordinator.last_fetch_tomorrow is None
