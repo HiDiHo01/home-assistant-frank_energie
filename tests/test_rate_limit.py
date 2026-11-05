@@ -495,24 +495,23 @@ async def test_optional_hvac_throttle_keeps_user_settings(
     rate_api.smart_hvac_status.assert_awaited_once()
 
 
-async def test_price_resolution_rate_limit_is_normalized(
+async def test_price_resolution_rate_limit_keeps_last_state(
     hass: HomeAssistant,
     rate_entry: MockConfigEntry,
     rate_api: MagicMock,
     settings: FrankEnergieSettingsCoordinator,
 ) -> None:
-    """Resolution fetches outside the price-cache fallback preserve retry hints."""
+    """A throttled optional resolution query retains the previous state."""
     prices = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
-    prices._static_prices_today = MagicMock()
-    prices.last_fetch_today = dt_util.utcnow()
-    prices._connection_id = "connection-1"
+    previous = MagicMock()
+    prices._api_resolution_state = previous
     rate_api.contract_price_resolution_state = AsyncMock(
         side_effect=RateLimitException("Resolution", retry_after=7200)
     )
-    with pytest.raises(UpdateFailed) as raised:
-        await prices._async_update_data()
-    assert raised.value.retry_after == 7200
-    assert isinstance(raised.value.__cause__, RateLimitException)
+    for _ in range(2):
+        state = await prices._fetch_contract_price_resolution_state("connection-1")
+        assert state is previous
+    rate_api.contract_price_resolution_state.assert_awaited_once()
 
 
 @pytest.mark.parametrize("on_renewal", [False, True])
