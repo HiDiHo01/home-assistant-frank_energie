@@ -9,7 +9,7 @@ Open the repository in GitHub Codespaces or use **Dev Containers: Reopen in Cont
 For a host installation, use Python 3.14.2 or a newer 3.14 patch and run:
 
 ```sh
-python3.14 -m pip install "poetry==2.5.1"
+uv tool install "poetry==2.5.1"
 poetry env use python3.14
 poetry sync --with dev --no-root
 poetry check --lock
