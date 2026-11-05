@@ -18,6 +18,7 @@ from custom_components.frank_energie.const import (
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import (
+    BATTERY_SETTINGS_REFRESH_INTERVAL,
     FrankEnergieCoordinator,
     PricesTodayCache,
     FrankEnergieSettingsCoordinator,
@@ -2919,7 +2920,7 @@ async def test_battery_coordinator_fetches_settings_per_battery(
 
 @pytest.mark.asyncio
 async def test_battery_settings_refresh_interval_and_carry_over(
-    mock_config_entry,
+    mock_config_entry, freezer
 ) -> None:
     """Settings refetch at most every refresh interval or after invalidation,
     and the last known settings carry over a skipped or failed fetch."""
@@ -2956,6 +2957,12 @@ async def test_battery_settings_refresh_interval_and_carry_over(
     # The failed fetch did not count as fresh, so the next refresh retries
     assert await refresh() == {"bat_1": "settings-2"}
     assert api.smart_battery_settings.await_count == 3
+
+    # Past the refresh interval: refetched without an invalidation
+    freezer.tick(BATTERY_SETTINGS_REFRESH_INTERVAL + timedelta(minutes=1))
+    api.smart_battery_settings.side_effect = ["settings-3"]
+    assert await refresh() == {"bat_1": "settings-3"}
+    assert api.smart_battery_settings.await_count == 4
 
 
 def _battery_coordinator_for(api, config_entry) -> FrankEnergieBatteryCoordinator:
@@ -3072,3 +3079,27 @@ async def test_battery_settings_none_result_is_cached(mock_config_entry) -> None
     assert await _settings_after_refresh(coordinator, "bat_1") == {}
     assert await _settings_after_refresh(coordinator, "bat_1") == {}
     assert api.smart_battery_settings.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_battery_update_publishes_settings(mock_config_entry) -> None:
+    """The battery coordinator's update result carries the per-battery settings."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = lambda battery_id: f"settings-{battery_id}"
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.settings_coordinator.data = {}
+    batteries = SimpleNamespace(
+        batteries=[SimpleNamespace(id="bat_1"), SimpleNamespace(id="bat_2")]
+    )
+
+    with (
+        patch.object(coordinator, "_should_skip_api_calls", return_value=False),
+        patch.object(coordinator, "_is_smart_trading_enabled", return_value=True),
+        patch.object(coordinator, "_fetch_smart_batteries", return_value=batteries),
+    ):
+        result = await coordinator._async_update_data()
+
+    assert result[DATA_BATTERY_SETTINGS] == {
+        "bat_1": "settings-bat_1",
+        "bat_2": "settings-bat_2",
+    }

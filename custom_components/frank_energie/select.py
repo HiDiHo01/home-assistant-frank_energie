@@ -12,6 +12,7 @@ from homeassistant.components.select import SelectEntity, SelectEntityDescriptio
 from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -420,7 +421,18 @@ class FrankEnergieBatteryBaseSelect(
         }
 
     async def _async_update_setting(self, api_key: str, option: str) -> None:
-        """Send one setting change to the API and refresh on success."""
+        """Send one setting change to the API and refresh on success.
+
+        A setting that cannot be changed right now offers only its current
+        value; selecting it sends nothing, and any other value is rejected.
+        """
+        setting = self._get_adjustable_setting()
+        if setting is not None and not setting.updatable:
+            if option == self.current_option:
+                return
+            raise HomeAssistantError(
+                f"Smart battery {self._battery_id} {api_key} cannot be changed right now"
+            )
         _LOGGER.debug(
             "Setting smart battery %s %s to %s", self._battery_id, api_key, option
         )

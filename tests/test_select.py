@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
@@ -364,7 +364,8 @@ def test_battery_mode_select_uses_per_battery_options(
     }
 
 
-def test_battery_mode_select_not_updatable_offers_only_current(
+@pytest.mark.asyncio
+async def test_battery_mode_select_not_updatable_offers_only_current(
     mock_coordinator, mock_config_entry
 ):
     """A mode that cannot change right now offers only the current mode."""
@@ -382,6 +383,13 @@ def test_battery_mode_select_not_updatable_offers_only_current(
 
     assert entity.options == ["self_consumption_mix"]
     assert entity.extra_state_attributes["is_change_request_possible"] is False
+
+    # Selecting the only offered value sends nothing; anything else is rejected
+    await entity.async_select_option("self_consumption_mix")
+    mock_coordinator.api.smart_battery_update_settings.assert_not_called()
+    with pytest.raises(HomeAssistantError, match="cannot be changed right now"):
+        await entity.async_select_option("imbalance_trading")
+    mock_coordinator.api.smart_battery_update_settings.assert_not_called()
 
     # Details without a known mode fall back to the per-battery current mode
     mock_coordinator.data[DATA_BATTERY_DETAILS] = [_details(SmartBatteryMode.UNKNOWN)]
