@@ -60,9 +60,6 @@
         "title": "Configuratie importeren"
       },
       "options": {
-    "error": {
-      "rate_limited": "Frank Energie ontvangt te veel verzoeken. Wacht even en probeer het later opnieuw."
-    },
         "description": "Configureer de opties voor Frank Energie.",
         "title": "Opties configureren"
       },
@@ -73,6 +70,9 @@
     }
   },
   "options": {
+    "error": {
+      "rate_limited": "Frank Energie ontvangt te veel verzoeken. Wacht even en probeer het later opnieuw."
+    },
     "step": {
       "user": {
         "title": "Inloggen bij Frank Energie",
