@@ -33,9 +33,6 @@
         "title": "Enter your Frank Energie account credentials"
       },
       "options": {
-    "error": {
-      "rate_limited": "Frank Energie is receiving too many requests. Please wait and try again later."
-    },
         "description": "Configure the options for Frank Energie.",
         "title": "Configure options"
       },
@@ -1085,6 +1082,9 @@
     }
   },
   "options": {
+    "error": {
+      "rate_limited": "Frank Energie is receiving too many requests. Please wait and try again later."
+    },
     "step": {
       "user": {
         "data": {
