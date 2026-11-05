@@ -33,9 +33,6 @@
         "title": "Saisissez les identifiants de votre compte Frank Energie"
       },
       "options": {
-    "error": {
-      "rate_limited": "Frank Energie reçoit trop de requêtes. Veuillez patienter et réessayer plus tard."
-    },
         "description": "Configurez les options de Frank Energie.",
         "title": "Configurer les options"
       },
@@ -1085,6 +1082,9 @@
     }
   },
   "options": {
+    "error": {
+      "rate_limited": "Frank Energie reçoit trop de requêtes. Veuillez patienter et réessayer plus tard."
+    },
     "step": {
       "user": {
         "data": {
