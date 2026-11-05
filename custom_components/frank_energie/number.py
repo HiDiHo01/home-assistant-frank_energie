@@ -385,7 +385,8 @@ class FrankEnergieBatteryThresholdNumber(
             return False
 
         if (threshold := self._get_threshold_setting()) is not None:
-            return bool(threshold.updatable)
+            # As in the app: only while updatable and with prices on offer.
+            return bool(threshold.updatable) and bool(self._threshold_amounts())
 
         if algorithm := battery_state_value(
             getattr(settings, "trading_algorithm", None)
@@ -420,7 +421,8 @@ class FrankEnergieBatteryThresholdNumber(
             )
 
         amounts = self._threshold_amounts()
-        if amounts and not any(math.isclose(value, amount) for amount in amounts):
+        has_offer = self._get_threshold_setting() is not None
+        if has_offer and not any(math.isclose(value, amount) for amount in amounts):
             raise ValueError(
                 "Threshold value %.2f is not one of the offered values %s"
                 % (value, ", ".join(f"{amount:.2f}" for amount in amounts))

@@ -110,13 +110,15 @@ def test_battery_threshold_number_availability(mock_coordinator, mock_config_ent
         assert entity.available is True
 
 
-def _threshold_setting(*, updatable: bool) -> SimpleNamespace:
-    """Mirror the smartBatterySettings threshold block (0.20-0.40 in 0.05 steps)."""
+def _threshold_setting(
+    *, updatable: bool, amounts: tuple[float, ...] = (0.3, 0.2, 0.35, 0.25)
+) -> SimpleNamespace:
+    """Mirror the smartBatterySettings threshold block."""
     return SimpleNamespace(
         self_consumption_trading_threshold_price=SimpleNamespace(
             current=0.2,
             updatable=updatable,
-            options=[SimpleNamespace(amount=a) for a in (0.3, 0.2, 0.35, 0.25)],
+            options=[SimpleNamespace(amount=a) for a in amounts],
         )
     )
 
@@ -145,6 +147,8 @@ def _threshold_data(
         # Per-battery settings decide when the library provides them
         (None, _threshold_setting(updatable=False), False),
         (None, _threshold_setting(updatable=True), True),
+        # Updatable but no prices on offer: hidden, as in the app
+        (None, _threshold_setting(updatable=True, amounts=()), False),
         # Otherwise only T1 batteries may change the threshold
         ("t2", None, False),
         ("t1", None, True),
@@ -165,7 +169,7 @@ def test_battery_threshold_number_availability_follows_battery_settings(
     )
 
     assert entity.available is expected
-    if adjustable:
+    if adjustable and adjustable.self_consumption_trading_threshold_price.options:
         assert entity.native_min_value == pytest.approx(0.2)
         assert entity.native_max_value == pytest.approx(0.35)
 
@@ -434,3 +438,21 @@ async def test_battery_threshold_number_rejects_value_not_offered(
     mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
         battery_id, {"selfConsumptionTradingThresholdPrice": 0.25}
     )
+
+
+@pytest.mark.asyncio
+async def test_battery_threshold_number_rejects_any_value_without_offered_prices(
+    mock_coordinator, mock_config_entry
+):
+    """A threshold block without prices accepts no value, not the static range."""
+    battery_id = "bat_123"
+    mock_coordinator.data = _threshold_data(
+        battery_id, _threshold_setting(updatable=True, amounts=())
+    )
+    entity = FrankEnergieBatteryThresholdNumber(
+        mock_coordinator, mock_config_entry, battery_id
+    )
+
+    with pytest.raises(ValueError, match="not one of the offered values"):
+        await entity.async_set_native_value(0.25)
+    mock_coordinator.async_update_battery_settings.assert_not_called()
