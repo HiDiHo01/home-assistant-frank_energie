@@ -56,7 +56,6 @@ class RateLimitState:
         self._check(resource)
         if authenticated:
             self._check("renew_token")
-            self._check("login")
         try:
             return await request()
         except RateLimitException as err:
