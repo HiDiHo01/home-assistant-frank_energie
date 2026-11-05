@@ -2769,6 +2769,23 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
             prices_tomorrow = self.cached_prices_tomorrow
         else:
+            # Resolve the active interval before deciding whether today's cached
+            # prices can be reused. The account may override the configured value.
+            data_contract_price_resolution_state = (
+                await self._fetch_contract_price_resolution_state(self._connection_id)
+            )
+            self._static_contract_price_resolution_state = (
+                data_contract_price_resolution_state
+            )
+            if not self._is_cache_resolution_valid():
+                _LOGGER.debug(
+                    "Invalidating cached prices after an effective resolution change"
+                )
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+
             if (
                 self._static_prices_today is None
                 or self.last_fetch_today is None
@@ -2805,12 +2822,6 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             else:
                 prices_today = self._static_prices_today
 
-            data_contract_price_resolution_state = (
-                await self._fetch_contract_price_resolution_state(self._connection_id)
-            )
-            self._static_contract_price_resolution_state = (
-                data_contract_price_resolution_state
-            )
             prices_tomorrow = await self._refresh_tomorrow_cache(
                 today, tomorrow, now_utc
             )
