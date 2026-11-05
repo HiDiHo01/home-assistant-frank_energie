@@ -41,6 +41,7 @@ from .helpers import (
     async_sync_contract_entities,
     battery_adjustable_setting,
     battery_details_settings,
+    battery_mode_state,
     battery_state_value,
     device_translation_key,
     known_site_contracts,
@@ -488,8 +489,10 @@ class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
         """Return True while the battery is in a trading mode."""
         if not super().available:
             return False
-        mode = battery_state_value(getattr(self._get_settings(), "battery_mode", None))
-        return mode in BATTERY_TRADING_MODES
+        return (
+            battery_mode_state(self.coordinator.data, self._battery_id)
+            in BATTERY_TRADING_MODES
+        )
 
     async def async_select_option(self, option: str) -> None:
         """Update battery trading strategy via mutation."""

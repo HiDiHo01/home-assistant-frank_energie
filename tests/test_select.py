@@ -631,3 +631,34 @@ async def test_failed_battery_change_fails_the_service_call(
             blocking=True,
         )
     assert hass.states.get(entity_id).state == "self_consumption_mix"
+
+
+@pytest.mark.parametrize(
+    ("details_mode", "expected"),
+    [
+        # Details without a known mode: the per-battery mode decides
+        (SmartBatteryMode.UNKNOWN, True),
+        # Details with a known mode win over the (possibly older) settings
+        (SmartBatteryMode.SELF_CONSUMPTION_MIX, False),
+    ],
+)
+def test_battery_strategy_select_falls_back_to_per_battery_mode(
+    mock_coordinator, mock_config_entry, details_mode, expected
+):
+    """Strategy availability uses the per-battery mode only when the details
+    report no known mode."""
+    adjustable = _adjustable()
+    adjustable.battery_mode.current = SmartBatteryMode.IMBALANCE_TRADING
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(details_mode)],
+        DATA_BATTERY_SETTINGS: {_BATTERY_ID: adjustable},
+    }
+
+    entity = _select(
+        FrankEnergieBatteryStrategySelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_strategy",
+    )
+
+    assert entity.available is expected

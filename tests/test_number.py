@@ -456,3 +456,23 @@ async def test_battery_threshold_number_rejects_any_value_without_offered_prices
     with pytest.raises(ValueError, match="not one of the offered values"):
         await entity.async_set_native_value(0.25)
     mock_coordinator.async_update_battery_settings.assert_not_called()
+
+
+def test_battery_threshold_number_falls_back_to_per_battery_mode(
+    mock_coordinator, mock_config_entry
+):
+    """Without a known mode in the details, the per-battery mode decides."""
+    battery_id = "bat_123"
+    adjustable = _threshold_setting(updatable=True)
+    adjustable.battery_mode = SimpleNamespace(
+        current=SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
+    data = _threshold_data(battery_id, adjustable)
+    data[DATA_BATTERY_DETAILS][0].smart_battery.settings.battery_mode = None
+    mock_coordinator.data = data
+
+    entity = FrankEnergieBatteryThresholdNumber(
+        mock_coordinator, mock_config_entry, battery_id
+    )
+
+    assert entity.available is True

@@ -55,6 +55,7 @@ from .helpers import (
     AdjustableBatterySetting,
     battery_adjustable_setting,
     battery_details_settings,
+    battery_mode_state,
     battery_state_value,
     device_translation_key,
 )
@@ -379,10 +380,10 @@ class FrankEnergieBatteryThresholdNumber(
         """
         if not super().available:
             return False
-        settings = battery_details_settings(self.coordinator.data, self._battery_id)
-        mode = battery_state_value(getattr(settings, "battery_mode", None))
+        mode = battery_mode_state(self.coordinator.data, self._battery_id)
         if mode not in BATTERY_SELF_CONSUMPTION_MODES:
             return False
+        settings = battery_details_settings(self.coordinator.data, self._battery_id)
 
         if (threshold := self._get_threshold_setting()) is not None:
             # As in the app: only while updatable and with prices on offer.

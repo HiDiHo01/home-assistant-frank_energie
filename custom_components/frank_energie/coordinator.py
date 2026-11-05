@@ -3133,18 +3133,18 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             return True, await self.api.smart_battery_settings(battery.id)
         except (AuthException, AuthRequiredException):
             raise
-        except RequestException as err:
-            # Same authentication shape that ``_handle_fetch_exceptions`` handles.
-            if str(err).startswith("user-error:"):
-                raise
-            _LOGGER.debug(
-                "Failed to fetch settings for battery %s: %s", battery.id, err
-            )
-        # Deliberately not ``_handle_dynamic_fetch_error``: it re-raises network
-        # errors on the first refresh, and settings must never fail the update.
         except Exception as err:
+            # Same authentication shape that ``_handle_fetch_exceptions`` handles.
+            if isinstance(err, RequestException) and str(err).startswith("user-error:"):
+                raise
+            # Deliberately not ``_handle_dynamic_fetch_error``: it re-raises
+            # network errors on the first refresh, and settings must never fail
+            # the update. Only the error type is logged, as API errors can carry
+            # upstream data.
             _LOGGER.debug(
-                "Failed to fetch settings for battery %s: %s", battery.id, err
+                "Failed to fetch settings for battery %s: %s",
+                battery.id,
+                type(err).__name__,
             )
         return False, None
 

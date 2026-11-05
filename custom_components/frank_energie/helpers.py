@@ -76,6 +76,24 @@ def battery_details_settings(
     return None
 
 
+def battery_mode_state(
+    data: Mapping[str, object] | None, battery_id: str
+) -> str | None:
+    """Return a battery's current mode as a state.
+
+    Prefers the details query, which refreshes every poll, and falls back to
+    the last known per-battery settings when the details report no known mode.
+    """
+    mode = battery_state_value(
+        getattr(battery_details_settings(data, battery_id), "battery_mode", None)
+    )
+    if mode is None and (
+        setting := battery_adjustable_setting(data, battery_id, "battery_mode")
+    ):
+        mode = battery_state_value(setting.current)
+    return mode
+
+
 def battery_adjustable_setting(
     data: Mapping[str, object] | None, battery_id: str, name: str
 ) -> AdjustableBatterySetting | None:

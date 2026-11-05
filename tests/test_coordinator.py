@@ -1,3 +1,4 @@
+import logging
 import asyncio
 import pytest
 from types import SimpleNamespace
@@ -3234,3 +3235,52 @@ async def test_failed_battery_setting_change_keeps_settings(mock_config_entry) -
     )
     assert coordinator._battery_settings_fetched_at["bat_1"] == fetched_at
     coordinator.async_request_refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_battery_settings_request_records_nothing(
+    mock_config_entry,
+) -> None:
+    """A refresh cancelled while a settings request is in flight records
+    nothing, so the next refresh fetches again."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    started = asyncio.Event()
+
+    async def hang(battery_id: str) -> str:
+        started.set()
+        await asyncio.Event().wait()
+        return "never"
+
+    api.smart_battery_settings.side_effect = hang
+    refresh = asyncio.create_task(_settings_after_refresh(coordinator, "bat_1"))
+    await started.wait()
+    refresh.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await refresh
+
+    assert "bat_1" not in coordinator._battery_settings
+    assert "bat_1" not in coordinator._battery_settings_fetched_at
+
+    api.smart_battery_settings.side_effect = ["settings-1"]
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_failure_logs_only_the_error_type(
+    mock_config_entry, caplog
+) -> None:
+    """A failed settings fetch logs the error type, not upstream error text."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = RequestException(
+        "upstream detail: account 12345"
+    )
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    with caplog.at_level(logging.DEBUG, logger="custom_components.frank_energie"):
+        assert await _settings_after_refresh(coordinator, "bat_1") == {}
+
+    assert "Failed to fetch settings for battery bat_1: RequestException" in caplog.text
+    assert "account 12345" not in caplog.text
