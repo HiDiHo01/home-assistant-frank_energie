@@ -200,6 +200,34 @@ async def test_cancellation_is_not_a_rate_limit() -> None:
     assert await state.async_call("invoices", request) == "ok"
 
 
+async def test_login_throttle_does_not_block_valid_token_requests(
+    clock: MagicMock,
+) -> None:
+    """Throttle repeated logins without blocking existing authenticated sessions."""
+    state = RateLimitState()
+    login_request = AsyncMock(
+        side_effect=[RateLimitException("Login", retry_after=120), "logged in"]
+    )
+    with pytest.raises(RateLimitException):
+        await state.async_call("login", login_request, authenticated=False)
+
+    clock.return_value = 150.0
+    with pytest.raises(RateLimitException) as blocked:
+        await state.async_call("login", login_request, authenticated=False)
+    assert blocked.value.operation_name == "Login"
+    assert blocked.value.retry_after == 70
+    login_request.assert_awaited_once()
+
+    for resource in ("prices", "period_usage_and_costs", "invoices"):
+        request = AsyncMock(return_value=resource)
+        assert await state.async_call(resource, request) == resource
+        request.assert_awaited_once()
+
+    clock.return_value = 220.0
+    assert await state.async_call("login", login_request, authenticated=False) == "logged in"
+    assert login_request.await_count == 2
+
+
 async def test_automatic_renewal_throttle_is_shared(clock: MagicMock) -> None:
     """An error from implicit renewal also gates other authenticated resources."""
     state = RateLimitState()
