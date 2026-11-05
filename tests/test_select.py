@@ -75,7 +75,6 @@ async def test_battery_mode_select_action(mock_coordinator, mock_config_entry):
     )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
-    mock_coordinator.api.smart_battery_update_settings.return_value = True
 
     entity = FrankEnergieBatteryModeSelect(
         mock_coordinator,
@@ -85,10 +84,9 @@ async def test_battery_mode_select_action(mock_coordinator, mock_config_entry):
     )
     await entity.async_select_option("trading")
 
-    mock_coordinator.api.smart_battery_update_settings.assert_called_once_with(
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
         battery_id, {"batteryMode": "TRADING"}
     )
-    mock_coordinator.async_request_refresh.assert_called_once()
 
 
 def test_battery_strategy_select_properties(mock_coordinator, mock_config_entry):
@@ -126,7 +124,6 @@ async def test_battery_strategy_select_action(mock_coordinator, mock_config_entr
     mock_battery.smart_battery.settings.battery_mode = SmartBatteryMode.TRADING
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
-    mock_coordinator.api.smart_battery_update_settings.return_value = True
 
     entity = FrankEnergieBatteryStrategySelect(
         mock_coordinator,
@@ -136,10 +133,9 @@ async def test_battery_strategy_select_action(mock_coordinator, mock_config_entr
     )
     await entity.async_select_option("aggressive")
 
-    mock_coordinator.api.smart_battery_update_settings.assert_called_once_with(
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
         battery_id, {"imbalanceTradingStrategy": "AGGRESSIVE"}
     )
-    mock_coordinator.async_request_refresh.assert_called_once()
 
 
 def test_battery_strategy_select_availability(mock_coordinator, mock_config_entry):
@@ -386,10 +382,10 @@ async def test_battery_mode_select_not_updatable_offers_only_current(
 
     # Selecting the only offered value sends nothing; anything else is rejected
     await entity.async_select_option("self_consumption_mix")
-    mock_coordinator.api.smart_battery_update_settings.assert_not_called()
+    mock_coordinator.async_update_battery_settings.assert_not_called()
     with pytest.raises(HomeAssistantError, match="cannot be changed right now"):
         await entity.async_select_option("imbalance_trading")
-    mock_coordinator.api.smart_battery_update_settings.assert_not_called()
+    mock_coordinator.async_update_battery_settings.assert_not_called()
 
     # Details without a known mode fall back to the per-battery current mode
     mock_coordinator.data[DATA_BATTERY_DETAILS] = [_details(SmartBatteryMode.UNKNOWN)]
@@ -434,8 +430,7 @@ async def _add_battery_selects(hass: HomeAssistant, data: dict) -> MagicMock:
     coordinator = MagicMock()
     coordinator.last_update_success = True
     coordinator.data = data
-    coordinator.api.smart_battery_update_settings = AsyncMock(return_value=True)
-    coordinator.async_request_refresh = AsyncMock()
+    coordinator.async_update_battery_settings = AsyncMock(return_value=True)
 
     platform = MockEntityPlatform(hass, domain=SELECT_DOMAIN, platform_name=DOMAIN)
     platform.config_entry = entry
@@ -505,10 +500,9 @@ async def test_battery_mode_select_option_goes_through_ha_validation(
         {"entity_id": entity_id, "option": "imbalance_trading"},
         blocking=True,
     )
-    coordinator.api.smart_battery_update_settings.assert_awaited_once_with(
+    coordinator.async_update_battery_settings.assert_awaited_once_with(
         _BATTERY_ID, {"batteryMode": "IMBALANCE_TRADING"}
     )
-    coordinator.invalidate_battery_settings.assert_called_once_with(_BATTERY_ID)
 
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
@@ -517,4 +511,4 @@ async def test_battery_mode_select_option_goes_through_ha_validation(
             {"entity_id": entity_id, "option": "trading"},
             blocking=True,
         )
-    coordinator.api.smart_battery_update_settings.assert_awaited_once()
+    coordinator.async_update_battery_settings.assert_awaited_once()

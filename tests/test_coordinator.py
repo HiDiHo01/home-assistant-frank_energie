@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -3126,3 +3127,75 @@ async def test_battery_update_publishes_settings(mock_config_entry) -> None:
         "bat_1": "settings-bat_1",
         "bat_2": "settings-bat_2",
     }
+
+
+@pytest.mark.asyncio
+async def test_overlapping_battery_setting_changes_are_serialized(
+    mock_config_entry,
+) -> None:
+    """Two overlapping changes for one battery apply in request order: the
+    second starts only after the first finished, so the last requested value
+    wins, and each success invalidates the settings and requests a refresh."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator._battery_settings_fetched_at["bat_1"] = datetime.now(UTC)
+    order: list[str] = []
+    first_started = asyncio.Event()
+    first_may_finish = asyncio.Event()
+
+    async def update(battery_id: str, settings: dict[str, object]) -> bool:
+        mode = settings["batteryMode"]
+        order.append(f"start {mode}")
+        if mode == "TRADING":
+            first_started.set()
+            await first_may_finish.wait()
+        order.append(f"end {mode}")
+        return True
+
+    api.smart_battery_update_settings.side_effect = update
+
+    first = asyncio.create_task(
+        coordinator.async_update_battery_settings("bat_1", {"batteryMode": "TRADING"})
+    )
+    await first_started.wait()
+    second = asyncio.create_task(
+        coordinator.async_update_battery_settings(
+            "bat_1", {"batteryMode": "SELF_CONSUMPTION_MIX"}
+        )
+    )
+    await asyncio.sleep(0)
+    assert order == ["start TRADING"]  # the second change waits for the first
+
+    first_may_finish.set()
+    assert await asyncio.gather(first, second) == [True, True]
+
+    assert order == [
+        "start TRADING",
+        "end TRADING",
+        "start SELF_CONSUMPTION_MIX",
+        "end SELF_CONSUMPTION_MIX",
+    ]
+    assert "bat_1" not in coordinator._battery_settings_fetched_at
+    assert coordinator._battery_settings_generation["bat_1"] == 2
+    assert coordinator.async_request_refresh.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_battery_setting_change_keeps_settings(mock_config_entry) -> None:
+    """An unsuccessful change neither invalidates the settings nor refreshes."""
+    api = AsyncMock()
+    api.smart_battery_update_settings.return_value = False
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.async_request_refresh = AsyncMock()
+    fetched_at = datetime.now(UTC)
+    coordinator._battery_settings_fetched_at["bat_1"] = fetched_at
+
+    assert (
+        await coordinator.async_update_battery_settings(
+            "bat_1", {"batteryMode": "TRADING"}
+        )
+        is False
+    )
+    assert coordinator._battery_settings_fetched_at["bat_1"] == fetched_at
+    coordinator.async_request_refresh.assert_not_awaited()

@@ -177,6 +177,7 @@ def mock_coordinator():
     coordinator.api = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
     coordinator.async_update_enode_charge_settings = AsyncMock()
+    coordinator.async_update_battery_settings = AsyncMock(return_value=True)
     return coordinator
 
 

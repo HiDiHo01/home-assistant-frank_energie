@@ -433,7 +433,7 @@ class FrankEnergieBatteryThresholdNumber(
         )
 
         try:
-            success = await self.coordinator.api.smart_battery_update_settings(
+            success = await self.coordinator.async_update_battery_settings(
                 self._battery_id,
                 {
                     "selfConsumptionTradingThresholdPrice": value,
@@ -458,10 +458,6 @@ class FrankEnergieBatteryThresholdNumber(
             )
 
             raise ValueError(message % self._battery_id)
-
-        # Show the pending change and new change window right away.
-        self.coordinator.invalidate_battery_settings(self._battery_id)
-        await self.coordinator.async_request_refresh()
 
 
 class FrankEnergieFixedMonthlyCostsNumber(

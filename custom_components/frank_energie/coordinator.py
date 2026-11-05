@@ -3066,6 +3066,31 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         self._battery_settings_fetched_at: dict[str, datetime] = {}
         self._battery_settings_generation: dict[str, int] = {}
 
+    async def async_update_battery_settings(
+        self, battery_id: str, settings: dict[str, object]
+    ) -> bool:
+        """Send a smart battery setting change through the mutation queue.
+
+        Changes are serialized, so overlapping changes are applied in the order
+        they were requested and the last requested value wins. A successful
+        change invalidates the battery's settings before the next queued change
+        starts, then requests a refresh to show the pending change.
+        """
+        success = False
+
+        async def _update() -> None:
+            nonlocal success
+            success = bool(
+                await self.api.smart_battery_update_settings(battery_id, settings)
+            )
+            if success:
+                self.invalidate_battery_settings(battery_id)
+
+        await self._mutation_queue.add(_update)
+        if success:
+            await self.async_request_refresh()
+        return success
+
     def invalidate_battery_settings(self, battery_id: str) -> None:
         """Refetch a battery's settings on the next refresh, e.g. after a change."""
         self._battery_settings_fetched_at.pop(battery_id, None)

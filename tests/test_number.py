@@ -68,17 +68,15 @@ async def test_battery_threshold_number_action(mock_coordinator, mock_config_ent
     )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
-    mock_coordinator.api.smart_battery_update_settings.return_value = True
 
     entity = FrankEnergieBatteryThresholdNumber(
         mock_coordinator, mock_config_entry, battery_id
     )
     await entity.async_set_native_value(0.35)
 
-    mock_coordinator.api.smart_battery_update_settings.assert_called_once_with(
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
         battery_id, {"selfConsumptionTradingThresholdPrice": 0.35}
     )
-    mock_coordinator.async_request_refresh.assert_called_once()
 
 
 def test_battery_threshold_number_availability(mock_coordinator, mock_config_entry):
@@ -424,17 +422,15 @@ async def test_battery_threshold_number_rejects_value_not_offered(
     mock_coordinator.data = _threshold_data(
         battery_id, _threshold_setting(updatable=True)
     )
-    mock_coordinator.api.smart_battery_update_settings.return_value = True
     entity = FrankEnergieBatteryThresholdNumber(
         mock_coordinator, mock_config_entry, battery_id
     )
 
     with pytest.raises(ValueError, match="not one of the offered values"):
         await entity.async_set_native_value(0.27)
-    mock_coordinator.api.smart_battery_update_settings.assert_not_called()
+    mock_coordinator.async_update_battery_settings.assert_not_called()
 
     await entity.async_set_native_value(0.25)
-    mock_coordinator.api.smart_battery_update_settings.assert_called_once_with(
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
         battery_id, {"selfConsumptionTradingThresholdPrice": 0.25}
     )
-    mock_coordinator.invalidate_battery_settings.assert_called_once_with(battery_id)
