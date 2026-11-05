@@ -3182,7 +3182,11 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 details_list.append(details)
             if sessions:
                 sessions_list.append(sessions)
-            if fetched:
+            # The library also returns None for GraphQL errors and malformed
+            # responses, so None only replaces settings when none are known.
+            if fetched and (
+                settings is not None or self._battery_settings.get(battery.id) is None
+            ):
                 self._battery_settings[battery.id] = settings
                 if (
                     self._battery_settings_generation.get(battery.id, 0)

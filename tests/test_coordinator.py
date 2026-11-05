@@ -3070,6 +3070,29 @@ async def test_battery_settings_failed_batch_records_nothing(mock_config_entry) 
 
 
 @pytest.mark.asyncio
+async def test_battery_settings_none_result_keeps_known_settings(
+    mock_config_entry,
+) -> None:
+    """A None result (the library's answer to GraphQL errors or malformed data)
+    keeps known settings and is retried next refresh instead of cached."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = ["settings-1", None, "settings-2"]
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-2"
+    }
+    assert api.smart_battery_settings.await_count == 3
+
+
+@pytest.mark.asyncio
 async def test_battery_settings_none_result_is_cached(mock_config_entry) -> None:
     """A battery without settings is not refetched on every refresh."""
     api = AsyncMock()
