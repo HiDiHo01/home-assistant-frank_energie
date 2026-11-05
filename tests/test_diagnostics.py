@@ -183,6 +183,19 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
         "access_token": "token",
         "site_reference": "site",
     }
+    coordinator.data.update(
+        {
+            "vin": "1HGCR2F83HA000000",
+            "vehicleIdentificationNumber": "1HGCR2F83HA000000",
+            "pv_system_id": "pv-12345",
+            "street": "Main Street",
+            "houseNumber": "42",
+            "postalCode": "1000AA",
+            "city": "Amsterdam",
+            "contract_reference": "CR-9999",
+            "battery_serial_number": "BAT-SN-123",
+        }
+    )
     entry.runtime_data = runtime_data
 
     diagnostics = await async_get_config_entry_diagnostics(
@@ -197,6 +210,15 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
 
     assert diagnostics["data"]["email"] == "**REDACTED**"
     assert diagnostics["data"]["ean"] == "**REDACTED**"
+    assert diagnostics["data"]["vin"] == "**REDACTED**"
+    assert diagnostics["data"]["vehicleIdentificationNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["pv_system_id"] == "**REDACTED**"
+    assert diagnostics["data"]["street"] == "**REDACTED**"
+    assert diagnostics["data"]["houseNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["postalCode"] == "**REDACTED**"
+    assert diagnostics["data"]["city"] == "**REDACTED**"
+    assert diagnostics["data"]["contract_reference"] == "**REDACTED**"
+    assert diagnostics["data"]["battery_serial_number"] == "**REDACTED**"
 
     assert diagnostics["data"]["safe"] == "value"
 
