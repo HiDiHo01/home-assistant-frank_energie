@@ -1,13 +1,14 @@
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
+    DATA_BATTERY_SETTINGS,
     DATA_ELECTRICITY,
     DATA_GAS,
     DATA_INVOICES,
@@ -2876,3 +2877,78 @@ async def test_partial_today_response_without_cache_remains_retryable(
     assert not result[missing_commodity].all
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+
+@pytest.mark.asyncio
+async def test_battery_coordinator_fetches_settings_per_battery(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Per-battery settings are keyed by battery ID and skipped on library
+    releases without ``smart_battery_settings`` (the entities then keep their
+    static options)."""
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(
+        hass, mock_config_entry, mock_frank_energie
+    )
+    battery_coordinator = FrankEnergieBatteryCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    mock_frank_energie.smart_battery_details.return_value = None
+    mock_frank_energie.smart_battery_sessions.return_value = None
+    library_has_settings = hasattr(FrankEnergie, "smart_battery_settings")
+    if library_has_settings:
+        mock_frank_energie.smart_battery_settings.side_effect = lambda battery_id: (
+            None if battery_id == "bat_2" else f"settings-{battery_id}"
+        )
+
+    batteries = SimpleNamespace(
+        batteries=[SimpleNamespace(id="bat_1"), SimpleNamespace(id="bat_2")]
+    )
+    *_, settings_by_battery = await battery_coordinator._get_battery_data(
+        batteries, date(2026, 11, 4), date(2026, 11, 6)
+    )
+
+    assert settings_by_battery == (
+        {"bat_1": "settings-bat_1"} if library_has_settings else {}
+    )
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_refresh_interval_and_carry_over(
+    mock_config_entry,
+) -> None:
+    """Settings refetch at most every refresh interval or after invalidation,
+    and the last known settings carry over a skipped or failed fetch."""
+    api = AsyncMock()  # no spec: exercises the fetch logic on any library release
+    api.smart_battery_details.return_value = None
+    api.smart_battery_sessions.return_value = None
+    api.smart_battery_settings.side_effect = [
+        "settings-1",
+        RequestException("Too Many Requests"),
+        "settings-2",
+    ]
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(hass, mock_config_entry, api)
+    battery_coordinator = FrankEnergieBatteryCoordinator(
+        hass, mock_config_entry, api, settings
+    )
+    batteries = SimpleNamespace(batteries=[SimpleNamespace(id="bat_1")])
+
+    async def refresh() -> dict[str, object]:
+        _, _, by_battery = await battery_coordinator._get_battery_data(
+            batteries, date(2026, 11, 4), date(2026, 11, 6)
+        )
+        battery_coordinator.data = {DATA_BATTERY_SETTINGS: by_battery}
+        return by_battery
+
+    assert await refresh() == {"bat_1": "settings-1"}
+    # Within the refresh interval: no request, previous settings kept
+    assert await refresh() == {"bat_1": "settings-1"}
+    assert api.smart_battery_settings.await_count == 1
+
+    # After a change: refetched; a failure keeps the previous settings
+    battery_coordinator.invalidate_battery_settings("bat_1")
+    assert await refresh() == {"bat_1": "settings-1"}
+    # The failed fetch did not count as fresh, so the next refresh retries
+    assert await refresh() == {"bat_1": "settings-2"}
+    assert api.smart_battery_settings.await_count == 3

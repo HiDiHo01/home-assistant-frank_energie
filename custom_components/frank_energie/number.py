@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Callable, Final, override
 
@@ -24,12 +25,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from python_frank_energie.domain import SmartBatteryMode
-from python_frank_energie.models import EnodeVehicle, EnodeCharger, SmartBatteryDetails
+from python_frank_energie.models import EnodeVehicle, EnodeCharger
 
 from . import FrankEnergieEntryData
 from .const import (
     API_CONF_URL,
+    BATTERY_SELF_CONSUMPTION_MODES,
     COMPONENT_TITLE,
     CONF_ENERGY_TAX_ODE,
     CONF_ENERGY_TAX_REDUCTION,
@@ -49,8 +50,14 @@ from .const import (
     UNIT_ELECTRICITY,
     MANUFACTURER_FRANK_ENERGIE,
 )
-from .coordinator import FrankEnergieCoordinator
-from .helpers import device_translation_key
+from .coordinator import FrankEnergieBatteryCoordinator, FrankEnergieCoordinator
+from .helpers import (
+    AdjustableBatterySetting,
+    battery_adjustable_setting,
+    battery_details_settings,
+    battery_state_value,
+    device_translation_key,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -282,7 +289,7 @@ async def async_setup_entry(
 
 
 class FrankEnergieBatteryThresholdNumber(
-    CoordinatorEntity[FrankEnergieCoordinator], NumberEntity
+    CoordinatorEntity[FrankEnergieBatteryCoordinator], NumberEntity
 ):
     """Number entity for setting the self consumption trading threshold price."""
 
@@ -296,7 +303,7 @@ class FrankEnergieBatteryThresholdNumber(
 
     def __init__(
         self,
-        coordinator: FrankEnergieCoordinator,
+        coordinator: FrankEnergieBatteryCoordinator,
         config_entry: ConfigEntry[FrankEnergieEntryData],
         battery_id: str,
     ) -> None:
@@ -329,51 +336,69 @@ class FrankEnergieBatteryThresholdNumber(
             name=name,
         )
 
-    def _get_battery(self) -> SmartBatteryDetails | None:
-        """Return the battery details for this entity."""
-        battery_details = self.coordinator.data.get(DATA_BATTERY_DETAILS) or []
+    def _get_threshold_setting(self) -> AdjustableBatterySetting | None:
+        """Return the threshold block of the per-battery ``smartBatterySettings``."""
+        return battery_adjustable_setting(
+            self.coordinator.data,
+            self._battery_id,
+            "self_consumption_trading_threshold_price",
+        )
 
-        return next(
-            (
-                battery
-                for battery in battery_details
-                if battery.smart_battery
-                and battery.smart_battery.id == self._battery_id
-            ),
-            None,
+    def _threshold_amounts(self) -> list[float]:
+        """Return the threshold prices Frank Energie offers for this battery."""
+        setting = self._get_threshold_setting()
+        if setting is None:
+            return []
+        return sorted(
+            amount
+            for option in setting.options
+            if isinstance(amount := getattr(option, "amount", None), float)
         )
 
     @property
+    def native_min_value(self) -> float:
+        """Return the lowest threshold price offered for this battery."""
+        amounts = self._threshold_amounts()
+        return amounts[0] if amounts else self._attr_native_min_value
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the highest threshold price offered for this battery."""
+        amounts = self._threshold_amounts()
+        return amounts[-1] if amounts else self._attr_native_max_value
+
+    @property
     def available(self) -> bool:
-        """Return True if entity is available."""
+        """Return True when the battery is self-consuming and may change its threshold.
+
+        Unlike the battery mode and strategy, whose ``updatable`` flag marks a
+        temporary change window, the threshold's ``updatable`` flag says whether
+        the battery has the feature at all: the Frank Energie app only offers it
+        on ``T1`` batteries and hides it otherwise, so the entity does too.
+        Library releases without either field keep the mode-only check.
+        """
         if not super().available:
             return False
-        battery = self._get_battery()
-        settings = (
-            battery.smart_battery.settings
-            if battery and battery.smart_battery
-            else None
-        )
-
-        if settings is None:
+        settings = battery_details_settings(self.coordinator.data, self._battery_id)
+        mode = battery_state_value(getattr(settings, "battery_mode", None))
+        if mode not in BATTERY_SELF_CONSUMPTION_MODES:
             return False
 
-        return settings.battery_mode == SmartBatteryMode.SELF_CONSUMPTION_MIX
+        if (threshold := self._get_threshold_setting()) is not None:
+            return bool(threshold.updatable)
+
+        if algorithm := battery_state_value(
+            getattr(settings, "trading_algorithm", None)
+        ):
+            return algorithm == "t1"
+
+        return True
 
     @property
     def native_value(self) -> float | None:
         """Return the threshold price value."""
-        battery = self._get_battery()
-        settings = (
-            battery.smart_battery.settings
-            if battery and battery.smart_battery
-            else None
-        )
-
-        if settings is None:
-            return None
-
-        return settings.self_consumption_trading_threshold_price
+        settings = battery_details_settings(self.coordinator.data, self._battery_id)
+        return getattr(settings, "self_consumption_trading_threshold_price", None)
 
     @override
     async def async_set_native_value(self, value: float) -> None:
@@ -382,23 +407,23 @@ class FrankEnergieBatteryThresholdNumber(
         min_value = self.native_min_value
         max_value = self.native_max_value
 
-        # native_min_value/native_max_value may be properties or callables depending
-        # on Home Assistant version; ensure we compare floats.
-        if callable(min_value):
-            min_value = min_value()
-        if callable(max_value):
-            max_value = max_value()
-
-        if min_value is not None and value < min_value:
+        if value < min_value:
             raise ValueError(
                 "Threshold value %.2f is below the minimum allowed value %.2f"
                 % (value, min_value)
             )
 
-        if max_value is not None and value > max_value:
+        if value > max_value:
             raise ValueError(
                 "Threshold value %.2f exceeds the maximum allowed value %.2f"
                 % (value, max_value)
+            )
+
+        amounts = self._threshold_amounts()
+        if amounts and not any(math.isclose(value, amount) for amount in amounts):
+            raise ValueError(
+                "Threshold value %.2f is not one of the offered values %s"
+                % (value, ", ".join(f"{amount:.2f}" for amount in amounts))
             )
 
         _LOGGER.debug(
@@ -434,6 +459,8 @@ class FrankEnergieBatteryThresholdNumber(
 
             raise ValueError(message % self._battery_id)
 
+        # Show the pending change and new change window right away.
+        self.coordinator.invalidate_battery_settings(self._battery_id)
         await self.coordinator.async_request_refresh()
 
 
