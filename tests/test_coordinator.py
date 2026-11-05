@@ -20,6 +20,7 @@ from custom_components.frank_energie.const import (
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import (
+    BATTERY_SETTINGS_EMPTY_RETRY_INTERVAL,
     BATTERY_SETTINGS_REFRESH_INTERVAL,
     FrankEnergieCoordinator,
     PricesTodayCache,
@@ -3108,10 +3109,9 @@ async def test_battery_settings_failed_batch_records_nothing(mock_config_entry) 
 
 @pytest.mark.asyncio
 async def test_battery_settings_none_result_keeps_known_settings(
-    mock_config_entry,
+    mock_config_entry, freezer
 ) -> None:
-    """A None result (the library's answer to GraphQL errors or malformed data)
-    keeps known settings and is retried next refresh instead of cached."""
+    """An empty response retains good settings without retrying every poll."""
     api = AsyncMock()
     api.smart_battery_settings.side_effect = ["settings-1", None, "settings-2"]
     coordinator = _battery_coordinator_for(api, mock_config_entry)
@@ -3124,9 +3124,60 @@ async def test_battery_settings_none_result_keeps_known_settings(
         "bat_1": "settings-1"
     }
     assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert api.smart_battery_settings.await_count == 2
+
+    freezer.tick(BATTERY_SETTINGS_EMPTY_RETRY_INTERVAL + timedelta(seconds=1))
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
         "bat_1": "settings-2"
     }
     assert api.smart_battery_settings.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_invalidation_bypasses_empty_retry(
+    mock_config_entry,
+) -> None:
+    """A successful change can retry settings immediately despite a cooldown."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = ["settings-1", None, "settings-2"]
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert "bat_1" in coordinator._battery_settings_retry_after
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-2"
+    }
+    assert "bat_1" not in coordinator._battery_settings_retry_after
+    assert api.smart_battery_settings.await_count == 3
+
+
+def test_older_none_response_does_not_extend_battery_settings_retry(
+    mock_config_entry,
+) -> None:
+    """An older overlapping empty response must not postpone a newer retry."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    fetched_at = datetime.now(UTC)
+    coordinator._record_battery_settings("bat_1", True, "known", (0, 1), fetched_at)
+
+    later = fetched_at + BATTERY_SETTINGS_REFRESH_INTERVAL
+    coordinator._record_battery_settings("bat_1", True, None, (0, 3), later)
+    retry_deadline = coordinator._battery_settings_retry_after["bat_1"]
+
+    assert coordinator._record_battery_settings(
+        "bat_1", True, None, (0, 2), later + timedelta(minutes=1)
+    ) == "known"
+    assert coordinator._battery_settings_recorded["bat_1"] == 3
+    assert coordinator._battery_settings_retry_after["bat_1"] == retry_deadline
 
 
 @pytest.mark.asyncio

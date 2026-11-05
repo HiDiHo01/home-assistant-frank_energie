@@ -113,6 +113,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Battery options and change windows change rarely; refetch them at most this often.
 BATTERY_SETTINGS_REFRESH_INTERVAL: Final[timedelta] = timedelta(minutes=30)
+# A transient empty response can indicate a GraphQL failure. Retry less often
+# than the default 5-minute battery poll without treating stale data as fresh.
+BATTERY_SETTINGS_EMPTY_RETRY_INTERVAL: Final[timedelta] = timedelta(minutes=15)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
     "Authentication tokens expired, trying to renew them (%s)"
 )
@@ -3064,6 +3067,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         # invalidated, so a request that overlaps a change is not marked fresh.
         self._battery_settings: dict[str, object | None] = {}
         self._battery_settings_fetched_at: dict[str, datetime] = {}
+        self._battery_settings_retry_after: dict[str, datetime] = {}
         self._battery_settings_generation: dict[str, int] = {}
         # Per-battery request numbers: the last one issued and the last one
         # recorded, so an older response can never overwrite a newer one.
@@ -3099,6 +3103,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
     def invalidate_battery_settings(self, battery_id: str) -> None:
         """Refetch a battery's settings on the next refresh, e.g. after a change."""
         self._battery_settings_fetched_at.pop(battery_id, None)
+        self._battery_settings_retry_after.pop(battery_id, None)
         self._battery_settings_generation[battery_id] = (
             self._battery_settings_generation.get(battery_id, 0) + 1
         )
@@ -3128,6 +3133,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         if not hasattr(self.api, "smart_battery_settings"):
             return False, None
         if self._battery_settings_are_fresh(battery.id, now):
+            return False, None
+        retry_after = self._battery_settings_retry_after.get(battery.id)
+        if retry_after is not None and now < retry_after:
             return False, None
         try:
             return True, await self.api.smart_battery_settings(battery.id)
@@ -3178,18 +3186,26 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         while it was in flight, or when a newer request was already recorded,
         so newer state stays authoritative. The library also returns None for
         GraphQL errors and malformed responses, so None only replaces settings
-        when none are known.
+        when none are known. When known settings exist, retain them and defer
+        retries briefly without marking the stale data as fresh.
         """
         generation, request_number = request
         if (
             fetched
             and self._battery_settings_generation.get(battery_id, 0) == generation
             and request_number > self._battery_settings_recorded.get(battery_id, 0)
-            and (settings is not None or self._battery_settings.get(battery_id) is None)
         ):
-            self._battery_settings[battery_id] = settings
+            # Even an empty response is the newest completed request. Do not let
+            # an older overlapping response extend this retry deadline.
             self._battery_settings_recorded[battery_id] = request_number
-            self._battery_settings_fetched_at[battery_id] = now
+            if settings is not None or self._battery_settings.get(battery_id) is None:
+                self._battery_settings[battery_id] = settings
+                self._battery_settings_fetched_at[battery_id] = now
+                self._battery_settings_retry_after.pop(battery_id, None)
+            else:
+                self._battery_settings_retry_after[battery_id] = (
+                    now + BATTERY_SETTINGS_EMPTY_RETRY_INTERVAL
+                )
         return self._battery_settings.get(battery_id)
 
     def _start_battery_settings_request(self, battery_id: str) -> tuple[int, int]:
