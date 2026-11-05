@@ -3076,17 +3076,18 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         change invalidates the battery's settings before the next queued change
         starts, then requests a refresh to show the pending change.
         """
-        success = False
+        outcome: list[bool] = []
 
         async def _update() -> None:
-            nonlocal success
-            success = bool(
+            applied = bool(
                 await self.api.smart_battery_update_settings(battery_id, settings)
             )
-            if success:
+            if applied:
                 self.invalidate_battery_settings(battery_id)
+            outcome.append(applied)
 
         await self._mutation_queue.add(_update)
+        success = bool(outcome and outcome[0])
         if success:
             await self.async_request_refresh()
         return success
@@ -3158,6 +3159,29 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             self._fetch_battery_settings(battery, now),
         )
 
+    def _record_battery_settings(
+        self,
+        battery_id: str,
+        fetched: bool,
+        settings: object | None,
+        generation: int,
+        now: datetime,
+    ) -> object | None:
+        """Record a battery's fetched settings and return its known settings.
+
+        The library also returns None for GraphQL errors and malformed
+        responses, so None only replaces settings when none are known. A result
+        is only marked fresh when the battery was not invalidated while it was
+        in flight (its generation is unchanged).
+        """
+        if fetched and (
+            settings is not None or self._battery_settings.get(battery_id) is None
+        ):
+            self._battery_settings[battery_id] = settings
+            if self._battery_settings_generation.get(battery_id, 0) == generation:
+                self._battery_settings_fetched_at[battery_id] = now
+        return self._battery_settings.get(battery_id)
+
     async def _get_battery_data(
         self,
         data_smart_batteries: SmartBatteries | None,
@@ -3207,18 +3231,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 details_list.append(details)
             if sessions:
                 sessions_list.append(sessions)
-            # The library also returns None for GraphQL errors and malformed
-            # responses, so None only replaces settings when none are known.
-            if fetched and (
-                settings is not None or self._battery_settings.get(battery.id) is None
-            ):
-                self._battery_settings[battery.id] = settings
-                if (
-                    self._battery_settings_generation.get(battery.id, 0)
-                    == generations[battery.id]
-                ):
-                    self._battery_settings_fetched_at[battery.id] = now
-            if (known := self._battery_settings.get(battery.id)) is not None:
+            known = self._record_battery_settings(
+                battery.id, fetched, settings, generations[battery.id], now
+            )
+            if known is not None:
                 settings_by_battery[battery.id] = known
 
         return details_list, sessions_list, settings_by_battery
