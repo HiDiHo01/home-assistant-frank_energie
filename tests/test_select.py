@@ -237,11 +237,12 @@ _BATTERY_ID = "bat_123"
 def _details(
     mode: SmartBatteryMode,
     strategy: SmartBatteryImbalanceStrategy = SmartBatteryImbalanceStrategy.AGGRESSIVE,
+    battery_id: str = _BATTERY_ID,
 ) -> SmartBatteryDetails:
     """Build real library battery details for one battery."""
     return SmartBatteryDetails(
         smart_battery=SmartBattery(
-            id=_BATTERY_ID,
+            id=battery_id,
             brand="HYXi",
             settings=SmartBatterySettings(
                 battery_mode=mode, imbalance_trading_strategy=strategy
@@ -292,11 +293,11 @@ def _adjustable(*, updatable: bool = True, pending=None) -> SimpleNamespace:
     )
 
 
-def _select(cls, coordinator, entry, key: str):
+def _select(cls, coordinator, entry, key: str, battery_id: str = _BATTERY_ID):
     return cls(
         coordinator,
         entry,
-        _BATTERY_ID,
+        battery_id,
         next(d for d in SELECT_DESCRIPTIONS if d.key == key),
     )
 
@@ -422,7 +423,9 @@ def test_battery_strategy_select_uses_per_battery_options(
 # a current option missing from ``options`` into the ``unknown`` state.
 
 
-async def _add_battery_selects(hass: HomeAssistant, data: dict) -> MagicMock:
+async def _add_battery_selects(
+    hass: HomeAssistant, data: dict, battery_ids: tuple[str, ...] = (_BATTERY_ID,)
+) -> MagicMock:
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
     entry.add_to_hass(hass)
     assert await async_setup_component(hass, SELECT_DOMAIN, {})
@@ -436,22 +439,35 @@ async def _add_battery_selects(hass: HomeAssistant, data: dict) -> MagicMock:
     platform.config_entry = entry
     await platform.async_add_entities(
         [
-            _select(FrankEnergieBatteryModeSelect, coordinator, entry, "battery_mode"),
-            _select(
-                FrankEnergieBatteryStrategySelect,
-                coordinator,
-                entry,
-                "battery_strategy",
-            ),
+            entity
+            for battery_id in battery_ids
+            for entity in (
+                _select(
+                    FrankEnergieBatteryModeSelect,
+                    coordinator,
+                    entry,
+                    "battery_mode",
+                    battery_id,
+                ),
+                _select(
+                    FrankEnergieBatteryStrategySelect,
+                    coordinator,
+                    entry,
+                    "battery_strategy",
+                    battery_id,
+                ),
+            )
         ]
     )
     await hass.async_block_till_done()
     return coordinator
 
 
-def _battery_entity_id(hass: HomeAssistant, key: str) -> str:
+def _battery_entity_id(
+    hass: HomeAssistant, key: str, battery_id: str = _BATTERY_ID
+) -> str:
     entity_id = er.async_get(hass).async_get_entity_id(
-        SELECT_DOMAIN, DOMAIN, f"{DOMAIN}_{_BATTERY_ID}_{key}"
+        SELECT_DOMAIN, DOMAIN, f"{DOMAIN}_{battery_id}_{key}"
     )
     assert entity_id is not None, key
     return entity_id
@@ -512,3 +528,64 @@ async def test_battery_mode_select_option_goes_through_ha_validation(
             blocking=True,
         )
     coordinator.async_update_battery_settings.assert_awaited_once()
+
+
+async def test_battery_selects_keep_each_batterys_own_options(
+    hass: HomeAssistant,
+) -> None:
+    """Two batteries with different per-battery options each offer only their
+    own modes and strategies; nothing is shared between devices."""
+    t1_settings = SimpleNamespace(
+        battery_mode=SimpleNamespace(
+            current=SmartBatteryMode.TRADING,
+            updatable=True,
+            options=[
+                SimpleNamespace(code=SmartBatteryMode.TRADING, selectable=True),
+                SimpleNamespace(
+                    code=SmartBatteryMode.SELF_CONSUMPTION, selectable=True
+                ),
+            ],
+            pending=None,
+            pending_value_effective_from=None,
+            update_delayed_till=None,
+        ),
+        imbalance_trading_strategy=SimpleNamespace(
+            current=SmartBatteryImbalanceStrategy.BALANCED,
+            updatable=True,
+            options=[
+                SimpleNamespace(code=SmartBatteryImbalanceStrategy.BALANCED),
+                SimpleNamespace(code=SmartBatteryImbalanceStrategy.CONSERVATIVE),
+            ],
+            pending=None,
+            pending_value_effective_from=None,
+            update_delayed_till=None,
+        ),
+    )
+    await _add_battery_selects(
+        hass,
+        {
+            DATA_BATTERY_DETAILS: [
+                _details(SmartBatteryMode.IMBALANCE_TRADING, battery_id="bat_t2"),
+                _details(
+                    SmartBatteryMode.TRADING,
+                    SmartBatteryImbalanceStrategy.BALANCED,
+                    battery_id="bat_t1",
+                ),
+            ],
+            DATA_BATTERY_SETTINGS: {"bat_t2": _adjustable(), "bat_t1": t1_settings},
+        },
+        battery_ids=("bat_t2", "bat_t1"),
+    )
+
+    def options(key: str, battery_id: str) -> list[str]:
+        return hass.states.get(_battery_entity_id(hass, key, battery_id)).attributes[
+            "options"
+        ]
+
+    assert options("battery_mode", "bat_t2") == [
+        "imbalance_trading",
+        "self_consumption_mix",
+    ]
+    assert options("battery_mode", "bat_t1") == ["trading", "self_consumption"]
+    assert options("battery_strategy", "bat_t2") == ["standard", "aggressive"]
+    assert options("battery_strategy", "bat_t1") == ["balanced", "conservative"]
