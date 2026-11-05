@@ -18,7 +18,7 @@ verification after installing the normal development dependencies:
 
 ```sh
 poetry install
-poetry run pip install --no-deps --force-reinstall "python-frank-energie @ https://github.com/HiDiHo01/python-frank-energie/archive/0cf5332e55167ef45461a46cbae4e0f7bede2d94.tar.gz"
+poetry run pip install --no-deps --force-reinstall "python-frank-energie @ https://github.com/HiDiHo01/python-frank-energie/archive/38e2595c3ff87373d186fa7763b4d25320bf8f9e.tar.gz"
 poetry run pytest
 ```
 
