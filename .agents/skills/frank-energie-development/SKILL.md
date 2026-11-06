@@ -5,6 +5,18 @@ description: Develop, debug, review, and test the Frank Energie Home Assistant c
 
 # Frank Energie development and review
 
+## Specialized workflows
+
+Use the most specific skill that matches the task; these files complement rather than override the target repository's `AGENTS.md`, `AI_POLICY.md`, and `home-assistant.md`:
+
+- [frank-energie-pr-review](../frank-energie-pr-review/SKILL.md) — PR reviews, comment audits, CI and merge-readiness; read-only by default.
+- [frank-energie-quality-scale](../frank-energie-quality-scale/SKILL.md) — evidence-based quality-rule and Platinum audits.
+- [frank-energie-ha-compatibility](../frank-energie-ha-compatibility/SKILL.md) — Home Assistant release changes, deprecations and migrations.
+- [frank-energie-dependency-update](../frank-energie-dependency-update/SKILL.md) — provider-library and dependency compatibility upgrades.
+- [frank-energie-api-reliability](../frank-energie-api-reliability/SKILL.md) — coordinator and upstream failures, rate limits, cache and recovery.
+
+When several apply, follow their task-specific checks without duplicating work. Each skill is adapted from public workflows in the HiDiHo01 repositories; original project-specific instructions remain scoped to their own repositories.
+
 ## Scope and authority
 
 This skill is a task workflow, not a replacement for repository policy.
