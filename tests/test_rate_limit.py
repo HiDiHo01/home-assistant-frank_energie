@@ -33,7 +33,6 @@ from custom_components.frank_energie import FrankEnergieComponent, async_remove_
 from custom_components.frank_energie.config_flow import ConfigFlow
 from custom_components.frank_energie.const import (
     CONF_INTERVAL_STATISTICS,
-    DATA_ELECTRICITY,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
     DATA_USAGE,
@@ -232,7 +231,10 @@ async def test_login_throttle_does_not_block_valid_token_requests(
         request.assert_awaited_once()
 
     clock.return_value = 220.0
-    assert await state.async_call("login", login_request, authenticated=False) == "logged in"
+    assert (
+        await state.async_call("login", login_request, authenticated=False)
+        == "logged in"
+    )
     assert login_request.await_count == 2
 
 
@@ -251,10 +253,7 @@ async def test_login_cooldown_blocks_only_auth_recovery(
     assert blocked.value.retry_after == 120
 
     user_sites = AsyncMock(return_value="valid token response")
-    assert (
-        await state.async_call("UserSites", user_sites)
-        == "valid token response"
-    )
+    assert await state.async_call("UserSites", user_sites) == "valid token response"
     user_sites.assert_awaited_once()
 
     clock.return_value = 220.0
@@ -430,7 +429,13 @@ async def test_invoice_authentication_error_is_not_empty_data(
 
 
 @pytest.mark.parametrize(
-    ("electricity_enabled", "gas_enabled", "cached_electricity", "cached_gas", "expected"),
+    (
+        "electricity_enabled",
+        "gas_enabled",
+        "cached_electricity",
+        "cached_gas",
+        "expected",
+    ),
     [
         (True, False, True, False, True),
         (False, True, False, True, True),

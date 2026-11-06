@@ -2863,9 +2863,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         if self.api.is_authenticated and (
             self.user_electricity_enabled or self.user_gas_enabled
         ):
-            return (
-                (not self.user_electricity_enabled or electricity_available)
-                and (not self.user_gas_enabled or gas_available)
+            return (not self.user_electricity_enabled or electricity_available) and (
+                not self.user_gas_enabled or gas_available
             )
         return electricity_available or gas_available
 
@@ -2932,7 +2931,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                         )
                         prices_today = self._static_prices_today
                     elif rate_limited:
-                        raise rate_limit_update_failed(err, self.update_interval) from err
+                        raise rate_limit_update_failed(
+                            err, self.update_interval
+                        ) from err
                     else:
                         raise UpdateFailed(
                             f"Failed to fetch today prices: {err}"
