@@ -33,6 +33,16 @@ Repository instructions must be respected. Resolve conflicting instructions by f
 
 Never assume an API exists merely because it appeared in an older Home Assistant release, another integration, an example, or a previous AI-generated response.
 
+### Agent Skill maintenance
+
+Keep the reusable workflows under `.agents/skills/*/SKILL.md` accurate and aligned with the current repository.
+
+* When a new, verified, reusable development or review practice is learned, or when an existing skill, upstream API, project workflow, policy, or CI requirement changes, **review the affected skills and update their instructions when the change is relevant**. Create a new skill only when its purpose is genuinely distinct from existing skills.
+* Check the original source and current repository behavior before adopting lessons from another repository. Adapt practices to this integration; never blindly copy external instructions or override `AGENTS.md`, `AI_POLICY.md`, or other applicable repository policy.
+* Keep skill activation metadata (`name` and `description`), internal references, example commands, supported versions, and validation steps consistent with the actual implementation and tooling. Avoid duplicating detailed governance rules already maintained here.
+* Treat skill maintenance as part of an **authorized change**. A review-only, analysis-only, or no-changes task does not authorize editing skill files; identify and report outdated skills instead. Do not open an unrelated PR or modify other repositories without authorization.
+* After updating skills, validate YAML frontmatter, paths, Markdown links, and task instructions; inspect the diff, run applicable checks, and report the exact results or unavailable checks. Include relevant skill updates in the same PR when they belong to the requested change.
+
 ## 3. Current documentation and API verification
 
 Use the official developer documentation as the primary reference:
@@ -423,6 +433,16 @@ Test the relevant cases for:
 
 Use `pytest.mark.parametrize` for meaningful input variations.
 
+Workflow behavior is covered by `tests/test_workflow_*.py`, and release manifest
+updates are covered by `tests/test_release_manifest.py`. Inline
+`github-script` JavaScript is executed offline with mocked GitHub API calls using
+Node.js 24. CI installs Node.js and runs these cases as part of the existing full
+pytest suite on the configured Python matrix. For a focused local run, use
+`poetry run pytest -q tests/test_workflow_*.py tests/test_release_manifest.py`
+with Node.js available. Only configure package-update and deployment jobs for
+build projects that exist in the repository. Keep authorization and command
+filters on the job when they determine whether a runner is needed.
+
 Mock external services and devices. Tests must not depend on live accounts, real hardware, external networks, or personal credentials unless an explicitly separate integration-test suite requires them.
 
 Use `AsyncMock` for asynchronous dependencies where appropriate.
@@ -474,6 +494,20 @@ Never fabricate test results or claim a command succeeded when it was not execut
 If a tool cannot be run in the available environment, report that limitation and identify the exact unverified check.
 
 Do not add broad lint suppressions or typing ignores to conceal defects. Every necessary suppression must be narrow and justified.
+
+### GitHub Actions SHA pinning
+
+* Always pin every external, repository-based GitHub Action and reusable workflow to a verified, full 40-character hexadecimal commit SHA. This includes `step-security/harden-runner` and actions used by composite actions.
+* Never use version tags, branch names, or abbreviated SHAs as the executable reference, including `@v2`, `@v2.22.3`, `@main`, or `@master`. Local `./...` references remain local paths and do not take a separate ref.
+* Resolve the SHA from the official upstream repository and verify that it belongs to the intended release or commit. Never guess a SHA or copy an unverified value.
+* Add a readable version comment beside the SHA, such as `# @v2.22.3`, only after verifying that the upstream tag resolves to that SHA. If no release tag points to the pinned commit, use `# upstream commit YYYY-MM-DD` with its verified upstream commit date instead. Never invent a release label or change the SHA merely to obtain one. Keep comments aligned with the verified pin during updates.
+* Preserve full SHA pinning in manual, Dependabot, and Renovate updates. Before completing any workflow change, inspect all workflow and composite-action YAML files for unpinned external action or reusable-workflow references.
+
+Example:
+
+```yaml
+uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+```
 
 ### Flake8, Ruff, and existing lint debt
 

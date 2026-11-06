@@ -1,56 +1,83 @@
-"""Update the manifest file.
+"""Set the release manifest version and fail when the update cannot complete."""
 
-Sets the version number in the manifest file to the version number
-"""
-
-import sys
+import argparse
 import json
+import sys
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime
+from tempfile import NamedTemporaryFile
+
+MANIFEST_PATH = Path("custom_components") / "frank_energie" / "manifest.json"
 
 
-MANIFEST_PATH = Path.cwd() / "custom_components" / "frank_energie" / "manifest.json"
-VERSION_FLAG = ["--version", "-V"]
+def _reject_json_constant(constant: str) -> None:
+    """Reject nonstandard JSON constants before replacing the manifest."""
+    raise ValueError(f"Manifest contains an invalid JSON constant: {constant}.")
 
 
-def update_manifest():
-    """Update the manifest file with the current date as the version number."""
-    # Get the current date in YEAR.MONTH.DAY format
-    release_date = datetime.now().strftime("%Y.%m.%d")
-
-    version = release_date  # Set version to the release date
-
-    # Check if version argument is passed (optional, can still override)
-    for index, value in enumerate(sys.argv):
-        if value in VERSION_FLAG:
-            # Ensure the version number is present
-            if index + 1 < len(sys.argv):
-                version = sys.argv[index + 1]
-            else:
-                print("Error: No version number provided after the '--version' flag.")
-                return
-
-    # Remove the 'v' from the version if it exists
-    version = version.lstrip("v")
+def update_manifest(version: str) -> str:
+    """Write the requested version, propagating invalid data and file errors."""
+    normalized_version = version.strip().removeprefix("v")
+    if not normalized_version:
+        raise ValueError("The release version must not be empty after removing 'v'.")
 
     try:
-        with open(MANIFEST_PATH, "r") as manifestfile:
-            manifest = json.load(manifestfile)
+        manifest = json.loads(
+            MANIFEST_PATH.read_text(encoding="utf-8"),
+            parse_constant=_reject_json_constant,
+        )
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"Manifest '{MANIFEST_PATH}' contains invalid JSON: {error.msg}."
+        ) from error
 
-        # Update the version in the manifest
-        manifest["version"] = version
+    if not isinstance(manifest, dict):
+        raise TypeError(f"Manifest '{MANIFEST_PATH}' must contain a JSON object.")
 
-        with open(MANIFEST_PATH, "w") as manifestfile:
-            json.dump(manifest, manifestfile, indent=4, sort_keys=True)
+    manifest["version"] = normalized_version
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=MANIFEST_PATH.parent,
+            prefix=".manifest-",
+            suffix=".json",
+            delete=False,
+        ) as temporary_manifest:
+            temporary_path = Path(temporary_manifest.name)
+            json.dump(
+                manifest, temporary_manifest, indent=4, sort_keys=True, allow_nan=False
+            )
+        temporary_path.chmod(MANIFEST_PATH.stat().st_mode)
+        temporary_path.replace(MANIFEST_PATH)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    return normalized_version
 
-        print(f"Manifest updated with version: {version}")
 
-    except FileNotFoundError:
-        print(f"Error: The manifest file '{MANIFEST_PATH}' does not exist.")
-    except json.JSONDecodeError:
-        print(f"Error: The manifest file '{MANIFEST_PATH}' is not valid JSON.")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+def main(arguments: Sequence[str] | None = None) -> int:
+    """Update the manifest and return a failing exit status for expected errors."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--version",
+        "-V",
+        default=datetime.now(UTC).strftime("%Y.%m.%d"),
+        help="Release version, optionally prefixed with v; defaults to the UTC date.",
+    )
+    parsed_arguments = parser.parse_args(arguments)
+
+    try:
+        updated_version = update_manifest(parsed_arguments.version)
+    except (OSError, TypeError, ValueError) as error:
+        print(f"Unable to update integration manifest: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Manifest updated with version: {updated_version}")
+    return 0
 
 
-update_manifest()
+if __name__ == "__main__":
+    raise SystemExit(main())

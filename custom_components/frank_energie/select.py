@@ -28,12 +28,17 @@ from .const import (
     DATA_BATTERY_DETAILS,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
+    DATA_USER,
     DOMAIN,
     MANUFACTURER_FRANK_ENERGIE,
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieCoordinator
-from .helpers import device_translation_key
+from .helpers import (
+    async_sync_contract_entities,
+    device_translation_key,
+    known_site_contracts,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -161,7 +166,24 @@ async def async_setup_entry(
     vehicle_coordinator = entry.runtime_data.vehicle_coordinator
     charger_coordinator = entry.runtime_data.charger_coordinator
 
-    entities: list[SelectEntity] = [FrankEnergieResolutionSelect(price_coordinator)]
+    settings = entry.runtime_data.settings_coordinator
+    contracts = (
+        known_site_contracts(settings.data.get(DATA_USER))
+        if settings.api.is_authenticated
+        else None
+    )
+    electricity_supported = contracts is None or "ELECTRICITY" in contracts
+    if contracts is not None or not settings.api.is_authenticated:
+        async_sync_contract_entities(
+            hass,
+            entry,
+            "select",
+            {f"{entry.entry_id}_resolution": electricity_supported},
+            enabled_by_default={f"{entry.entry_id}_resolution"},
+        )
+    entities: list[SelectEntity] = []
+    if electricity_supported:
+        entities.append(FrankEnergieResolutionSelect(price_coordinator))
     entities.extend(_setup_battery_entities(battery_coordinator, entry))
     entities.extend(
         _setup_enode_entities(hass, vehicle_coordinator, charger_coordinator, entry)

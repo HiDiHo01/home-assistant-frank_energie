@@ -11,13 +11,18 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RequestException
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from python_frank_energie.models import (
     ContractPriceResolutionChangeResult,
     ContractPriceResolutionState,
     User,
 )
 
-from custom_components.frank_energie.const import DATA_USER, DOMAIN
+from custom_components.frank_energie.const import (
+    DATA_CONTRACT_PRICE_RESOLUTION_STATE,
+    DATA_USER,
+    DOMAIN,
+)
 from custom_components.frank_energie.coordinator import (
     FrankEnergiePriceCoordinator,
     FrankEnergieSettingsCoordinator,
@@ -41,7 +46,7 @@ class _ConnectionContext:
 
 
 def _make_user(
-    electricity_id: str | None = "electricity-alpha", *, include_gas: bool = True
+    electricity_id: str | None = "electricity-alpha", *, include_gas: bool = False
 ) -> User:
     """Parse realistic user data with distinct row and connection identifiers."""
     connections: list[dict[str, str]] = []
@@ -223,7 +228,9 @@ async def test_fresh_price_cache_initializes_connection_without_fetching(
 
     assert connection_context.prices._connection_id == "electricity-alpha"
     connection_context.prices._fetch_prices_with_fallback.assert_not_awaited()
-    connection_context.api.contract_price_resolution_state.assert_not_awaited()
+    connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
+        "electricity-alpha"
+    )
     connection_context.api.user.assert_not_awaited()
 
     await connection_context.prices.async_set_resolution("PT60M")
@@ -344,3 +351,117 @@ async def test_resolution_connections_remain_entry_scoped(
     other_api.contract_price_resolution_request_change.assert_awaited_once_with(
         "electricity-beta", "PT60M"
     )
+
+
+async def test_connection_replacement_invalidates_old_change_permissions(
+    connection_context: _ConnectionContext,
+) -> None:
+    """A new connection must not inherit the old connection's denied state."""
+    old_state = ContractPriceResolutionState(
+        active_option="PT15M",
+        available_options=["PT15M", "PT60M"],
+        is_change_request_possible=False,
+    )
+    connection_context.prices._connection_id = "old-electricity"
+    connection_context.prices._resolution_state_connection_id = "old-electricity"
+    connection_context.prices._api_resolution_state = old_state
+    connection_context.prices._static_contract_price_resolution_state = old_state
+    connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = old_state
+    connection_context.settings.data[DATA_USER] = _make_user("new-electricity")
+
+    await connection_context.prices.async_set_resolution("PT60M")
+
+    assert connection_context.prices._connection_id == "new-electricity"
+    assert connection_context.prices._resolution_state_connection_id == "new-electricity"
+    connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
+        "new-electricity"
+    )
+    connection_context.api.contract_price_resolution_request_change.assert_awaited_once_with(
+        "new-electricity", "PT60M"
+    )
+
+
+async def test_removed_connection_clears_all_resolution_metadata(
+    connection_context: _ConnectionContext,
+) -> None:
+    """A gas-only response clears the old permissions and published status."""
+    old_state = ContractPriceResolutionState(
+        active_option="PT15M",
+        available_options=["PT15M", "PT60M"],
+        is_change_request_possible=True,
+    )
+    connection_context.prices._connection_id = "old-electricity"
+    connection_context.prices._api_resolution_state = old_state
+    connection_context.prices._static_contract_price_resolution_state = old_state
+    connection_context.prices._resolution_state_connection_id = "old-electricity"
+    connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = old_state
+    connection_context.settings.data[DATA_USER] = _make_user(None)
+
+    connection_context.prices._sync_connection_id()
+
+    assert connection_context.prices._connection_id is None
+    assert connection_context.prices._api_resolution_state is None
+    assert connection_context.prices._static_contract_price_resolution_state is None
+    assert connection_context.prices._resolution_state_connection_id is None
+    assert connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is None
+
+
+async def test_resolution_change_rejects_unverified_status(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Do not mutate when fresh eligibility cannot be retrieved from the API."""
+    connection_context.api.contract_price_resolution_state.side_effect = (
+        RequestException("temporary upstream failure")
+    )
+
+    with pytest.raises(UpdateFailed, match="Cannot verify resolution change eligibility"):
+        await connection_context.prices.async_set_resolution("PT60M")
+
+    connection_context.api.contract_price_resolution_request_change.assert_not_awaited()
+    assert connection_context.prices._api_resolution_state is None
+    assert connection_context.prices._resolution_state_connection_id is None
+
+
+async def test_warm_cache_does_not_publish_stale_resolution_status(
+    connection_context: _ConnectionContext,
+) -> None:
+    """A fresh price cache remains useful when its resolution query fails."""
+    connection_context.api.contract_price_resolution_state.side_effect = (
+        RequestException("temporary upstream failure")
+    )
+
+    await connection_context.prices.async_config_entry_first_refresh()
+
+    assert connection_context.prices._connection_id == "electricity-alpha"
+    assert connection_context.prices._api_resolution_state is None
+    assert (
+        connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is None
+    )
+    connection_context.prices._fetch_prices_with_fallback.assert_not_awaited()
+
+
+async def test_resolution_change_uses_latest_restrictions_for_replaced_connection(
+    connection_context: _ConnectionContext,
+) -> None:
+    """The new connection's denied state blocks a previously permitted change."""
+    allowed_state = ContractPriceResolutionState(
+        active_option="PT15M",
+        available_options=["PT15M", "PT60M"],
+        is_change_request_possible=True,
+    )
+    blocked_state = ContractPriceResolutionState(
+        active_option="PT15M",
+        available_options=["PT15M", "PT60M"],
+        is_change_request_possible=False,
+    )
+    connection_context.prices._connection_id = "old-electricity"
+    connection_context.prices._resolution_state_connection_id = "old-electricity"
+    connection_context.prices._api_resolution_state = allowed_state
+    connection_context.settings.data[DATA_USER] = _make_user("new-electricity")
+    connection_context.api.contract_price_resolution_state.return_value = blocked_state
+
+    await connection_context.prices.async_set_resolution("PT60M")
+
+    assert connection_context.prices._api_resolution_state is blocked_state
+    assert connection_context.prices._resolution_state_connection_id == "new-electricity"
+    connection_context.api.contract_price_resolution_request_change.assert_not_awaited()

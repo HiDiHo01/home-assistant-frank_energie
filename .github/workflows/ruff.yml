@@ -12,6 +12,7 @@ permissions:
   contents: read
 
 concurrency:
+  # Cancel superseded runs when another commit is pushed to the same PR.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -23,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # @v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -55,4 +56,4 @@ jobs:
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
           version: "0.15.18"
-          args: "format --check custom_components tests"
+          args: "format --check --diff custom_components tests"

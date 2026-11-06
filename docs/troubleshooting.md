@@ -142,15 +142,19 @@ No user action is required.
 
 ## Resolution Change Has No Electricity Connection
 
-Resolution changes apply to the electricity connection at the selected delivery
-site. If the log reports that the electricity connection ID is unavailable,
-check that the selected site has an electricity connection in your Frank Energie
-account and that account settings have been retrieved successfully.
+Resolution changes target the electricity connection of the selected delivery
+site. A warm price cache does not restore an electricity connection ID; the
+coordinator synchronizes it from the selected site's account settings instead.
 
-Restoring cached prices after a restart does not require another price fetch
-before requesting a resolution change. A valid account update without an
-electricity connection stops requests to the old connection. Temporarily missing
-account data preserves the last known connection.
+On startup, an available connection's resolution permissions are verified with
+the API even when a fresh price cache avoids another price fetch. If the
+connection is replaced or removed, the old permissions and resolution status
+are cleared. Temporary missing account data preserves the last known
+same-entry connection ID; failed permission checks do not allow a change.
+
+If Home Assistant reports that the electricity connection is unavailable,
+confirm that the selected Frank Energie site has an electricity contract and
+that account settings have loaded. Retry after a temporary API failure.
 
 ## Smart Battery Entities Unavailable
 
