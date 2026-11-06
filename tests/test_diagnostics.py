@@ -181,9 +181,24 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
         "username": "user@example.com",
         "password": "secret",
         "access_token": "token",
+        "auth_token": "token_auth",
         "site_reference": "site",
     }
     entry.runtime_data = runtime_data
+
+    coordinator.data.update(
+        {
+            "street": "Main Street",
+            "houseNumber": "10",
+            "houseNumberAddition": "A",
+            "zipCode": "1234 AB",
+            "city": "Amsterdam",
+            "latitude": 52.3676,
+            "longitude": 4.9041,
+            "vin": "1HGCR2F83HA000000",
+            "inverter_serial_numbers": ["INV-123456"],
+        }
+    )
 
     diagnostics = await async_get_config_entry_diagnostics(
         MagicMock(),
@@ -193,10 +208,20 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["entry"]["data"]["username"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["password"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["access_token"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["auth_token"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["site_reference"] == "**REDACTED**"
 
     assert diagnostics["data"]["email"] == "**REDACTED**"
     assert diagnostics["data"]["ean"] == "**REDACTED**"
+    assert diagnostics["data"]["street"] == "**REDACTED**"
+    assert diagnostics["data"]["houseNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["houseNumberAddition"] == "**REDACTED**"
+    assert diagnostics["data"]["zipCode"] == "**REDACTED**"
+    assert diagnostics["data"]["city"] == "**REDACTED**"
+    assert diagnostics["data"]["latitude"] == "**REDACTED**"
+    assert diagnostics["data"]["longitude"] == "**REDACTED**"
+    assert diagnostics["data"]["vin"] == "**REDACTED**"
+    assert diagnostics["data"]["inverter_serial_numbers"] == "**REDACTED**"
 
     assert diagnostics["data"]["safe"] == "value"
 
