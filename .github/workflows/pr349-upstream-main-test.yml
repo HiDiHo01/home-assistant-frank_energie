@@ -54,6 +54,7 @@ jobs:
       - name: Install integration test dependencies
         run: poetry install
       - name: Override installed client with verified upstream main
+        id: upstream_client
         run: |
           poetry run python -m pip install --no-deps --force-reinstall "git+https://github.com/HiDiHo01/python-frank-energie.git@f99c7d399e2ffb2971dbe1819225ce82bd92a29e"
           poetry run python - <<'PY'
@@ -66,4 +67,5 @@ jobs:
         run: |
           poetry run python -m pytest -q tests/test_rate_limit.py tests/test_coordinator.py tests/test_price_cache.py tests/test_diagnostics.py tests/test_config_flow.py
       - name: Complete integration test suite
+        if: ${{ !cancelled() && steps.upstream_client.outcome == 'success' }}
         run: poetry run python -m pytest -q
