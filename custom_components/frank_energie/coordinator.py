@@ -62,6 +62,7 @@ from python_frank_energie.models import (
     UserSmartFeedInStatus,
 )
 
+from . import helpers
 from .const import (
     CONF_INTERVAL_BATTERIES,
     CONF_INTERVAL_BATTERY_SESSIONS,
@@ -837,11 +838,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Tomorrow prices not yet available, retrying on next refresh")
 
         if self.cached_prices_today is not None:
-            entry_title = self.config_entry.title if self.config_entry else "Unknown"
+            entry_id = self.config_entry.entry_id if self.config_entry else "Unknown"
             _LOGGER.debug(
-                "[%s][%s] Tomorrow electricity periods: %s",
-                entry_title,
-                self.site_reference,
+                "[%s] Tomorrow electricity periods: %s",
+                entry_id,
                 (
                     len(prices_tomorrow.electricity.all)
                     if prices_tomorrow and prices_tomorrow.electricity
@@ -1345,7 +1345,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             vehicles = await self.api.enode_vehicles()
-            _LOGGER.debug("Fetched Enode vehicles: %s", vehicles)
+            _LOGGER.debug("Fetched Enode vehicles")
             return vehicles
         except Exception as err:
             self._handle_dynamic_fetch_error("enode vehicles", err)
@@ -1429,12 +1429,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 # Merge SUMMARY
                 if details.smart_battery_summary:
                     battery.summary = details.smart_battery_summary
-                _LOGGER.debug(
-                    "Merged battery data %s | settings=%s summary=%s",
-                    battery.id,
-                    battery.settings,
-                    battery.summary,
-                )
+                _LOGGER.debug("Merged smart battery settings and summary")
             return details
         except Exception as err:
             self._handle_dynamic_fetch_error(f"details for battery {battery.id}", err)
@@ -1987,8 +1982,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         user_country = self._user_country or default_country
 
         _LOGGER.debug(
-            "Fetching user prices for site_reference=%s country=%s resolution=%s",
-            site_reference,
+            "Fetching user prices for country=%s resolution=%s",
             user_country,
             self.resolution,
         )
@@ -2209,25 +2203,25 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             _LOGGER.warning(
                 "API not authenticated, skipping call to %s",
-                getattr(method, "__name__", repr(method)),
+                getattr(method, "__name__", type(method).__name__),
             )
             return None
         try:
             result = await method(*args)
             _LOGGER.debug(
-                "Fetched data from %s: %s",
-                getattr(method, "__name__", repr(method)),
-                result,
+                "Fetched data from %s",
+                getattr(method, "__name__", type(method).__name__),
             )
             return result
         except asyncio.CancelledError:
             # Required for correct task cancellation handling in Home Assistant
             raise
         except Exception as err:
-            _LOGGER.exception(
-                "Failed to fetch data using %s: %s",
-                getattr(method, "__name__", repr(method)),
+            helpers.log_api_exception(
+                _LOGGER,
+                "Failed to fetch data using %s",
                 err,
+                getattr(method, "__name__", type(method).__name__),
             )
             return None
 
@@ -2328,9 +2322,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     options={**self.config_entry.options, "resolution": value},
                 )
                 _LOGGER.debug(
-                    "Resolution saved to options (unauthenticated API): %s -> options=%s",
+                    "Resolution saved to options (unauthenticated API): %s",
                     value,
-                    self.config_entry.options,
                 )
                 # Invalidate price cache so next refresh fetches with new resolution
                 self._static_prices_today = None

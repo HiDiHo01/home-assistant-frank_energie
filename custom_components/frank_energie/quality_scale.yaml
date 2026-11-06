@@ -1,0 +1,171 @@
+# Evidence review: 2026-11-02, main a691e348 plus the session/privacy changes.
+# This custom integration targets Platinum; no tier is currently certified.
+# todo means incomplete or not yet fully verified, not necessarily absent.
+# See docs/quality_readiness.md for measurements, limitations and priorities.
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: No integration-specific services are registered; controls use standard entity actions.
+  appropriate-polling:
+    status: todo
+    comment: Separate coordinators and intervals exist; verify rate-limit recovery and publication-window consistency.
+  brands:
+    status: todo
+    comment: Local brand assets exist; verify the applicable Home Assistant brands requirement separately.
+  common-modules:
+    status: todo
+    comment: coordinator.py is shared, but common entity behavior remains distributed across platform modules.
+  config-flow:
+    status: todo
+    comment: UI setup exists; finish translated validation and reconfiguration data/identity review, including PR 352.
+  config-flow-test-coverage:
+    status: todo
+    comment: Authentication/session regressions are covered; config_flow.py still lacks full coverage.
+  dependency-transparency:
+    status: todo
+    comment: The client is open source and published on PyPI; its release/build transparency audit remains open.
+  docs-actions:
+    status: exempt
+    comment: There are no integration-specific services; entity controls are described in docs/entities.md.
+  docs-conditions:
+    status: exempt
+    comment: No integration-specific condition platform is implemented.
+  docs-high-level-description:
+    status: done
+    comment: README.md and docs/index.md describe the service and the public/authenticated use cases.
+  docs-installation-instructions:
+    status: todo
+    comment: UI setup and prerequisites are documented; verify complete HACS/manual installation instructions.
+  docs-removal-instructions:
+    status: done
+    comment: docs/configuration.md explains entry removal and cache cleanup; tests/test_init.py covers stored-cache removal.
+  docs-triggers:
+    status: exempt
+    comment: No integration-specific trigger platform exists; bus events and generic event triggers are documented in docs/events.md.
+  entity-event-setup:
+    status: todo
+    comment: CoordinatorEntity owns listeners, but complete lifecycle verification still includes three skipped teardown tests.
+  entity-unique-id:
+    status: todo
+    comment: Entry/device identifiers exist; finish cross-entry and dynamic-device identifier verification across all platforms.
+  has-entity-name:
+    status: todo
+    comment: Active entity classes generally set has_entity_name; complete the description/name audit before certification.
+  runtime-data:
+    status: todo
+    comment: Typed runtime_data exists, but a legacy price-coordinator alias remains in hass.data[DOMAIN][entry_id]; remove it and verify lifecycle/consumers.
+  test-before-configure:
+    status: todo
+    comment: Authenticated setup checks login and sites; verify the public path and all failure/identity cases.
+  test-before-setup:
+    status: todo
+    comment: Initial coordinator refreshes exist; finish maintenance, partial-failure and setup-cleanup verification.
+  unique-config-entry:
+    status: todo
+    comment: Setup checks unique IDs; reconfiguration and account/site identity checks still need complete verification.
+  # Silver
+  action-exceptions:
+    status: todo
+    comment: Review entity commands that currently return after failed mutations or raise plain ValueError.
+  config-entry-unloading:
+    status: todo
+    comment: Unload/cache-removal tests exist; resolve or specifically justify the three existing timer-related skips.
+  docs-configuration-parameters:
+    status: todo
+    comment: Document every current polling/feature option with defaults and constraints.
+  docs-installation-parameters:
+    status: todo
+    comment: Reconcile every setup field and its validation behavior with docs/configuration.md.
+  entity-unavailable:
+    status: todo
+    comment: Some availability tests pass; verify per-resource failure and retained-value behavior on every platform.
+  integration-owner:
+    status: done
+    comment: manifest.json lists the repository maintainers as codeowners.
+  log-when-unavailable:
+    status: todo
+    comment: DataUpdateCoordinator reports transitions, but additional fetch logs need an outage/recovery repetition audit.
+  parallel-updates:
+    status: todo
+    comment: Entity platforms do not yet declare explicit PARALLEL_UPDATES policies.
+  reauthentication-flow:
+    status: todo
+    comment: Success/error/session tests and the supported reauth callback pass; finish account-identity and lifecycle coverage.
+  test-coverage:
+    status: todo
+    comment: Measured coverage remains below the required greater-than-95-percent coverage in every module; no gaps are excluded for certification.
+  # Gold
+  devices:
+    status: todo
+    comment: Service and child devices exist; finish identifier, metadata and parent-link verification for all device kinds.
+  diagnostics:
+    status: todo
+    comment: Redaction tests pass, but diagnostics currently emphasize the price coordinator; review other resources and unloaded entries.
+  discovery:
+    status: exempt
+    comment: This cloud account service requires user credentials/site selection and has no discoverable local endpoint.
+  discovery-update-info:
+    status: exempt
+    comment: There is no discovered host/address to update; the client uses the provider's fixed cloud endpoint.
+  docs-data-update:
+    status: todo
+    comment: docs/update_frequency.md exists; reconcile UTC windows, Amsterdam-local fetch gating and DST behavior.
+  docs-examples:
+    status: todo
+    comment: Examples exist; verify their event fields, price resolutions and current entity names before certification.
+  docs-known-limitations:
+    status: todo
+    comment: Consolidate contract, regional, history, maintenance and provider capability limitations from current code.
+  docs-supported-devices:
+    status: todo
+    comment: Clarify upstream-supported battery/charger/vehicle capabilities without claiming unverified device compatibility.
+  docs-supported-functions:
+    status: todo
+    comment: Reconcile the entity reference with every forwarded platform, including datetime, and current account capabilities.
+  docs-troubleshooting:
+    status: todo
+    comment: A troubleshooting guide exists; verify all recovery instructions against the current implementation.
+  docs-use-cases:
+    status: done
+    comment: docs/examples.md and docs/user_features.md describe energy monitoring, price notifications and smart-device use cases.
+  dynamic-devices:
+    status: todo
+    comment: Device entities are largely built during platform setup; verify additions after setup without a reload.
+  entity-category:
+    status: todo
+    comment: Complete the configuration/diagnostic classification audit for static and generated descriptions.
+  entity-device-class:
+    status: todo
+    comment: Verify units, state classes and device classes for every generated and static measurement.
+  entity-disabled-by-default:
+    status: todo
+    comment: Many optional diagnostics are disabled; finish the rare/noisy/sensitive entity audit across platforms.
+  entity-translations:
+    status: todo
+    comment: Locale tests exist; review generated names and remaining hardcoded user-visible labels.
+  exception-translations:
+    status: todo
+    comment: Config validation and entity command errors still include untranslated messages.
+  icon-translations:
+    status: todo
+    comment: No icons.json exists; icons are still predominantly defined in Python descriptions.
+  reconfiguration-flow:
+    status: todo
+    comment: PR 352 contains dedicated lifecycle work and remains unmerged; do not count it as main evidence.
+  repair-issues:
+    status: todo
+    comment: Assess repairable configuration/capability failures and document which are covered by HA's built-in reauth handling.
+  stale-devices:
+    status: todo
+    comment: Obsolete umbrella-device cleanup exists; complete removal handling for departed batteries, chargers and vehicles.
+  # Platinum
+  async-dependency:
+    status: done
+    comment: Released python-frank-energie 2026.9.20 performs HTTP requests through awaited aiohttp operations.
+  inject-websession:
+    status: done
+    comment: Runtime and all four config-flow client sites receive HA's aiohttp session; tests/test_auth_session_privacy.py verifies reuse and ownership.
+  strict-typing:
+    status: todo
+    comment: No strict checker is enforced, annotations remain incomplete, and the installed client distribution has no py.typed marker.

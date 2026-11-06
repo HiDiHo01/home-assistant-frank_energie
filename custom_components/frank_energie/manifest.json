@@ -14,7 +14,6 @@
         "frank_energie",
         "python_frank_energie"
     ],
-    "quality_scale": "platinum",
     "requirements": [
         "python-frank-energie==2026.9.20"
     ],

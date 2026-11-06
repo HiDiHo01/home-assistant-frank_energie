@@ -90,6 +90,18 @@ def price_cache_store(hass: HomeAssistant, entry_id: str) -> Store:
     return Store(hass, PRICE_CACHE_STORE_VERSION, f"{DOMAIN}_prices_{entry_id}")
 
 
+def log_api_exception(
+    logger: logging.Logger, message: str, error: Exception, *args: object
+) -> None:
+    """Log useful frames without a provider's private message or exception chain."""
+    sanitized_error = RuntimeError(f"{type(error).__name__}: provider details omitted")
+    logger.exception(
+        message,
+        *args,
+        exc_info=(RuntimeError, sanitized_error, error.__traceback__),
+    )
+
+
 def resolve_gas_unit(per_unit: str | None) -> str:
     """Return the Home Assistant gas unit for an API perUnit value."""
 
