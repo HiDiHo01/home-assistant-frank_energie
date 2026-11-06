@@ -10,12 +10,14 @@ from datetime import datetime, time
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_platform
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
@@ -152,6 +154,39 @@ async def async_remove_entry(
     """Clean up persistent storage when a config entry is removed."""
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
     await price_cache_store(hass, entry.entry_id).async_remove()
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Allow deleting a device once the integration no longer provides it.
+
+    A device is kept while any of its entities is live in one of this entry's
+    entity platforms, so an API failure after setup (entities merely going
+    unavailable) doesn't make it deletable. A charger, battery or vehicle
+    removed from the account has no live entities after the next restart or
+    reload, so the user can then delete the leftover device.
+
+    Entities are only created at setup, so a device whose fetch failed during
+    setup also has no live entities for that run. Deleting it then is
+    recoverable: the next successful reload recreates the device.
+    """
+    if entry.state is not ConfigEntryState.LOADED:
+        # Can't tell which devices are still provided until setup has finished.
+        return False
+
+    live_entity_ids = {
+        entity_id
+        for platform in entity_platform.async_get_platforms(hass, DOMAIN)
+        if platform.config_entry is entry
+        for entity_id in platform.entities
+    }
+    device_entities = er.async_entries_for_device(
+        er.async_get(hass), device_entry.id, include_disabled_entities=True
+    )
+    return live_entity_ids.isdisjoint(entity.entity_id for entity in device_entities)
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods

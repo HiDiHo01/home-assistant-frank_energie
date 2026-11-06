@@ -8,6 +8,8 @@ import zoneinfo
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie.const import (
     DOMAIN,
@@ -19,7 +21,11 @@ from custom_components.frank_energie.helpers import encrypt_password
 from custom_components.frank_energie.helpers import (
     _get_fernet_key as real_get_fernet_key,
 )
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockEntity,
+    MockEntityPlatform,
+)
 from tests.utils import ResponseMocks
 
 pytestmark = pytest.mark.asyncio
@@ -152,6 +158,96 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
     assert result is True
     assert spy.called
     assert _find_device(device_registry, entry.entry_id, identifier) is None
+
+
+@pytest.mark.parametrize(
+    ("scenario", "removable"),
+    [
+        ("leftover-device", True),
+        ("live-entities", False),
+        ("entry-not-loaded", False),
+        ("shared-device", True),
+    ],
+)
+async def test_remove_config_entry_device(
+    hass: HomeAssistant,
+    hass_ws_client,
+    frank_energie_setup,
+    scenario: str,
+    removable: bool,
+) -> None:
+    """Only devices whose entities the integration no longer provides can be deleted.
+
+    Goes through HA's own device-removal websocket command (what the UI's
+    Delete button calls) so HA's lookup of the integration hook is covered.
+    """
+    # Authenticate the websocket before frank_energie_setup freezes the clock,
+    # otherwise the access token is checked against the frozen time.
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    entry = await frank_energie_setup()
+    assert entry.state is ConfigEntryState.LOADED
+
+    device_registry = dr.async_get(hass)
+    if scenario == "live-entities":
+        # Created by the real setup and carries the live price sensors.
+        device = _find_device(device_registry, entry.entry_id, (DOMAIN, entry.entry_id))
+        assert device is not None
+    else:
+        # A charger removed from the account: still in both registries, but
+        # no platform provides its entities any more.
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "charger-removed")},
+        )
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            DOMAIN,
+            "charger-removed_power",
+            config_entry=entry,
+            device_id=device.id,
+        )
+    if scenario == "shared-device":
+        # A second Frank Energie entry still has a live entity for the same
+        # hardware ID. HA gives each entry its own device for that
+        # identifier, so the other entry's live entity must neither block this
+        # removal nor be affected by it.
+        other_entry = MockConfigEntry(domain=DOMAIN, entry_id="other_entry")
+        other_entry.add_to_hass(hass)
+        other_platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
+        other_platform.config_entry = other_entry
+        await other_platform.async_add_entities(
+            [
+                MockEntity(
+                    unique_id="other-charger-power",
+                    device_info={"identifiers": {(DOMAIN, "charger-removed")}},
+                )
+            ]
+        )
+    if scenario == "entry-not-loaded":
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    await client.send_json_auto_id(
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": entry.entry_id,
+            "device_id": device.id,
+        }
+    )
+    response = await client.receive_json()
+
+    assert response["success"] is removable
+    assert (device_registry.async_get(device.id) is None) is removable
+    if scenario == "shared-device":
+        other_device = _find_device(
+            device_registry, "other_entry", (DOMAIN, "charger-removed")
+        )
+        assert other_device is not None
+        assert other_device.id != device.id
+        assert er.async_get(hass).async_get_entity_id(
+            "sensor", DOMAIN, "other-charger-power"
+        )
 
 
 async def test_setup_entry_auth_failure(
