@@ -43,7 +43,7 @@ async def async_setup_entry(
             coordinator=runtime_data.coordinator,
             description=FrankEnergieButtonEntityDescription(
                 key="refresh_prices",
-                name="Refresh Frank Energie Prices",
+                translation_key="refresh_prices",
                 service_name=SERVICE_NAME_PRICES,
             ),
             entry=entry,
@@ -60,7 +60,7 @@ async def async_setup_entry(
                 coordinator=first_session_coordinator,
                 description=FrankEnergieButtonEntityDescription(
                     key="refresh_battery_sessions",
-                    name="Refresh Battery Sessions",
+                    translation_key="refresh_battery_sessions",
                     service_name=SERVICE_NAME_BATTERIES,
                 ),
                 entry=entry,
@@ -106,5 +106,5 @@ class FrankEnergieRefreshButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Handle button press to trigger manual refresh."""
-        _LOGGER.debug("Manual refresh requested: %s", self.entity_description.name)
+        _LOGGER.debug("Manual refresh requested: %s", self.entity_description.key)
         await self._coordinator.async_request_refresh()
