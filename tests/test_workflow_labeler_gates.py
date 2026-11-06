@@ -336,7 +336,7 @@ def test_checkout_retries_failure_before_link_validation(
 
 
 def test_ci_executes_workflow_regressions_with_node() -> None:
-    """Keep the existing full pytest gate and explicitly provide its JS runtime."""
+    """Run the full pytest suite with Node.js after lint when setup succeeds."""
     workflow = _load_workflow("ci.yaml")
     events = workflow.get("on", workflow.get(True))
     assert isinstance(events, dict)
@@ -352,9 +352,20 @@ def test_ci_executes_workflow_regressions_with_node() -> None:
     assert node_inputs["node-version"] == "24"
     assert steps.index(node_step) < steps.index(pytest_step)
     assert steps.index(dependencies) < steps.index(pytest_step)
-    assert "if" not in pytest_step
+    environment_step = _named_step(
+        "ci.yaml", "run", "Verify Home Assistant test environment"
+    )
+    lint_step = _named_step("ci.yaml", "run", "Lint with flake8")
+    assert environment_step["id"] == "environment"
+    assert steps.index(environment_step) < steps.index(pytest_step)
+    assert steps.index(lint_step) < steps.index(pytest_step)
+    assert pytest_step["if"] == (
+        "${{ !cancelled() && steps.environment.outcome == 'success' }}"
+    )
     assert pytest_step.get("continue-on-error", False) is False
-    assert str(pytest_step["run"]).strip() == "poetry run pytest -v --capture=no"
+    assert str(pytest_step["run"]).strip() == (
+        "poetry run python -m pytest tests -ra --junitxml=pytest-results.xml"
+    )
 
 
 @pytest.mark.parametrize(

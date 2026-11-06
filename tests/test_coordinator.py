@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
