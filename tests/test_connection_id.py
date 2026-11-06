@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -613,9 +613,11 @@ async def test_stale_price_cache_only_fetches_resolution_state_once(
 
     # This coordinator-level test exercises the entry's setup phase directly.
     with patch.object(
-        connection_context.entry,
+        type(connection_context.entry),
         "state",
-        ConfigEntryState.SETUP_IN_PROGRESS,
+        new_callable=PropertyMock,
+        return_value=ConfigEntryState.SETUP_IN_PROGRESS,
+        create=True,
     ):
         await connection_context.prices.async_config_entry_first_refresh()
 
