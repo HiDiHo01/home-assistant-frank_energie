@@ -8,10 +8,11 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import math
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Final, TypedDict, cast
 from zoneinfo import ZoneInfo
 
@@ -53,6 +54,7 @@ from python_frank_energie.models import (
     PriceData,
     Resolution,
     SmartBatteries,
+    SmartBattery,
     SmartBatteryDetails,
     SmartBatterySessions,
     SmartPvSystems,
@@ -74,6 +76,7 @@ from .const import (
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
+    DATA_BATTERY_SETTINGS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
@@ -108,6 +111,11 @@ from .helpers import decrypt_password, known_site_contracts, price_cache_store
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
+
+# Battery options and change windows change rarely; refetch them at most this often.
+BATTERY_SETTINGS_REFRESH_INTERVAL: Final[timedelta] = timedelta(minutes=30)
+# Retry ambiguous empty responses and transient failures without discarding cache.
+BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL: Final[timedelta] = timedelta(minutes=15)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
     "Authentication tokens expired, trying to renew them (%s)"
 )
@@ -356,6 +364,9 @@ class FrankEnergieData(TypedDict):
     battery_sessions: list[SmartBatterySessions]
     """Optional smart battery sessions data."""
 
+    smart_battery_settings: dict[str, object]
+    """Per-battery adjustable settings and options, keyed by battery ID."""
+
     smart_pv_systems: SmartPvSystems | None
     """Optional smart PV systems data."""
 
@@ -403,6 +414,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_BATTERIES: None,
         DATA_BATTERY_DETAILS: [],
         DATA_BATTERY_SESSIONS: [],
+        DATA_BATTERY_SETTINGS: {},
         DATA_ENODE_VEHICLES: None,
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
@@ -1477,50 +1489,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except Exception as err:
             self._handle_dynamic_fetch_error(f"sessions for battery {battery.id}", err)
             return None
-
-    async def _fetch_battery_details_and_sessions(
-        self, battery, start_date: date, tomorrow: date
-    ) -> tuple[SmartBatteryDetails | None, SmartBatterySessions | None]:
-        """Fetch details and sessions for each smart battery concurrently."""
-        if not battery:
-            return None, None
-
-        _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
-        return await asyncio.gather(
-            self._fetch_battery_details(battery),
-            self._fetch_battery_sessions(battery, start_date, tomorrow),
-        )
-
-    async def _get_battery_details_and_sessions(
-        self,
-        data_smart_batteries: SmartBatteries | None,
-        start_date: date,
-        tomorrow: date,
-    ) -> tuple[list[SmartBatteryDetails], list[SmartBatterySessions]]:
-        """Fetch details and sessions for all smart batteries concurrently."""
-        details_list: list[SmartBatteryDetails] = []
-        sessions_list: list[SmartBatterySessions] = []
-
-        if not (data_smart_batteries and data_smart_batteries.batteries):
-            _LOGGER.debug("No smart batteries found")
-            return details_list, sessions_list
-
-        battery_tasks = [
-            self._fetch_battery_details_and_sessions(battery, start_date, tomorrow)
-            for battery in data_smart_batteries.batteries
-            if battery
-        ]
-        if not battery_tasks:
-            return details_list, sessions_list
-
-        results = await asyncio.gather(*battery_tasks)
-        for details, sessions in results:
-            if details:
-                details_list.append(details)
-            if sessions:
-                sessions_list.append(sessions)
-
-        return details_list, sessions_list
 
     async def _fetch_tomorrow_data(
         self,
@@ -3107,6 +3075,233 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
             )
         )
+        # Last known ``smartBatterySettings`` per battery, when each was fetched,
+        # when a failed or empty request may be retried, and how often each was
+        # invalidated, so a request that overlaps a change is not marked fresh.
+        self._battery_settings: dict[str, object] = {}
+        self._battery_settings_fetched_at: dict[str, datetime] = {}
+        self._battery_settings_retry_after: dict[str, datetime] = {}
+        self._battery_settings_generation: dict[str, int] = {}
+        # Per-battery request numbers: the last one issued and the last one
+        # recorded, so an older response can never overwrite a newer one.
+        self._battery_settings_requested: dict[str, int] = {}
+        self._battery_settings_recorded: dict[str, int] = {}
+
+    async def async_update_battery_settings(
+        self, battery_id: str, settings: dict[str, object]
+    ) -> bool:
+        """Send a smart battery setting change through the mutation queue.
+
+        Changes are serialized, so overlapping changes are applied in the order
+        they were requested and the last requested value wins. A successful
+        change invalidates the battery's settings before the next queued change
+        starts, then requests a refresh to show the pending change.
+        """
+        outcome: list[bool] = []
+
+        async def _update() -> None:
+            applied = bool(
+                await self.api.smart_battery_update_settings(battery_id, settings)
+            )
+            if applied:
+                self.invalidate_battery_settings(battery_id)
+            outcome.append(applied)
+
+        await self._mutation_queue.add(_update)
+        success = bool(outcome and outcome[0])
+        if success:
+            await self.async_request_refresh()
+        return success
+
+    def invalidate_battery_settings(self, battery_id: str) -> None:
+        """Refetch a battery's settings on the next refresh, e.g. after a change."""
+        self._battery_settings_fetched_at.pop(battery_id, None)
+        self._battery_settings_retry_after.pop(battery_id, None)
+        self._battery_settings_generation[battery_id] = (
+            self._battery_settings_generation.get(battery_id, 0) + 1
+        )
+
+    def _battery_settings_are_fresh(self, battery_id: str, now: datetime) -> bool:
+        """Skip requests while settings are fresh or a retry cooldown is active."""
+        retry_after = self._battery_settings_retry_after.get(battery_id)
+        if retry_after is not None:
+            return now < retry_after
+
+        fetched_at = self._battery_settings_fetched_at.get(battery_id)
+        return (
+            battery_id in self._battery_settings
+            and fetched_at is not None
+            and now - fetched_at < BATTERY_SETTINGS_REFRESH_INTERVAL
+        )
+
+    async def _fetch_battery_settings(
+        self, battery: SmartBattery, now: datetime
+    ) -> tuple[bool, object | None, timedelta | None]:
+        """Fetch the adjustable settings and allowed options of one smart battery.
+
+        Returns ``(fetched, settings, retry_delay)``. ``fetched`` is False when
+        the settings are still fresh (see ``BATTERY_SETTINGS_REFRESH_INTERVAL``
+        and ``invalidate_battery_settings``), when the request failed, and on
+        library releases without ``smart_battery_settings``, where the battery
+        entities keep their static option lists. ``retry_delay`` is set when
+        the request did not produce settings. The library returns None both
+        for a battery without settings and for GraphQL errors or malformed
+        responses, so None keeps the known settings and is retried at the
+        normal refresh interval. Only authentication failures propagate: the
+        settings only refine which options the entities offer, so they must
+        never fail the battery update.
+        """
+        if not hasattr(self.api, "smart_battery_settings"):
+            return False, None, None
+        if self._battery_settings_are_fresh(battery.id, now):
+            return False, None, None
+
+        try:
+            settings = await self.api.smart_battery_settings(battery.id)
+        except (AuthException, AuthRequiredException):
+            raise
+        except Exception as err:
+            # Same authentication shape that ``_handle_fetch_exceptions`` handles.
+            if isinstance(err, RequestException) and str(err).startswith("user-error:"):
+                raise
+            # Deliberately not ``_handle_dynamic_fetch_error``: it re-raises
+            # network errors on the first refresh, and settings must never fail
+            # the update.
+            retry_delay = BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL
+            retry_after = getattr(err, "retry_after", None)
+            if (
+                isinstance(err, RequestException)
+                and isinstance(retry_after, int | float)
+                and not isinstance(retry_after, bool)
+                and math.isfinite(retry_after)
+                and retry_after > 0
+            ):
+                # New clients have a rate-limit error; older pinned clients do
+                # not export that class. Respect a bounded Retry-After hint.
+                retry_delay = max(
+                    retry_delay, timedelta(seconds=min(retry_after, 86400))
+                )
+
+            # Upstream error messages can contain private account data.
+            _LOGGER.debug(
+                "Failed to fetch settings for battery %s: %s",
+                battery.id,
+                type(err).__name__,
+            )
+            return False, None, retry_delay
+
+        if settings is None:
+            return False, None, BATTERY_SETTINGS_REFRESH_INTERVAL
+        return True, settings, None
+
+    async def _fetch_battery_data(
+        self, battery: SmartBattery, start_date: date, tomorrow: date, now: datetime
+    ) -> tuple[
+        SmartBatteryDetails | None,
+        SmartBatterySessions | None,
+        tuple[bool, object | None, timedelta | None],
+    ]:
+        """Fetch details, sessions and settings for one smart battery concurrently."""
+        _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
+        return await asyncio.gather(
+            self._fetch_battery_details(battery),
+            self._fetch_battery_sessions(battery, start_date, tomorrow),
+            self._fetch_battery_settings(battery, now),
+        )
+
+    def _record_battery_settings(
+        self,
+        battery_id: str,
+        fetched: bool,
+        settings: object | None,
+        request: tuple[int, int],
+        now: datetime,
+        retry_delay: timedelta | None,
+    ) -> object | None:
+        """Keep valid settings and guard both success and retry timestamps.
+
+        Generation and request ordering prevent an older response from changing
+        the cache or its cooldown after an overlapping mutation or newer fetch.
+        A request without settings keeps the last known settings and schedules
+        a retry after ``retry_delay``.
+        """
+        generation, request_number = request
+        current = self._battery_settings_generation.get(battery_id, 0) == generation
+        newest = request_number > self._battery_settings_recorded.get(battery_id, 0)
+        if current and newest:
+            if retry_delay is not None:
+                self._battery_settings_retry_after[battery_id] = now + retry_delay
+                self._battery_settings_recorded[battery_id] = request_number
+            elif fetched:
+                self._battery_settings[battery_id] = settings
+                self._battery_settings_recorded[battery_id] = request_number
+                self._battery_settings_fetched_at[battery_id] = now
+                self._battery_settings_retry_after.pop(battery_id, None)
+
+        return self._battery_settings.get(battery_id)
+
+    def _start_battery_settings_request(self, battery_id: str) -> tuple[int, int]:
+        """Return the battery's generation and a new, increasing request number."""
+        request_number = self._battery_settings_requested.get(battery_id, 0) + 1
+        self._battery_settings_requested[battery_id] = request_number
+        return (self._battery_settings_generation.get(battery_id, 0), request_number)
+
+    async def _get_battery_data(
+        self,
+        data_smart_batteries: SmartBatteries | None,
+        start_date: date,
+        tomorrow: date,
+    ) -> tuple[
+        list[SmartBatteryDetails], list[SmartBatterySessions], dict[str, object]
+    ]:
+        """Fetch details, sessions and settings for all smart batteries concurrently.
+
+        Fetched settings and their timestamps are only recorded once every
+        battery's requests completed, and a result is only marked fresh when the
+        battery was not invalidated while it was in flight. Batteries whose
+        settings were not refetched keep their last known settings, including
+        batteries that were briefly missing from the battery list.
+        """
+        details_list: list[SmartBatteryDetails] = []
+        sessions_list: list[SmartBatterySessions] = []
+        settings_by_battery: dict[str, object] = {}
+
+        batteries = [
+            battery
+            for battery in (
+                data_smart_batteries.batteries if data_smart_batteries else []
+            )
+            if battery and battery.id
+        ]
+        if not batteries:
+            _LOGGER.debug("No smart batteries found")
+            return details_list, sessions_list, settings_by_battery
+
+        now = datetime.now(UTC)
+        requests = {
+            battery.id: self._start_battery_settings_request(battery.id)
+            for battery in batteries
+        }
+        results = await asyncio.gather(
+            *(
+                self._fetch_battery_data(battery, start_date, tomorrow, now)
+                for battery in batteries
+            )
+        )
+        for battery, (details, sessions, (fetched, settings, retry_delay)) in zip(
+            batteries, results
+        ):
+            if details:
+                details_list.append(details)
+            if sessions:
+                sessions_list.append(sessions)
+            known = self._record_battery_settings(
+                battery.id, fetched, settings, requests[battery.id], now, retry_delay
+            )
+            if known is not None:
+                settings_by_battery[battery.id] = known
+
+        return details_list, sessions_list, settings_by_battery
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch battery data."""
@@ -3129,9 +3324,8 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             (
                 data_smart_battery_details,
                 data_smart_battery_sessions,
-            ) = await self._get_battery_details_and_sessions(
-                data_smart_batteries, start_date, tomorrow
-            )
+                data_smart_battery_settings,
+            ) = await self._get_battery_data(data_smart_batteries, start_date, tomorrow)
 
             if data_smart_batteries and data_smart_batteries.batteries:
                 self.update_interval = timedelta(
@@ -3153,6 +3347,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             result[DATA_BATTERIES] = data_smart_batteries
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
+            result[DATA_BATTERY_SETTINGS] = data_smart_battery_settings
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

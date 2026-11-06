@@ -7,7 +7,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Final
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import TYPE_CHECKING, Final, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant, callback
@@ -19,6 +21,8 @@ from homeassistant.helpers.storage import Store
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
+    DATA_BATTERY_DETAILS,
+    DATA_BATTERY_SETTINGS,
     DOMAIN,
     SERVICE_NAME_PRICES,
     UNIT_GAS_BE,
@@ -32,6 +36,72 @@ if TYPE_CHECKING:
     from python_frank_energie.models import ChargeSettings
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class AdjustableBatterySetting(Protocol):
+    """One block of python-frank-energie's ``SmartBatteryAdjustableSettings``.
+
+    Typed structurally so the integration also runs on library releases that
+    predate the model.
+    """
+
+    current: object
+    updatable: bool
+    options: Sequence[object]
+    pending: object
+    pending_value_effective_from: datetime | None
+    update_delayed_till: datetime | None
+
+
+def battery_state_value(value: object) -> str | None:
+    """Return an API enum value as a lowercase state, or None when absent or unknown.
+
+    Library enums are ``StrEnum``s; anything that is not a string is not a state.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    state = value.lower()
+    return None if state == "unknown" else state
+
+
+def battery_details_settings(
+    data: Mapping[str, object] | None, battery_id: str
+) -> object | None:
+    """Return a battery's current settings from the battery details query."""
+    details = (data or {}).get(DATA_BATTERY_DETAILS)
+    for battery in details if isinstance(details, list) else []:
+        smart_battery = getattr(battery, "smart_battery", None)
+        if smart_battery is not None and smart_battery.id == battery_id:
+            return smart_battery.settings
+    return None
+
+
+def battery_mode_state(
+    data: Mapping[str, object] | None, battery_id: str
+) -> str | None:
+    """Return a battery's current mode as a state.
+
+    Prefers the details query, which refreshes every poll, and falls back to
+    the last known per-battery settings when the details report no known mode.
+    """
+    mode = battery_state_value(
+        getattr(battery_details_settings(data, battery_id), "battery_mode", None)
+    )
+    if mode is None and (
+        setting := battery_adjustable_setting(data, battery_id, "battery_mode")
+    ):
+        mode = battery_state_value(setting.current)
+    return mode
+
+
+def battery_adjustable_setting(
+    data: Mapping[str, object] | None, battery_id: str, name: str
+) -> AdjustableBatterySetting | None:
+    """Return one setting block of a battery's ``smartBatterySettings``, if known."""
+    by_battery = (data or {}).get(DATA_BATTERY_SETTINGS)
+    if not isinstance(by_battery, dict):
+        return None
+    return getattr(by_battery.get(battery_id), name, None)
 
 
 PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
