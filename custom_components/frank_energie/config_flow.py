@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 import voluptuous as vol
+from aiohttp import ClientError
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.const import (
@@ -17,6 +18,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -26,9 +28,16 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
 )
 from python_frank_energie import Authentication, FrankEnergie
-from python_frank_energie.exceptions import AuthException, ConnectionException
+from python_frank_energie.exceptions import (
+    AuthException,
+    AuthRequiredException,
+    ConnectionException,
+    NetworkError,
+)
 
 from .const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
     CONF_SITE,
     DOMAIN,
     CONF_INTERVAL_SETTINGS,
@@ -55,26 +64,46 @@ from .helpers import decrypt_password, encrypt_password
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
 
-VERSION = 2
-MINOR_VERSION = 1
 
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old config entry format."""
-
-    if entry.version < 2:
-        new_options = dict(entry.options)
-
-        if "resolution" not in new_options:
-            new_options["resolution"] = "PT15M"
-
-        hass.config_entries.async_update_entry(
-            entry,
-            options=new_options,
-            version=2,
+async def _async_account_matches_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    auth: Authentication,
+    username: str,
+) -> bool:
+    """Verify site access before replacing credentials, preserving legacy account identity."""
+    if CONF_SITE not in entry.data:
+        saved_username = entry.options.get(CONF_USERNAME) or entry.data.get(
+            CONF_USERNAME
+        )
+        return (
+            isinstance(saved_username, str)
+            and bool(saved_username)
+            and saved_username.casefold() == username.casefold()
         )
 
-    return True
+    site_reference = entry.data[CONF_SITE]
+    if not isinstance(site_reference, str) or not site_reference:
+        return False
+
+    try:
+        async with FrankEnergie(
+            clientsession=async_get_clientsession(hass),
+            auth_token=auth.authToken,
+            refresh_token=auth.refreshToken,
+        ) as api:
+            user_sites = await api.UserSites()
+    except AuthRequiredException as err:
+        raise AuthException("Site verification requires valid credentials") from err
+    except (ClientError, NetworkError, TimeoutError) as err:
+        raise ConnectionException(
+            "Unable to verify the configured delivery site"
+        ) from err
+
+    return user_sites is not None and any(
+        getattr(site, "reference", None) == site_reference
+        for site in user_sites.deliverySites
+    )
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -112,7 +141,8 @@ async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> 
 class ConfigFlow(config_entries.ConfigFlow):
     """Handle the config flow for Frank Energie."""
 
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
+    MINOR_VERSION = CONFIG_ENTRY_MINOR_VERSION
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -137,6 +167,10 @@ class ConfigFlow(config_entries.ConfigFlow):
         try:
             # Attempt authentication with the API
             auth = await self._authenticate(user_input)
+            if self._reauth_entry and not await _async_account_matches_entry(
+                self.hass, self._reauth_entry, auth, user_input[CONF_USERNAME]
+            ):
+                return self._show_login_form(errors={"base": "wrong_account"})
             # Successful login
             return await self._handle_authentication_success(user_input, auth)
 
@@ -147,11 +181,11 @@ class ConfigFlow(config_entries.ConfigFlow):
             # Network/API issues
             return await self._handle_authentication_failure(reason="connection_error")
         except Exception as ex:
-            # Catch-all for unexpected errors
+            # Keep traceback frames without exposing provider messages or chained errors.
+            sanitized_exception = RuntimeError(type(ex).__name__)
             _LOGGER.exception(
-                "Unexpected error during login for user %s: %s",
-                user_input.get(CONF_USERNAME, "UNKNOWN"),
-                ex,
+                "Unexpected error during login",
+                exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
             )
             return await self._handle_authentication_failure(reason="unknown_error")
 
@@ -400,30 +434,9 @@ class ConfigFlow(config_entries.ConfigFlow):
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None,
     ) -> ConfigFlowResult:
-        """Handle the reconfiguration step."""
-        if self._reauth_entry is None:
-            self._reauth_entry = self.hass.config_entries.async_get_entry(
-                self.context["entry_id"]
-            )
-
-        if not user_input:
-            return self._show_login_form()
-
-        validation_errors = self._validate_login_input(user_input)
-
-        if validation_errors:
-            return self._show_login_form(errors=validation_errors)
-
-        try:
-            auth = await self._authenticate(user_input)
-        except AuthException:
-            return await self._handle_authentication_failure(reason="invalid_auth")
-        except ConnectionException:
-            return await self._handle_authentication_failure(reason="connection_error")
-        except Exception:
-            return await self._handle_authentication_failure(reason="unknown_error")
-
-        return await self._handle_authentication_success(user_input, auth)
+        """Validate credentials for the entry selected by Home Assistant."""
+        self._reauth_entry = self._get_reconfigure_entry()
+        return await self.async_step_login(user_input, errors)
 
     async def _get_available_sites(self, username: str) -> list[dict[str, str]]:
         """Retrieve and normalize available delivery sites for the user."""
@@ -630,7 +643,9 @@ class ConfigFlow(config_entries.ConfigFlow):
         # Try to pre-fill username from reauth entry or last user input
         username = None
         if self._reauth_entry:
-            username = self._reauth_entry.data.get(CONF_USERNAME)
+            username = self._reauth_entry.options.get(
+                CONF_USERNAME
+            ) or self._reauth_entry.data.get(CONF_USERNAME)
         elif user_input:
             username = user_input.get(CONF_USERNAME)
 
@@ -701,13 +716,11 @@ class ConfigFlow(config_entries.ConfigFlow):
             updated_data.pop(CONF_USERNAME, None)
             updated_data.pop(CONF_PASSWORD, None)
 
-            self.hass.config_entries.async_update_entry(
-                self._reauth_entry, data=updated_data, options=updated_options
+            return self.async_update_reload_and_abort(
+                self._reauth_entry,
+                data=updated_data,
+                options=updated_options,
             )
-            self.hass.async_create_task(
-                self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
-            )
-            return self.async_abort(reason="reauth_successful")
         return await self.async_step_site(self.sign_in_data)
 
     async def _handle_authentication_failure(
@@ -872,6 +885,10 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                     auth = await api.login(
                         user_input[CONF_USERNAME], password_to_validate
                     )
+                if not await _async_account_matches_entry(
+                    self.hass, entry, auth, user_input[CONF_USERNAME]
+                ):
+                    return await self.async_step_user(errors={"base": "wrong_account"})
 
                 # Encrypt password before storing in options
                 encrypted_password = encrypt_password(self.hass, password_to_validate)
@@ -898,7 +915,11 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:
-                _LOGGER.exception("Unexpected error in options flow: %s", ex)
+                sanitized_exception = RuntimeError(type(ex).__name__)
+                _LOGGER.exception(
+                    "Unexpected error in options flow",
+                    exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
+                )
                 errors = {"base": "unknown_error"}
 
         runtime_data = getattr(entry, "runtime_data", None)
