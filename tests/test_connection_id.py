@@ -554,13 +554,16 @@ async def test_mutation_does_not_update_options_after_target_changes(
         _change_connection_during_mutation
     )
 
-    with pytest.raises(UpdateFailed, match="Electricity connection changed"):
-        await connection_context.prices.async_set_resolution("PT60M")
+    await connection_context.prices.async_set_resolution("PT60M")
 
     assert connection_context.entry.options["resolution"] == "PT15M"
     connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
         "electricity-alpha"
     )
+    connection_context.api.contract_price_resolution_request_change.assert_awaited_once_with(
+        "electricity-alpha", "PT60M"
+    )
+    connection_context.prices.async_request_refresh.assert_awaited_once()
 
 
 async def test_post_change_state_updates_static_cache(
@@ -601,6 +604,61 @@ async def test_connection_replacement_invalidates_old_price_caches(
     assert connection_context.prices.cached_prices_tomorrow is None
     assert connection_context.prices.last_fetch_today is None
     assert connection_context.prices.last_fetch_tomorrow is None
+
+
+async def test_transient_state_failure_keeps_verified_prices(
+    hass: HomeAssistant, connection_context: _ConnectionContext
+) -> None:
+    """Keep the confirmed account interval and cached prices after a failed poll."""
+    ctx = connection_context
+    hass.config_entries.async_update_entry(ctx.entry, options={"resolution": "PT60M"})
+    ctx.prices._sync_connection_id()
+    ctx.prices._static_prices_today = (
+        ctx.prices._fetch_prices_with_fallback.return_value
+    )
+    ctx.prices.last_fetch_today = datetime.now(UTC)
+
+    verified_state = await ctx.prices._refresh_current_resolution_state()
+    assert verified_state is not None
+    assert ctx.prices.resolution == "PT15M"
+    assert ctx.prices._is_cache_resolution_valid()
+
+    ctx.api.contract_price_resolution_state.side_effect = RequestException(
+        "temporary failure"
+    )
+    result = await ctx.prices._async_update_data()
+
+    assert ctx.prices.resolution == "PT15M"
+    assert ctx.prices._is_cache_resolution_valid()
+    assert result[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is verified_state
+    ctx.prices._fetch_prices_with_fallback.assert_not_awaited()
+    assert ctx.api.contract_price_resolution_state.await_count == 2
+
+
+async def test_effective_resolution_change_invalidates_today_cache(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Fetch prices again if the account changes the active resolution."""
+    ctx = connection_context
+    ctx.prices._sync_connection_id()
+    ctx.prices._static_prices_today = (
+        ctx.prices._fetch_prices_with_fallback.return_value
+    )
+    ctx.prices.last_fetch_today = datetime.now(UTC)
+    ctx.api.contract_price_resolution_state.return_value = (
+        ContractPriceResolutionState(
+            active_option="PT60M",
+            available_options=["PT15M", "PT60M"],
+            is_change_request_possible=True,
+        )
+    )
+
+    await ctx.prices._async_update_data()
+
+    ctx.prices._fetch_prices_with_fallback.assert_awaited_once()
+    ctx.api.contract_price_resolution_state.assert_awaited_once_with(
+        "electricity-alpha"
+    )
 
 
 async def test_stale_price_cache_only_fetches_resolution_state_once(
