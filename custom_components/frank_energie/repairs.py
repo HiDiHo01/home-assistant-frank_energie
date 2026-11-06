@@ -39,7 +39,9 @@ def _inventory_ids(kind: str, inventory: object) -> set[str] | None:
 
     identifiers: set[str] = set()
     for item in collection:
-        item_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
+        item_id = (
+            item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
+        )
         if not isinstance(item_id, str) or not item_id or item_id in identifiers:
             return None
         identifiers.add(item_id)
