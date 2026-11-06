@@ -21,7 +21,11 @@ from custom_components.frank_energie.helpers import encrypt_password
 from custom_components.frank_energie.helpers import (
     _get_fernet_key as real_get_fernet_key,
 )
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockEntity,
+    MockEntityPlatform,
+)
 from tests.utils import ResponseMocks
 
 pytestmark = pytest.mark.asyncio
@@ -158,7 +162,12 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
 
 @pytest.mark.parametrize(
     ("scenario", "removable"),
-    [("leftover-device", True), ("live-entities", False), ("entry-not-loaded", False)],
+    [
+        ("leftover-device", True),
+        ("live-entities", False),
+        ("entry-not-loaded", False),
+        ("shared-device", True),
+    ],
 )
 async def test_remove_config_entry_device(
     hass: HomeAssistant,
@@ -198,6 +207,23 @@ async def test_remove_config_entry_device(
             config_entry=entry,
             device_id=device.id,
         )
+    if scenario == "shared-device":
+        # A second Frank Energie entry still has a live entity for the same
+        # hardware ID. HA gives each entry its own device for that
+        # identifier, so the other entry's live entity must neither block this
+        # removal nor be affected by it.
+        other_entry = MockConfigEntry(domain=DOMAIN, entry_id="other_entry")
+        other_entry.add_to_hass(hass)
+        other_platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
+        other_platform.config_entry = other_entry
+        await other_platform.async_add_entities(
+            [
+                MockEntity(
+                    unique_id="other-charger-power",
+                    device_info={"identifiers": {(DOMAIN, "charger-removed")}},
+                )
+            ]
+        )
     if scenario == "entry-not-loaded":
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
@@ -213,6 +239,15 @@ async def test_remove_config_entry_device(
 
     assert response["success"] is removable
     assert (device_registry.async_get(device.id) is None) is removable
+    if scenario == "shared-device":
+        other_device = _find_device(
+            device_registry, "other_entry", (DOMAIN, "charger-removed")
+        )
+        assert other_device is not None
+        assert other_device.id != device.id
+        assert er.async_get(hass).async_get_entity_id(
+            "sensor", DOMAIN, "other-charger-power"
+        )
 
 
 async def test_setup_entry_auth_failure(
