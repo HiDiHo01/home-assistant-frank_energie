@@ -2931,12 +2931,8 @@ async def test_api_resolution_change_invalidates_same_day_price_cache(
     )
 
     now_utc = datetime.now(UTC)
-    cached_prices = _make_market_prices_with_resolution(
-        15, now_utc.isoformat()
-    )
-    refreshed_prices = _make_market_prices_with_resolution(
-        60, now_utc.isoformat()
-    )
+    cached_prices = _make_market_prices_with_resolution(15, now_utc.isoformat())
+    refreshed_prices = _make_market_prices_with_resolution(60, now_utc.isoformat())
     price_coordinator._static_prices_today = cached_prices
     price_coordinator.last_fetch_today = now_utc
     price_coordinator.cached_prices_tomorrow = cached_prices
