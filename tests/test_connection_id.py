@@ -471,3 +471,37 @@ async def test_resolution_change_uses_latest_restrictions_for_replaced_connectio
         connection_context.prices._resolution_state_connection_id == "new-electricity"
     )
     connection_context.api.contract_price_resolution_request_change.assert_not_awaited()
+
+async def test_resolution_state_discards_connection_changed_during_fetch(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Never publish a resolution state for a connection replaced mid-request."""
+    connection_context.prices._sync_connection_id()
+
+    async def _change_connection_during_fetch(
+        connection_id: str,
+    ) -> ContractPriceResolutionState:
+        """Simulate the selected site's settings updating during the API await."""
+        assert connection_id == "electricity-alpha"
+        connection_context.settings.data[DATA_USER] = _make_user("electricity-beta")
+        return ContractPriceResolutionState(
+            active_option="PT15M",
+            available_options=["PT15M", "PT60M"],
+            is_change_request_possible=True,
+        )
+
+    connection_context.api.contract_price_resolution_state.side_effect = (
+        _change_connection_during_fetch
+    )
+
+    state = await connection_context.prices._refresh_current_resolution_state()
+
+    assert state is None
+    assert connection_context.prices._connection_id == "electricity-beta"
+    assert connection_context.prices._resolution_state_connection_id is None
+    assert connection_context.prices._api_resolution_state is None
+    assert connection_context.prices._static_contract_price_resolution_state is None
+    assert connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is None
+    connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
+        "electricity-alpha"
+    )

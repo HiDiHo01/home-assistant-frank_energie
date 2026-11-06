@@ -2663,6 +2663,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return None
 
         state = await self._fetch_contract_price_resolution_state(connection_id)
+        # Account settings may change while the API request is in flight.
+        self._sync_connection_id()
         if connection_id != self._connection_id or state is None:
             self._clear_resolution_state()
             return None
