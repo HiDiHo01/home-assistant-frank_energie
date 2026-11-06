@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
@@ -32,6 +32,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import FrankEnergieException, RequestException
 from python_frank_energie.models import (
+    ContractPriceResolutionState,
     MonthSummary,
     Invoices,
     User,
@@ -643,16 +644,24 @@ class TestResolutionProperty:
             "expected_resolution",
         ),
         [
-            # Authenticated cases
+            # A valid API resolution wins even while a change is pending.
             (True, "PT60M", "PT15M", False, "PT60M"),
-            (True, "PT60M", "PT15M", True, "PT15M"),
+            (True, "PT60M", "PT15M", True, "PT60M"),
+            (True, "PT15M", "PT60M", True, "PT15M"),
+            (True, "pt60m", "PT15M", False, "PT60M"),
+            (True, "pT15m", "PT60M", True, "PT15M"),
             (True, "UNSUPPORTED", "PT60M", False, "PT60M"),
             (True, "UNSUPPORTED", "INVALID", False, "PT15M"),
             (True, None, "PT60M", False, "PT60M"),
             (True, "", "PT60M", False, "PT60M"),
-            # Unauthenticated cases
-            (False, "PT60M", "PT15M", False, "PT15M"),
+            (True, None, "INVALID", True, "PT15M"),
+            # Authentication does not change resolution precedence.
+            (False, "PT60M", "PT15M", False, "PT60M"),
+            (False, "PT60M", "PT15M", True, "PT60M"),
             (False, "PT15M", "INVALID", False, "PT15M"),
+            (False, "pt15m", "PT60M", False, "PT15M"),
+            (False, "pT60m", "PT15M", True, "PT60M"),
+            (False, "UNSUPPORTED", "PT60M", True, "PT60M"),
         ],
     )
     async def test_resolution_selection_and_fetch_resolution_parameter(
@@ -664,7 +673,7 @@ class TestResolutionProperty:
         pending_change: bool,
         expected_resolution: str,
     ) -> None:
-        """Verify resolution property selection and the resolution argument in public price queries."""
+        """Prefer valid API resolutions regardless of auth or pending changes."""
         from datetime import date
         from unittest.mock import PropertyMock
 
@@ -680,9 +689,9 @@ class TestResolutionProperty:
         coordinator._resolution_change_pending = pending_change
 
         if api_active_option is not None:
-            mock_state = MagicMock()
-            mock_state.activeOption = api_active_option
-            coordinator._api_resolution_state = mock_state
+            coordinator._api_resolution_state = ContractPriceResolutionState(
+                active_option=api_active_option
+            )
         else:
             coordinator._api_resolution_state = None
 
@@ -694,9 +703,39 @@ class TestResolutionProperty:
 
         await coordinator._fetch_public_prices_for_range(today, tomorrow, "NL")
 
-        coordinator.api.prices.assert_called_once_with(
+        coordinator.api.prices.assert_awaited_once_with(
             today, resolution=expected_resolution
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "api_active_option", [None, 60, ["PT60M"], {"PT60M": True}]
+    )
+    @pytest.mark.parametrize(
+        ("config_option", "expected_resolution"),
+        [("PT60M", "PT60M"), ("INVALID", "PT15M")],
+    )
+    async def test_non_string_api_resolution_uses_fallback(
+        self,
+        hass: HomeAssistant,
+        coordinator: FrankEnergieCoordinator,
+        api_active_option: object,
+        config_option: str,
+        expected_resolution: str,
+    ) -> None:
+        """Reject malformed API fields without losing configured or default values."""
+        entry = coordinator.config_entry
+        assert isinstance(entry, MockConfigEntry)
+        entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={"resolution": config_option}
+        )
+        await hass.async_block_till_done()
+        coordinator._api_resolution_state = MagicMock(
+            spec=ContractPriceResolutionState, activeOption=api_active_option
+        )
+
+        assert coordinator.resolution == expected_resolution
 
 
 class TestApiResolutionProperty:
@@ -2876,3 +2915,52 @@ async def test_partial_today_response_without_cache_remains_retryable(
     assert not result[missing_commodity].all
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+
+@pytest.mark.asyncio
+async def test_api_resolution_change_invalidates_same_day_price_cache(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Refetch prices when the account resolution changes after today's cache."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    now_utc = datetime.now(UTC)
+    cached_prices = _make_market_prices_with_resolution(15, now_utc.isoformat())
+    refreshed_prices = _make_market_prices_with_resolution(60, now_utc.isoformat())
+    price_coordinator._static_prices_today = cached_prices
+    price_coordinator.last_fetch_today = now_utc
+    price_coordinator.cached_prices_tomorrow = cached_prices
+    price_coordinator.last_fetch_tomorrow = now_utc
+
+    resolution_state = MagicMock(spec=ContractPriceResolutionState)
+    resolution_state.activeOption = "PT60M"
+
+    async def fetch_resolution(_connection_id: str | None):
+        """Simulate the API updating the coordinator's active resolution."""
+        price_coordinator._api_resolution_state = resolution_state
+        return resolution_state
+
+    price_coordinator._fetch_contract_price_resolution_state = AsyncMock(
+        side_effect=fetch_resolution
+    )
+    price_coordinator._fetch_prices_with_fallback = AsyncMock(
+        return_value=refreshed_prices
+    )
+    price_coordinator._refresh_tomorrow_cache = AsyncMock(return_value=None)
+    price_coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    price_coordinator.store.async_save = AsyncMock()
+
+    await price_coordinator._async_update_data()
+
+    price_coordinator._fetch_prices_with_fallback.assert_awaited_once()
+    assert price_coordinator._static_prices_today is refreshed_prices
+    assert price_coordinator._static_prices_today.electricity.resolution_minutes == 60
+    assert price_coordinator.last_fetch_today is not None
+    assert price_coordinator.cached_prices_tomorrow is None
+    assert price_coordinator.last_fetch_tomorrow is None
