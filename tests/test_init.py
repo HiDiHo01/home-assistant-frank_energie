@@ -8,6 +8,8 @@ import zoneinfo
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie.const import (
     DOMAIN,
@@ -152,6 +154,65 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
     assert result is True
     assert spy.called
     assert _find_device(device_registry, entry.entry_id, identifier) is None
+
+
+@pytest.mark.parametrize(
+    ("scenario", "removable"),
+    [("leftover-device", True), ("live-entities", False), ("entry-not-loaded", False)],
+)
+async def test_remove_config_entry_device(
+    hass: HomeAssistant,
+    hass_ws_client,
+    frank_energie_setup,
+    scenario: str,
+    removable: bool,
+) -> None:
+    """Only devices whose entities the integration no longer provides can be deleted.
+
+    Goes through HA's own device-removal websocket command (what the UI's
+    Delete button calls) so HA's lookup of the integration hook is covered.
+    """
+    # Authenticate the websocket before frank_energie_setup freezes the clock,
+    # otherwise the access token is checked against the frozen time.
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    entry = await frank_energie_setup()
+    assert entry.state is ConfigEntryState.LOADED
+
+    device_registry = dr.async_get(hass)
+    if scenario == "live-entities":
+        # Created by the real setup and carries the live price sensors.
+        device = _find_device(device_registry, entry.entry_id, (DOMAIN, entry.entry_id))
+        assert device is not None
+    else:
+        # A charger removed from the account: still in both registries, but
+        # no platform provides its entities any more.
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "charger-removed")},
+        )
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            DOMAIN,
+            "charger-removed_power",
+            config_entry=entry,
+            device_id=device.id,
+        )
+    if scenario == "entry-not-loaded":
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    await client.send_json_auto_id(
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": entry.entry_id,
+            "device_id": device.id,
+        }
+    )
+    response = await client.receive_json()
+
+    assert response["success"] is removable
+    assert (device_registry.async_get(device.id) is None) is removable
 
 
 async def test_setup_entry_auth_failure(
