@@ -629,7 +629,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return set()
         settings = getattr(self, "settings_coordinator", self)
-        user = settings.data.get(DATA_USER)
+        settings_data = settings.data
+        user = settings_data.get(DATA_USER) if settings_data else None
         contracts = known_site_contracts(user)
         if contracts is not None:
             return contracts
@@ -2435,9 +2436,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     @property
     def resolution(self) -> str:
         """Effective price resolution used for API queries."""
-        if self.api.is_authenticated and known_site_contracts(
-            getattr(self, "settings_coordinator", self).data.get(DATA_USER)
-        ) == {"GAS"}:
+        settings_data = getattr(self, "settings_coordinator", self).data
+        user = settings_data.get(DATA_USER) if settings_data else None
+        if self.api.is_authenticated and known_site_contracts(user) == {"GAS"}:
             return "PT60M"
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
