@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from homeassistant.components.repairs import repairs_flow_manager
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
@@ -13,12 +14,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 
-from custom_components.frank_energie.const import (
-    DATA_BATTERIES,
-    DATA_ENODE_CHARGERS,
-    DATA_ENODE_VEHICLES,
-    DOMAIN,
-)
+from custom_components.frank_energie import FrankEnergieEntryData
+from custom_components.frank_energie.const import DATA_ENODE_CHARGERS, DOMAIN
 from custom_components.frank_energie.repairs import (
     async_clear_entry_device_repairs,
     async_process_device_inventory,
@@ -27,14 +24,17 @@ from custom_components.frank_energie.repairs import (
 pytestmark = pytest.mark.asyncio
 
 _KINDS = [
-    ("charger", DATA_ENODE_CHARGERS, "chargers", "charger_brand"),
-    ("vehicle", DATA_ENODE_VEHICLES, "vehicles", "vehicle_name"),
-    ("battery", DATA_BATTERIES, "batteries", "battery_status"),
+    ("charger", "chargers", "charger_brand"),
+    ("vehicle", "vehicles", "vehicle_name"),
+    ("battery", "batteries", "battery_status"),
 ]
 
 
 def _register_device(
-    hass: HomeAssistant, entry, kind: str, marker: str
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    kind: str,
+    marker: str
 ) -> tuple[dr.DeviceEntry, er.RegistryEntry]:
     """Register a device and its historical marker without a live entity."""
     identifier = f"stale-{kind}"
@@ -68,12 +68,11 @@ def _repair_exists(hass: HomeAssistant, issue_id: str) -> bool:
     return (DOMAIN, issue_id) in ir.async_get(hass).issues
 
 
-@pytest.mark.parametrize(("kind", "data_key", "collection_key", "marker"), _KINDS)
+@pytest.mark.parametrize(("kind", "collection_key", "marker"), _KINDS)
 async def test_stale_device_requires_two_fresh_inventories(
     hass: HomeAssistant,
     frank_energie_setup,
     kind: str,
-    data_key: str,
     collection_key: str,
     marker: str,
 ) -> None:
@@ -105,13 +104,12 @@ async def test_stale_device_requires_two_fresh_inventories(
     assert dr.async_get(hass).async_get(device.id) is not None
 
 
-@pytest.mark.parametrize(("kind", "data_key", "collection_key", "marker"), _KINDS)
+@pytest.mark.parametrize(("kind", "collection_key", "marker"), _KINDS)
 @pytest.mark.parametrize("invalid_case", ["missing", "none", "invalid_id", "duplicate"])
 async def test_invalid_inventory_never_creates_or_clears_repair(
     hass: HomeAssistant,
     frank_energie_setup,
     kind: str,
-    data_key: str,
     collection_key: str,
     marker: str,
     invalid_case: str,
@@ -140,12 +138,11 @@ async def test_invalid_inventory_never_creates_or_clears_repair(
     assert dr.async_get(hass).async_get(device.id) is not None
 
 
-@pytest.mark.parametrize(("kind", "data_key", "collection_key", "marker"), _KINDS)
+@pytest.mark.parametrize(("kind", "collection_key", "marker"), _KINDS)
 async def test_disabled_registry_entity_does_not_hide_stale_device(
     hass: HomeAssistant,
     frank_energie_setup,
     kind: str,
-    data_key: str,
     collection_key: str,
     marker: str,
 ) -> None:
@@ -228,6 +225,7 @@ async def test_repair_flow_revalidates_before_removing_device(
         result = await manager.async_configure(start["flow_id"], user_input={})
 
     refresh.assert_awaited_once()
+    await hass.async_block_till_done()
     expected_deleted = current_state == "missing"
     assert (dr.async_get(hass).async_get(device.id) is None) is expected_deleted
     assert (er.async_get(hass).async_get(entity.entity_id) is None) is expected_deleted
