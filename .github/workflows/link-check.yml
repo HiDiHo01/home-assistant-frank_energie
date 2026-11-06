@@ -15,10 +15,11 @@ jobs:
       contents: read
     name: Validate Documentation Links
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # @v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -50,8 +51,16 @@ jobs:
             chatgpt.com:443
             img.shields.io:443
       - name: Checkout repository
+        id: checkout
+        # Checkout already retries network operations internally. Retry the action
+        # once more if an outage outlasts those attempts; the retry stays blocking.
+        continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
-
+        with:
+          persist-credentials: false
+      - name: Retry repository checkout
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
         with:
           persist-credentials: false
       - name: Run Lychee

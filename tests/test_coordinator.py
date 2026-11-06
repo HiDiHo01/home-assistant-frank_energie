@@ -1,9 +1,12 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
@@ -2430,7 +2433,9 @@ async def test_refresh_tomorrow_cache_rejects_freshly_fetched_poisoned_data(
 
 @pytest.mark.asyncio
 async def test_is_cache_fresh_detects_poisoned_same_day_tomorrow_cache(
-    mock_frank_energie, mock_config_entry
+    hass: HomeAssistant,
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """_is_cache_fresh must not be fooled by a poisoned same-day tomorrow cache.
 
@@ -2451,8 +2456,15 @@ async def test_is_cache_fresh_detects_poisoned_same_day_tomorrow_cache(
 
     now_utc = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)
 
+    # Valid today cache, so only the tomorrow check can make it stale.
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={"resolution": "PT15M"}
+    )
     price_coordinator.last_fetch_today = now_utc
-    price_coordinator._static_prices_today = None  # bypass resolution check
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-20T10:00:00.000Z"
+    )
 
     # Poisoned: claims to be fetched today, but entries are dated today too.
     price_coordinator.last_fetch_tomorrow = now_utc
@@ -2465,7 +2477,9 @@ async def test_is_cache_fresh_detects_poisoned_same_day_tomorrow_cache(
 
 @pytest.mark.asyncio
 async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
-    mock_frank_energie, mock_config_entry
+    hass: HomeAssistant,
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """_is_cache_fresh must still return True for a genuinely valid same-day cache."""
     settings_coordinator = FrankEnergieSettingsCoordinator(
@@ -2477,8 +2491,14 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
 
     now_utc = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)
 
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={"resolution": "PT15M"}
+    )
     price_coordinator.last_fetch_today = now_utc
-    price_coordinator._static_prices_today = None  # bypass resolution check
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-20T10:00:00.000Z"
+    )
 
     price_coordinator.last_fetch_tomorrow = now_utc
     price_coordinator.cached_prices_tomorrow = _make_market_prices(
@@ -2486,6 +2506,416 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
     )
 
     assert price_coordinator._is_cache_fresh(now_utc) is True
+
+
+@pytest.mark.parametrize(
+    ("entry_isos", "expected"),
+    [
+        (("2026-07-20T10:00:00.000Z",), True),  # today (local)
+        (("2026-07-19T10:00:00.000Z",), False),  # yesterday
+        (("2026-07-19T21:45:00.000Z",), False),  # 23:45 local yesterday
+        (("2026-07-19T22:00:00.000Z",), True),  # 00:00 local today
+        (("2026-07-19T10:00:00.000Z", "2026-07-20T10:00:00.000Z"), True),
+        ((), False),
+    ],
+)
+def test_prices_cover_date(entry_isos: tuple[str, ...], expected: bool) -> None:
+    """_prices_cover_date matches on the Amsterdam-local date of any entry."""
+    from datetime import date
+
+    prices = _make_market_prices(*entry_isos)
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
+        is expected
+    )
+
+
+def test_prices_cover_date_handles_missing_prices() -> None:
+    """No prices at all never cover a date."""
+    from datetime import date
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(None, date(2026, 7, 20))
+        is False
+    )
+
+
+def _make_gas_price_data(*entry_date_isos: str):
+    """Build a minimal hourly gas PriceData with one entry per given ISO start."""
+    from datetime import timedelta as _timedelta
+
+    from python_frank_energie.models import PriceData
+
+    raw_prices = [
+        {
+            "from": entry_date_iso,
+            "till": (
+                datetime.fromisoformat(entry_date_iso.replace("Z", "+00:00"))
+                + _timedelta(hours=1)
+            ).isoformat(),
+            "marketPrice": 0.5,
+            "marketPriceTax": 0.1,
+            "sourcingMarkupPrice": 0.05,
+            "energyTaxPrice": 0.3,
+        }
+        for entry_date_iso in entry_date_isos
+    ]
+    return PriceData(raw_prices, energy_type="gas")
+
+
+@pytest.mark.parametrize(
+    ("gas_isos", "expected"),
+    [
+        (("2026-07-20T10:00:00.000Z",), True),  # both series cover today
+        (("2026-07-19T10:00:00.000Z",), False),  # gas is still yesterday's
+        ((), True),  # no gas contract: electricity alone decides
+    ],
+)
+def test_prices_cover_date_checks_each_series(
+    gas_isos: tuple[str, ...], expected: bool
+) -> None:
+    """Fresh electricity must not hide a stale gas series."""
+    from datetime import date
+
+    from python_frank_energie.models import MarketPrices
+
+    prices = MarketPrices(
+        electricity=_make_market_prices("2026-07-20T10:00:00.000Z").electricity,
+        gas=_make_gas_price_data(*gas_isos),
+        energy_country="NL",
+    )
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
+        is expected
+    )
+
+
+def test_prices_cover_date_gas_only_site() -> None:
+    """A gas-only site validates on its gas series alone."""
+    from datetime import date
+
+    from python_frank_energie.models import MarketPrices, PriceData
+
+    prices = MarketPrices(
+        electricity=PriceData([], energy_type="electricity"),
+        gas=_make_gas_price_data("2026-07-20T10:00:00.000Z"),
+        energy_country="NL",
+    )
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
+        is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_is_cache_fresh_detects_stale_today_cache(
+    hass: HomeAssistant,
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """_is_cache_fresh must not trust last_fetch_today when the prices are yesterday's.
+
+    Regression test: when both price fetches failed at startup,
+    _fetch_prices_with_fallback returned the previous day's disk cache, which
+    was then stamped with today's last_fetch_today. Since a "fresh" verdict
+    skips the live refresh on every later reload/restart, the stale set
+    survived until the midnight promotion and every price sensor stayed
+    unavailable.
+    """
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    now_utc = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={"resolution": "PT15M"}
+    )
+    price_coordinator.last_fetch_today = now_utc
+    price_coordinator._static_prices_today = _make_market_prices(
+        "2026-07-19T10:00:00.000Z"  # yesterday (local)
+    )
+
+    assert price_coordinator._is_cache_fresh(now_utc) is False
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_does_not_stamp_stale_today_fallback(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """A today-fetch that returns yesterday's cached prices is not a live update.
+
+    Regression test: last_fetch_today was set even when the fetch result was
+    the cache fallback, so later cycles skipped the today fetch for the rest
+    of the day. Now it stays unset and the next cycle retries, which then
+    picks up the real prices.
+    """
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator.store.async_save = AsyncMock()
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=None)
+
+    freezer.move_to(datetime(2026, 7, 20, 9, 0, tzinfo=tz))
+
+    yesterday_prices = _make_market_prices("2026-07-19T10:00:00.000Z")
+    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=yesterday_prices)
+
+    await coordinator._async_update_data()
+
+    assert coordinator.last_fetch_today is None
+
+    # --- Next cycle: the API is back and returns today's prices ---
+    freezer.move_to(datetime(2026, 7, 20, 10, 0, tzinfo=tz))
+    now_utc = dt_util.utcnow()
+
+    today_prices = _make_market_prices("2026-07-20T08:00:00.000Z")
+    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=today_prices)
+
+    await coordinator._async_update_data()
+
+    coordinator._fetch_prices_with_fallback.assert_awaited_once()
+    assert coordinator.last_fetch_today == now_utc
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_refetches_stale_today_cache(
+    mock_frank_energie, mock_config_entry, freezer
+) -> None:
+    """A today cache stamped today but holding yesterday's prices is refetched.
+
+    Covers caches already written by the old behavior: last_fetch_today says
+    today, so the date check alone would skip the fetch until midnight.
+    """
+    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator.store.async_save = AsyncMock()
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=None)
+
+    freezer.move_to(datetime(2026, 7, 20, 10, 0, tzinfo=tz))
+    now_utc = dt_util.utcnow()
+
+    coordinator._static_prices_today = _make_market_prices("2026-07-19T10:00:00.000Z")
+    coordinator.last_fetch_today = now_utc - timedelta(hours=2)
+
+    today_prices = _make_market_prices("2026-07-20T08:00:00.000Z")
+    coordinator._fetch_prices_with_fallback = AsyncMock(return_value=today_prices)
+
+    await coordinator._async_update_data()
+
+    coordinator._fetch_prices_with_fallback.assert_awaited_once()
+    assert coordinator.last_fetch_today == now_utc
+
+
+def _market_prices_for_cache_test(
+    electricity_start: str | None, gas_start: str | None
+) -> MarketPrices:
+    """Build independent real price series, including omitted commodities."""
+    return MarketPrices(
+        electricity=_make_market_prices(
+            *([electricity_start] if electricity_start else [])
+        ).electricity,
+        gas=_make_gas_price_data(*([gas_start] if gas_start else [])),
+        energy_country="NL",
+    )
+
+
+def _price_coordinator_for_cache_test(
+    api: AsyncMock, entry: MockConfigEntry, contracts: list[str] | None
+) -> FrankEnergiePriceCoordinator:
+    """Keep the real price-fetch path while isolating settings and disk writes."""
+    settings = FrankEnergieSettingsCoordinator(MagicMock(), entry, api)
+    settings.data = (
+        {DATA_USER: SimpleNamespace(userSegments=contracts)}
+        if contracts is not None
+        else {}
+    )
+    prices = FrankEnergiePriceCoordinator(MagicMock(), entry, api, settings)
+    prices._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    prices._fetch_tomorrow_data = AsyncMock(return_value=None)
+    prices.store.async_save = AsyncMock()
+    return prices
+
+
+@pytest.mark.parametrize("missing_commodity", ["electricity", "gas"])
+async def test_partial_today_prices_preserve_contract_cache_and_retry(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    missing_commodity: str,
+) -> None:
+    """Missing contract data preserves usable prices without stopping recovery."""
+    mock_frank_energie.is_authenticated = True
+    now_utc = datetime(2026, 7, 20, 8, 5, tzinfo=UTC)
+    freezer.move_to(now_utc)
+    prices = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, ["ELECTRICITY", "GAS"]
+    )
+    previous = _market_prices_for_cache_test(
+        "2026-07-20T08:00:00Z"
+        if missing_commodity == "electricity"
+        else "2026-07-19T08:00:00Z",
+        "2026-07-20T08:00:00Z"
+        if missing_commodity == "gas"
+        else "2026-07-19T08:00:00Z",
+    )
+    prices._static_prices_today = previous
+    prices._cached_prices = previous
+    prices.last_fetch_today = now_utc - timedelta(hours=1)
+    partial = _market_prices_for_cache_test(
+        None if missing_commodity == "electricity" else "2026-07-20T08:00:00Z",
+        None if missing_commodity == "gas" else "2026-07-20T08:00:00Z",
+    )
+    recovered = _market_prices_for_cache_test(
+        "2026-07-20T08:15:00Z", "2026-07-20T08:15:00Z"
+    )
+    prices._fetch_public_prices_for_range = AsyncMock(side_effect=[partial, recovered])
+    prices._fetch_user_prices_for_range = AsyncMock(side_effect=[partial, recovered])
+
+    await prices._async_update_data()
+
+    retained = getattr(prices._static_prices_today, missing_commodity)
+    expected = getattr(previous, missing_commodity).current
+    assert retained is not None
+    assert retained.current is not None
+    assert expected is not None
+    assert retained.current.date_from == expected.date_from
+    assert retained.current.total == expected.total
+    assert prices.last_fetch_today is None
+    assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+    freezer.move_to(now_utc + timedelta(minutes=15))
+    await prices._async_update_data()
+
+    assert prices._fetch_user_prices_for_range.await_count == 2
+    assert prices.last_fetch_today == dt_util.utcnow()
+
+    freezer.move_to(now_utc + timedelta(minutes=30))
+    await prices._async_update_data()
+    assert prices._fetch_user_prices_for_range.await_count == 2
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+async def test_cached_same_day_fallback_does_not_suppress_live_retry(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    authenticated: bool,
+) -> None:
+    """A cache with today's date remains retryable after both live calls fail."""
+    mock_frank_energie.is_authenticated = authenticated
+    now_utc = datetime(2026, 7, 20, 8, 5, tzinfo=UTC)
+    freezer.move_to(now_utc)
+    prices = _price_coordinator_for_cache_test(
+        mock_frank_energie,
+        mock_config_entry,
+        ["ELECTRICITY", "GAS"] if authenticated else None,
+    )
+    prices._static_prices_today = _market_prices_for_cache_test(
+        "2026-07-19T08:00:00Z", "2026-07-19T08:00:00Z"
+    )
+    prices._cached_prices = _market_prices_for_cache_test(
+        "2026-07-19T22:00:00Z", "2026-07-19T22:00:00Z"
+    )
+    prices.last_fetch_today = now_utc - timedelta(hours=1)
+    recovered = _market_prices_for_cache_test(
+        "2026-07-20T08:15:00Z", "2026-07-20T08:15:00Z"
+    )
+    prices._fetch_public_prices_for_range = AsyncMock(side_effect=[None, recovered])
+    prices._fetch_user_prices_for_range = AsyncMock(
+        side_effect=[None, recovered if authenticated else None]
+    )
+
+    await prices._async_update_data()
+
+    assert prices._prices_cover_date(prices._static_prices_today, now_utc.date())
+    assert prices._static_prices_today.electricity.current is None
+    assert prices.last_fetch_today is None
+    assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+    freezer.move_to(now_utc + timedelta(minutes=15))
+    await prices._async_update_data()
+
+    assert prices._fetch_public_prices_for_range.await_count == 2
+    assert prices.last_fetch_today == dt_util.utcnow()
+    assert prices._static_prices_today.electricity.current is not None
+
+
+@pytest.mark.parametrize("contract", ["ELECTRICITY", "GAS"])
+async def test_live_prices_for_single_contract_are_accepted(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    contract: str,
+) -> None:
+    """An absent second contract must not make a complete live fetch retry."""
+    mock_frank_energie.is_authenticated = True
+    freezer.move_to("2026-07-20T08:05:00Z")
+    prices = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, [contract]
+    )
+    live = _market_prices_for_cache_test(
+        "2026-07-20T08:00:00Z" if contract == "ELECTRICITY" else None,
+        "2026-07-20T08:00:00Z" if contract == "GAS" else None,
+    )
+    prices._fetch_public_prices_for_range = AsyncMock(return_value=live)
+    prices._fetch_user_prices_for_range = AsyncMock(return_value=live)
+
+    await prices._async_update_data()
+
+    assert prices.last_fetch_today == dt_util.utcnow()
+
+
+@pytest.mark.parametrize("missing_commodity", ["electricity", "gas"])
+async def test_partial_today_response_without_cache_remains_retryable(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    missing_commodity: str,
+) -> None:
+    """A failed public call and partial user data must not require an old cache."""
+    mock_frank_energie.is_authenticated = True
+    freezer.move_to("2026-07-20T08:05:00Z")
+    prices = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, ["ELECTRICITY", "GAS"]
+    )
+    prices._cached_prices = None
+    partial = _market_prices_for_cache_test(
+        None if missing_commodity == "electricity" else "2026-07-20T08:00:00Z",
+        None if missing_commodity == "gas" else "2026-07-20T08:00:00Z",
+    )
+    prices._fetch_public_prices_for_range = AsyncMock(return_value=None)
+    prices._fetch_user_prices_for_range = AsyncMock(return_value=partial)
+
+    result = await prices._async_update_data()
+
+    assert not result[missing_commodity].all
+    assert prices.last_fetch_today is None
+    assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
 
 
 @pytest.mark.asyncio

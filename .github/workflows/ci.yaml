@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # @v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -42,6 +42,7 @@ jobs:
             raw.githubusercontent.com:443
             github.com:443
             install.python-poetry.org:443
+            nodejs.org:443
             pypi.org:443
             files.pythonhosted.org:443
             sonarcloud.io:443
@@ -60,11 +61,17 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # @v6
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # @v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
           cache-dependency-path: poetry.lock
+
+      - name: Set up Node.js for workflow script regression tests
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # @v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
 
       - name: Install Poetry
         run: |
