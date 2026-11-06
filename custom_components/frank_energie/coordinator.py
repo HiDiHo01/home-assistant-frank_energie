@@ -2330,12 +2330,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return _extract_electricity_connection_id(user)
         return self._connection_id
 
-    async def _refresh_resolution_state_after_change(
-        self, connection_id: str
-    ) -> None:
+    async def _refresh_resolution_state_after_change(self, connection_id: str) -> None:
         """Update the published status after a successful resolution request."""
         state = await self._fetch_contract_price_resolution_state(connection_id)
-        if state is not None and self._selected_electricity_connection_id() == connection_id:
+        if (
+            state is not None
+            and self._selected_electricity_connection_id() == connection_id
+        ):
             self._static_contract_price_resolution_state = state
             self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
 
@@ -2384,7 +2385,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         async def _mutation() -> None:
             try:
-                if self._selected_electricity_connection_id() != requested_connection_id:
+                if (
+                    self._selected_electricity_connection_id()
+                    != requested_connection_id
+                ):
                     raise UpdateFailed(
                         "Electricity connection changed before the resolution request; retry"
                     )
@@ -2392,7 +2396,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     requested_connection_id,
                     cast(Resolution, value),
                 )
-                if self._selected_electricity_connection_id() != requested_connection_id:
+                if (
+                    self._selected_electricity_connection_id()
+                    != requested_connection_id
+                ):
                     raise UpdateFailed(
                         "Electricity connection changed during the resolution request; "
                         "refresh settings before retrying"
@@ -2681,9 +2688,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 self.cached_prices_tomorrow = None
                 self.last_fetch_tomorrow = None
 
-    async def _refresh_resolution_state_after_change(
-        self, connection_id: str
-    ) -> None:
+    async def _refresh_resolution_state_after_change(self, connection_id: str) -> None:
         """Refresh published change status only for the selected connection."""
         self._sync_connection_id()
         if self._connection_id == connection_id:

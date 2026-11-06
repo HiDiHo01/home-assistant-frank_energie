@@ -174,7 +174,10 @@ async def _connection_context(
 async def test_extracts_electricity_connection_id() -> None:
     """Choose the electricity connectionId instead of gas, row ID, or EAN."""
     assert _extract_electricity_connection_id(_make_user()) == "electricity-alpha"
-    assert _extract_electricity_connection_id(_make_user(include_gas=True)) == "electricity-alpha"
+    assert (
+        _extract_electricity_connection_id(_make_user(include_gas=True))
+        == "electricity-alpha"
+    )
 
 
 async def test_user_fetch_replaces_previous_connection_id(
@@ -513,6 +516,7 @@ async def test_mutation_rechecks_selected_connection_after_queuing(
     connection_context: _ConnectionContext,
 ) -> None:
     """Reject a queued change when account settings replace its target."""
+
     async def _run_after_settings_update(
         mutation: Callable[[], Awaitable[None]],
     ) -> None:
@@ -535,6 +539,7 @@ async def test_mutation_does_not_update_options_after_target_changes(
     connection_context: _ConnectionContext,
 ) -> None:
     """Do not persist an old connection's choice after an in-flight switch."""
+
     async def _change_connection_during_mutation(
         connection_id: str, resolution: str
     ) -> ContractPriceResolutionChangeResult:
@@ -566,7 +571,9 @@ async def test_post_change_state_updates_static_cache(
     state = connection_context.api.contract_price_resolution_state.return_value
     assert connection_context.prices._static_contract_price_resolution_state is state
     assert connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is state
-    assert connection_context.prices._resolution_state_connection_id == "electricity-alpha"
+    assert (
+        connection_context.prices._resolution_state_connection_id == "electricity-alpha"
+    )
 
 
 async def test_connection_replacement_invalidates_old_price_caches(
