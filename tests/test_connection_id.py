@@ -537,7 +537,7 @@ async def test_mutation_rechecks_selected_connection_after_queuing(
 
 
 async def test_mutation_does_not_update_options_after_target_changes(
-    connection_context: _ConnectionContext,
+    connection_context: _ConnectionContext, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Do not persist an old connection's choice after an in-flight switch."""
 
@@ -556,6 +556,7 @@ async def test_mutation_does_not_update_options_after_target_changes(
 
     await connection_context.prices.async_set_resolution("PT60M")
 
+    assert "not applying the previous connection's response" in caplog.text
     assert connection_context.entry.options["resolution"] == "PT15M"
     connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
         "electricity-alpha"
