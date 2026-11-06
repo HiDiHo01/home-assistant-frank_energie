@@ -158,16 +158,68 @@ async def async_remove_entry(
     await price_cache_store(hass, entry.entry_id).async_remove()
 
 
+def _device_inventory(
+    runtime_data: FrankEnergieEntryData,
+    device_entry: dr.DeviceEntry,
+    registered_unique_ids: set[str],
+    identifier: str,
+) -> tuple[FrankEnergieCoordinator, str, str] | None:
+    """Select a verified inventory only for a uniquely recognized device kind."""
+    inventories: list[tuple[FrankEnergieCoordinator, str, str]] = []
+    if f"{DOMAIN}_{identifier}_charger_brand" in registered_unique_ids:
+        inventories.append(
+            (runtime_data.charger_coordinator, DATA_ENODE_CHARGERS, "chargers")
+        )
+    if f"{DOMAIN}_{identifier}_vehicle_name" in registered_unique_ids:
+        inventories.append(
+            (runtime_data.vehicle_coordinator, DATA_ENODE_VEHICLES, "vehicles")
+        )
+    if device_entry.model == "SmartBattery":
+        inventories.append(
+            (runtime_data.battery_coordinator, DATA_BATTERIES, "batteries")
+        )
+    return inventories[0] if len(inventories) == 1 else None
+
+
+def _inventory_confirms_device_absent(
+    coordinator: FrankEnergieCoordinator,
+    data_key: str,
+    collection_key: str,
+    identifier: str,
+) -> bool:
+    """Return True only when valid, successfully refreshed data omits the device."""
+    if not coordinator.last_update_success or not isinstance(coordinator.data, dict):
+        return False
+
+    inventory = coordinator.data.get(data_key)
+    devices = getattr(inventory, collection_key, None)
+    if not isinstance(devices, list):
+        # None also represents a skipped or failed fetch in the current API.
+        return False
+
+    for device in devices:
+        device_id = (
+            device.get("id")
+            if isinstance(device, dict)
+            else getattr(device, "id", None)
+        )
+        if not isinstance(device_id, str) or not device_id:
+            # An invalid partial response must not authorize deletion.
+            return False
+        if device_id == identifier:
+            return False
+    return True
+
+
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
     device_entry: dr.DeviceEntry,
 ) -> bool:
-    """Allow removing a device only when a complete inventory confirms its absence.
+    """Allow removing hardware only if a complete inventory confirms its absence.
 
-    A missing or failed API fetch is not proof that hardware was removed.
-    Use registry identities rather than loaded entities so devices whose
-    entities are all disabled remain protected.
+    Registry entities remain detectable even when disabled. Fail closed for
+    unknown devices, missing data, and failed API requests.
     """
     if (
         entry.state is not ConfigEntryState.LOADED
@@ -192,47 +244,12 @@ async def async_remove_config_entry_device(
         )
         if entity.config_entry_id == entry.entry_id
     }
-    runtime_data = entry.runtime_data
-    inventories = []
-    if f"{DOMAIN}_{identifier}_charger_brand" in registered_unique_ids:
-        inventories.append(
-            (runtime_data.charger_coordinator, DATA_ENODE_CHARGERS, "chargers")
-        )
-    if f"{DOMAIN}_{identifier}_vehicle_name" in registered_unique_ids:
-        inventories.append(
-            (runtime_data.vehicle_coordinator, DATA_ENODE_VEHICLES, "vehicles")
-        )
-    if device_entry.model == "SmartBattery":
-        inventories.append(
-            (runtime_data.battery_coordinator, DATA_BATTERIES, "batteries")
-        )
-
-    # Unknown or ambiguous device kinds must not become removable.
-    if len(inventories) != 1:
-        return False
-
-    coordinator, data_key, collection_key = inventories[0]
-    if not coordinator.last_update_success or not isinstance(coordinator.data, dict):
-        return False
-
-    inventory = coordinator.data.get(data_key)
-    devices = getattr(inventory, collection_key, None)
-    if not isinstance(devices, list):
-        # None also represents a skipped or failed fetch in the current API.
-        return False
-
-    for device in devices:
-        device_id = (
-            device.get("id")
-            if isinstance(device, dict)
-            else getattr(device, "id", None)
-        )
-        if not isinstance(device_id, str) or not device_id:
-            # An invalid partial response must not authorize deletion.
-            return False
-        if device_id == identifier:
-            return False
-    return True
+    inventory = _device_inventory(
+        entry.runtime_data, device_entry, registered_unique_ids, identifier
+    )
+    return inventory is not None and _inventory_confirms_device_absent(
+        *inventory, identifier
+    )
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
