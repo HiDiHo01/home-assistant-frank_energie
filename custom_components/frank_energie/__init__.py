@@ -10,12 +10,13 @@ from datetime import datetime, time
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
@@ -25,6 +26,9 @@ from python_frank_energie.models import UserSites
 
 from .const import (
     CONF_COORDINATOR,
+    DATA_BATTERIES,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
@@ -152,6 +156,100 @@ async def async_remove_entry(
     """Clean up persistent storage when a config entry is removed."""
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
     await price_cache_store(hass, entry.entry_id).async_remove()
+
+
+def _device_inventory(
+    runtime_data: FrankEnergieEntryData,
+    device_entry: dr.DeviceEntry,
+    registered_unique_ids: set[str],
+    identifier: str,
+) -> tuple[FrankEnergieCoordinator, str, str] | None:
+    """Select a verified inventory only for a uniquely recognized device kind."""
+    inventories: list[tuple[FrankEnergieCoordinator, str, str]] = []
+    if f"{DOMAIN}_{identifier}_charger_brand" in registered_unique_ids:
+        inventories.append(
+            (runtime_data.charger_coordinator, DATA_ENODE_CHARGERS, "chargers")
+        )
+    if f"{DOMAIN}_{identifier}_vehicle_name" in registered_unique_ids:
+        inventories.append(
+            (runtime_data.vehicle_coordinator, DATA_ENODE_VEHICLES, "vehicles")
+        )
+    if device_entry.model == "SmartBattery":
+        inventories.append(
+            (runtime_data.battery_coordinator, DATA_BATTERIES, "batteries")
+        )
+    return inventories[0] if len(inventories) == 1 else None
+
+
+def _inventory_confirms_device_absent(
+    coordinator: FrankEnergieCoordinator,
+    data_key: str,
+    collection_key: str,
+    identifier: str,
+) -> bool:
+    """Return True only when valid, successfully refreshed data omits the device."""
+    if not coordinator.last_update_success or not isinstance(coordinator.data, dict):
+        return False
+
+    inventory = coordinator.data.get(data_key)
+    devices = getattr(inventory, collection_key, None)
+    if not isinstance(devices, list):
+        # None also represents a skipped or failed fetch in the current API.
+        return False
+
+    for device in devices:
+        device_id = (
+            device.get("id")
+            if isinstance(device, dict)
+            else getattr(device, "id", None)
+        )
+        if not isinstance(device_id, str) or not device_id:
+            # An invalid partial response must not authorize deletion.
+            return False
+        if device_id == identifier:
+            return False
+    return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Allow removing hardware only if a complete inventory confirms its absence.
+
+    Registry entities remain detectable even when disabled. Fail closed for
+    unknown devices, missing data, and failed API requests.
+    """
+    if (
+        entry.state is not ConfigEntryState.LOADED
+        or device_entry.config_entry_id != entry.entry_id
+        or device_entry.entry_type is not None
+    ):
+        return False
+
+    identifiers = {
+        identifier
+        for domain, identifier in device_entry.identifiers
+        if domain == DOMAIN and identifier
+    }
+    if len(identifiers) != 1:
+        return False
+    identifier = next(iter(identifiers))
+
+    registered_unique_ids = {
+        entity.unique_id
+        for entity in er.async_entries_for_device(
+            er.async_get(hass), device_entry.id, include_disabled_entities=True
+        )
+        if entity.config_entry_id == entry.entry_id
+    }
+    inventory = _device_inventory(
+        entry.runtime_data, device_entry, registered_unique_ids, identifier
+    )
+    return inventory is not None and _inventory_confirms_device_absent(
+        *inventory, identifier
+    )
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
