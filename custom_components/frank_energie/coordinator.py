@@ -2400,10 +2400,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     self._selected_electricity_connection_id()
                     != requested_connection_id
                 ):
-                    raise UpdateFailed(
-                        "Electricity connection changed during the resolution request; "
-                        "refresh settings before retrying"
+                    _LOGGER.warning(
+                        "Electricity connection changed while a resolution request was "
+                        "in flight; not applying the previous connection's response"
                     )
+                    return
 
                 if result is None:
                     raise UpdateFailed("Resolution change request failed: no response")
@@ -3075,6 +3076,23 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
             prices_tomorrow = self.cached_prices_tomorrow
         else:
+            # Verify the account's interval before reusing prices from the cache.
+            # On transient errors, retain state verified for this connection.
+            fetched_resolution_state = await self._refresh_current_resolution_state()
+            data_contract_price_resolution_state = (
+                fetched_resolution_state
+                if fetched_resolution_state is not None
+                else self._static_contract_price_resolution_state
+            )
+            if not self._is_cache_resolution_valid():
+                _LOGGER.debug(
+                    "Invalidating cached prices after an effective resolution change"
+                )
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+
             if (
                 self._static_prices_today is None
                 or self.last_fetch_today is None
@@ -3123,9 +3141,6 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             else:
                 prices_today = self._static_prices_today
 
-            data_contract_price_resolution_state = (
-                await self._refresh_current_resolution_state()
-            )
             prices_tomorrow = await self._refresh_tomorrow_cache(
                 today, tomorrow, now_utc
             )
