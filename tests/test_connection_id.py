@@ -440,9 +440,7 @@ async def test_warm_cache_does_not_publish_stale_resolution_status(
 
     assert connection_context.prices._connection_id == "electricity-alpha"
     assert connection_context.prices._api_resolution_state is None
-    assert (
-        connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is None
-    )
+    assert connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is None
     connection_context.prices._fetch_prices_with_fallback.assert_not_awaited()
 
 
