@@ -326,11 +326,12 @@ async def test_remove_device_requires_confirmed_inventory(
     if inventory_case == "fetch-failed":
         inventory = None
     else:
-        members = (
-            []
-            if inventory_case == "confirmed-absent"
-            else [{"id": identifier}] if kind == "vehicle" else [SimpleNamespace(id=identifier)]
-        )
+        if inventory_case == "confirmed-absent":
+            members = []
+        elif kind == "vehicle":
+            members = [{"id": identifier}]
+        else:
+            members = [SimpleNamespace(id=identifier)]
         if inventory_case == "malformed-response":
             members = [SimpleNamespace(id=None)]
         inventory = SimpleNamespace(**{collection_key: members})
