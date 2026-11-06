@@ -28,6 +28,7 @@ TO_REDACT: set[str] = {
     "authToken",
     "refreshToken",
     "auth_token",
+    "accessToken",
     "access_token",
     "refresh_token",
     "password",
