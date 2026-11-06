@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -375,9 +375,11 @@ async def test_connection_replacement_invalidates_old_change_permissions(
     assert (
         connection_context.prices._resolution_state_connection_id == "new-electricity"
     )
-    connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
-        "new-electricity"
-    )
+    # A status check precedes the mutation; the accepted change re-fetches it.
+    assert connection_context.api.contract_price_resolution_state.await_args_list == [
+        call("new-electricity"),
+        call("new-electricity"),
+    ]
     connection_context.api.contract_price_resolution_request_change.assert_awaited_once_with(
         "new-electricity", "PT60M"
     )
