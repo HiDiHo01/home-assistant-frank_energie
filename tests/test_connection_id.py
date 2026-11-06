@@ -1,6 +1,6 @@
 """Regression coverage for selected-site electricity connection IDs."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -174,6 +174,7 @@ async def _connection_context(
 async def test_extracts_electricity_connection_id() -> None:
     """Choose the electricity connectionId instead of gas, row ID, or EAN."""
     assert _extract_electricity_connection_id(_make_user()) == "electricity-alpha"
+    assert _extract_electricity_connection_id(_make_user(include_gas=True)) == "electricity-alpha"
 
 
 async def test_user_fetch_replaces_previous_connection_id(
@@ -503,6 +504,107 @@ async def test_resolution_state_discards_connection_changed_during_fetch(
     assert connection_context.prices._api_resolution_state is None
     assert connection_context.prices._static_contract_price_resolution_state is None
     assert connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is None
+    connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
+        "electricity-alpha"
+    )
+
+
+async def test_mutation_rechecks_selected_connection_after_queuing(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Reject a queued change when account settings replace its target."""
+    async def _run_after_settings_update(
+        mutation: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Change the selected connection before the queued mutation runs."""
+        connection_context.settings.data[DATA_USER] = _make_user("electricity-beta")
+        await mutation()
+
+    connection_context.prices._mutation_queue.add = AsyncMock(
+        side_effect=_run_after_settings_update
+    )
+
+    with pytest.raises(UpdateFailed, match="Electricity connection changed"):
+        await connection_context.prices.async_set_resolution("PT60M")
+
+    connection_context.api.contract_price_resolution_request_change.assert_not_awaited()
+    assert connection_context.entry.options["resolution"] == "PT15M"
+
+
+async def test_mutation_does_not_update_options_after_target_changes(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Do not persist an old connection's choice after an in-flight switch."""
+    async def _change_connection_during_mutation(
+        connection_id: str, resolution: str
+    ) -> ContractPriceResolutionChangeResult:
+        """Simulate a successful API reply after settings switch connections."""
+        assert connection_id == "electricity-alpha"
+        assert resolution == "PT60M"
+        connection_context.settings.data[DATA_USER] = _make_user("electricity-beta")
+        return ContractPriceResolutionChangeResult(success=True)
+
+    connection_context.api.contract_price_resolution_request_change.side_effect = (
+        _change_connection_during_mutation
+    )
+
+    with pytest.raises(UpdateFailed, match="Electricity connection changed"):
+        await connection_context.prices.async_set_resolution("PT60M")
+
+    assert connection_context.entry.options["resolution"] == "PT15M"
+    connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
+        "electricity-alpha"
+    )
+
+
+async def test_post_change_state_updates_static_cache(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Publish newly verified permissions after a successful mutation."""
+    await connection_context.prices.async_set_resolution("PT60M")
+
+    state = connection_context.api.contract_price_resolution_state.return_value
+    assert connection_context.prices._static_contract_price_resolution_state is state
+    assert connection_context.prices.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] is state
+    assert connection_context.prices._resolution_state_connection_id == "electricity-alpha"
+
+
+async def test_connection_replacement_invalidates_old_price_caches(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Avoid reusing a previous connection's price resolution and tomorrow cache."""
+    payload = _cached_payload()
+    prices_payload = payload["prices_today"]
+    assert isinstance(prices_payload, dict)
+    prices = _dict_to_market_prices(prices_payload)
+    assert prices is not None
+
+    connection_context.prices._connection_id = "electricity-alpha"
+    connection_context.prices._static_prices_today = prices
+    connection_context.prices.cached_prices_tomorrow = prices
+    connection_context.prices.last_fetch_today = datetime.now(UTC)
+    connection_context.prices.last_fetch_tomorrow = datetime.now(UTC)
+    connection_context.settings.data[DATA_USER] = _make_user("electricity-beta")
+
+    connection_context.prices._sync_connection_id()
+
+    assert connection_context.prices._connection_id == "electricity-beta"
+    assert connection_context.prices._static_prices_today is None
+    assert connection_context.prices.cached_prices_tomorrow is None
+    assert connection_context.prices.last_fetch_today is None
+    assert connection_context.prices.last_fetch_tomorrow is None
+
+
+async def test_stale_price_cache_only_fetches_resolution_state_once(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Avoid repeated status API calls when a stale cache requires live prices."""
+    cached_payload = _cached_payload()
+    cached_payload["last_fetch_today"] = "2026-10-28T08:00:00+00:00"
+    connection_context.store.async_load.return_value = cached_payload
+
+    await connection_context.prices.async_config_entry_first_refresh()
+
     connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
         "electricity-alpha"
     )

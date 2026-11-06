@@ -2321,6 +2321,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     api_value,
                 )
 
+    def _selected_electricity_connection_id(self) -> str | None:
+        """Read the selected connection from authoritative settings when available."""
+        settings = getattr(self, "settings_coordinator", self)
+        settings_data = settings.data
+        user = settings_data.get(DATA_USER) if settings_data else None
+        if user is not None:
+            return _extract_electricity_connection_id(user)
+        return self._connection_id
+
+    async def _refresh_resolution_state_after_change(
+        self, connection_id: str
+    ) -> None:
+        """Update the published status after a successful resolution request."""
+        state = await self._fetch_contract_price_resolution_state(connection_id)
+        if state is not None and self._selected_electricity_connection_id() == connection_id:
+            self._static_contract_price_resolution_state = state
+            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
+
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
         if not self.api.is_authenticated:
@@ -2366,7 +2384,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         async def _mutation() -> None:
             try:
-                if self._connection_id != requested_connection_id:
+                if self._selected_electricity_connection_id() != requested_connection_id:
                     raise UpdateFailed(
                         "Electricity connection changed before the resolution request; retry"
                     )
@@ -2374,6 +2392,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     requested_connection_id,
                     cast(Resolution, value),
                 )
+                if self._selected_electricity_connection_id() != requested_connection_id:
+                    raise UpdateFailed(
+                        "Electricity connection changed during the resolution request; "
+                        "refresh settings before retrying"
+                    )
 
                 if result is None:
                     raise UpdateFailed("Resolution change request failed: no response")
@@ -2414,13 +2437,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         options={**self.config_entry.options, "resolution": value},
                     )
 
-                # Re-fetch resolution state to update our internal tracker immediately
+                # Publish only a status verified for the current connection.
                 try:
-                    state = await self._fetch_contract_price_resolution_state(
+                    await self._refresh_resolution_state_after_change(
                         requested_connection_id
                     )
-                    if state:
-                        self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
                 except Exception as err:
                     _LOGGER.debug(
                         "Failed to re-fetch resolution state after successful change: %s",
@@ -2650,8 +2671,23 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         connection_id = _extract_electricity_connection_id(user_data)
         if connection_id != self._connection_id:
+            previous_connection_id = self._connection_id
             self._connection_id = connection_id
             self._clear_resolution_state()
+            if previous_connection_id is not None:
+                # Prices from the previous connection may use another resolution.
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+
+    async def _refresh_resolution_state_after_change(
+        self, connection_id: str
+    ) -> None:
+        """Refresh published change status only for the selected connection."""
+        self._sync_connection_id()
+        if self._connection_id == connection_id:
+            await self._refresh_current_resolution_state()
 
     async def _refresh_current_resolution_state(
         self,
@@ -2861,8 +2897,10 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         now_utc = dt_util.utcnow()
 
         if cached_data_loaded:
+            cache_is_fresh = self._is_cache_fresh(now_utc)
             if (
-                self.api.is_authenticated
+                cache_is_fresh
+                and self.api.is_authenticated
                 and self._connection_id is not None
                 and self._price_contracts() != {"GAS"}
                 and not self._should_skip_api_calls(now_utc)
