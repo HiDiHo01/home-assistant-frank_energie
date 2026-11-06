@@ -2706,8 +2706,14 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         state = await self._fetch_contract_price_resolution_state(connection_id)
         # Account settings may change while the API request is in flight.
         self._sync_connection_id()
-        if connection_id != self._connection_id or state is None:
+        if connection_id != self._connection_id:
             self._clear_resolution_state()
+            return None
+        if state is None:
+            # A failed fetch says nothing about the connection: keep a state
+            # already verified for it, so the effective resolution can't flip.
+            if self._resolution_state_connection_id != connection_id:
+                self._clear_resolution_state()
             return None
 
         self._resolution_state_connection_id = connection_id
