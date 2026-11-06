@@ -1009,28 +1009,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.site_reference:
             _LOGGER.warning("Site reference is missing, cannot fetch invoices.")
             return None
-        try:
-            return await self.async_api_call(
-                "invoices", self.api.invoices, self.site_reference
-            )
-        except RateLimitException:
-            raise
-        except AuthException as ex:
-            _LOGGER.warning("Authentication failed while fetching invoices: %s", ex)
-            return None
-        except (RequestException, FrankEnergieException, ClientError) as ex:
-            error_msg = str(ex).lower()
-            if "no reading dates" in error_msg:
-                _LOGGER.debug(
-                    "No invoice data available yet (typical for none IN_DELIVERY sites): %s",
-                    ex,
-                )
-            else:
-                _LOGGER.debug(
-                    "No invoice data available (normal for noneIN_DELIVERY sites): %s",
-                    ex,
-                )
-            return None
+        # An API exception is a failed refresh, never a successful empty invoice.
+        # The invoice coordinator translates failures into unavailable state
+        # while retaining the last successful result in its data cache.
+        return await self.async_api_call(
+            "invoices", self.api.invoices, self.site_reference
+        )
 
     async def _fetch_period_usage(self, start_date: date) -> PeriodUsageAndCosts | None:
         """Fetch period usage and costs from the API."""
@@ -2847,6 +2831,37 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             energy_type=new_prices.energy_type,
         )
 
+    def _cached_today_prices_cover_time(self, now_utc: datetime) -> bool:
+        """Accept cached prices only for the currently active contract segments."""
+        cached = self._static_prices_today
+        if cached is None:
+            return False
+
+        def has_current_interval(prices: PriceData | None) -> bool:
+            """Check actual interval coverage, including across local midnight."""
+            return bool(
+                prices
+                and any(
+                    period.date_from <= now_utc < period.date_till
+                    for period in prices.all
+                )
+            )
+
+        electricity_available = has_current_interval(cached.electricity)
+        gas_available = has_current_interval(cached.gas)
+
+        # A customer may have only electricity or only gas. For anonymous
+        # accounts and sessions with no known segments, require at least one
+        # valid public price interval rather than inventing a contract.
+        if self.api.is_authenticated and (
+            self.user_electricity_enabled or self.user_gas_enabled
+        ):
+            return (
+                (not self.user_electricity_enabled or electricity_available)
+                and (not self.user_gas_enabled or gas_available)
+            )
+        return electricity_available or gas_available
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch price data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -2903,13 +2918,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                     rate_limited = isinstance(err, RateLimitException)
                     if not rate_limited:
                         await self._handle_fetch_exceptions(err)
-                    if (
-                        self._static_prices_today is not None
-                        and self._static_prices_today.electricity is not None
-                        and self._static_prices_today.electricity.current is not None
-                        and self._static_prices_today.gas is not None
-                        and self._static_prices_today.gas.current is not None
-                    ):
+                    if self._cached_today_prices_cover_time(now_utc):
                         _LOGGER.warning(
                             "Failed to fetch today prices, falling back to cached data: %s",
                             err,
@@ -3386,7 +3395,7 @@ class FrankEnergieInvoiceCoordinator(FrankEnergieStatisticsCoordinator):
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
-            raise UpdateFailed(f"Failed to fetch invoices: {err}") from err
+            raise UpdateFailed("Failed to fetch invoices") from err
 
 
 class FrankEnergieBatterySessionCoordinator(

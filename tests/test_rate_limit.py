@@ -2,10 +2,12 @@
 
 import asyncio
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiohttp import ClientError
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import (
@@ -20,12 +22,18 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
-from python_frank_energie.exceptions import AuthException, RateLimitException
+from python_frank_energie.exceptions import (
+    AuthException,
+    RateLimitException,
+    RequestException,
+)
+from python_frank_energie.models import MarketPrices, PriceData
 
 from custom_components.frank_energie import FrankEnergieComponent, async_remove_entry
 from custom_components.frank_energie.config_flow import ConfigFlow
 from custom_components.frank_energie.const import (
     CONF_INTERVAL_STATISTICS,
+    DATA_ELECTRICITY,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
     DATA_USAGE,
@@ -346,6 +354,131 @@ async def test_invoice_failure_preserves_data_and_statistics(
     assert invoices.last_update_success
     assert invoices.data[DATA_INVOICES] is recovered
     assert rate_api.invoices.await_count == 3
+
+
+@pytest.mark.parametrize(
+    "api_error",
+    [
+        RequestException("Private provider reference must not be logged"),
+        ClientError("Connection interrupted"),
+    ],
+)
+async def test_invoice_transport_failures_preserve_last_result(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+    api_error: Exception,
+) -> None:
+    """Request failures retain invoices and report a failed refresh."""
+    invoices = FrankEnergieInvoiceCoordinator(hass, rate_entry, rate_api, settings)
+    previous = object()
+    rate_api.invoices.side_effect = [previous, api_error]
+
+    await invoices.async_refresh()
+    assert invoices.last_update_success
+    await invoices.async_refresh()
+
+    assert not invoices.last_update_success
+    assert invoices.data[DATA_INVOICES] is previous
+    assert isinstance(invoices.last_exception, UpdateFailed)
+    assert str(api_error) not in str(invoices.last_exception)
+    assert rate_api.invoices.await_count == 2
+
+
+async def test_invoice_authentication_error_is_not_empty_data(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+) -> None:
+    """Let the coordinator handle authentication rather than clearing invoices."""
+    invoices = FrankEnergieInvoiceCoordinator(hass, rate_entry, rate_api, settings)
+    auth_error = AuthException("Expired invoice access")
+    rate_api.invoices.side_effect = auth_error
+
+    with pytest.raises(AuthException) as caught:
+        await invoices._fetch_invoices()
+
+    assert caught.value is auth_error
+
+
+@pytest.mark.parametrize(
+    ("electricity_enabled", "gas_enabled", "cached_electricity", "cached_gas", "expected"),
+    [
+        (True, False, True, False, True),
+        (False, True, False, True, True),
+        (True, True, True, True, True),
+        (True, True, True, False, False),
+        (False, False, True, False, True),
+    ],
+)
+def test_price_cache_respects_active_contract_segments(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+    electricity_enabled: bool,
+    gas_enabled: bool,
+    cached_electricity: bool,
+    cached_gas: bool,
+    expected: bool,
+) -> None:
+    """Accept only the cached fuel types required by the account."""
+    now_utc = datetime(2026, 10, 28, 10, tzinfo=UTC)
+
+    def make_prices(energy_type: str, enabled: bool) -> PriceData:
+        """Build a real typed price series for the tested interval."""
+        periods = (
+            [
+                {
+                    "from": now_utc.isoformat(),
+                    "till": (now_utc + timedelta(minutes=15)).isoformat(),
+                    "marketPrice": 0.2,
+                }
+            ]
+            if enabled
+            else []
+        )
+        return PriceData(periods, energy_type=energy_type)
+
+    prices = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
+    prices.user_electricity_enabled = electricity_enabled
+    prices.user_gas_enabled = gas_enabled
+    prices._static_prices_today = MarketPrices(
+        electricity=make_prices("electricity", cached_electricity),
+        gas=make_prices("gas", cached_gas),
+        energy_country="NL",
+    )
+    assert prices._cached_today_prices_cover_time(now_utc) is expected
+
+
+def test_price_cache_rejects_expired_interval_after_midnight(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+) -> None:
+    """Reject yesterday's cache even when a previous entry was once current."""
+    prices = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
+    prices.user_electricity_enabled = True
+    prices._static_prices_today = MarketPrices(
+        electricity=PriceData(
+            [
+                {
+                    "from": "2026-10-28T22:00:00+00:00",
+                    "till": "2026-10-28T23:00:00+00:00",
+                    "marketPrice": 0.2,
+                }
+            ],
+            energy_type="electricity",
+        ),
+        gas=PriceData([], energy_type="gas"),
+        energy_country="NL",
+    )
+    # Amsterdam has switched to CET: 23:05 UTC is 00:05 local.
+    now_utc = datetime(2026, 10, 28, 23, 5, tzinfo=UTC)
+    assert not prices._cached_today_prices_cover_time(now_utc)
 
 
 async def test_renewal_throttle_does_not_reauthenticate(
@@ -851,8 +984,10 @@ async def test_site_form_keeps_typed_error_and_recovers(
     )
     assert result["step_id"] == "site"
     assert result["errors"] == {"base": "rate_limited"}
+    # Retry uses the saved tokens; it must not prompt for ignored credentials.
+    assert result["data_schema"].schema == {}
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], user_input=USER_INPUT
+        result["flow_id"], user_input={}
     )
     assert result["errors"] == {"base": "rate_limited"}
     api.UserSites.assert_awaited_once()
@@ -860,7 +995,7 @@ async def test_site_form_keeps_typed_error_and_recovers(
     api.UserSites.side_effect = None
     clock.return_value = 220.0
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], user_input=USER_INPUT
+        result["flow_id"], user_input={}
     )
     assert result["step_id"] == "site"
     assert not result.get("errors")

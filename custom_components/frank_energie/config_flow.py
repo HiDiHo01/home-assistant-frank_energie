@@ -391,14 +391,8 @@ class ConfigFlow(config_entries.ConfigFlow):
             )
 
     def _site_error_schema(self) -> vol.Schema:
-        """Return schema used when site retrieval fails."""
-        return vol.Schema(
-            {
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
-                vol.Optional("timeout", default=5): int,
-            }
-        )
+        """Allow retrying site lookup using the existing authenticated tokens."""
+        return vol.Schema({})
 
     async def async_step_user(
         self, user_input: Optional[dict[str, Any]] = None

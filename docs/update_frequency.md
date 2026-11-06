@@ -4,11 +4,18 @@ This page describes how and when the Frank Energie integration retrieves and upd
 
 ## API Rate Limits
 
-When the client reports `RateLimitException`, the affected coordinator reports
-a temporary update failure. Its last data remains cached, and its entities are
-unavailable until a successful refresh. An invoice throttle affects
-invoice-derived sensors independently of usage, monthly totals, and prices.
-Invoices continue to use the configured statistics polling interval.
+When the client reports `RateLimitException`, the affected resource records
+its cooldown. Required requests that cannot use currently valid cached data
+cause a temporary coordinator failure; the last successful data is retained,
+but affected entities become unavailable until recovery. Current-price data
+can remain available from cache only when the cached intervals cover the
+current time for the contracted energy types. A throttle on optional tomorrow
+prices or contract-resolution metadata does not make today's prices unavailable.
+
+Invoice requests use an independent coordinator with the configured statistics
+polling interval. A failed invoice request keeps its last successful result
+but makes invoice-derived sensors unavailable without affecting usage, monthly
+totals, or prices. An actual empty invoice response remains valid data.
 
 If the API provides a retry delay, automatic polling waits for at least that
 delay and does not run faster than its normal polling interval. Manual refreshes,
