@@ -234,6 +234,7 @@ async def async_remove_config_entry_device(
             return False
     return True
 
+
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
 
