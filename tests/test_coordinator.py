@@ -2876,3 +2876,66 @@ async def test_partial_today_response_without_cache_remains_retryable(
     assert not result[missing_commodity].all
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+
+class TestFindLowestConsecutiveHours:
+    """Tests for FrankEnergieCoordinator._find_lowest_consecutive_hours."""
+
+    @pytest.fixture
+    def coordinator(self, hass: HomeAssistant, mock_config_entry: MockConfigEntry):
+        api = MagicMock(spec=FrankEnergie)
+        return FrankEnergieCoordinator(hass, mock_config_entry, api)
+
+    def test_empty_prices_returns_none(self, coordinator):
+        assert coordinator._find_lowest_consecutive_hours([], 4) is None
+
+    def test_fewer_prices_than_window_returns_none(self, coordinator):
+        prices = [
+            MagicMock(total=1.0, date_from=1, date_till=2),
+            MagicMock(total=2.0, date_from=2, date_till=3),
+        ]
+        assert coordinator._find_lowest_consecutive_hours(prices, 4) is None
+
+    def test_finds_lowest_window_in_middle(self, coordinator):
+        # Window of 2 over [5.0, 1.0, 4.0, 9.0, 2.0]
+        # Candidates: (5+1)/2=3, (1+4)/2=2.5, (4+9)/2=6.5, (9+2)/2=5.5 -> [1.0, 4.0]
+        prices = [
+            MagicMock(total=5.0, date_from=1, date_till=2),
+            MagicMock(total=1.0, date_from=2, date_till=3),
+            MagicMock(total=4.0, date_from=3, date_till=4),
+            MagicMock(total=9.0, date_from=4, date_till=5),
+            MagicMock(total=2.0, date_from=5, date_till=6),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, 2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.5
+        assert start is prices[1]
+        assert end is prices[2]
+
+    def test_ties_keep_first_occurrence(self, coordinator):
+        prices = [
+            MagicMock(total=2.0, date_from=1, date_till=2),
+            MagicMock(total=2.0, date_from=2, date_till=3),
+            MagicMock(total=2.0, date_from=3, date_till=4),
+            MagicMock(total=2.0, date_from=4, date_till=5),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, 2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is prices[0]
+        assert end is prices[1]
+
+    def test_window_equals_length(self, coordinator):
+        prices = [
+            MagicMock(total=1.0, date_from=1, date_till=2),
+            MagicMock(total=2.0, date_from=2, date_till=3),
+            MagicMock(total=3.0, date_from=3, date_till=4),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, 3)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is prices[0]
+        assert end is prices[2]
