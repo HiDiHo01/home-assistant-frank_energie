@@ -64,6 +64,14 @@ When working with the latest Home Assistant release:
 * Do not use deprecated APIs when a supported replacement exists.
 * Do not add speculative compatibility code for obsolete Home Assistant versions unless the repository explicitly requires it.
 
+### Latest stable Home Assistant API policy (mandatory)
+
+* **Always implement new or substantially refactored integration functionality using the newest stable Home Assistant Core APIs**, verified against the official release notes, developer documentation, and tagged Core source. Do not target beta, development, undocumented, private, or deprecated APIs.
+* **Raise the declared minimum supported Home Assistant version when a required public API is introduced in a newer stable release.** Prefer this explicit, documented minimum-version increase over compatibility fallbacks or replicating superseded Core behavior merely to keep older versions working.
+* Update every minimum-version declaration (including `hacs.json`), relevant documentation, release notes, and tests consistently. Record the exact minimum version and the upstream change that necessitates it in the PR description; call out the compatibility impact as a breaking change for users on older releases.
+* Validate new functionality against the chosen minimum version (and the latest stable Core version if different). Do not claim compatibility or successful checks without actual evidence. A minimum-version increase does not authorize unrelated breaking changes.
+* For changes that do not need a newer API, do not increase the minimum version solely to chase the latest release; continue testing with the declared minimum until a concrete new-API requirement warrants a bump.
+
 Prefer a clean implementation for the declared minimum supported version. If compatibility constraints are unclear, inspect the repository's manifest, documentation, and CI configuration before changing them.
 
 ## 4. Python standards
