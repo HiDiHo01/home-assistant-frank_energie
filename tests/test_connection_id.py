@@ -372,7 +372,9 @@ async def test_connection_replacement_invalidates_old_change_permissions(
     await connection_context.prices.async_set_resolution("PT60M")
 
     assert connection_context.prices._connection_id == "new-electricity"
-    assert connection_context.prices._resolution_state_connection_id == "new-electricity"
+    assert (
+        connection_context.prices._resolution_state_connection_id == "new-electricity"
+    )
     connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
         "new-electricity"
     )
@@ -414,7 +416,9 @@ async def test_resolution_change_rejects_unverified_status(
         RequestException("temporary upstream failure")
     )
 
-    with pytest.raises(UpdateFailed, match="Cannot verify resolution change eligibility"):
+    with pytest.raises(
+        UpdateFailed, match="Cannot verify resolution change eligibility"
+    ):
         await connection_context.prices.async_set_resolution("PT60M")
 
     connection_context.api.contract_price_resolution_request_change.assert_not_awaited()
@@ -463,5 +467,7 @@ async def test_resolution_change_uses_latest_restrictions_for_replaced_connectio
     await connection_context.prices.async_set_resolution("PT60M")
 
     assert connection_context.prices._api_resolution_state is blocked_state
-    assert connection_context.prices._resolution_state_connection_id == "new-electricity"
+    assert (
+        connection_context.prices._resolution_state_connection_id == "new-electricity"
+    )
     connection_context.api.contract_price_resolution_request_change.assert_not_awaited()
