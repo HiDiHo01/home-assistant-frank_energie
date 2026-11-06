@@ -158,6 +158,9 @@ async def async_remove_entry(
     """Clean up persistent storage when a config entry is removed."""
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
     await price_cache_store(hass, entry.entry_id).async_remove()
+    from .repairs import async_clear_entry_device_repairs
+
+    async_clear_entry_device_repairs(hass, entry.entry_id)
 
 
 def _device_inventory(
