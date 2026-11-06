@@ -40,6 +40,14 @@ class RateLimitState:
             raise RateLimitException(cooldown.operation_name, retry_after=remaining)
         del self._cooldowns[resource]
 
+    def check_authentication_recovery(self) -> None:
+        """Respect login cooldowns only when recovering failed credentials.
+
+        Regular API polling with an existing valid token remains unaffected
+        by a separate login throttle.
+        """
+        self._check("login")
+
     async def async_call[T](
         self,
         resource: str,

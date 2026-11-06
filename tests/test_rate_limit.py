@@ -236,6 +236,32 @@ async def test_login_throttle_does_not_block_valid_token_requests(
     assert login_request.await_count == 2
 
 
+async def test_login_cooldown_blocks_only_auth_recovery(
+    clock: MagicMock,
+) -> None:
+    """A login throttle stops recovery attempts but not valid-token requests."""
+    state = RateLimitState()
+    login = AsyncMock(side_effect=RateLimitException("Login", retry_after=120))
+    with pytest.raises(RateLimitException):
+        await state.async_call("login", login, authenticated=False)
+
+    with pytest.raises(RateLimitException) as blocked:
+        state.check_authentication_recovery()
+    assert blocked.value.operation_name == "Login"
+    assert blocked.value.retry_after == 120
+
+    user_sites = AsyncMock(return_value="valid token response")
+    assert (
+        await state.async_call("UserSites", user_sites)
+        == "valid token response"
+    )
+    user_sites.assert_awaited_once()
+
+    clock.return_value = 220.0
+    state.check_authentication_recovery()
+    login.assert_awaited_once()
+
+
 async def test_automatic_renewal_throttle_is_shared(clock: MagicMock) -> None:
     """An error from implicit renewal also gates other authenticated resources."""
     state = RateLimitState()

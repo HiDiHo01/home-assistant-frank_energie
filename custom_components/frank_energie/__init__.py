@@ -412,6 +412,10 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         """Fetch site reference and human-readable title."""
         _LOGGER.debug("Getting site reference and title for coordinator")
 
+        # Site discovery after a failed silent login must honor the original
+        # login cooldown instead of retrying UserSites and token renewal.
+        coordinator.rate_limits.check_authentication_recovery()
+
         try:
             # Haal de 'UserSites' gegevens op van de coordinator API
             user_sites_data: UserSites = await coordinator.async_api_call(

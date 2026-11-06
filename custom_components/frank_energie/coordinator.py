@@ -2069,6 +2069,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Try to renew authentication token with shared-client serialization."""
 
         async with self._auth_lock:
+            # A failed silent login must not trigger another token renewal
+            # until the provider's authentication cooldown has expired.
+            self.rate_limits.check_authentication_recovery()
             try:
                 updated_tokens = await self.async_api_call(
                     "renew_token",
@@ -2388,9 +2391,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
+        # An unauthenticated account uses its local setting. During an
+        # in-flight change, the configured choice is authoritative until
+        # the provider confirms the new active resolution.
         if (
-            self._api_resolution_state is not None
-        ):  # and not self._resolution_change_pending:
+            self.api.is_authenticated
+            and not self._resolution_change_pending
+            and self._api_resolution_state is not None
+        ):
             active = self._api_resolution_state.activeOption
             if active in SUPPORTED_RESOLUTIONS:
                 return active
@@ -2664,7 +2672,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         return False
 
     def _is_cache_resolution_valid(self) -> bool:
-        """Check if the cached resolution matches the configured resolution."""
+        """Require cached intervals to match the effective API-query resolution."""
         if not self._static_prices_today or not self.config_entry:
             return True
 
@@ -2675,12 +2683,11 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             return True
 
         cached_res = price_series.resolution_minutes
-        config_value = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
-        expected_res = 15 if config_value == "PT15M" else 60
+        expected_res = 15 if self.resolution == "PT15M" else 60
 
         if cached_res != expected_res:
             _LOGGER.debug(
-                "Cache resolution (%s) differs from config (%s), invalidating cache",
+                "Cache resolution (%s) differs from effective resolution (%s), invalidating cache",
                 cached_res,
                 expected_res,
             )
