@@ -171,6 +171,7 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
         ("live-entities", False),
         ("entry-not-loaded", False),
         ("shared-device", True),
+        ("unknown-device", False),
     ],
 )
 async def test_remove_config_entry_device(
@@ -212,7 +213,11 @@ async def test_remove_config_entry_device(
         er.async_get(hass).async_get_or_create(
             "sensor",
             DOMAIN,
-            f"{DOMAIN}_charger-removed_charger_brand",
+            (
+                "charger-removed_power"
+                if scenario == "unknown-device"
+                else f"{DOMAIN}_charger-removed_charger_brand"
+            ),
             config_entry=entry,
             device_id=device.id,
         )
