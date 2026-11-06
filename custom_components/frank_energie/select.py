@@ -5,17 +5,18 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from python_frank_energie.domain import SmartBatteryMode
 from python_frank_energie.models import EnodeCharger
 
 
@@ -23,6 +24,7 @@ from .const import (
     API_CONF_URL,
     BATTERY_MODE_OPTIONS,
     BATTERY_STRATEGY_OPTIONS,
+    BATTERY_TRADING_MODES,
     ENODE_CHARGING_MODE_OPTIONS,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
@@ -33,9 +35,14 @@ from .const import (
     MANUFACTURER_FRANK_ENERGIE,
     SERVICE_NAME_SETTINGS,
 )
-from .coordinator import FrankEnergieCoordinator
+from .coordinator import FrankEnergieBatteryCoordinator, FrankEnergieCoordinator
 from .helpers import (
+    AdjustableBatterySetting,
     async_sync_contract_entities,
+    battery_adjustable_setting,
+    battery_details_settings,
+    battery_mode_state,
+    battery_state_value,
     device_translation_key,
     known_site_contracts,
 )
@@ -52,6 +59,11 @@ VALUE_TO_DISPLAY: dict[str, str] = {v: k for k, v in DISPLAY_TO_VALUE.items()}
 
 DEFAULT_DISPLAY = "pt15m"
 DEFAULT_VALUE = DISPLAY_TO_VALUE[DEFAULT_DISPLAY]
+
+
+def _iso(value: datetime | None) -> str | None:
+    """Return a datetime attribute as an ISO 8601 string."""
+    return value.isoformat() if value else None
 
 
 @dataclass(kw_only=True)
@@ -82,7 +94,7 @@ SELECT_DESCRIPTIONS: tuple[FrankEnergieSelectEntityDescription, ...] = (
 
 
 def _setup_battery_entities(
-    coordinator: FrankEnergieCoordinator, entry: ConfigEntry
+    coordinator: FrankEnergieBatteryCoordinator, entry: ConfigEntry
 ) -> list[SelectEntity]:
     """Create and return smart battery select entities."""
     entities: list[SelectEntity] = []
@@ -299,16 +311,18 @@ class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):
 
 
 class FrankEnergieBatteryBaseSelect(
-    CoordinatorEntity[FrankEnergieCoordinator], SelectEntity
+    CoordinatorEntity[FrankEnergieBatteryCoordinator], SelectEntity
 ):
     """Base select entity for controlling smart battery."""
 
     entity_description: FrankEnergieSelectEntityDescription
     _attr_has_entity_name = True
+    # Attribute name shared by the library's settings and adjustable settings.
+    _setting_name: str
 
     def __init__(
         self,
-        coordinator: FrankEnergieCoordinator,
+        coordinator: FrankEnergieBatteryCoordinator,
         entry: ConfigEntry,
         battery_id: str,
         description: FrankEnergieSelectEntityDescription,
@@ -341,13 +355,106 @@ class FrankEnergieBatteryBaseSelect(
             None,
         )
 
+    def _get_settings(self) -> object | None:
+        """Return the battery's current settings from the details query."""
+        return battery_details_settings(self.coordinator.data, self._battery_id)
+
+    def _get_adjustable_setting(self) -> AdjustableBatterySetting | None:
+        """Return this entity's block of the per-battery ``smartBatterySettings``."""
+        return battery_adjustable_setting(
+            self.coordinator.data, self._battery_id, self._setting_name
+        )
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current setting as a select option.
+
+        Prefers the details query, which refreshes every poll, and falls back
+        to the per-battery settings when the details report no known value.
+        """
+        current = battery_state_value(
+            getattr(self._get_settings(), self._setting_name, None)
+        )
+        if current is None and (setting := self._get_adjustable_setting()):
+            current = battery_state_value(setting.current)
+        return current
+
+    @property
+    def options(self) -> list[str]:
+        """Return the values this battery may select.
+
+        Uses the battery's own options from ``smartBatterySettings`` when the
+        library provides them, otherwise the static description options. The
+        current value is always included so the select never shows ``unknown``
+        for a valid mode, and a setting that cannot be changed right now
+        offers only its current value.
+        """
+        current = self.current_option
+        setting = self._get_adjustable_setting()
+        if setting is None:
+            options = list(self.entity_description.options or [])
+        elif not setting.updatable:
+            options = []
+        else:
+            options = [
+                state
+                for option in setting.options
+                if getattr(option, "selectable", True)
+                and (state := battery_state_value(getattr(option, "code", None)))
+            ]
+        if current and current not in options:
+            options.append(current)
+        return options
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        """Return whether and when the setting can change, and any pending change."""
+        setting = self._get_adjustable_setting()
+        if setting is None:
+            return None
+        return {
+            "is_change_request_possible": setting.updatable,
+            "change_request_effective_date": _iso(setting.update_delayed_till),
+            "upcoming_change": battery_state_value(setting.pending),
+            "upcoming_change_effective_date": _iso(
+                setting.pending_value_effective_from
+            ),
+        }
+
+    async def _async_update_setting(self, api_key: str, option: str) -> None:
+        """Send one setting change to the API and refresh on success.
+
+        A setting that cannot be changed right now offers only its current
+        value; selecting it sends nothing, and any other value is rejected.
+        """
+        setting = self._get_adjustable_setting()
+        if setting is not None and not setting.updatable:
+            if option == self.current_option:
+                return
+            raise HomeAssistantError(
+                f"Smart battery {self._battery_id} {api_key} cannot be changed right now"
+            )
+        _LOGGER.debug(
+            "Setting smart battery %s %s to %s", self._battery_id, api_key, option
+        )
+        success = await self.coordinator.async_update_battery_settings(
+            self._battery_id, {api_key: option.upper()}
+        )
+        if not success:
+            raise HomeAssistantError(
+                f"Frank Energie did not accept setting smart battery "
+                f"{self._battery_id} {api_key} to {option}"
+            )
+
 
 class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
     """Select entity for controlling smart battery mode."""
 
+    _setting_name = "battery_mode"
+
     def __init__(
         self,
-        coordinator: FrankEnergieCoordinator,
+        coordinator: FrankEnergieBatteryCoordinator,
         entry: ConfigEntry,
         battery_id: str,
         description: FrankEnergieSelectEntityDescription,
@@ -356,38 +463,19 @@ class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
         super().__init__(coordinator, entry, battery_id, description)
         self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
 
-    @property
-    def current_option(self) -> str | None:
-        """Return the current battery mode."""
-        battery = self._get_battery()
-        if not battery or not battery.smart_battery.settings:
-            return None
-        mode = battery.smart_battery.settings.battery_mode
-        if mode:
-            mode_lower = mode.lower()
-            return mode_lower
-        return None
-
     async def async_select_option(self, option: str) -> None:
         """Update battery mode via mutation."""
-        _LOGGER.debug("Setting smart battery %s mode to %s", self._battery_id, option)
-        success = await self.coordinator.api.smart_battery_update_settings(
-            self._battery_id, {"batteryMode": option.upper()}
-        )
-        if success:
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error(
-                "Failed to set battery %s mode to %s", self._battery_id, option
-            )
+        await self._async_update_setting("batteryMode", option)
 
 
 class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
     """Select entity for controlling smart battery trading strategy."""
 
+    _setting_name = "imbalance_trading_strategy"
+
     def __init__(
         self,
-        coordinator: FrankEnergieCoordinator,
+        coordinator: FrankEnergieBatteryCoordinator,
         entry: ConfigEntry,
         battery_id: str,
         description: FrankEnergieSelectEntityDescription,
@@ -398,40 +486,17 @@ class FrankEnergieBatteryStrategySelect(FrankEnergieBatteryBaseSelect):
 
     @property
     def available(self) -> bool:
-        """Return True if strategy selection is available."""
+        """Return True while the battery is in a trading mode."""
         if not super().available:
             return False
-        battery = self._get_battery()
-        if not battery or not battery.smart_battery.settings:
-            return False
-        return battery.smart_battery.settings.battery_mode == SmartBatteryMode.TRADING
-
-    @property
-    def current_option(self) -> str | None:
-        """Return the current battery strategy."""
-        battery = self._get_battery()
-        if not battery or not battery.smart_battery.settings:
-            return None
-        strategy = battery.smart_battery.settings.imbalance_trading_strategy
-        if strategy:
-            strategy_lower = strategy.lower()
-            return strategy_lower
-        return None
+        return (
+            battery_mode_state(self.coordinator.data, self._battery_id)
+            in BATTERY_TRADING_MODES
+        )
 
     async def async_select_option(self, option: str) -> None:
         """Update battery trading strategy via mutation."""
-        _LOGGER.debug(
-            "Setting smart battery %s strategy to %s", self._battery_id, option
-        )
-        success = await self.coordinator.api.smart_battery_update_settings(
-            self._battery_id, {"imbalanceTradingStrategy": option.upper()}
-        )
-        if success:
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error(
-                "Failed to set battery %s strategy to %s", self._battery_id, option
-            )
+        await self._async_update_setting("imbalanceTradingStrategy", option)
 
 
 class FrankEnergieEnodeChargingModeSelect(
