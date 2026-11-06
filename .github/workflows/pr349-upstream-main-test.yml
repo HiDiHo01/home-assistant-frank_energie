@@ -1,0 +1,69 @@
+name: PR 349 - Test against python-frank-energie main
+
+on:
+  push:
+    branches:
+      - codex/handle-api-rate-limits
+    paths:
+      - .github/workflows/pr349-upstream-main-test.yml
+      - custom_components/**
+      - tests/**
+      - pyproject.toml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-main-tests:
+    name: Python ${{ matrix.python-version }} / upstream main
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.14.2", "3.14"]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            codeload.github.com:443
+            install.python-poetry.org:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            release-assets.githubusercontent.com:443
+      - name: Checkout PR code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install Poetry
+        run: |
+          set -o pipefail
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "PATH=$HOME/.local/bin:$PATH" >> "$GITHUB_ENV"
+      - name: Install integration test dependencies
+        run: poetry install
+      - name: Override installed client with verified upstream main
+        run: |
+          poetry run python -m pip install --no-deps --force-reinstall "git+https://github.com/HiDiHo01/python-frank-energie.git@f99c7d399e2ffb2971dbe1819225ce82bd92a29e"
+          poetry run python - <<'PY'
+          import importlib.metadata as metadata
+          from python_frank_energie.exceptions import RateLimitException
+          print("Upstream client distribution:", metadata.version("python-frank-energie"))
+          print("Typed exception:", RateLimitException.__qualname__)
+          PY
+      - name: Targeted rate-limit and coordinator regressions
+        run: |
+          poetry run python -m pytest -q tests/test_rate_limit.py tests/test_coordinator.py tests/test_price_cache.py tests/test_diagnostics.py tests/test_config_flow.py
+      - name: Complete integration test suite
+        run: poetry run python -m pytest -q
