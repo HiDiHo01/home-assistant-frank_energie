@@ -16,7 +16,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_platform
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
@@ -27,6 +26,9 @@ from python_frank_energie.models import UserSites
 
 from .const import (
     CONF_COORDINATOR,
+    DATA_BATTERIES,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
@@ -161,33 +163,72 @@ async def async_remove_config_entry_device(
     entry: ConfigEntry[FrankEnergieEntryData],
     device_entry: dr.DeviceEntry,
 ) -> bool:
-    """Allow deleting a device once the integration no longer provides it.
+    """Allow removing a device only when a complete inventory confirms its absence.
 
-    A device is kept while any of its entities is live in one of this entry's
-    entity platforms, so an API failure after setup (entities merely going
-    unavailable) doesn't make it deletable. A charger, battery or vehicle
-    removed from the account has no live entities after the next restart or
-    reload, so the user can then delete the leftover device.
-
-    Entities are only created at setup, so a device whose fetch failed during
-    setup also has no live entities for that run. Deleting it then is
-    recoverable: the next successful reload recreates the device.
+    A missing or failed API fetch is not proof that hardware was removed.
+    Use registry identities rather than loaded entities so devices whose
+    entities are all disabled remain protected.
     """
-    if entry.state is not ConfigEntryState.LOADED:
-        # Can't tell which devices are still provided until setup has finished.
+    if (
+        entry.state is not ConfigEntryState.LOADED
+        or device_entry.config_entry_id != entry.entry_id
+        or device_entry.entry_type is not None
+    ):
         return False
 
-    live_entity_ids = {
-        entity_id
-        for platform in entity_platform.async_get_platforms(hass, DOMAIN)
-        if platform.config_entry is entry
-        for entity_id in platform.entities
+    identifiers = {
+        identifier
+        for domain, identifier in device_entry.identifiers
+        if domain == DOMAIN and identifier
     }
-    device_entities = er.async_entries_for_device(
-        er.async_get(hass), device_entry.id, include_disabled_entities=True
-    )
-    return live_entity_ids.isdisjoint(entity.entity_id for entity in device_entities)
+    if len(identifiers) != 1:
+        return False
+    identifier = next(iter(identifiers))
 
+    registered_unique_ids = {
+        entity.unique_id
+        for entity in er.async_entries_for_device(
+            er.async_get(hass), device_entry.id, include_disabled_entities=True
+        )
+        if entity.config_entry_id == entry.entry_id
+    }
+    runtime_data = entry.runtime_data
+    inventories = []
+    if f"{DOMAIN}_{identifier}_charger_brand" in registered_unique_ids:
+        inventories.append(
+            (runtime_data.charger_coordinator, DATA_ENODE_CHARGERS, "chargers")
+        )
+    if f"{DOMAIN}_{identifier}_vehicle_name" in registered_unique_ids:
+        inventories.append(
+            (runtime_data.vehicle_coordinator, DATA_ENODE_VEHICLES, "vehicles")
+        )
+    if device_entry.model == "SmartBattery":
+        inventories.append(
+            (runtime_data.battery_coordinator, DATA_BATTERIES, "batteries")
+        )
+
+    # Unknown or ambiguous device kinds must not become removable.
+    if len(inventories) != 1:
+        return False
+
+    coordinator, data_key, collection_key = inventories[0]
+    if not coordinator.last_update_success or not isinstance(coordinator.data, dict):
+        return False
+
+    inventory = coordinator.data.get(data_key)
+    devices = getattr(inventory, collection_key, None)
+    if not isinstance(devices, list):
+        # None also represents a skipped or failed fetch in the current API.
+        return False
+
+    for device in devices:
+        device_id = device.get("id") if isinstance(device, dict) else getattr(device, "id", None)
+        if not isinstance(device_id, str) or not device_id:
+            # An invalid partial response must not authorize deletion.
+            return False
+        if device_id == identifier:
+            return False
+    return True
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
