@@ -472,6 +472,7 @@ async def test_resolution_change_uses_latest_restrictions_for_replaced_connectio
     )
     connection_context.api.contract_price_resolution_request_change.assert_not_awaited()
 
+
 async def test_resolution_state_discards_connection_changed_during_fetch(
     connection_context: _ConnectionContext,
 ) -> None:
