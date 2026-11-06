@@ -69,6 +69,8 @@ TO_REDACT: set[str] = {
     "serialNumber",
     "battery_id",
     "batteryId",
+    "battery_serial_number",
+    "batterySerialNumber",
     "charger_id",
     "chargerId",
     "vehicle_id",
@@ -77,6 +79,24 @@ TO_REDACT: set[str] = {
     "deviceId",
     "installation_id",
     "installationId",
+    "pv_system_id",
+    "pvSystemId",
+    # Vehicle identification numbers (VINs) are sensitive hardware identifiers
+    "vin",
+    "vehicleIdentificationNumber",
+    # Contract references and agreements
+    "contract_reference",
+    "contractReference",
+    "contract_number",
+    "contractNumber",
+    "agreement_id",
+    "agreementId",
+    # Structured delivery address elements
+    "street",
+    "houseNumber",
+    "houseNumberAddition",
+    "postalCode",
+    "city",
 }
 
 
