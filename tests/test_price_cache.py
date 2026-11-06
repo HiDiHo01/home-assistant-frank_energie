@@ -160,7 +160,7 @@ async def test_resolution_state_serialization_from_date_types():
 
 @pytest.mark.asyncio
 async def test_coordinator_load_cache(mock_store, mock_config_entry):
-    """Test that coordinator loads cached data from Store on startup."""
+    """Restore cached prices without trusting unverified change permissions."""
     mock_config_entry.data = {}
     mock_config_entry.options = {}
 
@@ -222,10 +222,8 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
     assert (
         price_coordinator._static_prices_today.electricity.all[0].market_price == 0.15
     )
-    assert (
-        price_coordinator._static_contract_price_resolution_state.active_option
-        == "PT15M"
-    )
+    # No selected electricity ID was fetched: cached change rights are untrusted.
+    assert price_coordinator._static_contract_price_resolution_state is None
     assert price_coordinator.last_fetch_today == datetime.fromisoformat(
         "2026-06-26T07:30:00+00:00"
     )
