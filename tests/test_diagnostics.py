@@ -181,6 +181,7 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
         "username": "user@example.com",
         "password": "secret",
         "access_token": "token",
+        "accessToken": "token_camel",
         "auth_token": "token_auth",
         "site_reference": "site",
     }
@@ -208,6 +209,7 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["entry"]["data"]["username"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["password"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["access_token"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["accessToken"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["auth_token"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["site_reference"] == "**REDACTED**"
 
