@@ -259,7 +259,6 @@ async def test_remove_config_entry_device(
         )
 
 
-
 @pytest.mark.parametrize(
     ("kind", "data_key", "collection_key", "marker", "device_model"),
     [
