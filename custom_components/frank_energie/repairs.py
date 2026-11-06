@@ -1,8 +1,9 @@
 """User-confirmed repairs for Frank Energie devices absent from live inventories."""
 
+import re
 from typing import TYPE_CHECKING
 
-import voluptuous as vol
+import probatio
 
 from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
 from homeassistant.config_entries import ConfigEntryState
@@ -105,70 +106,64 @@ def async_process_device_inventory(
         runtime_data.stale_inventory_epochs.get(kind, 0) + 1
     )
     observed: set[str] = set()
-    # Targeted reconciliation is compatible with HA 2026.1, unlike the
-    # issue-refresh API introduced in 2026.11. Keep existing missing-device
-    # issues untouched after just one fetch, preserving ignored state.
-    active_ids: set[str] = set()
-    for device in dr.async_entries_for_config_entry(
-        dr.async_get(hass), entry.entry_id
-    ):
-        identifier = _candidate_identifier(hass, entry, device, kind)
-        if identifier is None:
-            continue
-        key = f"{kind}:{device.id}"
-        observed.add(key)
-        issue_id = _issue_id(kind, entry.entry_id, device.id)
-        if identifier in inventory_ids:
-            runtime_data.stale_device_absences.pop(key, None)
-            continue
+    with ir.async_refresh_issues(
+        hass,
+        DOMAIN,
+        issue_id_pattern=rf"stale_{re.escape(kind)}_",
+        config_entry_id=entry.entry_id,
+    ) as refresh:
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(hass), entry.entry_id
+        ):
+            issue_id = _issue_id(kind, entry.entry_id, device.id)
+            identifier = _candidate_identifier(hass, entry, device, kind)
+            if identifier is None:
+                # The device still exists, but its kind can no longer be
+                # verified. Preserve any existing issue, including ignore state.
+                refresh.async_keep([issue_id])
+                continue
 
-        active_ids.add(issue_id)
-        count = runtime_data.stale_device_absences.get(key, 0) + 1
-        runtime_data.stale_device_absences[key] = count
-        if count < _REQUIRED_ABSENT_FETCHES:
-            continue
+            key = f"{kind}:{device.id}"
+            observed.add(key)
+            if identifier in inventory_ids:
+                runtime_data.stale_device_absences.pop(key, None)
+                continue
 
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=True,
-            is_persistent=True,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="stale_device",
-            translation_placeholders={
-                "device": (
-                    device.name_by_user
-                    or device.name
-                    or device.model
-                    or "Frank Energie device"
-                )
-            },
-            data={
-                "entry_id": entry.entry_id,
-                "device_id": device.id,
-                "kind": kind,
-            },
-        )
+            count = runtime_data.stale_device_absences.get(key, 0) + 1
+            runtime_data.stale_device_absences[key] = count
+            if count < _REQUIRED_ABSENT_FETCHES:
+                # Existing persistent issues survive a restart: one new
+                # valid fetch is not enough to change their state.
+                refresh.async_keep([issue_id])
+                continue
 
-    prefix = f"stale_{kind}_{entry.entry_id}_"
-    for (issue_domain, issue_id) in tuple(ir.async_get(hass).issues):
-        if issue_domain == DOMAIN and issue_id.startswith(prefix):
-            if issue_id not in active_ids:
-                ir.async_delete_issue(hass, DOMAIN, issue_id)
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                config_entry_id=entry.entry_id,
+                is_fixable=True,
+                is_persistent=True,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="stale_device",
+                translation_placeholders={
+                    "device": (
+                        device.name_by_user
+                        or device.name
+                        or device.model
+                        or "Frank Energie device"
+                    )
+                },
+                data={
+                    "entry_id": entry.entry_id,
+                    "device_id": device.id,
+                    "kind": kind,
+                },
+            )
 
     for key in tuple(runtime_data.stale_device_absences):
         if key.startswith(f"{kind}:") and key not in observed:
             runtime_data.stale_device_absences.pop(key, None)
-
-
-@callback
-def async_clear_entry_device_repairs(hass: HomeAssistant, entry_id: str) -> None:
-    """Remove persistent stale-device issues when their config entry is deleted."""
-    prefixes = tuple(f"stale_{kind}_{entry_id}_" for kind in _INVENTORIES)
-    for issue_domain, issue_id in tuple(ir.async_get(hass).issues):
-        if issue_domain == DOMAIN and issue_id.startswith(prefixes):
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 class StaleDeviceRepairFlow(RepairsFlow):
@@ -185,8 +180,13 @@ class StaleDeviceRepairFlow(RepairsFlow):
     ) -> RepairsFlowResult:
         """Re-fetch the relevant inventory and delete only if still absent."""
         if user_input is None:
+            issue = ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id)
             return self.async_show_form(
-                step_id="confirm", data_schema=vol.Schema({})
+                step_id="confirm",
+                data_schema=probatio.Schema({}),
+                description_placeholders=(
+                    issue.translation_placeholders if issue is not None else None
+                ),
             )
 
         data = self.data or {}
