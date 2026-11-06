@@ -3075,10 +3075,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
             )
         )
-        # Last known ``smartBatterySettings`` per battery (``None``: fetched, but
-        # the battery has none), when each was fetched, and how often each was
+        # Last known ``smartBatterySettings`` per battery, when each was fetched,
+        # when a failed or empty request may be retried, and how often each was
         # invalidated, so a request that overlaps a change is not marked fresh.
-        self._battery_settings: dict[str, object | None] = {}
+        self._battery_settings: dict[str, object] = {}
         self._battery_settings_fetched_at: dict[str, datetime] = {}
         self._battery_settings_retry_after: dict[str, datetime] = {}
         self._battery_settings_generation: dict[str, int] = {}
@@ -3137,11 +3137,19 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
     async def _fetch_battery_settings(
         self, battery: SmartBattery, now: datetime
     ) -> tuple[bool, object | None, timedelta | None]:
-        """Fetch settings and return success, value, and an optional retry delay.
+        """Fetch the adjustable settings and allowed options of one smart battery.
 
-        The client returns None both for missing settings and for malformed
-        or GraphQL error responses. Treat it as an ambiguous result, not
-        a valid 30-minute negative cache entry.
+        Returns ``(fetched, settings, retry_delay)``. ``fetched`` is False when
+        the settings are still fresh (see ``BATTERY_SETTINGS_REFRESH_INTERVAL``
+        and ``invalidate_battery_settings``), when the request failed, and on
+        library releases without ``smart_battery_settings``, where the battery
+        entities keep their static option lists. ``retry_delay`` is set when
+        the request did not produce settings. The library returns None both
+        for a battery without settings and for GraphQL errors or malformed
+        responses, so None keeps the known settings and is retried at the
+        normal refresh interval. Only authentication failures propagate: the
+        settings only refine which options the entities offer, so they must
+        never fail the battery update.
         """
         if not hasattr(self.api, "smart_battery_settings"):
             return False, None, None
@@ -3149,14 +3157,16 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             return False, None, None
 
         try:
-            return True, await self.api.smart_battery_settings(battery.id), None
+            settings = await self.api.smart_battery_settings(battery.id)
         except (AuthException, AuthRequiredException):
             raise
         except Exception as err:
-            # The released client may wrap authentication failures this way.
+            # Same authentication shape that ``_handle_fetch_exceptions`` handles.
             if isinstance(err, RequestException) and str(err).startswith("user-error:"):
                 raise
-
+            # Deliberately not ``_handle_dynamic_fetch_error``: it re-raises
+            # network errors on the first refresh, and settings must never fail
+            # the update.
             retry_delay = BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL
             retry_after = getattr(err, "retry_after", None)
             if (
@@ -3179,6 +3189,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 type(err).__name__,
             )
             return False, None, retry_delay
+
+        if settings is None:
+            return False, None, BATTERY_SETTINGS_REFRESH_INTERVAL
+        return True, settings, None
 
     async def _fetch_battery_data(
         self, battery: SmartBattery, start_date: date, tomorrow: date, now: datetime
@@ -3208,23 +3222,16 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
 
         Generation and request ordering prevent an older response from changing
         the cache or its cooldown after an overlapping mutation or newer fetch.
-        A None response is ambiguous in the client contract, so the last known
-        settings survive and a short retry is scheduled.
+        A request without settings keeps the last known settings and schedules
+        a retry after ``retry_delay``.
         """
         generation, request_number = request
-        if (
-            self._battery_settings_generation.get(battery_id, 0) == generation
-            and request_number > self._battery_settings_recorded.get(battery_id, 0)
-        ):
-            if retry_delay is not None or (fetched and settings is None):
-                self._battery_settings_retry_after[battery_id] = now + (
-                    retry_delay
-                    if retry_delay is not None
-                    else BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL
-                )
+        current = self._battery_settings_generation.get(battery_id, 0) == generation
+        newest = request_number > self._battery_settings_recorded.get(battery_id, 0)
+        if current and newest:
+            if retry_delay is not None:
+                self._battery_settings_retry_after[battery_id] = now + retry_delay
                 self._battery_settings_recorded[battery_id] = request_number
-                if fetched and battery_id not in self._battery_settings:
-                    self._battery_settings[battery_id] = None
             elif fetched:
                 self._battery_settings[battery_id] = settings
                 self._battery_settings_recorded[battery_id] = request_number

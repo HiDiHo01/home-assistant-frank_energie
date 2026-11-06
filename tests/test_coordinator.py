@@ -3153,7 +3153,7 @@ async def test_battery_settings_failed_batch_records_nothing(mock_config_entry) 
 async def test_battery_settings_none_result_keeps_known_settings(
     mock_config_entry, freezer
 ) -> None:
-    """Ambiguous None preserves known settings and receives a bounded retry."""
+    """A None result keeps known settings and is retried at the refresh interval."""
     api = AsyncMock()
     api.smart_battery_settings.side_effect = ["settings-1", None, "settings-2"]
     coordinator = _battery_coordinator_for(api, mock_config_entry)
@@ -3170,7 +3170,7 @@ async def test_battery_settings_none_result_keeps_known_settings(
     }
     assert api.smart_battery_settings.await_count == 2
 
-    freezer.tick(BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL + timedelta(seconds=1))
+    freezer.tick(BATTERY_SETTINGS_REFRESH_INTERVAL + timedelta(seconds=1))
     assert await _settings_after_refresh(coordinator, "bat_1") == {
         "bat_1": "settings-2"
     }
@@ -3178,19 +3178,20 @@ async def test_battery_settings_none_result_keeps_known_settings(
 
 
 @pytest.mark.asyncio
-async def test_battery_settings_none_result_retries_after_short_cooldown(
+async def test_battery_settings_none_result_retries_at_refresh_interval(
     mock_config_entry, freezer
 ) -> None:
-    """An initial None does not suppress a recovery for the full 30 minutes."""
+    """A battery without settings is not queried more often than one with."""
     api = AsyncMock()
     api.smart_battery_settings.side_effect = [None, "recovered-settings"]
     coordinator = _battery_coordinator_for(api, mock_config_entry)
 
     assert await _settings_after_refresh(coordinator, "bat_1") == {}
+    freezer.tick(BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL + timedelta(seconds=1))
     assert await _settings_after_refresh(coordinator, "bat_1") == {}
     assert api.smart_battery_settings.await_count == 1
 
-    freezer.tick(BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL + timedelta(seconds=1))
+    freezer.tick(BATTERY_SETTINGS_REFRESH_INTERVAL)
     assert await _settings_after_refresh(coordinator, "bat_1") == {
         "bat_1": "recovered-settings"
     }
@@ -3202,6 +3203,7 @@ async def test_battery_settings_rate_limit_honors_retry_after(
     mock_config_entry, freezer
 ) -> None:
     """Rate limits retain cached options and respect the longer server delay."""
+
     class RateLimitedRequest(RequestException):
         """Simulate a newer client rate limit without importing its new class."""
 
