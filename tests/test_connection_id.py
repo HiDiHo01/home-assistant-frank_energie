@@ -3,10 +3,11 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
@@ -610,7 +611,14 @@ async def test_stale_price_cache_only_fetches_resolution_state_once(
     cached_payload["last_fetch_today"] = "2026-10-28T08:00:00+00:00"
     connection_context.store.async_load.return_value = cached_payload
 
-    await connection_context.prices.async_config_entry_first_refresh()
+    # This coordinator-level test exercises the entry's setup phase directly.
+    with patch.object(
+        type(connection_context.entry),
+        "state",
+        new_callable=PropertyMock,
+        return_value=ConfigEntryState.SETUP_IN_PROGRESS,
+    ):
+        await connection_context.prices.async_config_entry_first_refresh()
 
     connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
         "electricity-alpha"
