@@ -33,6 +33,16 @@ Repository instructions must be respected. Resolve conflicting instructions by f
 
 Never assume an API exists merely because it appeared in an older Home Assistant release, another integration, an example, or a previous AI-generated response.
 
+### Agent Skill maintenance
+
+Keep the reusable workflows under `.agents/skills/*/SKILL.md` accurate and aligned with the current repository.
+
+* When a new, verified, reusable development or review practice is learned, or when an existing skill, upstream API, project workflow, policy, or CI requirement changes, **review the affected skills and update their instructions when the change is relevant**. Create a new skill only when its purpose is genuinely distinct from existing skills.
+* Check the original source and current repository behavior before adopting lessons from another repository. Adapt practices to this integration; never blindly copy external instructions or override `AGENTS.md`, `AI_POLICY.md`, or other applicable repository policy.
+* Keep skill activation metadata (`name` and `description`), internal references, example commands, supported versions, and validation steps consistent with the actual implementation and tooling. Avoid duplicating detailed governance rules already maintained here.
+* Treat skill maintenance as part of an **authorized change**. A review-only, analysis-only, or no-changes task does not authorize editing skill files; identify and report outdated skills instead. Do not open an unrelated PR or modify other repositories without authorization.
+* After updating skills, validate YAML frontmatter, paths, Markdown links, and task instructions; inspect the diff, run applicable checks, and report the exact results or unavailable checks. Include relevant skill updates in the same PR when they belong to the requested change.
+
 ## 3. Current documentation and API verification
 
 Use the official developer documentation as the primary reference:
