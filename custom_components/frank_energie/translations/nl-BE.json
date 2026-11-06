@@ -1101,5 +1101,22 @@
         "name": "Startniveau batterij"
       }
     }
+  },
+  "issues": {
+    "stale_device": {
+      "title": "Niet meer gekoppeld Frank Energie-apparaat: {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Niet meer gekoppeld apparaat verwijderen?",
+            "description": "Frank Energie vermeldt **{device}** niet meer in twee volledige inventarisantwoorden. Het verwijderen uit Home Assistant verwijdert ook de bijbehorende entiteiten en kan automatiseringen beïnvloeden. Kies **Verzenden** om de actuele accountgegevens opnieuw te controleren en het apparaat enkel te verwijderen wanneer het nog ontbreekt."
+          }
+        },
+        "abort": {
+          "cannot_verify": "De actuele inventaris van Frank Energie kon niet worden gecontroleerd. Er is geen apparaat verwijderd. Probeer opnieuw na een geslaagde update.",
+          "device_restored": "Het apparaat is opnieuw aanwezig of kan niet veilig worden verwijderd. Er is geen apparaat verwijderd."
+        }
+      }
+    }
   }
 }

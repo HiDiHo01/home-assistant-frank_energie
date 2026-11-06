@@ -161,6 +161,7 @@ def test_no_unused_or_missing_translation_keys():
     class TranslationKeyExtractor(ast.NodeVisitor):
         def __init__(self):
             self.translation_keys = set()
+            self.issue_keys = set()
             self.button_keys = set()
             self.service_names = set()
 
@@ -221,7 +222,13 @@ def test_no_unused_or_missing_translation_keys():
                     if isinstance(keyword.value, ast.Constant) and isinstance(
                         keyword.value.value, str
                     ):
-                        self.translation_keys.add(keyword.value.value)
+                        if (
+                            isinstance(node.func, ast.Attribute)
+                            and node.func.attr == "async_create_issue"
+                        ):
+                            self.issue_keys.add(keyword.value.value)
+                        else:
+                            self.translation_keys.add(keyword.value.value)
                 elif keyword.arg == "key":
                     if isinstance(keyword.value, ast.Constant) and isinstance(
                         keyword.value.value, str
@@ -283,7 +290,15 @@ def test_no_unused_or_missing_translation_keys():
     # Verify that all explicit translation keys defined in Python are translated in strings.json
     missing_entity_keys = extractor.translation_keys - strings_entity_keys
     assert not missing_entity_keys, (
-        f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
+        f"Entity translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
+    )
+
+    strings_issue_keys = set(strings_content.get("issues", {}))
+    assert not (missing_issue_keys := extractor.issue_keys - strings_issue_keys), (
+        f"Repair issue translation keys missing from strings.json: {sorted(missing_issue_keys)}"
+    )
+    assert not (unused_issue_keys := strings_issue_keys - extractor.issue_keys), (
+        f"Unused repair issue translation keys in strings.json: {sorted(unused_issue_keys)}"
     )
 
 
@@ -307,6 +322,7 @@ def test_all_translation_keys_are_lowercase():
     check_lowercase_keys(strings_content.get("device", {}), "device")
     check_lowercase_keys(strings_content.get("entity", {}), "entity")
     check_lowercase_keys(strings_content.get("options", {}), "options")
+    check_lowercase_keys(strings_content.get("issues", {}), "issues")
 
 
 def _check_for_empty_states(d: dict, path: str = "") -> None:

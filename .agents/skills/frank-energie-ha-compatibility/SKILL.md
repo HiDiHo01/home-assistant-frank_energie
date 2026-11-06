@@ -11,6 +11,14 @@ Read the repository's `AGENTS.md`, `AI_POLICY.md`, `home-assistant.md`, manifest
 
 Do not apply obsolete guidance, Core-only `dev` tooling, or general dependency-bump routines without verifying this repository's actual compatibility baseline.
 
+**Required API selection:** For any new or materially refactored integration capability, prefer the public API in the *latest stable* Home Assistant Core release (verify its exact release tag). If that API requires a newer Core release than `hacs.json` declares, **raise the minimum version**, document the breaking compatibility impact in the PR, and update tests, installation requirements, and any other version assertions. Do not substitute legacy compatibility paths merely to avoid raising the minimum. Do not raise the minimum unless a concrete API or other compatibility requirement justifies it. This implements the rule in `AGENTS.md`.
+
+## Official pytest-plugin migration trigger
+
+When a **stable PyPI release** of Home Assistant Core's official `pytest-homeassistant` supports this repository's declared minimum Core/Python versions, the migration away from `pytest-homeassistant-custom-component` is **mandatory**. Validate the release and dependency metadata against the matching tagged Core source and the [official migration guide](https://github.com/home-assistant/core/blob/2026.11.0/packages/pytest-homeassistant/README.md); do not install overlapping pytest plugins, take an unverified prerelease, or bypass the CI version gate.
+
+Follow `AGENTS.md` and the [dependency-upgrade skill](../frank-energie-dependency-update/SKILL.md) to migrate imports, fixtures, pytest configuration, dependency declarations and the Poetry lockfile, then exercise the full test matrix. Keep the PR blocked until the supported Core and complete tests pass.
+
 ## Compatibility workflow
 
 1. Identify the requested Home Assistant/Python target, the project's declared minimums, and the changed or deprecated API's documented removal/version deadline.

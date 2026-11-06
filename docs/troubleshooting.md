@@ -140,6 +140,32 @@ The integration automatically switches back when the preferred resolution become
 
 No user action is required.
 
+## Disconnected Devices in Home Assistant Repairs
+
+When Frank Energie no longer lists a linked charger, vehicle, or SmartBattery,
+the integration checks two separate, complete live inventory responses before
+raising a warning under **Settings → System → Repairs**. It does not delete
+devices automatically.
+
+Open the repair, review the device name, and confirm removal only if the device
+was deliberately disconnected from the Frank Energie account. The integration
+re-checks the live inventory before deleting the Home Assistant device and its
+registered entities. Deleting entities can affect automations and dashboards.
+
+During API maintenance, authentication failures, disabled smart features, or
+incomplete/invalid inventory responses, no removal is offered or performed on
+the basis of those responses. Existing repair issues remain available until a
+successful inventory check establishes that the device returned or was removed.
+
+The original manual device-removal option remains available and uses the
+same safety checks. The repair mechanism does not call the provider API more
+often unless the user confirms a repair.
+
+**Minimum supported version: Home Assistant 2026.11.0.** The repair flow uses
+Core's current config-entry-scoped issue registry and issue-refresh APIs.
+Earlier Core releases are not supported by this change. Upgrade Home
+Assistant before installing this integration version.
+
 ## Smart Battery Entities Unavailable
 
 Possible causes:

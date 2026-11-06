@@ -64,6 +64,22 @@ When working with the latest Home Assistant release:
 * Do not use deprecated APIs when a supported replacement exists.
 * Do not add speculative compatibility code for obsolete Home Assistant versions unless the repository explicitly requires it.
 
+### Latest stable Home Assistant API policy (mandatory)
+
+* **Always implement new or substantially refactored integration functionality using the newest stable Home Assistant Core APIs**, verified against the official release notes, developer documentation, and tagged Core source. Do not target beta, development, undocumented, private, or deprecated APIs.
+* **Raise the declared minimum supported Home Assistant version when a required public API is introduced in a newer stable release.** Prefer this explicit, documented minimum-version increase over compatibility fallbacks or replicating superseded Core behavior merely to keep older versions working.
+* Update every minimum-version declaration (including `hacs.json`), relevant documentation, release notes, and tests consistently. Record the exact minimum version and the upstream change that necessitates it in the PR description; call out the compatibility impact as a breaking change for users on older releases.
+* Validate new functionality against the chosen minimum version (and the latest stable Core version if different). Do not claim compatibility or successful checks without actual evidence. A minimum-version increase does not authorize unrelated breaking changes.
+* **Enforce the declared Home Assistant minimum in CI.** Verify the installed Core package version before running tests and update the pytest Home Assistant fixtures plus the dependency lockfile when the baseline moves. Keep a PR blocked rather than silently testing the new APIs against an older Core release; never skip or weaken these tests to hide a tooling-version mismatch.
+
+### Official Home Assistant pytest plugin migration (mandatory)
+
+* **Migrate from `pytest-homeassistant-custom-component` to Home Assistant's official `pytest-homeassistant` as soon as a stable, published package release is available that supports this repository's declared minimum Home Assistant Core and Python versions.** Verify availability and compatibility from the official package metadata and the matching Home Assistant Core release; do not use prereleases, a development checkout, or an unrelated similarly named package as proof.
+* Once that condition is met, prioritize the migration in the active development/CI work instead of retaining the obsolete third-party plugin. Update `pyproject.toml`, migrate imports from `pytest_homeassistant_custom_component` to `pytest_homeassistant`, adjust pytest configuration and fixtures according to the official migration guide, and regenerate `poetry.lock` using the repository's Poetry version. **Never install both overlapping pytest plugins** or manually edit the generated lockfile.
+* Verify the installed Home Assistant version satisfies `hacs.json`, run dependency and lockfile checks, the focused regression tests and complete Python/HA CI matrix (including Ruff and Flake8), and update documentation when needed. Keep dependent PRs blocked until these checks pass; do not mask the version conflict, disable tests, downgrade the API, or claim migration is complete without evidence.
+
+* For changes that do not need a newer API, do not increase the minimum version solely to chase the latest release; continue testing with the declared minimum until a concrete new-API requirement warrants a bump.
+
 Prefer a clean implementation for the declared minimum supported version. If compatibility constraints are unclear, inspect the repository's manifest, documentation, and CI configuration before changing them.
 
 ## 4. Python standards
@@ -418,7 +434,7 @@ Use the testing framework and conventions already established in the repository,
 * Use Poetry 2.5.1. Select the interpreter with `poetry env use python3.14` and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
 * Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
 * Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
-* Keep `pytest-homeassistant-custom-component` required in pytest configuration. Use its real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
+* Until a compatible stable official `pytest-homeassistant` release is published, the existing `pytest-homeassistant-custom-component` configuration is a temporary dependency only. Once the release is available, replace that requirement and its fixtures with the official package as mandated above. Always use real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
 * Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
 * Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
 * Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.

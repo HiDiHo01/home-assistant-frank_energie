@@ -69,6 +69,8 @@ class FrankEnergieEntryData:
     vehicle_coordinator: FrankEnergieVehicleCoordinator
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
+    stale_device_absences: dict[str, int] = field(default_factory=dict)
+    stale_inventory_epochs: dict[str, int] = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.

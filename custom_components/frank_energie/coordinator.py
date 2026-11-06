@@ -106,6 +106,7 @@ from .const import (
 )
 from .helpers import decrypt_password, known_site_contracts, price_cache_store
 from .mutation_queue import MutationQueue
+from .repairs import async_process_device_inventory
 
 _LOGGER = logging.getLogger(__name__)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
@@ -3151,6 +3152,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_BATTERIES] = data_smart_batteries
+            if data_smart_batteries is not None:
+                async_process_device_inventory(
+                    self.hass, self.config_entry, "battery", data_smart_batteries
+                )
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
             return result
@@ -3223,6 +3228,10 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_ENODE_CHARGERS] = data_enode_chargers
+            if data_enode_chargers is not None:
+                async_process_device_inventory(
+                    self.hass, self.config_entry, "charger", data_enode_chargers
+                )
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -3372,6 +3381,10 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_ENODE_VEHICLES] = enode_vehicles
+            if enode_vehicles is not None:
+                async_process_device_inventory(
+                    self.hass, self.config_entry, "vehicle", enode_vehicles
+                )
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

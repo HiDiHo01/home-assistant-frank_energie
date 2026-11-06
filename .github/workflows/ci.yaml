@@ -92,15 +92,27 @@ jobs:
         run: |
           poetry run python - <<'PY'
           """Verify the supported interpreter and import the real test framework."""
+          import json
           import sys
           from importlib import import_module
           from importlib.metadata import version
+          from pathlib import Path
+
+          from packaging.version import Version
 
           if sys.version_info[:2] != (3, 14) or sys.version_info < (3, 14, 2):
               raise SystemExit("Home Assistant tests require Python 3.14.2 or a newer 3.14 patch.")
 
           import_module("homeassistant.core")
           import_module("pytest_homeassistant_custom_component")
+          minimum = json.loads(Path("hacs.json").read_text(encoding="utf-8"))["homeassistant"]
+          installed = version("homeassistant")
+          if Version(installed) < Version(minimum):
+              raise SystemExit(
+                  f"Home Assistant test environment is too old: installed={installed}, "
+                  f"minimum={minimum}. Update the pytest Home Assistant test dependency "
+                  "and poetry.lock; never test new integration APIs against older Core."
+              )
           print(f"Python: {sys.version.split()[0]}")
           for package_name in ("homeassistant", "pytest", "pytest-homeassistant-custom-component"):
               print(f"{package_name}: {version(package_name)}")
