@@ -157,9 +157,14 @@ incomplete/invalid inventory responses, no removal is offered or performed on
 the basis of those responses. Existing repair issues remain available until a
 successful inventory check establishes that the device returned or was removed.
 
-The original manual device-removal option remains available on supported
-Home Assistant versions and uses the same safety checks. The repair mechanism
-does not call the provider API more often unless the user confirms a repair.
+The original manual device-removal option remains available and uses the
+same safety checks. The repair mechanism does not call the provider API more
+often unless the user confirms a repair.
+
+**Minimum supported version: Home Assistant 2026.11.0.** The repair flow uses
+Core's current config-entry-scoped issue registry and issue-refresh APIs.
+Earlier Core releases are not supported by this change. Upgrade Home
+Assistant before installing this integration version.
 
 ## Smart Battery Entities Unavailable
 
