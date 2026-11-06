@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from types import SimpleNamespace
 import zoneinfo
 
 from homeassistant.core import HomeAssistant
@@ -13,6 +14,9 @@ from homeassistant.setup import async_setup_component
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie.const import (
     DOMAIN,
+    DATA_BATTERIES,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     CONF_COORDINATOR,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
@@ -189,6 +193,11 @@ async def test_remove_config_entry_device(
     assert entry.state is ConfigEntryState.LOADED
 
     device_registry = dr.async_get(hass)
+    if scenario != "live-entities":
+        # A complete, successful (empty) charger inventory proves absence.
+        charger_coordinator = entry.runtime_data.charger_coordinator
+        charger_coordinator.data[DATA_ENODE_CHARGERS] = SimpleNamespace(chargers=[])
+        charger_coordinator.last_update_success = True
     if scenario == "live-entities":
         # Created by the real setup and carries the live price sensors.
         device = _find_device(device_registry, entry.entry_id, (DOMAIN, entry.entry_id))
@@ -203,7 +212,7 @@ async def test_remove_config_entry_device(
         er.async_get(hass).async_get_or_create(
             "sensor",
             DOMAIN,
-            "charger-removed_power",
+            f"{DOMAIN}_charger-removed_charger_brand",
             config_entry=entry,
             device_id=device.id,
         )
@@ -248,6 +257,95 @@ async def test_remove_config_entry_device(
         assert er.async_get(hass).async_get_entity_id(
             "sensor", DOMAIN, "other-charger-power"
         )
+
+
+
+@pytest.mark.parametrize(
+    ("kind", "data_key", "collection_key", "marker", "device_model"),
+    [
+        ("charger", DATA_ENODE_CHARGERS, "chargers", "charger_brand", None),
+        ("vehicle", DATA_ENODE_VEHICLES, "vehicles", "vehicle_name", None),
+        ("battery", DATA_BATTERIES, "batteries", "battery_status", "SmartBattery"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("inventory_case", "removable"),
+    [
+        ("confirmed-absent", True),
+        ("present-disabled", False),
+        ("fetch-failed", False),
+        ("refresh-failed", False),
+        ("malformed-response", False),
+    ],
+)
+async def test_remove_device_requires_confirmed_inventory(
+    hass: HomeAssistant,
+    hass_ws_client,
+    frank_energie_setup,
+    kind: str,
+    data_key: str,
+    collection_key: str,
+    marker: str,
+    device_model: str | None,
+    inventory_case: str,
+    removable: bool,
+) -> None:
+    """Prevent deleting existing devices even with disabled or missing entities."""
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    entry = await frank_energie_setup()
+    assert entry.state is ConfigEntryState.LOADED
+
+    identifier = f"test-{kind}"
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, identifier)},
+        model=device_model,
+    )
+    entity_registry = er.async_get(hass)
+    entity = entity_registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_{identifier}_{marker}",
+        config_entry=entry,
+        device_id=device.id,
+    )
+    if inventory_case == "present-disabled":
+        entity_registry.async_update_entity(
+            entity.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+        )
+
+    runtime_data = entry.runtime_data
+    coordinator = {
+        "charger": runtime_data.charger_coordinator,
+        "vehicle": runtime_data.vehicle_coordinator,
+        "battery": runtime_data.battery_coordinator,
+    }[kind]
+    coordinator.last_update_success = inventory_case != "refresh-failed"
+    if inventory_case == "fetch-failed":
+        inventory = None
+    else:
+        members = (
+            []
+            if inventory_case == "confirmed-absent"
+            else [{"id": identifier}] if kind == "vehicle" else [SimpleNamespace(id=identifier)]
+        )
+        if inventory_case == "malformed-response":
+            members = [SimpleNamespace(id=None)]
+        inventory = SimpleNamespace(**{collection_key: members})
+    coordinator.data[data_key] = inventory
+
+    await client.send_json_auto_id(
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": entry.entry_id,
+            "device_id": device.id,
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"] is removable
+    assert (device_registry.async_get(device.id) is None) is removable
 
 
 async def test_setup_entry_auth_failure(
