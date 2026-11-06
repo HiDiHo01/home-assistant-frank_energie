@@ -17,7 +17,6 @@ from homeassistant.setup import async_setup_component
 from custom_components.frank_energie import FrankEnergieEntryData
 from custom_components.frank_energie.const import DATA_ENODE_CHARGERS, DOMAIN
 from custom_components.frank_energie.repairs import (
-    async_clear_entry_device_repairs,
     async_process_device_inventory,
 )
 
@@ -34,7 +33,7 @@ def _register_device(
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
     kind: str,
-    marker: str
+    marker: str,
 ) -> tuple[dr.DeviceEntry, er.RegistryEntry]:
     """Register a device and its historical marker without a live entity."""
     identifier = f"stale-{kind}"
@@ -91,6 +90,7 @@ async def test_stale_device_requires_two_fresh_inventories(
     issue = ir.async_get(hass).issues[DOMAIN, issue_id]
     assert issue.is_fixable
     assert issue.is_persistent
+    assert issue.config_entry_id == entry.entry_id
     assert issue.data == {
         "entry_id": entry.entry_id,
         "device_id": device.id,
@@ -98,8 +98,14 @@ async def test_stale_device_requires_two_fresh_inventories(
     }
     assert er.async_get(hass).async_get(entity.entity_id) is not None
 
-    member = {"id": f"stale-{kind}"} if kind == "vehicle" else SimpleNamespace(id=f"stale-{kind}")
-    async_process_device_inventory(hass, entry, kind, _inventory(collection_key, [member]))
+    member = (
+        {"id": f"stale-{kind}"}
+        if kind == "vehicle"
+        else SimpleNamespace(id=f"stale-{kind}")
+    )
+    async_process_device_inventory(
+        hass, entry, kind, _inventory(collection_key, [member])
+    )
     assert not _repair_exists(hass, issue_id)
     assert dr.async_get(hass).async_get(device.id) is not None
 
@@ -128,7 +134,8 @@ async def test_invalid_inventory_never_creates_or_clears_repair(
         "none": None,
         "invalid_id": _inventory(collection_key, [SimpleNamespace(id=None)]),
         "duplicate": _inventory(
-            collection_key, [SimpleNamespace(id="duplicate"), SimpleNamespace(id="duplicate")]
+            collection_key,
+            [SimpleNamespace(id="duplicate"), SimpleNamespace(id="duplicate")],
         ),
     }[invalid_case]
     epoch = entry.runtime_data.stale_inventory_epochs[kind]
@@ -219,7 +226,9 @@ async def test_repair_flow_revalidates_before_removing_device(
     assert start["step_id"] == "confirm"
 
     with patch.object(
-        coordinator, "async_request_refresh", new_callable=AsyncMock,
+        coordinator,
+        "async_request_refresh",
+        new_callable=AsyncMock,
         side_effect=_mock_fresh_refresh,
     ) as refresh:
         result = await manager.async_configure(start["flow_id"], user_input={})
@@ -239,17 +248,22 @@ async def test_repair_flow_revalidates_before_removing_device(
         )
 
 
-async def test_config_entry_removal_clears_persistent_issues(
+async def test_entry_scoped_issue_preserves_ignored_state(
     hass: HomeAssistant, frank_energie_setup
 ) -> None:
-    """Remove only issues for the deleted entry, not unrelated repairs."""
+    """Let Core own the issue lifecycle without losing user dismissals."""
     entry = await frank_energie_setup()
     device, _ = _register_device(hass, entry, "charger", "charger_brand")
     issue_id = _issue_id(entry.entry_id, "charger", device.id)
     empty = _inventory("chargers", [])
     async_process_device_inventory(hass, entry, "charger", empty)
     async_process_device_inventory(hass, entry, "charger", empty)
-    assert _repair_exists(hass, issue_id)
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.config_entry_id == entry.entry_id
 
-    async_clear_entry_device_repairs(hass, entry.entry_id)
-    assert not _repair_exists(hass, issue_id)
+    ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
+    async_process_device_inventory(hass, entry, "charger", empty)
+    dismissed_issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    assert dismissed_issue is not None
+    assert dismissed_issue.dismissed_version is not None
