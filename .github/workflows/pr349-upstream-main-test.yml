@@ -78,6 +78,9 @@ jobs:
       - name: Ruff format check
         if: ${{ !cancelled() && steps.upstream_client.outcome == 'success' }}
         run: poetry run ruff format --check custom_components tests
+      - name: Show Ruff formatting diff
+        if: ${{ !cancelled() && steps.upstream_client.outcome == 'success' }}
+        run: poetry run ruff format --diff custom_components/frank_energie/coordinator.py tests/test_rate_limit.py
       - name: Critical Flake8
         if: ${{ !cancelled() && steps.upstream_client.outcome == 'success' }}
         run: poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
