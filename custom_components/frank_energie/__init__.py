@@ -222,7 +222,11 @@ async def async_remove_config_entry_device(
         return False
 
     for device in devices:
-        device_id = device.get("id") if isinstance(device, dict) else getattr(device, "id", None)
+        device_id = (
+            device.get("id")
+            if isinstance(device, dict)
+            else getattr(device, "id", None)
+        )
         if not isinstance(device_id, str) or not device_id:
             # An invalid partial response must not authorize deletion.
             return False
