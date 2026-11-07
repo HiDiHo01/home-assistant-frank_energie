@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
@@ -2964,3 +2965,62 @@ async def test_api_resolution_change_invalidates_same_day_price_cache(
     assert price_coordinator.last_fetch_today is not None
     assert price_coordinator.cached_prices_tomorrow is None
     assert price_coordinator.last_fetch_tomorrow is None
+
+
+class TestFindLowestConsecutiveHours:
+    """Tests for FrankEnergieCoordinator._find_lowest_consecutive_hours."""
+
+    @dataclass
+    class _MockPrice:
+        total: float
+        date_from: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+        date_till: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def test_insufficient_prices(self, coordinator):
+        """Returns None when prices list has fewer elements than window."""
+        prices = [self._MockPrice(total=1.0) for _ in range(3)]
+        assert coordinator._find_lowest_consecutive_hours(prices, window=4) is None
+        assert coordinator._find_lowest_consecutive_hours([], window=1) is None
+
+    def test_exact_window_length(self, coordinator):
+        """Returns the average and boundaries when price list equals window."""
+        p1 = self._MockPrice(total=0.10)
+        p2 = self._MockPrice(total=0.20)
+        result = coordinator._find_lowest_consecutive_hours([p1, p2], window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == pytest.approx(0.15)
+        assert start is p1
+        assert end is p2
+
+    def test_finds_lowest_sliding_window(self, coordinator):
+        """Finds the window with the lowest average in a sequence."""
+        prices = [
+            self._MockPrice(total=0.50),
+            self._MockPrice(total=0.40),
+            self._MockPrice(total=0.10),
+            self._MockPrice(total=0.15),
+            self._MockPrice(total=0.60),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == pytest.approx(0.125)
+        assert start is prices[2]
+        assert end is prices[3]
+
+    def test_picks_earliest_on_tie(self, coordinator):
+        """Picks the earliest window if there are multiple windows with identical averages."""
+        prices = [
+            self._MockPrice(total=0.10),
+            self._MockPrice(total=0.20),
+            self._MockPrice(total=0.30),
+            self._MockPrice(total=0.10),
+            self._MockPrice(total=0.20),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == pytest.approx(0.15)
+        assert start is prices[0]
+        assert end is prices[1]
