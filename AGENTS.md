@@ -661,6 +661,14 @@ When working on GitHub repositories:
 
 Do not assume that pushing, publishing, releasing, or merging is authorized merely because code changes were requested.
 
+### Check for obsolete pull requests before resolving conflicts
+
+- Before resolving merge/rebase conflicts, rebasing, or rewriting a pull request, compare its complete changes against the **current** target branch. Inspect the PR diff, relevant code, tests, documentation, review feedback, and commit history.
+- Verify whether **all** meaningful functionality, bug fixes, regression coverage, and documentation changes are already present on the target branch with equivalent behavior. Similar code, a matching PR title, or a conflict flag alone is not sufficient evidence.
+- If the pull request is fully superseded, **do not resolve conflicts or merge duplicate changes**. When explicitly authorized to comment and close, post a concise explanation citing the replacement commit(s), relevant files, and existing tests; close the PR as obsolete **without merging**. For review-only tasks, recommend closure without changing the PR; never disclose confidential security details publicly.
+- If any meaningful change is missing or equivalence cannot be established, keep the PR open and resolve conflicts while preserving its unique changes. Run the relevant verification checks and report their actual results.
+- Document the disposition and any checks that were not run. Never claim an obsolete PR was merged, or that tests passed when they were not executed.
+
 ## 22. Required workflow for every task
 
 Follow this sequence:
