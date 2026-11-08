@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import re
 import subprocess
 from collections import Counter
 from pathlib import Path
@@ -73,7 +74,37 @@ def test_link_check_retries_and_verifies_a_pinned_binary() -> None:
     lychee = _named_step("link-check.yml", "link-check", "Run Lychee")
     assert lychee.get("continue-on-error", False) is False
     assert "lychee --verbose" in str(lychee["run"])
-    assert "--exclude-file .lycheeignore" in str(lychee["run"])
+    assert "--max-retries 5 --retry-wait-time 2" in str(lychee["run"])
+    assert "--exclude-file" not in str(lychee["run"])
+
+
+def test_releases_link_is_verified_through_its_actual_github_api() -> None:
+    """Exclude only unreliable HTML and still block when releases are missing."""
+    patterns = [
+        line.strip()
+        for line in (ROOT / ".lycheeignore").read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("^https://github")
+    ]
+    assert len(patterns) == 1
+    assert re.search(
+        patterns[0],
+        "https://github.com/HiDiHo01/home-assistant-frank_energie/releases/",
+    )
+    assert not re.search(patterns[0], "https://github.com/another/repo/releases/")
+    assert not re.search(
+        patterns[0],
+        "https://github.com/HiDiHo01/home-assistant-frank_energie/releases/tag/v2026.9.20",
+    )
+    api_step = _named_step(
+        "link-check.yml", "link-check", "Verify GitHub Releases via API"
+    )
+    assert api_step["env"] == {"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"}
+    script = str(api_step["run"])
+    assert "gh api" in script
+    assert "releases?per_page=1" in script
+    assert '.[0].html_url' in script
+    assert "exit 1" in script
+    assert api_step.get("continue-on-error", False) is False
 
 
 def test_ruff_checks_main_pushes_and_python_pull_requests() -> None:
