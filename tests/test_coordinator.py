@@ -2964,3 +2964,62 @@ async def test_api_resolution_change_invalidates_same_day_price_cache(
     assert price_coordinator.last_fetch_today is not None
     assert price_coordinator.cached_prices_tomorrow is None
     assert price_coordinator.last_fetch_tomorrow is None
+
+
+class TestFindLowestConsecutiveHours:
+    """Tests for FrankEnergieCoordinator._find_lowest_consecutive_hours."""
+
+    @staticmethod
+    def _make_price(total: float) -> SimpleNamespace:
+        return SimpleNamespace(total=total)
+
+    def test_returns_none_when_fewer_prices_than_window(self, coordinator):
+        prices = [self._make_price(1.0), self._make_price(2.0)]
+        assert coordinator._find_lowest_consecutive_hours(prices, window=3) is None
+
+    def test_window_equals_prices_length(self, coordinator):
+        prices = [self._make_price(1.0), self._make_price(2.0), self._make_price(3.0)]
+        result = coordinator._find_lowest_consecutive_hours(prices, window=3)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is prices[0]
+        assert end is prices[2]
+
+    def test_window_of_one_returns_single_lowest(self, coordinator):
+        prices = [self._make_price(5.0), self._make_price(1.0), self._make_price(3.0)]
+        result = coordinator._find_lowest_consecutive_hours(prices, window=1)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 1.0
+        assert start is prices[1]
+        assert end is prices[1]
+
+    def test_finds_lowest_middle_window(self, coordinator):
+        prices = [
+            self._make_price(5.0),
+            self._make_price(1.0),
+            self._make_price(2.0),
+            self._make_price(8.0),
+            self._make_price(9.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 1.5
+        assert start is prices[1]
+        assert end is prices[2]
+
+    def test_ties_preserve_earliest_window(self, coordinator):
+        prices = [
+            self._make_price(2.0),
+            self._make_price(2.0),
+            self._make_price(2.0),
+            self._make_price(2.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, window=2)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is prices[0]
+        assert end is prices[1]
