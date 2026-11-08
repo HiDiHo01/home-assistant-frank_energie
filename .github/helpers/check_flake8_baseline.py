@@ -78,7 +78,10 @@ def main() -> int:
 
     if unexpected:
         for (path, code, message), count in sorted(unexpected.items()):
-            print(f"New Flake8 finding ({count}): {path}: {code} {message}", file=sys.stderr)
+            print(
+                f"New Flake8 finding ({count}): {path}: {code} {message}",
+                file=sys.stderr,
+            )
         return 1
 
     remaining = sum(findings.values())
