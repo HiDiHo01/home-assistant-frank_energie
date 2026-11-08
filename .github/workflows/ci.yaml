@@ -75,7 +75,7 @@ jobs:
 
       - name: Install Poetry
         run: |
-          python -m pip install "poetry==2.5.1"
+          python -m pip install --only-binary :all: "poetry==2.5.1"
 
       - name: Validate lockfile
         run: poetry check --lock
@@ -112,10 +112,12 @@ jobs:
       - name: Lint with flake8
         run: |
           poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Keep the existing full-report pass informational until the pre-existing
-          # E501/E203/C901 findings are resolved in a dedicated code-cleanup PR.
-          # The critical-error pass above remains blocking.
-          poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --max-complexity=10 --max-line-length=120 --statistics || true
+
+      # The full check is blocking for new violations. Existing C901/E501
+      # technical debt is explicitly recorded in .github/flake8-baseline.json;
+      # E203 is excluded only to match Ruff-compatible slice formatting.
+      - name: Enforce no new Flake8 violations
+        run: poetry run python .github/helpers/check_flake8_baseline.py
 
       - name: Test with pytest
         id: pytest
