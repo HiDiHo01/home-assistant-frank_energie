@@ -126,9 +126,7 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     job = jobs["run"]
     assert isinstance(job, dict)
     assert job["strategy"]["matrix"]["python-version"] == ["3.14.2", "3.14"]
-    full_check = _named_step(
-        "ci.yaml", "run", "Enforce no new Flake8 violations"
-    )
+    full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (
         "poetry run python .github/helpers/check_flake8_baseline.py"
     )
@@ -174,8 +172,7 @@ def test_flake8_baseline_rejects_new_findings(
     )
     known = baseline_data["allowed"][0]
     report = (
-        f"./{known['path']}:1:1: {known['code']} {known['message']}\n"
-        f"{extra_report}"
+        f"./{known['path']}:1:1: {known['code']} {known['message']}\n{extra_report}"
     )
     result = subprocess.CompletedProcess(
         args=["flake8"], returncode=1, stdout=report, stderr=""
