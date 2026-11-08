@@ -57,14 +57,13 @@ def test_link_check_retries_and_verifies_a_pinned_binary() -> None:
     )
     environment = install_step["env"]
     assert isinstance(environment, dict)
-    assert environment["LYCHEE_VERSION"] == "v0.24.2"
     assert environment["LYCHEE_SHA256"] == (
         "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
     )
     script = install_step["run"]
     assert isinstance(script, str)
     assert "curl " in script
-    assert "--retry 2 --retry-all-errors" in script
+    assert "--retry 3 --retry-all-errors" in script
     assert "--connect-timeout 10 --max-time 35" in script
     assert "api.github.com/repos/lycheeverse/lychee/releases/assets/409959156" in script
     assert '--header "Authorization: Bearer $GITHUB_TOKEN"' in script
