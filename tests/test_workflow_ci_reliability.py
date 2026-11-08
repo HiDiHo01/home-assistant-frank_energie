@@ -101,7 +101,7 @@ def test_releases_link_is_verified_through_its_actual_github_api() -> None:
     script = str(api_step["run"])
     assert "gh api" in script
     assert "releases?per_page=1" in script
-    assert '.[0].html_url' in script
+    assert ".[0].html_url" in script
     assert "exit 1" in script
     assert api_step.get("continue-on-error", False) is False
 
