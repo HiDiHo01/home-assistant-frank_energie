@@ -99,7 +99,20 @@ jobs:
       - name: Run Lychee
         run: |
           lychee --verbose --no-progress --accept 200,403,429 \
-            --root-dir . --exclude-file .lycheeignore \
-            . README.md 'docs/**/*.md'
+            --max-retries 5 --retry-wait-time 2 \
+            --root-dir . .
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify GitHub Releases via API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The specific HTML page intermittently responds 502 in CI. Check
+          # the equivalent live GitHub API resource instead of accepting 502.
+          release_url="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=1" --jq '.[0].html_url')"
+          if [[ "$release_url" != "https://github.com/$GITHUB_REPOSITORY/releases/tag/"* ]]; then
+            echo "::error::GitHub Releases API did not return a release for this repository"
+            exit 1
+          fi
