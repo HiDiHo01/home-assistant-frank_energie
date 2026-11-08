@@ -20,6 +20,12 @@ Read the target repository's `AGENTS.md`, `AI_POLICY.md`, and `home-assistant.md
 5. Distinguish `mergeable`, `mergeable_state`, `rebaseable`, branch-behind status, code-owner reviews, and passing checks. None alone proves readiness. If a property is unavailable or indeterminate, report it as unknown.
 6. Inspect the repository's PR template, rules, and CI definitions before deciding which gates are required. Never apply Core's `dev` branch or Core-only merge gates to this repository.
 
+## Obsolete PR triage before conflict resolution
+
+Before attempting to rebase or resolve conflicts, apply the obsolete-PR rule in the root `AGENTS.md`: compare the complete PR changes with the **current** target branch, including functionality, tests, documentation, reviews, and commit history. A merge conflict is not proof that a change is still needed.
+
+If all meaningful changes are already present with equivalent behavior, cite the replacement commits and files and **recommend closing without merging**. Only post a comment and close the PR when explicitly authorized; never expose confidential security details. If anything material is missing or uncertain, keep the PR open, preserve its unique changes when resolving conflicts, and report checks actually run.
+
 ## Validate findings
 
 - Confirm each potential issue against the actual code and relevant tests, not merely an automated comment or a Sonar annotation.
