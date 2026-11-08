@@ -65,16 +65,26 @@ jobs:
           persist-credentials: false
       - name: Install verified Lychee release
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LYCHEE_VERSION: "v0.24.2"
           LYCHEE_SHA256: "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/lychee-x86_64-unknown-linux-gnu.tar.gz"
           url="https://github.com/lycheeverse/lychee/releases/download/${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz"
-          curl --fail --show-error --silent --location \
-            --retry 5 --retry-all-errors --retry-delay 3 \
-            --connect-timeout 15 --max-time 120 \
-            --output "$archive" "$url"
+          # Retry transient CDN failures, then fall back to the authenticated
+          # GitHub Releases asset API (asset ID/digest verified upstream).
+          download_args=(--fail --show-error --silent --location
+            --retry 2 --retry-all-errors --retry-delay 2
+            --connect-timeout 10 --max-time 35)
+          if ! curl "${download_args[@]}" --output "$archive" "$url"; then
+            echo "::warning::Direct release download failed; using GitHub Releases API"
+            curl "${download_args[@]}" \
+              --header "Accept: application/octet-stream" \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --output "$archive" \
+              "https://api.github.com/repos/lycheeverse/lychee/releases/assets/409959156"
+          fi
           printf '%s  %s\n' "$LYCHEE_SHA256" "$archive" | sha256sum --check
           mkdir -p "$RUNNER_TEMP/lychee-extract" "$RUNNER_TEMP/lychee-bin"
           tar -xzf "$archive" -C "$RUNNER_TEMP/lychee-extract"
