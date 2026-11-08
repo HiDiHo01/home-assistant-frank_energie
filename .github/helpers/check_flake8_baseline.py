@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / ".github" / "flake8-baseline.json"
 DIAGNOSTIC_PATTERN = re.compile(
-    r"^(?P<path>.+?):(?P<line>\\d+):(?P<column>\\d+): "
-    r"(?P<code>[A-Z]\\d+) (?P<message>.+)$"
+    r"^(?P<path>.+?):(?P<line>\d+):(?P<column>\d+): "
+    r"(?P<code>[A-Z]\d+) (?P<message>.+)$"
 )
 
 type Finding = tuple[str, str, str]
