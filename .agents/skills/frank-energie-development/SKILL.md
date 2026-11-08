@@ -72,6 +72,9 @@ poetry run pytest -q
 # CI's blocking Flake8 critical-error check
 poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
+# Full Flake8: fail on new findings compared with the tracked baseline
+poetry run python .github/helpers/check_flake8_baseline.py
+
 # Ruff must be installed at pyproject.toml's required version
 ruff check custom_components tests
 ruff format --check --diff custom_components tests
