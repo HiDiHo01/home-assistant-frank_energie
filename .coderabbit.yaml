@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en-US"
+early_access: false
+
+tone_instructions: >-
+  Be concise and technical. Prioritize actionable correctness, security,
+  concurrency, data-integrity, and maintainability defects. Avoid cosmetic
+  nitpicks, speculative findings, and issues unrelated to the changed code.
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  collapse_walkthrough: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: true
+
+  # Keep documentation, translations, and CI in scope for substantive reviews.
+  path_filters:
+    - "!**/*.svg"
+
+  path_instructions:
+    - path: "custom_components/frank_energie/**"
+      instructions: |
+        Focus on reproducible runtime defects, security, data integrity,
+        asynchronous execution, resource cleanup, and current supported
+        Home Assistant integration APIs. Check config flows, reauthentication,
+        config-entry migrations, coordinator refreshes, and entity lifecycles.
+
+        Preserve the integration invariants documented in home-assistant.md:
+        - Keep accounts, config entries, and sites isolated.
+        - Preserve independent freshness and availability of prices, account
+          data, batteries, chargers, vehicles, and PV resources.
+        - Handle nullable or partial upstream data without inventing values.
+        - Keep timestamps aware; distinguish UTC from Amsterdam-local dates,
+          including daylight-saving transitions and publication boundaries.
+        - Prevent stale cache data from being presented as fresh data.
+        - Check rate-limit, retry, timeout, and authentication behavior.
+        - Protect credentials, personal data, and sensitive API responses.
+        - Preserve entity/device identifiers and compatibility during upgrades.
+
+        Assume the repository's supported Python and Home Assistant versions;
+        verify API availability rather than inventing or assuming an API.
+        Report specific failure scenarios and actionable fixes. Do not flag
+        whitespace, import ordering, Ruff formatting, subjective naming,
+        or docstring wording without demonstrable functional impact.
+
+    - path: "tests/**"
+      instructions: |
+        Focus on missing regression coverage, invalid assertions, asynchronous
+        test behavior, fixture isolation, incorrect mocks, and failure paths.
+        Check multi-entry/site isolation, null upstream fields, rate limiting,
+        cache expiration, and 23/25-hour daylight-saving days when relevant.
+        Avoid test formatting or organization preferences.
+
+    - path: "custom_components/frank_energie/translations/**"
+      instructions: |
+        Verify translation keys, placeholders, entity names, and error messages
+        match the implementation. Flag missing or invalid translations that
+        affect users, not subjective wording preferences.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Check workflow correctness, event triggers, least-privilege permissions,
+        safe handling of untrusted pull request data, and supply-chain risks.
+        Require external GitHub Actions and reusable workflows to use verified
+        full 40-character commit SHAs, as specified in AGENTS.md.
+        Flag checks that can silently pass after lint, test, or security failure.
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - "AI_POLICY.md"
+      - "home-assistant.md"
