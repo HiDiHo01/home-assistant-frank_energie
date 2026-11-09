@@ -87,9 +87,18 @@ configured delivery site. Its state is `ELECTRICITY`, `GAS`, or
 `ELECTRICITY, GAS`. It is unavailable when the API has no usable segments for
 that site.
 
-The price refresh button appears under **Gas Prices** for a gas-only contract
-and under **Electricity Prices** for electricity-only and combined contracts.
-The integration reuses the registered entity ID when it moves the button.
+For signed-in entries, the configured delivery site determines where the
+**Refresh Prices** buttons appear.
+
+| Site segments | Devices with a refresh button |
+|---|---|
+| `ELECTRICITY` | Electricity Prices |
+| `GAS` | Gas Prices |
+| `ELECTRICITY` and `GAS` | Electricity Prices and Gas Prices |
+
+For a combined contract, either button requests a refresh from the same price
+coordinator. The original button keeps its registered entity ID when the
+integration moves it or adds the second button.
 
 ### Consumption Entities
 
