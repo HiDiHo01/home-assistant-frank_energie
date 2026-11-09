@@ -1,4 +1,4 @@
-name: Temporary HA lock diagnostic
+name: Temporary HA test lock refresh
 on:
   push:
     branches:
@@ -6,10 +6,53 @@ on:
     paths:
       - ".github/workflows/temporary-ha-2026-11-lock.yml"
 permissions:
-  contents: read
+  contents: write
 jobs:
-  diagnostic:
+  resolve:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - name: Check workflow availability
-        run: echo "Workflow triggered"
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
+        with:
+          persist-credentials: true
+      - name: Install Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # @v6
+        with:
+          python-version: "3.14.2"
+      - name: Install Poetry
+        run: python -m pip install --only-binary :all: "poetry==2.5.1"
+      - name: Resolve and validate
+        run: |
+          poetry lock
+          poetry check --lock
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          lock_data = tomllib.loads(Path("poetry.lock").read_text(encoding="utf-8"))
+          versions = {item["name"]: item["version"] for item in lock_data["package"]}
+          assert versions["homeassistant"] == "2026.11.0"
+          assert versions["pytest-homeassistant"] == "2026.11.0"
+          assert versions["python-frank-energie"] == "2026.11.9"
+          assert "pytest-homeassistant-custom-component" not in versions
+          PY
+      - name: Commit lockfile
+        run: |
+          git add poetry.lock
+          git diff --cached --quiet && exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(deps): resolve official HA 2026.11.0 plugin"
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
