@@ -31,11 +31,12 @@ For the authenticated Smart heating / Slim verwarmen entity, follow
   `Me.user_smart_hvac` response populated from `userSmartHvac(siteReference:)`.
   The released `2026.11.9` client contains the Smart HVAC additions, but
   future version changes require fresh contract and compatibility checks.
-- Do not declare this feature production-ready solely because the
-  integration's mocked pytest suite passes. Before merge, verify a **released**
-  library version exposes `Me.user_smart_hvac` and the expected
-  `isActivated`, `isAvailableOnSite`, `hasAcceptedTerms`, and
-  `isAvailableInCountry` fields.
+- The `2026.11.9` publication satisfies the former missing-client blocker;
+  the manifest pins that release and the committed Poetry lock resolves it.
+  Before declaring the feature deployment-ready, validate the installed
+  published package's `Me.user_smart_hvac` and the expected `isActivated`,
+  `isAvailableOnSite`, `hasAcceptedTerms`, and `isAvailableInCountry` fields.
+  Mock-only tests do not prove a live site's activation behavior.
 - Update `custom_components/frank_energie/manifest.json`,
   `pyproject.toml`, and `poetry.lock` together for the real published
   version. Never guess a version or pin an unreleased branch in production.
@@ -44,8 +45,9 @@ For the authenticated Smart heating / Slim verwarmen entity, follow
   Home Assistant entity presentation. Keep the `smart_hvac` entity's stable
   ID and its deliberate `RUNNING` display class; this class does not mean
   the physical heat pump is running.
-- Recheck release availability when revisiting a draft PR; keep the draft
-  release gate visible until deployment compatibility is demonstrated.
+- Recheck the release when the dependency version changes. Do not retain a
+  draft-only publication gate for the already published `2026.11.9` client;
+  track any remaining live-compatibility, CI and review blockers separately.
 
 ## Reporting
 
