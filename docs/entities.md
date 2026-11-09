@@ -111,6 +111,27 @@ Invoice entities may include:
 - Historical invoices
 - Annual summaries
 
+## Smart heating entity
+
+The authenticated User-service binary sensor **Smart heating** (NL/NL-BE:
+**Slim verwarmen**) retains the `smart_hvac` entity key. Its Boolean
+`isActivated` value reflects **service activation**, not whether a
+heat pump is currently heating.
+
+| Provider result | Binary sensor | Meaning |
+| --- | --- | --- |
+| `isActivated = true` | `on` | Service activated |
+| `isActivated = false` | `off` | Service not activated |
+| Missing or invalid activation value | `unavailable` | Unknown activation |
+
+The `RUNNING` device class is used only for localized active/inactive
+presentation. The `available_on_site` attribute shows whether the
+provider makes this feature available for the configured delivery site:
+it is not the entity's Home Assistant availability or the activation state.
+
+See [Smart heating activation](smart_hvac_activation.md) for details and
+the dependency-release prerequisite.
+
 ## Smart Charging Entities
 
 When smart charging is enabled and a supported charger is connected, additional entities become available.
