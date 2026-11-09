@@ -236,10 +236,14 @@ async def test_sensors_get_data_of_current_hour(
         == "1.75"
     )
 
-    # Change time to 12:15
+    # Change time to 12:15. This checks hour-slot selection from the
+    # already-fetched prices; refreshing the API would introduce unrelated
+    # publication-window cache behavior into a sensor-state regression.
     now = now.replace(hour=12, minute=15)
     freezer.move_to(now)
-    await trigger_update(hass)
+    coordinator = frank_energie_config_entry.runtime_data.price_coordinator
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
 
     assert (
         hass.states.get(
