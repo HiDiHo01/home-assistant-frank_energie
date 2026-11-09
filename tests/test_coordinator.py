@@ -2978,9 +2978,13 @@ async def test_fetch_user_data_uses_main_user_smart_hvac(
     user_data.smartHvac = None
     feature = SimpleNamespace(isActivated=True, is_available_on_site=True)
     mock_frank_energie.user = AsyncMock(return_value=user_data)
-    mock_frank_energie.me = AsyncMock(return_value=SimpleNamespace(user_smart_hvac=feature))
+    mock_frank_energie.me = AsyncMock(
+        return_value=SimpleNamespace(user_smart_hvac=feature)
+    )
     mock_frank_energie.smart_hvac_status = AsyncMock(
-        side_effect=AssertionError("The legacy SmartHvacStatus query must not be called")
+        side_effect=AssertionError(
+            "The legacy SmartHvacStatus query must not be called"
+        )
     )
 
     result = await coordinator._fetch_user_data()
@@ -3003,7 +3007,9 @@ async def test_fetch_user_data_preserves_false_hvac_activation(
     user_data.connections = []
     feature = SimpleNamespace(isActivated=False, is_available_on_site=True)
     mock_frank_energie.user = AsyncMock(return_value=user_data)
-    mock_frank_energie.me = AsyncMock(return_value=SimpleNamespace(user_smart_hvac=feature))
+    mock_frank_energie.me = AsyncMock(
+        return_value=SimpleNamespace(user_smart_hvac=feature)
+    )
 
     result = await coordinator._fetch_user_data()
 
