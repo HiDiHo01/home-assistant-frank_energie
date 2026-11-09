@@ -26,9 +26,9 @@ from .const import (
     ENODE_CHARGING_MODE_OPTIONS,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_DELIVERY_SITE,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
-    DATA_USER,
     DOMAIN,
     MANUFACTURER_FRANK_ENERGIE,
     SERVICE_NAME_SETTINGS,
@@ -168,7 +168,7 @@ async def async_setup_entry(
 
     settings = entry.runtime_data.settings_coordinator
     contracts = (
-        known_site_contracts(settings.data.get(DATA_USER))
+        known_site_contracts(settings.data.get(DATA_DELIVERY_SITE))
         if settings.api.is_authenticated
         else None
     )

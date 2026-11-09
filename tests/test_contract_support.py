@@ -1,10 +1,9 @@
 """Exercise electricity-only, gas-only and dual-contract integration lifecycles."""
 
-from dataclasses import fields, replace
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from inspect import iscoroutinefunction
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,16 +13,16 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RequestException
-from python_frank_energie.models import MarketPrices, PriceData, User
+from python_frank_energie.models import MarketPrices, PriceData, User, UserSites
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
 from custom_components.frank_energie.const import (
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
-    DATA_USER,
     DOMAIN,
     TIMEZONE_AMSTERDAM,
 )
@@ -32,6 +31,7 @@ from custom_components.frank_energie.coordinator import (
     FrankEnergieSettingsCoordinator,
 )
 from custom_components.frank_energie.helpers import async_sync_contract_entities
+from custom_components.frank_energie.sensor import SENSOR_TYPES, FrankEnergieSensor
 
 CONTRACT_CASES = [("ELECTRICITY",), ("GAS",), ("ELECTRICITY", "GAS")]
 AMSTERDAM = ZoneInfo(TIMEZONE_AMSTERDAM)
@@ -81,20 +81,16 @@ def _api_for_contracts(contracts: tuple[str, ...], resolution: int) -> AsyncMock
         if iscoroutinefunction(getattr(FrankEnergie, name, None)):
             setattr(api, name, AsyncMock(return_value=None))
     api.is_authenticated = True
-    user = MagicMock(spec=User)
-    for item in fields(User):
-        setattr(user, item.name, None)
-    for name, value in vars(User).items():
-        if isinstance(value, property):
-            setattr(user, name, None)
-    user.userSegments = list(contracts)
-    user.connections = []
-    user.countryCode = "NL"
-    user.UserSettings = {}
-    api.user.return_value = user
-    # Other sites can have different contracts; they must not affect this entry.
-    api.UserSites.return_value = SimpleNamespace(
-        segments=["ELECTRICITY", "GAS"], deliverySites=[]
+    api.user.return_value = User.from_dict({"data": {"me": {"countryCode": "NL"}}})
+    api.UserSites.return_value = UserSites.from_dict(
+        {
+            "data": {
+                "userSites": [
+                    {"reference": "other-site", "segments": ["ELECTRICITY", "GAS"]},
+                    {"reference": "test-site", "segments": list(reversed(contracts))},
+                ]
+            }
+        }
     )
 
     async def public_prices(start: date, **kwargs: object) -> MarketPrices:
@@ -137,18 +133,27 @@ async def test_contract_setup_reload_and_rollover(
         unique_id="test-site",
     )
     entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registered_segments = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.unique_id}.segments",
+        config_entry=entry,
+        suggested_object_id="frank_energie_gebruiker_segmenten",
+    )
     with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        registry = er.async_get(hass)
 
         def assert_prices() -> None:
             """Check native prices and contract-bound entities through HA's registry."""
             segments_id = registry.async_get_entity_id(
                 "sensor", DOMAIN, f"{entry.unique_id}.segments"
             )
-            assert segments_id is not None
-            assert hass.states.get(segments_id).state == ", ".join(sorted(contracts))
+            assert segments_id == registered_segments.entity_id
+            segments_state = hass.states.get(registered_segments.entity_id)
+            assert segments_state is not None
+            assert segments_state.state == ", ".join(sorted(contracts))
             for kind, key, expected in [
                 ("ELECTRICITY", "elec_markup", 0.25),
                 ("GAS", "gas_markup", 1.2),
@@ -205,6 +210,30 @@ async def test_contract_setup_reload_and_rollover(
         await hass.async_block_till_done()
 
 
+async def test_segments_recover_when_selected_site_is_returned(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Keep the sensor unavailable until the API includes the configured site."""
+    freezer.move_to("2026-07-20T08:15:00Z")
+    api = _api_for_contracts(("GAS",), 60)
+    sites = api.UserSites.return_value
+    api.UserSites.return_value = replace(sites, deliverySites=sites.deliverySites[:1])
+    entry = MockConfigEntry(domain=DOMAIN, data={"site_reference": "test-site"})
+    entry.add_to_hass(hass)
+    settings = FrankEnergieSettingsCoordinator(hass, entry, api)
+    description = next(item for item in SENSOR_TYPES if item.key == "segments")
+    sensor = FrankEnergieSensor(settings, description, entry)
+
+    await settings.async_refresh()
+    assert sensor.native_value is None
+    assert not sensor.available
+
+    api.UserSites.return_value = sites
+    await settings.async_refresh()
+    assert sensor.native_value == "GAS"
+    assert sensor.available
+
+
 def _coordinator(
     hass: HomeAssistant, contracts: tuple[str, ...], resolution: int = 15
 ) -> FrankEnergiePriceCoordinator:
@@ -215,7 +244,7 @@ def _coordinator(
     )
     entry.add_to_hass(hass)
     settings = FrankEnergieSettingsCoordinator(hass, entry, api)
-    settings.data = {DATA_USER: api.user.return_value}
+    settings.data[DATA_DELIVERY_SITE] = api.UserSites.return_value.deliverySites[1]
     prices = FrankEnergiePriceCoordinator(hass, entry, api, settings)
     prices.store.async_save = AsyncMock()
     return prices

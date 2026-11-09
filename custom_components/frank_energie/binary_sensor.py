@@ -27,6 +27,7 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_PV_SYSTEMS,
     DATA_USER,
@@ -746,7 +747,7 @@ def _sync_price_contract_entities(
 ) -> bool:
     """Sync price-entity registry state and return electricity support."""
     contracts = (
-        known_site_contracts(settings_coordinator.data.get(DATA_USER))
+        known_site_contracts(settings_coordinator.data.get(DATA_DELIVERY_SITE))
         if settings_coordinator.api.is_authenticated
         else None
     )
