@@ -923,7 +923,10 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
     def _resource_features(self) -> tuple[bool, bool, bool, bool]:
         """Determine optional resource visibility from coordinator data."""
         runtime_data = getattr(self.config_entry, "runtime_data", None)
-        if runtime_data is None or getattr(runtime_data, "battery_coordinator", None) is None:
+        if (
+            runtime_data is None
+            or getattr(runtime_data, "battery_coordinator", None) is None
+        ):
             return True, True, True, True
 
         battery_data = (
