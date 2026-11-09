@@ -672,9 +672,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         async with FrankEnergie() as api:
             # Let the login flow classify failures and sanitize their logging.
             # Never log provider exception text or account identifiers here.
-            return await api.login(
-                user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
-            )
+            return await api.login(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
 
     async def _handle_authentication_success(
         self, user_input: dict[str, Any], auth: Authentication
@@ -865,9 +863,8 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
-            if (
-                user_input[CONF_USERNAME] == current_username
-                and not user_input.get(CONF_PASSWORD)
+            if user_input[CONF_USERNAME] == current_username and not user_input.get(
+                CONF_PASSWORD
             ):
                 # No credential change: local polling options must remain
                 # editable even if authentication or site discovery is down.
