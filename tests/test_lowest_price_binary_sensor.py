@@ -393,7 +393,11 @@ async def test_setup_routes_price_entity_to_its_own_coordinator(
     assert price_entities[0].unique_id == f"site-one_{SENSOR_KEY}"
     assert price_entities[0].device_info["identifiers"] == {(DOMAIN, entry.entry_id)}
     if not authenticated:
-        assert entities == price_entities
+        assert {entity.entity_description.key for entity in entities} == {
+            SENSOR_KEY,
+            "tomorrow_prices_available",
+        }
+        assert all(entity.coordinator is price for entity in entities)
     else:
         for entity in entities:
             if entity.entity_description.authenticated:
