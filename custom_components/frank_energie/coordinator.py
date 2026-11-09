@@ -1188,7 +1188,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             user_data = await self.api.user(self.site_reference)
             if user_data is not None:
                 try:
-                    smart_hvac = await self.api.smart_hvac_status()
+                    smart_hvac = await self.api.smart_hvac_status(self.site_reference)
                     if smart_hvac:
                         user_data.smartHvac = smart_hvac
                 except (RequestException, FrankEnergieException, ClientError) as ex:
@@ -3158,7 +3158,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                         self.hass, self.config_entry, "battery", data_smart_batteries
                     )
                 except Exception:  # noqa: BLE001 - Repairs must not break polling
-                    _LOGGER.exception("Failed to process the battery inventory for Repairs")
+                    _LOGGER.exception(
+                        "Failed to process the battery inventory for Repairs"
+                    )
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
             return result
@@ -3237,7 +3239,9 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
                         self.hass, self.config_entry, "charger", data_enode_chargers
                     )
                 except Exception:  # noqa: BLE001 - Repairs must not break polling
-                    _LOGGER.exception("Failed to process the charger inventory for Repairs")
+                    _LOGGER.exception(
+                        "Failed to process the charger inventory for Repairs"
+                    )
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -3393,7 +3397,9 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
                         self.hass, self.config_entry, "vehicle", enode_vehicles
                     )
                 except Exception:  # noqa: BLE001 - Repairs must not break polling
-                    _LOGGER.exception("Failed to process the vehicle inventory for Repairs")
+                    _LOGGER.exception(
+                        "Failed to process the vehicle inventory for Repairs"
+                    )
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
