@@ -1,6 +1,6 @@
 ---
 name: frank-energie-api-reliability
-description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limiting, invoice isolation, price cache freshness, partial GraphQL responses, and asynchronous cancellation in the Home Assistant integration.
+description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limiting, invoice isolation, price cache freshness, partial GraphQL responses, delivery-site contracts, provider model fixtures, site-scoped Smart HVAC status and availability, and asynchronous cancellation in the Home Assistant integration.
 ---
 
 # Frank Energie API and coordinator reliability
@@ -19,6 +19,48 @@ Keep the API library responsible for GraphQL transport, authentication, parsing,
 4. Confirm bounded retries and `Retry-After` where supported, no overlapping refresh storms, proper cancellation propagation, entry/site isolation, and correct Home Assistant setup/re-auth/error transitions.
 5. Verify cache aging and response ordering; a fallback must not be labeled live/current, and an old request must not overwrite newer data.
 6. For price-related fixes, verify hourly/quarter-hour resolution, PT15M/PT60M effective dates, negative prices, UTC versus Amsterdam local dates, and DST days.
+
+## Smart Feed-In API outcome semantics
+
+`user_smart_feed_in()` returns `None` after a **successful** GraphQL
+`userSmartFeedIn: null` response when the account has no feed-in contract.
+The PV coordinator must also record whether this request completed successfully:
+a confirmed null maps to the inactive binary sensor state, while authentication
+skips, failed requests, or missing coordinator data remain unknown. Do not
+turn network failures into an inactive subscription status. Test null,
+active/inactive subscriptions, failure, and subsequent recovery.
+
+## Smart HVAC status and optional-request isolation
+
+See [Smart heating activation](../../../docs/smart_hvac_activation.md).
+The User-service `smart_hvac` entity is driven by the strictly Boolean
+`UserSmartHvac.isActivated` for the selected delivery site. Do not
+substitute `isAvailableOnSite`, an equipment operational status, or a
+truthy string. `RUNNING` is an intentional UI device class for the
+requested active/inactive wording, not physical operating telemetry.
+
+When the settings coordinator fetches `api.me(site_reference)` as an
+optional Smart HVAC request, preserve already-valid `api.user()` data
+on expected network, request, timeout, or optional `AuthException`
+failures. Do not swallow `asyncio.CancelledError` or
+`AuthRequiredException`, which must trigger Home Assistant reauthentication.
+Regression-test that optional `AuthException` keeps Smart Charging/Smart
+Trading data while avoiding sensitive exception logs. Never log raw upstream
+payloads, personal identifiers, GraphQL variables or tokens.
+
+Check that the selected config-entry site's reference is used consistently
+and originates from the established `UserSites` discovery/selection flow,
+not a hard-coded or environment-provided fallback. Verify unknown values
+are unavailable rather than silently treated as inactive, and that
+`CoordinatorEntity.available` follows the settings refresh state.
+
+## Delivery-site contracts and provider fixtures
+
+- Verify the GraphQL selection and parsed model in the dependency version pinned in `manifest.json`. `UserSites.segments` describes the first returned site. Match the config entry's site reference in `UserSites.deliverySites` and read that `DeliverySite.segments`. Treat a missing match or unusable segments as unknown.
+- Mock the API boundary and parse sanitized payloads with the actual `User.from_dict()` and `UserSites.from_dict()` models. `MagicMock(spec=User)` allows assignments to attributes absent from the real model, which can make a regression test pass with an invented field such as `userSegments`. If a model double is necessary, apply `spec_set` to a real instance.
+- Reproduce the failure with those models before applying the fix. Test electricity-only, gas-only, and dual contracts with the selected site after another site that has different segments. Verify the existing entity ID, contract-dependent entity setup, and sensor recovery when the selected site reappears. [Contract regression tests](../../../tests/test_contract_support.py)
+- Check the device registry and include refresh buttons in contract tests. Their `device_info` can create a price device independently of sensor setup. Verify that moving a button to another price device preserves its registered entity ID.
+- For a dual contract, verify a distinct refresh button on each price device and use the Home Assistant button action to check that each requests a refresh from the shared price coordinator. Test switching to one segment and back to verify that the extra button is restored with the same entity ID.
 
 ## Regression tests
 

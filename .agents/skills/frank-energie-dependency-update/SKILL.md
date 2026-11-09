@@ -1,6 +1,6 @@
 ---
 name: frank-energie-dependency-update
-description: Safely update python-frank-energie and other runtime or development dependencies in the Frank Energie Home Assistant integration. Use for library version bumps, manifest and Poetry synchronization, dependency security updates, compatibility verification, and dependency-related CI failures.
+description: Safely update python-frank-energie and other runtime or development dependencies in the Frank Energie Home Assistant integration. Use for library version bumps, manifest and Poetry synchronization, dependency security updates, Smart HVAC release gating, compatibility verification, and dependency-related CI failures.
 ---
 
 # Frank Energie dependency upgrade
@@ -20,6 +20,34 @@ The integration depends on the separately maintained [python-frank-energie libra
 5. Update tests/fixtures and code only for demonstrated compatibility changes. Use sanitized, mocked responses and preserve electricity-only, gas-only, dual-contract, cache, and config-entry behavior.
 6. Validate against the configured Python/Home Assistant CI matrix; include focused regression tests, the full pytest suite when feasible, Ruff/Flake8, HACS/hassfest, and dependency consistency checks as applicable.
 7. Inspect the final diff for accidental dependency upgrades, new permissions, changes to public behavior, and secrets.
+
+## Smart HVAC release gate
+
+For the authenticated Smart heating / Slim verwarmen entity, follow
+[the documented data contract](../../../docs/smart_hvac_activation.md):
+
+- Verify the **published version pinned in `manifest.json`**, not just
+  `python-frank-energie/main`, exposes the site-specific `api.me(site_reference)`
+  `Me.user_smart_hvac` response populated from `userSmartHvac(siteReference:)`.
+  The released `2026.11.9` client contains the Smart HVAC additions, but
+  future version changes require fresh contract and compatibility checks.
+- The `2026.11.9` publication satisfies the former missing-client blocker;
+  the manifest pins that release and the committed Poetry lock resolves it.
+  Before declaring the feature deployment-ready, validate the installed
+  published package's `Me.user_smart_hvac` and the expected `isActivated`,
+  `isAvailableOnSite`, `hasAcceptedTerms`, and `isAvailableInCountry` fields.
+  Mock-only tests do not prove a live site's activation behavior.
+- Update `custom_components/frank_energie/manifest.json`,
+  `pyproject.toml`, and `poetry.lock` together for the real published
+  version. Never guess a version or pin an unreleased branch in production.
+- Test both activated and deactivated services, missing data, site isolation,
+  authentication/reauthentication, optional-request failures, and the real
+  Home Assistant entity presentation. Keep the `smart_hvac` entity's stable
+  ID and its deliberate `RUNNING` display class; this class does not mean
+  the physical heat pump is running.
+- Recheck the release when the dependency version changes. Do not retain a
+  draft-only publication gate for the already published `2026.11.9` client;
+  track any remaining live-compatibility, CI and review blockers separately.
 
 ## Reporting
 

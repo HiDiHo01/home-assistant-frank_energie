@@ -1,6 +1,6 @@
 ---
 name: frank-energie-development
-description: Develop, debug, review, and test the Frank Energie Home Assistant custom integration. Use for PR review, bug fixes, config flows, price and contract resolution, coordinators, entity platforms, EV charging, batteries, translations, API errors, security, migrations, and CI/quality-scale work in home-assistant-frank_energie.
+description: Develop, debug, review, and test the Frank Energie Home Assistant custom integration. Use for PR review, bug fixes, config flows, price and contract resolution, coordinators, entity platforms, EV charging, Smart HVAC/Smart heating, batteries, translations, API errors, security, migrations, and CI/quality-scale work in home-assistant-frank_energie.
 ---
 
 # Frank Energie development and review
@@ -45,6 +45,7 @@ This skill is a task workflow, not a replacement for repository policy.
 - **Async/API:** Keep Home Assistant I/O asynchronous and resource-safe. Use the existing coordinator/client architecture, injected shared sessions where supported, cancellation-safe cleanup, bounded retries, timeouts, and provider rate-limit handling. Do not increase polling or retry load without justification.
 - **Upstream ownership:** Verify whether a defect belongs in this integration or in `python-frank-energie`; do not duplicate client-library parsing/error handling in entity code to conceal an upstream defect.
 - **Entity correctness:** Preserve state class, device class, units, attributes, availability, translations, events, and platform lifecycle. Do not invent service registrations: verify actual code before documenting services or actions.
+- **Smart HVAC activation:** Follow [the Smart heating contract](../../../docs/smart_hvac_activation.md). `UserSmartHvac.isActivated` means **service activation**, not equipment runtime; `isAvailableOnSite` is independent of activation and entity availability. Preserve the configured delivery site's identity and the existing `smart_hvac` entity key/unique ID. The `RUNNING` device class is an intentional **display** choice, not proof of physical operation; keep names as feature names (EN: Smart heating; NL/NL-BE: Slim verwarmen; FR: Chauffage intelligent) without appending a Boolean state word. Do not expose identifying attributes. Test strict booleans, null/malformed fields, optional API errors and authentication, coordinator availability and localized Home Assistant state. `python-frank-energie/main` support alone is not enough to merge: require an actual compatible library release and synchronized dependency declarations.
 
 ## Make and verify changes
 
@@ -71,6 +72,9 @@ poetry run pytest -q
 
 # CI's blocking Flake8 critical-error check
 poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+# Full Flake8: fail on new findings compared with the tracked baseline
+poetry run python .github/helpers/check_flake8_baseline.py
 
 # Ruff must be installed at pyproject.toml's required version
 ruff check custom_components tests

@@ -33,7 +33,7 @@ from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from python_frank_energie.models import ChargeSettings
+    from python_frank_energie.models import ChargeSettings, DeliverySite
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,12 +112,11 @@ PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
 PRICE_CACHE_STORE_VERSION: Final[int] = 1
 
 
-def known_site_contracts(user: object) -> set[str] | None:
-    """Return the selected site's contracts, keeping unknown metadata distinct."""
-    segments = getattr(user, "userSegments", None)
-    if not isinstance(segments, (list, tuple)):
+def known_site_contracts(site: DeliverySite | None) -> set[str] | None:
+    """Return the selected site's supported contracts when metadata is usable."""
+    if site is None:
         return None
-    return {kind for kind in ("ELECTRICITY", "GAS") if kind in segments}
+    return {kind for kind in ("ELECTRICITY", "GAS") if kind in site.segments} or None
 
 
 @callback

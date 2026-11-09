@@ -418,13 +418,24 @@ Use the testing framework and conventions already established in the repository,
 * Use Poetry 2.5.1. Select the interpreter with `poetry env use python3.14` and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
 * Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
 * Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
-* Keep `pytest-homeassistant-custom-component` required in pytest configuration. Use its real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
+* Keep the official `pytest-homeassistant` plugin required in pytest configuration and pin it to the same release as Home Assistant Core (currently `2026.11.0`). Do not co-install the deprecated `pytest-homeassistant-custom-component` package; their fixtures overlap. Use real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
 * Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
 * Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
 * Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.
 * Run Flake8 with `--jobs=1 --extend-exclude=.venv` so local virtual environments are excluded and checks work in environments with restricted process creation.
 * Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
 * Report the interpreter, Home Assistant, test-plugin versions, pass/skip/failure counts, and any checks that could not run. Do not describe isolated method checks as a full Home Assistant suite.
+
+### Config-entry migration and reconfiguration regressions
+
+* Keep the config-entry schema version and minor version centralized in `const.py`; use them for the config flow and the integration-level `async_migrate_entry` hook.
+* Exercise migration through Home Assistant's real config-entry setup/reload APIs. Mock provider/platform setup at the integration boundary, without mocking the migration callback or config-entry manager.
+* Cover legacy, current, older minor and future versions; preserve credentials, site identity, unrelated options and other entries. Never downgrade a newer minor schema or accept an incompatible future major schema.
+* Exercise reconfiguration through the real flow manager with `SOURCE_RECONFIGURE`. Cover saved-username defaults, invalid input, provider failures, retries, cancellation, encrypted credential updates and target-entry isolation.
+* Verify that reconfigure and reauthentication complete with their distinct Home Assistant reasons and schedule one reload. Use the native update/reload helper so Home Assistant provides the appropriate shared translation.
+* Verify the existing delivery-site reference against the new account's complete site inventory before persisting credentials through reauth, reconfigure or options. Include inactive/multiple sites, mismatched accounts with unchanged email, missing inventories, provider failures and successful retries. Preserve entry, entity and device identities on rejected changes. Legacy entries without a site retain their existing account username; do not silently bind them to another account.
+* Home Assistant awaits `async_migrate_entry` even when migration only uses the synchronous config-entry update callback. Preserve that async contract; document a necessary analyzer exception on the hook's declaration instead of adding a fake await or suppressing the rule across the file.
+* Run `poetry run python -m pytest tests/test_migration.py tests/test_reconfigure.py tests/test_config_flow.py tests/test_translations.py`, followed by the full suite and the configured lint/format checks.
 
 ### Required test coverage
 
@@ -660,6 +671,21 @@ When working on GitHub repositories:
 * Include relevant test results and any checks that could not be executed.
 
 Do not assume that pushing, publishing, releasing, or merging is authorized merely because code changes were requested.
+
+<!-- ai-review-rules:obsolete-pr-triage:start -->
+### Check for obsolete pull requests before resolving conflicts
+
+- Before resolving merge/rebase conflicts, rebasing, or rewriting a pull request, compare its complete changes against the **current** target branch. Inspect the PR diff, relevant code, tests, documentation, review feedback, and commit history.
+- Verify whether **all** meaningful functionality, bug fixes, regression coverage, and documentation changes are already present on the target branch with equivalent behavior. Similar code, a matching PR title, or a conflict flag alone is not sufficient evidence.
+- Classify the PR using evidence, not automation guesses:
+  - **Obsolete:** all meaningful changes are present with equivalent behavior and tests; recommend closing without merging.
+  - **Partially superseded:** some changes are present; retain and validate only unique changes before resolving conflicts.
+  - **Still relevant:** unique changes are missing; preserve them and resolve conflicts with relevant checks.
+  - **Unverified:** the evidence is insufficient or inaccessible; keep the PR open and report the missing proof.
+- When a PR is **obsolete**, do not resolve unnecessary conflicts or merge duplicate changes. If explicitly authorized to comment and close, cite replacement commits, relevant files, and existing tests in a concise explanation, then close **without merging**. In review-only tasks, report the recommendation without changing the PR. Never disclose confidential vulnerability details publicly.
+- For partially superseded or still relevant PRs, preserve the missing changes, perform relevant validation, and report the actual results. Never close a PR automatically based only on a matching title, similar patch, or GitHub mergeability flag.
+- Document the disposition and checks not run. Never claim that an obsolete PR was merged or that unexecuted tests passed.
+<!-- ai-review-rules:obsolete-pr-triage:end -->
 
 ## 22. Required workflow for every task
 

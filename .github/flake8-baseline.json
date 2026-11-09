@@ -1,0 +1,90 @@
+{
+  "description": "Existing non-E203 Flake8 violations measured on main in GitHub Actions 2026-11-08. New or increased findings must fail CI; reduce this list as debt is fixed.",
+  "allowed": [
+    {
+      "path": "custom_components/frank_energie/config_flow.py",
+      "code": "C901",
+      "message": "'ConfigFlow.async_step_site' is too complex (23)"
+    },
+    {
+      "path": "custom_components/frank_energie/config_flow.py",
+      "code": "C901",
+      "message": "'FrankEnergieOptionsFlowHandler.async_step_user' is too complex (11)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "C901",
+      "message": "'FrankEnergieBatterySessionCoordinator._async_update_data' is too complex (11)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "C901",
+      "message": "'FrankEnergieCoordinator._fetch_user_data' is too complex (14)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "C901",
+      "message": "'FrankEnergieCoordinator.async_set_resolution' is too complex (15)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "C901",
+      "message": "'FrankEnergieCoordinator.async_update_enode_charge_settings' is too complex (12)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "C901",
+      "message": "'FrankEnergiePriceCoordinator._async_update_data' is too complex (15)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "C901",
+      "message": "'FrankEnergiePVCoordinator._async_update_data' is too complex (11)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "E501",
+      "message": "line too long (128 > 120 characters)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "E501",
+      "message": "line too long (128 > 120 characters)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "E501",
+      "message": "line too long (141 > 120 characters)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "E501",
+      "message": "line too long (149 > 120 characters)"
+    },
+    {
+      "path": "custom_components/frank_energie/coordinator.py",
+      "code": "E501",
+      "message": "line too long (154 > 120 characters)"
+    },
+    {
+      "path": "custom_components/frank_energie/diagnostics.py",
+      "code": "C901",
+      "message": "'_serialize' is too complex (13)"
+    },
+    {
+      "path": "custom_components/frank_energie/select.py",
+      "code": "C901",
+      "message": "'_setup_enode_entities' is too complex (12)"
+    },
+    {
+      "path": "custom_components/frank_energie/sensor.py",
+      "code": "C901",
+      "message": "'async_setup_entry' is too complex (49)"
+    },
+    {
+      "path": "tests/test_translations.py",
+      "code": "C901",
+      "message": "'test_no_unused_or_missing_translation_keys' is too complex (27)"
+    }
+  ]
+}

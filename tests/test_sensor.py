@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant import config_entries
@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.util import dt
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     async_fire_time_changed,
     MockConfigEntry,
 )
@@ -179,20 +179,103 @@ async def test_sensors(
         ).state
         == "0.0225"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_vat_price").state
-        == "0.1845"
+    gas_registry = entity_registry.async_get(hass)
+    gas_vat_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_vat"
     )
+    gas_energy_tax_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_only"
+    )
+    assert gas_vat_entity_id is not None
+    assert gas_energy_tax_entity_id is not None
+    assert hass.states.get(gas_vat_entity_id).state == "0.0615"
     assert (
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_sourcing_price"
         ).state
         == "0.123"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_tax_only").state
-        == "0.0615"
+    assert hass.states.get(gas_energy_tax_entity_id).state == "0.1845"
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "price_component", "expected_value"),
+    [
+        ("elec_tax_only", "energy_tax_price", 0.7268),
+        ("elec_tax_vat", "market_price_tax", 0.1895),
+        ("gas_energy_tax", "energy_tax_price", 0.7268),
+        ("gas_market_vat", "market_price_tax", 0.1895),
+    ],
+)
+def test_current_tax_sensor_price_component_mapping(
+    sensor_key: str, price_component: str, expected_value: float
+) -> None:
+    """Map energy tax and market-price VAT consistently for both fuels."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    current_hour = SimpleNamespace(
+        energy_tax_price=0.7268,
+        market_price_tax=0.1895,
     )
+    data = {
+        const.DATA_ELECTRICITY: SimpleNamespace(current_hour=current_hour),
+        const.DATA_GAS: SimpleNamespace(current_hour=current_hour),
+    }
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert getattr(current_hour, price_component) == expected_value
+    assert description.value_fn(data) == pytest.approx(expected_value)
+
+
+@pytest.mark.parametrize("sensor_key", ["gas_energy_tax", "gas_market_vat"])
+@pytest.mark.parametrize("has_gas_prices", [False, True])
+def test_gas_tax_sensor_missing_current_hour_is_unknown(
+    sensor_key: str, has_gas_prices: bool
+) -> None:
+    """Return None when gas prices or the current gas period are absent."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    gas_prices = SimpleNamespace(current_hour=None) if has_gas_prices else None
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert description.value_fn({const.DATA_GAS: gas_prices}) is None
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "historical_key"),
+    [
+        ("gas_energy_tax", "gas_tax_only"),
+        ("gas_market_vat", "gas_tax_vat"),
+    ],
+)
+def test_gas_sensor_keys_keep_registry_unique_ids(
+    sensor_key: str, historical_key: str
+) -> None:
+    """Preserve existing entity registry identities after renaming sensor keys."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieSensor,
+        SENSOR_TYPES,
+        _sensor_unique_id,
+    )
+
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    entry = MagicMock()
+    entry.entry_id = "existing_entry"
+    entry.unique_id = "site_id"
+    coordinator = MagicMock()
+    coordinator.data = {}
+
+    sensor = FrankEnergieSensor(coordinator, description, entry)
+
+    assert description.translation_key == sensor_key
+    assert sensor.unique_id == f"site_id.{historical_key}"
+    assert _sensor_unique_id(entry, description) == sensor.unique_id
 
 
 async def test_sensors_get_data_of_current_hour(
@@ -201,6 +284,7 @@ async def test_sensors_get_data_of_current_hour(
     frank_energie_config_entry: MockConfigEntry,
     hass: HomeAssistant,
 ):
+    """Verify that current-hour price sensors follow an exact local-time change."""
     import zoneinfo
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
@@ -208,13 +292,12 @@ async def test_sensors_get_data_of_current_hour(
     now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Return the same two-day data on every request: concurrent refreshes may
+    # complete in any order, so a sequential today/tomorrow cycle is unreliable.
     aioclient_responses.add(
-        start_of_day, [0.3] * 12 + [0.15] * 12, [1.75] * 6 + [1.23] * 18
-    )
-    aioclient_responses.add(
-        start_of_day + timedelta(days=1),
-        [0.25] * 12 + [0.1] * 12,
-        [1.23] * 6 + [1.11] * 18,
+        start_of_day,
+        [0.3] * 12 + [0.15] * 12 + [0.25] * 12 + [0.1] * 12,
+        [1.75] * 6 + [1.23] * 18 + [1.23] * 6 + [1.11] * 18,
     )
     aioclient_responses.cyclic()
 
@@ -238,7 +321,9 @@ async def test_sensors_get_data_of_current_hour(
     # Change time to 12:15
     now = datetime.now(tz).replace(hour=12, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
-    await trigger_update(hass, 7 * 3600)
+    # The clock has already advanced; firing seven hours later can expire prices.
+    async_fire_time_changed(hass, now.astimezone(UTC) + timedelta(seconds=1))
+    await hass.async_block_till_done()
 
     assert (
         hass.states.get(
@@ -694,7 +779,7 @@ async def _parent_and_child_devices_after_add(
     """
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
     from homeassistant.helpers import device_registry as dr
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 
@@ -1166,7 +1251,7 @@ async def _register_sensor_and_get_state(
     the real SensorEntity validation (including ENUM ``options`` validation)
     rather than a hand-rolled stand-in for it."""
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 

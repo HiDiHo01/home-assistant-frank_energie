@@ -3,7 +3,7 @@ Constants used in the Frank Energie integration.
 """
 
 # const.py
-# date 2026.9.20
+# date 2026.11.9
 
 import logging
 from dataclasses import dataclass
@@ -33,7 +33,9 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2026.9.20"
+VERSION: Final[str] = "2026.11.9"
+CONFIG_ENTRY_VERSION: Final[int] = 2
+CONFIG_ENTRY_MINOR_VERSION: Final[int] = 1
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"
@@ -227,6 +229,7 @@ DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 DATA_PV_SYSTEMS: Final[str] = "smart_pv_systems"
 DATA_PV_SUMMARY: Final[str] = "smart_pv_summary"
 DATA_USER_SMART_FEED_IN: Final[str] = "user_smart_feed_in"
+DATA_USER_SMART_FEED_IN_FETCHED: Final[str] = "user_smart_feed_in_fetched"
 DATA_TOKEN_EXPIRES_AT: Final[str] = "auth_token_expires_at"
 DATA_REFRESH_TOKEN_EXPIRES_AT: Final[str] = "refresh_token_expires_at"
 

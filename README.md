@@ -22,6 +22,7 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 - [FAQ](docs/faq.md) - Frequently asked questions and common scenarios.
 - [Smart Battery](docs/smart_battery.md) - Smart Battery features, modes, and configuration.
 - [Smart Charging](docs/smart_charging.md) - Smart Charging features and troubleshooting.
+- [Smart heating](docs/smart_hvac_activation.md) - The Smart heating (Slim verwarmen) activation sensor, availability, and dependency requirements.
 - [Troubleshooting](docs/troubleshooting.md) - Common issues and expected behavior.
 - [Update Frequency](docs/update_frequency.md) - Polling intervals, maintenance windows, and price publication timing.
 - [User Features](docs/user_features.md) - Overview of all supported Frank Energie features.
