@@ -218,6 +218,41 @@ async def test_credentials_update_only_the_selected_entry(
 
 
 @pytest.mark.parametrize(
+    "source", [config_entries.SOURCE_REAUTH, config_entries.SOURCE_RECONFIGURE]
+)
+async def test_unexpected_login_failure_does_not_log_private_details(
+    hass: HomeAssistant,
+    reconfigure_entry: MockConfigEntry,
+    provider_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+    source: str,
+) -> None:
+    """Keep provider messages, chained causes and account names out of login logs."""
+    original_data = dict(reconfigure_entry.data)
+    original_options = dict(reconfigure_entry.options)
+    login_error = RuntimeError("synthetic-private-login-payload")
+    login_error.__cause__ = ValueError("synthetic-private-login-cause")
+    provider_api.login.side_effect = login_error
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": source, "entry_id": reconfigure_entry.entry_id}
+    )
+    failed = await hass.config_entries.flow.async_configure(
+        result["flow_id"], dict(_CREDENTIALS)
+    )
+    await hass.async_block_till_done()
+
+    assert failed["type"] is FlowResultType.FORM
+    assert failed["errors"] == {"base": "unknown_error"}
+    assert "synthetic-private-login-payload" not in caplog.text
+    assert "synthetic-private-login-cause" not in caplog.text
+    assert _CREDENTIALS[CONF_USERNAME] not in caplog.text
+    assert dict(reconfigure_entry.data) == original_data
+    assert dict(reconfigure_entry.options) == original_options
+    provider_api.UserSites.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
     ("failure", "error_key"),
     [
         (AuthException("rejected"), "invalid_auth"),
@@ -517,10 +552,47 @@ async def test_missing_site_inventory_does_not_replace_credentials(
     reload_entry.assert_not_awaited()
 
 
+@pytest.mark.parametrize("include_blank_password", [False, True])
+async def test_polling_settings_update_without_credential_verification(
+    hass: HomeAssistant,
+    reconfigure_entry: MockConfigEntry,
+    provider_api: MagicMock,
+    include_blank_password: bool,
+) -> None:
+    """Save polling changes offline without changing credentials or site identity."""
+    original_data = dict(reconfigure_entry.data)
+    original_options = dict(reconfigure_entry.options)
+    provider_api.login.side_effect = ConnectionException("login unavailable")
+    provider_api.UserSites.side_effect = NetworkError("site inventory unavailable")
+    user_input = {
+        CONF_USERNAME: original_options[CONF_USERNAME],
+        "interval_settings": 24,
+    }
+    if include_blank_password:
+        user_input[CONF_PASSWORD] = ""
+
+    initial = await hass.config_entries.options.async_init(reconfigure_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        initial["flow_id"], user_input
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert reconfigure_entry.options["interval_settings"] == 24
+    for key, value in original_options.items():
+        if key != "interval_settings":
+            assert reconfigure_entry.options[key] == value
+    assert dict(reconfigure_entry.data) == original_data
+    provider_api.login.assert_not_awaited()
+    provider_api.UserSites.assert_not_awaited()
+
+
+@pytest.mark.parametrize("username", ["updated@example.com", "current@example.com"])
 async def test_options_credentials_cannot_bypass_site_ownership(
     hass: HomeAssistant,
     reconfigure_entry: MockConfigEntry,
     provider_api: MagicMock,
+    username: str,
 ) -> None:
     """Require the same configured site when the options form changes credentials."""
     original_data = dict(reconfigure_entry.data)
@@ -528,7 +600,7 @@ async def test_options_credentials_cannot_bypass_site_ownership(
     provider_api.UserSites.return_value = _user_sites("unrelated-site")
     result = await hass.config_entries.options.async_init(reconfigure_entry.entry_id)
     rejected = await hass.config_entries.options.async_configure(
-        result["flow_id"], dict(_CREDENTIALS)
+        result["flow_id"], {**_CREDENTIALS, CONF_USERNAME: username}
     )
     await hass.async_block_till_done()
 
@@ -539,7 +611,7 @@ async def test_options_credentials_cannot_bypass_site_ownership(
 
     provider_api.UserSites.return_value = _user_sites("site-alpha")
     recovered = await hass.config_entries.options.async_configure(
-        result["flow_id"], dict(_CREDENTIALS)
+        result["flow_id"], {**_CREDENTIALS, CONF_USERNAME: username}
     )
     await hass.async_block_till_done()
     assert recovered["type"] is FlowResultType.CREATE_ENTRY
