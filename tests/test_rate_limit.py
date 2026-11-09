@@ -630,7 +630,8 @@ async def test_silent_login_authentication_failure_preserves_saved_state(
     ):
         await settings._try_renew_token()
 
-    assert raised.value.__cause__ is renewal_error
+    assert raised.value.__cause__ is None
+    assert "expired" not in str(raised.value)
     assert dict(rate_entry.data) == original_data
     assert dict(rate_entry.options) == original_options
     assert not settings._auth_lock.locked()
@@ -647,13 +648,14 @@ async def test_unexpected_silent_login_failure_remains_temporary(
     rate_api: MagicMock,
     settings: FrankEnergieSettingsCoordinator,
     failure_source: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Keep unexpected login errors retryable and release the shared auth lock."""
+    """Keep unexpected login errors retryable without exposing provider details."""
     hass.config_entries.async_update_entry(rate_entry, options=USER_INPUT)
     original_data = dict(rate_entry.data)
     original_options = dict(rate_entry.options)
     rate_api.renew_token.side_effect = AuthException("expired")
-    unexpected_error = RuntimeError("temporary login failure")
+    unexpected_error = RuntimeError("fictitious-private-account-secret")
     if failure_source == "login":
         rate_api.login.side_effect = unexpected_error
     with (
@@ -666,7 +668,9 @@ async def test_unexpected_silent_login_failure_remains_temporary(
     ):
         await settings._try_renew_token()
 
-    assert raised.value.__cause__ is unexpected_error
+    assert raised.value.__cause__ is None
+    assert "fictitious-private-account-secret" not in str(raised.value)
+    assert "fictitious-private-account-secret" not in caplog.text
     assert dict(rate_entry.data) == original_data
     assert dict(rate_entry.options) == original_options
     assert not settings._auth_lock.locked()
