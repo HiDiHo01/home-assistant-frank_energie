@@ -121,7 +121,9 @@ def test_smart_hvac_binary_sensor(mock_coordinator, mock_config_entry):
     assert sensor.available is False
     assert desc.device_class is None
 
-    mock_user = SimpleNamespace(smartHvac={"isActivated": True, "isAvailableOnSite": False})
+    mock_user = SimpleNamespace(
+        smartHvac={"isActivated": True, "isAvailableOnSite": False}
+    )
     mock_coordinator.data = {DATA_USER: mock_user}
     assert sensor.is_on is True
     assert sensor.available is True
