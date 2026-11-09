@@ -1191,6 +1191,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         else:
             user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
 
+    def _update_user_metadata(self, user_data: User | None) -> None:
+        """Update country and connection metadata from the user response."""
+        if not self._country_code and user_data:
+            country_code_raw = user_data.countryCode
+            if isinstance(country_code_raw, str) and country_code_raw:
+                country_code = country_code_raw.upper()
+                if country_code in SUPPORTED_COUNTRIES:
+                    self._country_code = country_code
+        if not self._connection_id:
+            self._connection_id = _extract_electricity_connection_id(user_data)
+            _LOGGER.debug("Electricity connection ID available: %s", self._connection_id is not None)
+
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
         if not self.api.is_authenticated:
@@ -1205,18 +1217,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             user_data = await self.api.user(self.site_reference)
             if user_data is not None:
                 await self._fetch_user_smart_hvac(user_data)
-            if not self._country_code and user_data:
-                country_code_raw = user_data.countryCode
-                if isinstance(country_code_raw, str) and country_code_raw:
-                    country_code = country_code_raw.upper()
-                    if country_code in SUPPORTED_COUNTRIES:
-                        self._country_code = country_code
-            if not self._connection_id:
-                self._connection_id = _extract_electricity_connection_id(user_data)
-                _LOGGER.debug(
-                    "Extracted electricity connection ID: %s", self._connection_id
-                )
-
+            self._update_user_metadata(user_data)
             return user_data
         except AuthRequiredException:
             raise ConfigEntryAuthFailed(
