@@ -1,6 +1,7 @@
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
-from datetime import datetime, date, timezone
+from datetime import UTC, datetime, date, timedelta
 from homeassistant.core import HomeAssistant
 from python_frank_energie.models import (
     MarketPrices,
@@ -19,8 +20,8 @@ from custom_components.frank_energie.coordinator import (
 )
 
 
-@pytest.fixture
-def mock_store():
+@pytest.fixture(name="mock_store")
+def _mock_store() -> Generator[MagicMock]:
     """Mock the Store helper."""
     with patch("custom_components.frank_energie.helpers.Store") as mock_store_class:
         store_instance = mock_store_class.return_value
@@ -131,7 +132,7 @@ async def test_resolution_state_serialization():
 async def test_resolution_state_serialization_from_date_types():
     """ContractPriceResolutionState serializes date/datetime fields to ISO strings and round-trips None."""
     change_request_date = date(2026, 7, 1)
-    upcoming_change_dt = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+    upcoming_change_dt = datetime(2026, 7, 1, 12, 0, 0, tzinfo=UTC)
 
     state = ContractPriceResolutionState(
         active_option="PT15M",
@@ -232,16 +233,51 @@ async def test_coordinator_load_cache(mock_store, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_unsupported_resolution_invalidates_hourly_cache(
-    mock_store, mock_config_entry
-):
-    """Test that an unsupported resolution option falls back to PT15M and invalidates 60-minute disk cache."""
+@pytest.mark.parametrize(
+    (
+        "configured_resolution",
+        "api_resolution",
+        "cached_resolution_minutes",
+        "expected_resolution",
+        "expected_loaded",
+    ),
+    [
+        ("INVALID_RESOLUTION", None, 60, "PT15M", False),
+        ("INVALID_RESOLUTION", None, 15, "PT15M", True),
+        ("INVALID_RESOLUTION", "PT60M", 60, "PT60M", True),
+        ("INVALID_RESOLUTION", "PT60M", 15, "PT60M", False),
+        ("PT15M", "PT60M", 60, "PT60M", True),
+        ("PT15M", "PT60M", 15, "PT60M", False),
+        ("PT60M", "PT15M", 15, "PT15M", True),
+        ("PT60M", "PT15M", 60, "PT15M", False),
+        ("INVALID_RESOLUTION", "pt60m", 60, "PT60M", True),
+        ("PT15M", "pT60m", 15, "PT60M", False),
+        ("PT60M", "pt15m", 15, "PT15M", True),
+        ("PT60M", "pT15m", 60, "PT15M", False),
+        ("PT60M", "UNSUPPORTED", 60, "PT60M", True),
+        ("PT60M", "UNSUPPORTED", 15, "PT60M", False),
+        ("INVALID_RESOLUTION", "UNSUPPORTED", 60, "PT15M", False),
+        ("INVALID_RESOLUTION", "UNSUPPORTED", 15, "PT15M", True),
+    ],
+)
+async def test_disk_cache_matches_effective_resolution(
+    mock_store: MagicMock,
+    mock_config_entry: MagicMock,
+    configured_resolution: str,
+    api_resolution: str | None,
+    cached_resolution_minutes: int,
+    expected_resolution: str,
+    expected_loaded: bool,
+) -> None:
+    """Retain matching disk caches and reject resolutions that queries will not use."""
     mock_config_entry.data = {}
-    mock_config_entry.options = {"resolution": "INVALID_RESOLUTION"}
+    mock_config_entry.options = {"resolution": configured_resolution}
+    cached_start = datetime(2026, 6, 26, 7, tzinfo=UTC)
+    cached_end = cached_start + timedelta(minutes=cached_resolution_minutes)
 
-    raw_hourly_price = {
-        "from": "2026-06-26T07:00:00+00:00",
-        "till": "2026-06-26T08:00:00+00:00",
+    raw_price = {
+        "from": cached_start.isoformat(),
+        "till": cached_end.isoformat(),
         "marketPrice": 0.15,
         "marketPriceTax": 0.03,
         "sourcingMarkupPrice": 0.01,
@@ -251,16 +287,18 @@ async def test_unsupported_resolution_invalidates_hourly_cache(
 
     cached_data = {
         "prices_today": {
-            "electricity": [raw_hourly_price],
+            "electricity": [raw_price],
             "gas": [],
             "energy_country": "NL",
             "energy_type": "electricity",
-            "electricity_resolution_minutes": 60,
+            "electricity_resolution_minutes": cached_resolution_minutes,
             "gas_resolution_minutes": 60,
         },
         "prices_tomorrow": None,
-        "contract_price_resolution_state": None,
-        "last_fetch_today": "2026-06-26T07:30:00+00:00",
+        "contract_price_resolution_state": (
+            {"activeOption": api_resolution} if api_resolution is not None else None
+        ),
+        "last_fetch_today": cached_start.isoformat(),
         "last_fetch_tomorrow": None,
     }
 
@@ -279,8 +317,17 @@ async def test_unsupported_resolution_invalidates_hourly_cache(
         hass, mock_config_entry, mock_api, settings_coordinator
     )
 
-    assert price_coordinator.resolution == "PT15M"
-
     loaded = await price_coordinator._async_setup()
-    assert loaded is False
-    assert price_coordinator._static_prices_today is None
+    mock_store.async_load.assert_awaited_once_with()
+    assert price_coordinator.resolution == expected_resolution
+    assert loaded is expected_loaded
+    if expected_loaded:
+        assert price_coordinator._static_prices_today is not None
+        assert (
+            price_coordinator._static_prices_today.electricity.resolution_minutes
+            == cached_resolution_minutes
+        )
+        assert price_coordinator.last_fetch_today == cached_start
+    else:
+        assert price_coordinator._static_prices_today is None
+        assert price_coordinator.last_fetch_today is None

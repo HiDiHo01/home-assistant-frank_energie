@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
-from enum import Enum
 from math import isfinite
 from typing import Callable
 from zoneinfo import ZoneInfo
@@ -28,10 +27,12 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DOMAIN,
     ICON,
     SERVICE_NAME_BATTERIES,
@@ -49,10 +50,6 @@ from .helpers import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class UserFeatureKey(str, Enum):
-    SMART_HVAC = "smartHvac"
 
 
 @dataclass(slots=True, frozen=True)
@@ -121,6 +118,14 @@ def _extract_activation_state(
             ),
         )
     )
+
+
+def _smart_feed_in_state(data: FrankEnergieData) -> bool | None:
+    """Distinguish a confirmed missing contract from an unsuccessful API fetch."""
+    status = data.get(DATA_USER_SMART_FEED_IN)
+    if status is None:
+        return False if data.get(DATA_USER_SMART_FEED_IN_FETCHED) is True else None
+    return _extract_activation_state(status)
 
 
 def _user_feature_state(
@@ -216,24 +221,46 @@ def _user_feature_attributes(
 
 
 def _smart_hvac_state(data: FrankEnergieData) -> bool | None:
-    """Return smart HVAC active state."""
-    return _user_feature_state(data, UserFeatureKey.SMART_HVAC)
+    """Return only the strictly typed UserSmartHvac activation state."""
+    user = data.get(DATA_USER)
+    feature = getattr(user, "smartHvac", None)
+    if feature is None:
+        return None
+
+    activated = (
+        feature.get("isActivated")
+        if isinstance(feature, dict)
+        else getattr(feature, "isActivated", None)
+    )
+    return activated if isinstance(activated, bool) else None
 
 
 def _smart_hvac_available(data: FrankEnergieData) -> bool:
-    """Return smart HVAC availability."""
-    user = data.get(DATA_USER)
-    if user is None:
-        return False
+    """Return whether a known Smart HVAC activation value is available."""
+    return _smart_hvac_state(data) is not None
 
+
+def _smart_hvac_attributes(data: FrankEnergieData) -> dict[str, object]:
+    """Expose only non-identifying feature capability flags."""
+    user = data.get(DATA_USER)
     feature = getattr(user, "smartHvac", None)
     if feature is None:
-        return False
+        return {}
 
     if isinstance(feature, dict):
-        return feature.get("isActivated") is not None
+        flags = {
+            "available_in_country": feature.get("isAvailableInCountry"),
+            "available_on_site": feature.get("isAvailableOnSite"),
+            "has_accepted_terms": feature.get("hasAcceptedTerms"),
+        }
+    else:
+        flags = {
+            "available_in_country": getattr(feature, "isAvailableInCountry", None),
+            "available_on_site": getattr(feature, "is_available_on_site", None),
+            "has_accepted_terms": getattr(feature, "has_accepted_terms", None),
+        }
 
-    return getattr(feature, "isActivated", None) is not None
+    return {key: value for key, value in flags.items() if isinstance(value, bool)}
 
 
 def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
@@ -534,7 +561,7 @@ class FrankEnergieBinarySensor(
         if available_fn is None:
             return super().available
 
-        return available_fn(
+        return super().available and available_fn(
             self.coordinator.data,
         )
 
@@ -608,9 +635,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: _extract_activation_state(
-            data.get(DATA_USER_SMART_FEED_IN),
-        ),
+        value_fn=_smart_feed_in_state,
         attr_fn=lambda data: _extract_activation_attributes(
             data.get(DATA_USER_SMART_FEED_IN),
         ),
@@ -624,9 +649,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         service_name=SERVICE_NAME_USER,
         value_fn=_smart_hvac_state,
         available_fn=_smart_hvac_available,
-        attr_fn=_user_feature_attributes(
-            "smartHvac",
-        ),
+        attr_fn=_smart_hvac_attributes,
     ),
     FrankEnergieBinarySensorDescription(
         key="disabled_haptic_feedback",
@@ -731,7 +754,7 @@ def _sync_price_contract_entities(
 ) -> bool:
     """Sync price-entity registry state and return electricity support."""
     contracts = (
-        known_site_contracts(settings_coordinator.data.get(DATA_USER))
+        known_site_contracts(settings_coordinator.data.get(DATA_DELIVERY_SITE))
         if settings_coordinator.api.is_authenticated
         else None
     )
