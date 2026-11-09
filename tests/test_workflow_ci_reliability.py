@@ -184,6 +184,7 @@ def test_ci_reuses_existing_matrix_for_upstream_main() -> None:
     assert "python-frank-energie.git@main" in str(upstream_install["run"])
     assert not (WORKFLOWS / "test-pr349-python-frank-energie-main.yml").exists()
 
+
 def test_homeassistant_test_dependencies_match_the_official_plugin() -> None:
     """Ensure Core and the official test plugin share the same locked version."""
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))

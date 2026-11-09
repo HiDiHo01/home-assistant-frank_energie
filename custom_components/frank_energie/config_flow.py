@@ -95,7 +95,9 @@ async def _async_account_matches_entry(
             auth_token=auth.authToken,
             refresh_token=auth.refreshToken,
         ) as api:
-            user_sites = await api.UserSites()
+            user_sites = await get_rate_limit_state(hass, entry).async_call(
+                "UserSites", api.UserSites
+            )
     except AuthRequiredException as err:
         raise AuthException("Site verification requires valid credentials") from err
     except (ClientError, NetworkError, TimeoutError) as err:
@@ -152,6 +154,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         self._reauth_entry: Optional[ConfigEntry] = None
         self.sign_in_data: dict[str, Any] = {}
         self._rate_limits = RateLimitState()
+        self._legacy_default_site_reference: str | None = None
 
     def _get_rate_limits(self) -> RateLimitState:
         """Share an existing entry's cooldowns during reauth and reconfigure."""
@@ -214,7 +217,15 @@ class ConfigFlow(config_entries.ConfigFlow):
             entry.unique_id == username
             and (
                 entry.data.get(CONF_SITE) == site_reference
-                or (single_site and not entry.data.get(CONF_SITE))
+                or entry.options.get(CONF_SITE) == site_reference
+                or (
+                    not entry.data.get(CONF_SITE)
+                    and not entry.options.get(CONF_SITE)
+                    and (
+                        single_site
+                        or self._legacy_default_site_reference == site_reference
+                    )
+                )
             )
             for entry in self._async_current_entries()
         )
@@ -361,6 +372,9 @@ class ConfigFlow(config_entries.ConfigFlow):
                 first_site = suitable_sites[
                     0
                 ]  # We know suitable_sites is not empty at this point
+                # Legacy username-keyed entries implicitly used the first selected site.
+                # Keep that identity when the site picker exposes multiple sites.
+                self._legacy_default_site_reference = first_site.reference
 
                 if number_of_sites == 1:
                     # for backward compatibility (do nothing)

@@ -144,8 +144,8 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, object]:
     """Return diagnostics for a config entry."""
 
-    runtime_data: FrankEnergieEntryData = entry.runtime_data
-    coordinator = runtime_data.coordinator
+    runtime_data: FrankEnergieEntryData | None = getattr(entry, "runtime_data", None)
+    coordinator = getattr(runtime_data, "coordinator", None)
 
     diagnostics: dict[str, object] = {
         "entry": {
@@ -154,6 +154,12 @@ async def async_get_config_entry_diagnostics(
             "options": dict(entry.options),
             "data": dict(entry.data),
         },
+    }
+    if coordinator is None:
+        diagnostics["setup_pending"] = True
+        return async_redact_data(diagnostics, TO_REDACT)
+
+    diagnostics.update({
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "update_interval": str(coordinator.update_interval),
@@ -187,6 +193,6 @@ async def async_get_config_entry_diagnostics(
         "battery_session_coordinators": len(
             runtime_data.battery_session_coordinators,
         ),
-    }
+    })
 
     return async_redact_data(diagnostics, TO_REDACT)

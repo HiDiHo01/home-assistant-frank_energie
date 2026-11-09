@@ -20,7 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
     AuthException,
@@ -1119,6 +1119,9 @@ async def test_rate_limited_price_source_keeps_successful_sibling(
     coordinator = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
     public = MagicMock(spec=MarketPrices)
     user = MagicMock(spec=MarketPrices)
+    for prices in (public, user):
+        prices.electricity = SimpleNamespace(all=[1])
+        prices.gas = SimpleNamespace(all=[])
     public_result = AsyncMock(return_value=public)
     user_result = AsyncMock(return_value=user)
     if throttled_source == "public":
@@ -1137,6 +1140,36 @@ async def test_rate_limited_price_source_keeps_successful_sibling(
         )
 
     assert actual == expected
+    public_result.assert_awaited_once()
+    user_result.assert_awaited_once()
+
+
+async def test_empty_sibling_preserves_rate_limit_retry_hint(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+) -> None:
+    """An empty public response cannot hide a throttled authenticated source."""
+    coordinator = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
+    empty = MarketPrices(
+        electricity=PriceData([], "electricity"),
+        gas=PriceData([], "gas"),
+        energy_country="NL",
+    )
+    public_result = AsyncMock(return_value=empty)
+    user_result = AsyncMock(
+        side_effect=RateLimitException("UserPrices", retry_after=120)
+    )
+    with (
+        patch.object(coordinator, "_fetch_public_prices_for_range", public_result),
+        patch.object(coordinator, "_fetch_user_prices_for_range", user_result),
+    ):
+        with pytest.raises(RateLimitException) as raised:
+            await coordinator._fetch_price_sources(
+                date(2026, 10, 28), date(2026, 10, 29), "NL"
+            )
+    assert raised.value.retry_after == 120
     public_result.assert_awaited_once()
     user_result.assert_awaited_once()
 
@@ -1213,6 +1246,25 @@ def test_monthly_cost_reading_date_survives_missing_invoice(
         DATA_INVOICES: None,
     }
     assert description.attr_fn(data) == {"Last update": "2026-10-28"}
+
+
+def test_multisite_legacy_default_site_is_not_duplicated(
+    hass: HomeAssistant,
+) -> None:
+    """The first site belonging to a legacy account cannot be selected twice."""
+    legacy_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Legacy account",
+        unique_id=USER_INPUT[CONF_USERNAME],
+        data={},
+    )
+    legacy_entry.add_to_hass(hass)
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow.sign_in_data = {CONF_USERNAME: USER_INPUT[CONF_USERNAME]}
+    flow._legacy_default_site_reference = "site-1"
+    assert flow._legacy_site_already_configured("site-1")
+    assert not flow._legacy_site_already_configured("site-2")
 
 
 def test_multisite_legacy_id_only_blocks_matching_site(hass: HomeAssistant) -> None:

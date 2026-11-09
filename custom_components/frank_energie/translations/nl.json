@@ -72,9 +72,6 @@
     }
   },
   "options": {
-    "error": {
-      "rate_limited": "Frank Energie ontvangt te veel verzoeken. Wacht even en probeer het later opnieuw."
-    },
     "step": {
       "user": {
         "title": "Inloggen bij Frank Energie",
@@ -92,6 +89,7 @@
       }
     },
     "error": {
+      "rate_limited": "Frank Energie ontvangt te veel verzoeken. Wacht even en probeer het later opnieuw.",
       "connection_error": "Verbindingsfout met Frank Energie API.",
       "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
       "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
@@ -900,6 +898,9 @@
       }
     },
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Elektriciteitsprijzen morgen beschikbaar"
+      },
       "smartcharging_isactivated": {
         "name": "Slim laden",
         "state_attributes": {

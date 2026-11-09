@@ -296,3 +296,21 @@ async def test_diagnostics_coordinator_metadata() -> None:
         "update_interval": "1:00:00",
         "has_cached_invoices": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_during_setup_retry_redacts_entry() -> None:
+    """A throttled setup may expose only redacted entry data, without coordinators."""
+    entry = MagicMock()
+    entry.entry_id = "synthetic-entry"
+    entry.title = "Private customer"
+    entry.options = {"username": "private@example.invalid"}
+    entry.data = {"access_token": "sample-secret"}
+    entry.runtime_data = SimpleNamespace(rate_limits=MagicMock())
+
+    report = await async_get_config_entry_diagnostics(MagicMock(), entry)
+
+    assert report["setup_pending"] is True
+    assert "coordinator" not in report
+    assert report["entry"]["data"]["access_token"] == "**REDACTED**"
+    assert report["entry"]["options"]["username"] == "**REDACTED**"

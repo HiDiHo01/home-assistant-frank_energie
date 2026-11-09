@@ -24,6 +24,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -2022,6 +2023,31 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             "serial_number": serial_number,
         }
 
+    async def _fetch_public_prices_unauthenticated(
+        self, start_date: date, end_date: date, country_code: str
+    ) -> MarketPrices | None:
+        """Recover public prices without triggering token renewal.
+
+        An authenticated client's implicit renewal may be rate-limited while
+        the provider's public price endpoints remain accessible.
+        """
+        async with FrankEnergie(
+            clientsession=async_get_clientsession(self.hass)
+        ) as public_api:
+            if COUNTRY_USES_SIMPLE_MARKET_PRICES.get(country_code, False):
+                return await self.rate_limits.async_call(
+                    "country_prices",
+                    lambda: public_api.country_prices(
+                        country_code, start_date, end_date, self.resolution
+                    ),
+                    authenticated=False,
+                )
+            return await self.rate_limits.async_call(
+                "prices",
+                lambda: public_api.prices(start_date, resolution=self.resolution),
+                authenticated=False,
+            )
+
     async def _fetch_public_prices_for_range(
         self, start_date: date, end_date: date, country_code: str
     ) -> MarketPrices | None:
@@ -2050,6 +2076,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 resolution=self.resolution,
             )
 
+        except RateLimitException as err:
+            if err.operation_name != FrankEnergie.RENEW_TOKEN_OPERATIONNAME:
+                raise
+            return await self._fetch_public_prices_unauthenticated(
+                start_date, end_date, country_code
+            )
         except RequestException as ex:
             if not _is_no_market_prices_error(ex):
                 raise
@@ -2129,6 +2161,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except RateLimitException as error:
             return None, error
 
+    @staticmethod
+    def _has_price_entries(prices: MarketPrices | None) -> bool:
+        """Reject empty market responses, even when the wrapper exists."""
+        return bool(
+            prices is not None
+            and (
+                (prices.electricity and prices.electricity.all)
+                or (prices.gas and prices.gas.all)
+            )
+        )
+
     async def _fetch_price_sources(
         self, start_date: date, end_date: date, country_code: str
     ) -> tuple[MarketPrices | None, MarketPrices | None]:
@@ -2143,7 +2186,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
         public_prices, public_error = public_result
         user_prices, user_error = user_result
-        if public_prices is None and user_prices is None:
+        if not self._has_price_entries(public_prices) and not self._has_price_entries(
+            user_prices
+        ):
             if rate_limit_error := public_error or user_error:
                 raise rate_limit_error
         return public_prices, user_prices
@@ -2331,24 +2376,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 return
             except RateLimitException:
                 raise
-            except (AuthException, FrankEnergieException) as login_ex:
+            except (AuthException, FrankEnergieException):
                 _LOGGER.warning(
-                    "Silent re-login failed with API/Auth error: %s. Proceeding to reauth flow",
-                    login_ex,
+                    "Silent re-login failed with API/Auth error; starting reauthentication"
                 )
             except Exception as login_ex:
-                _LOGGER.exception(
-                    "Unexpected error during silent re-login: %s. Retrying later.",
-                    login_ex,
+                _LOGGER.warning(
+                    "Unexpected silent re-login failure (%s); retrying later",
+                    type(login_ex).__name__,
                 )
                 raise UpdateFailed(
-                    f"Unexpected error during silent re-login: {login_ex}"
-                ) from login_ex
+                    "Unexpected silent re-login failure; retry later"
+                ) from None
 
-        _LOGGER.exception(
-            "Failed to renew token: %s. Starting user reauth flow", renewal_error
-        )
-        raise ConfigEntryAuthFailed from renewal_error
+        _LOGGER.warning("Token renewal failed; starting reauthentication")
+        raise ConfigEntryAuthFailed("Authentication has expired") from None
 
     async def _fetch_authenticated[T](
         self,
