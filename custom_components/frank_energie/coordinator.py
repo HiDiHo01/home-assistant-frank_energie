@@ -3064,9 +3064,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         """Drop cached price data only when its effective resolution changed."""
         if self._is_cache_resolution_valid():
             return
-        _LOGGER.debug(
-            "Invalidating cached prices after an effective resolution change"
-        )
+        _LOGGER.debug("Invalidating cached prices after an effective resolution change")
         self._static_prices_today = None
         self.last_fetch_today = None
         self.cached_prices_tomorrow = None
