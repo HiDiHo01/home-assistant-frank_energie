@@ -3060,6 +3060,18 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             raise rate_limit_update_failed(error, self.update_interval) from error
         raise UpdateFailed(f"Failed to fetch today prices: {error}") from error
 
+    def _invalidate_cache_on_resolution_change(self) -> None:
+        """Drop cached price data only when its effective resolution changed."""
+        if self._is_cache_resolution_valid():
+            return
+        _LOGGER.debug(
+            "Invalidating cached prices after an effective resolution change"
+        )
+        self._static_prices_today = None
+        self.last_fetch_today = None
+        self.cached_prices_tomorrow = None
+        self.last_fetch_tomorrow = None
+
     async def _get_today_prices(
         self,
         today: date,
@@ -3148,14 +3160,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             self._static_contract_price_resolution_state = (
                 data_contract_price_resolution_state
             )
-            if not self._is_cache_resolution_valid():
-                _LOGGER.debug(
-                    "Invalidating cached prices after an effective resolution change"
-                )
-                self._static_prices_today = None
-                self.last_fetch_today = None
-                self.cached_prices_tomorrow = None
-                self.last_fetch_tomorrow = None
+            self._invalidate_cache_on_resolution_change()
 
             prices_today = await self._get_today_prices(
                 today, tomorrow, now_utc, required_contracts
