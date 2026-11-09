@@ -2,7 +2,9 @@
 
 The existing `smart_hvac` binary sensor is a **service activation** indicator.
 It does not report whether a heat pump is heating, cooling, running, or currently
-being steered. Do not use `BinarySensorDeviceClass.RUNNING` for this state.
+being steered. The sensor intentionally uses `BinarySensorDeviceClass.RUNNING`
+so Home Assistant can display the requested active/inactive labels. This is a
+presentation choice only: `RUNNING` must not be interpreted as device telemetry.
 
 ## Data flow
 
