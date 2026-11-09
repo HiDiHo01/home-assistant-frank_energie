@@ -26,6 +26,8 @@ TO_REDACT: set[str] = {
     CONF_PASSWORD,
     "authToken",
     "refreshToken",
+    "auth_token",
+    "accessToken",
     "access_token",
     "refresh_token",
     "password",
@@ -33,6 +35,13 @@ TO_REDACT: set[str] = {
     "email",
     "phone",
     "address",
+    "street",
+    "houseNumber",
+    "houseNumberAddition",
+    "zipCode",
+    "city",
+    "latitude",
+    "longitude",
     "customer_id",
     "customerId",
     "account_id",
@@ -76,6 +85,8 @@ TO_REDACT: set[str] = {
     "deviceId",
     "installation_id",
     "installationId",
+    "vin",
+    "inverter_serial_numbers",
 }
 
 

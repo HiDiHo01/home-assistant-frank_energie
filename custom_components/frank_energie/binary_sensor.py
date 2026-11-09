@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from datetime import UTC, datetime, time, timedelta
+from math import isfinite
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -25,22 +27,29 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_DELIVERY_SITE,
+    DATA_ELECTRICITY,
     DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DOMAIN,
+    ICON,
     SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_PRICES,
     SERVICE_NAME_USER,
+    TIMEZONE_AMSTERDAM,
     VERSION,
 )
 from .coordinator import FrankEnergieCoordinator, FrankEnergieData
-from .helpers import device_translation_key
+from .helpers import (
+    async_sync_contract_entities,
+    device_translation_key,
+    known_site_contracts,
+    service_device_info,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class UserFeatureKey(str, Enum):
-    SMART_HVAC = "smartHvac"
 
 
 @dataclass(slots=True, frozen=True)
@@ -109,6 +118,14 @@ def _extract_activation_state(
             ),
         )
     )
+
+
+def _smart_feed_in_state(data: FrankEnergieData) -> bool | None:
+    """Distinguish a confirmed missing contract from an unsuccessful API fetch."""
+    status = data.get(DATA_USER_SMART_FEED_IN)
+    if status is None:
+        return False if data.get(DATA_USER_SMART_FEED_IN_FETCHED) is True else None
+    return _extract_activation_state(status)
 
 
 def _user_feature_state(
@@ -204,24 +221,86 @@ def _user_feature_attributes(
 
 
 def _smart_hvac_state(data: FrankEnergieData) -> bool | None:
-    """Return smart HVAC active state."""
-    return _user_feature_state(data, UserFeatureKey.SMART_HVAC)
+    """Return only the strictly typed UserSmartHvac activation state."""
+    user = data.get(DATA_USER)
+    feature = getattr(user, "smartHvac", None)
+    if feature is None:
+        return None
+
+    activated = (
+        feature.get("isActivated")
+        if isinstance(feature, dict)
+        else getattr(feature, "isActivated", None)
+    )
+    return activated if isinstance(activated, bool) else None
 
 
 def _smart_hvac_available(data: FrankEnergieData) -> bool:
-    """Return smart HVAC availability."""
-    user = data.get(DATA_USER)
-    if user is None:
-        return False
+    """Return whether a known Smart HVAC activation value is available."""
+    return _smart_hvac_state(data) is not None
 
+
+def _smart_hvac_attributes(data: FrankEnergieData) -> dict[str, object]:
+    """Expose only non-identifying feature capability flags."""
+    user = data.get(DATA_USER)
     feature = getattr(user, "smartHvac", None)
     if feature is None:
-        return False
+        return {}
 
     if isinstance(feature, dict):
-        return feature.get("isActivated") is not None
+        flags = {
+            "available_in_country": feature.get("isAvailableInCountry"),
+            "available_on_site": feature.get("isAvailableOnSite"),
+            "has_accepted_terms": feature.get("hasAcceptedTerms"),
+        }
+    else:
+        flags = {
+            "available_in_country": getattr(feature, "isAvailableInCountry", None),
+            "available_on_site": getattr(feature, "is_available_on_site", None),
+            "has_accepted_terms": getattr(feature, "has_accepted_terms", None),
+        }
 
-    return getattr(feature, "isActivated", None) is not None
+    return {key: value for key, value in flags.items() if isinstance(value, bool)}
+
+
+def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
+    """Compare the active all-in price with today's Amsterdam-local minimum."""
+    electricity = data.get(DATA_ELECTRICITY)
+    if electricity is None:
+        return None
+
+    now_utc = datetime.now(UTC)
+    today_prices = electricity.today
+    local_timezone = ZoneInfo(TIMEZONE_AMSTERDAM)
+    local_date = now_utc.astimezone(local_timezone).date()
+    local_start = datetime.combine(local_date, time.min, local_timezone)
+    local_end = datetime.combine(
+        local_date + timedelta(days=1), time.min, local_timezone
+    )
+    start_utc = local_start.astimezone(UTC)
+    end_utc = local_end.astimezone(UTC)
+
+    # The merged series can include a different contract resolution for tomorrow.
+    for price in sorted(today_prices, key=lambda item: item.date_from.astimezone(UTC)):
+        price_start = price.date_from.astimezone(UTC)
+        price_end = price.date_till.astimezone(UTC)
+        if price_start != start_utc or price_end <= price_start or price_end > end_utc:
+            return None
+        start_utc = price_end
+    if start_utc != end_utc:
+        return None
+
+    current_price = next(
+        (price for price in today_prices if price.contains_time(now_utc)), None
+    )
+    if current_price is None:
+        return None
+
+    totals = [price.total for price in today_prices]
+    if not all(isfinite(total) for total in totals):
+        return None
+
+    return current_price.total == min(totals)
 
 
 def _disabled_haptic_feedback(
@@ -452,6 +531,10 @@ class FrankEnergieBinarySensor(
                 model=SERVICE_NAME_BATTERIES,
                 configuration_url=API_CONF_URL,
             )
+        elif description.service_name == SERVICE_NAME_PRICES:
+            self._attr_device_info = service_device_info(
+                config_entry.entry_id, SERVICE_NAME_PRICES
+            )
         else:
             self._attr_device_info = DeviceInfo(
                 identifiers={
@@ -478,7 +561,7 @@ class FrankEnergieBinarySensor(
         if available_fn is None:
             return super().available
 
-        return available_fn(
+        return super().available and available_fn(
             self.coordinator.data,
         )
 
@@ -552,9 +635,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: _extract_activation_state(
-            data.get(DATA_USER_SMART_FEED_IN),
-        ),
+        value_fn=_smart_feed_in_state,
         attr_fn=lambda data: _extract_activation_attributes(
             data.get(DATA_USER_SMART_FEED_IN),
         ),
@@ -568,9 +649,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         service_name=SERVICE_NAME_USER,
         value_fn=_smart_hvac_state,
         available_fn=_smart_hvac_available,
-        attr_fn=_user_feature_attributes(
-            "smartHvac",
-        ),
+        attr_fn=_smart_hvac_attributes,
     ),
     FrankEnergieBinarySensorDescription(
         key="disabled_haptic_feedback",
@@ -620,6 +699,13 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
             else False
         ),
     ),
+    FrankEnergieBinarySensorDescription(
+        key="electricity_price_lowest_today",
+        translation_key="electricity_price_lowest_today",
+        icon=ICON,
+        service_name=SERVICE_NAME_PRICES,
+        value_fn=_electricity_price_lowest_today,
+    ),
 )
 
 
@@ -661,6 +747,38 @@ def _build_battery_descriptions(
     return descriptions
 
 
+def _sync_price_contract_entities(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    settings_coordinator: FrankEnergieCoordinator,
+) -> bool:
+    """Sync price-entity registry state and return electricity support."""
+    contracts = (
+        known_site_contracts(settings_coordinator.data.get(DATA_DELIVERY_SITE))
+        if settings_coordinator.api.is_authenticated
+        else None
+    )
+    electricity_supported = contracts is None or "ELECTRICITY" in contracts
+    if contracts is not None or not settings_coordinator.api.is_authenticated:
+        async_sync_contract_entities(
+            hass,
+            config_entry,
+            "binary_sensor",
+            {
+                f"{config_entry.unique_id}_{description.key}": electricity_supported
+                for description in BINARY_SENSOR_DESCRIPTIONS
+                if description.service_name == SERVICE_NAME_PRICES
+            },
+            enabled_by_default={
+                f"{config_entry.unique_id}_{description.key}"
+                for description in BINARY_SENSOR_DESCRIPTIONS
+                if description.service_name == SERVICE_NAME_PRICES
+                and description.entity_registry_enabled_default
+            },
+        )
+    return electricity_supported
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -670,18 +788,25 @@ async def async_setup_entry(
 
     runtime_data = config_entry.runtime_data
     settings_coordinator = runtime_data.settings_coordinator
+    price_coordinator = runtime_data.price_coordinator
     pv_coordinator = runtime_data.pv_coordinator
     battery_coordinator = runtime_data.battery_coordinator
 
     entities: list[FrankEnergieBinarySensor] = []
-
+    electricity_supported = _sync_price_contract_entities(
+        hass, config_entry, settings_coordinator
+    )
     for description in BINARY_SENSOR_DESCRIPTIONS:
-        if description.key in ("smart_feed_in", "smart_pv_systems"):
+        if description.service_name == SERVICE_NAME_PRICES:
+            if not electricity_supported:
+                continue
+            coord = price_coordinator
+        elif description.key in ("smart_feed_in", "smart_pv_systems"):
             coord = pv_coordinator
         else:
             coord = settings_coordinator
 
-        if coord.api.is_authenticated:
+        if not description.authenticated or coord.api.is_authenticated:
             entities.append(
                 FrankEnergieBinarySensor(
                     coord,

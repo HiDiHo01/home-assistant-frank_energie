@@ -40,6 +40,20 @@ Electricity price entities provide information such as:
 - Cheapest consecutive price periods
 - Price statistics
 
+The **Electricity price is lowest today** binary sensor is enabled by default
+under the electricity prices device, with or without authentication. It is `on`
+when the current all-in electricity price equals the lowest all-in price for the
+current calendar day in `Europe/Amsterdam`, and `off` during other price periods.
+Every period tied for the minimum switches it on, including zero or negative
+prices. It follows the available hourly or quarter-hourly intervals without
+rounding prices or making additional API requests.
+
+Today's intervals must cover the whole local day without gaps or overlaps.
+Changing between hourly and quarter-hourly prices tomorrow does not affect
+today's comparison. The state is `unknown` if today's coverage is incomplete or
+invalid, the active interval is missing, or any of today's prices is non-finite.
+A failed price coordinator makes the entity `unavailable`.
+
 Depending on the market configuration, electricity prices may be available as:
 
 - Hourly prices (24 prices per day)
@@ -67,6 +81,11 @@ Contract entities may include:
 - Contract type
 - Delivery address
 - Site information
+
+The **Segments** sensor (NL/NL-BE **Segmenten**) shows the energy types for the
+configured delivery site. Its state is `ELECTRICITY`, `GAS`, or
+`ELECTRICITY, GAS`. It is unavailable when the API has no usable segments for
+that site.
 
 ### Consumption Entities
 
@@ -96,6 +115,27 @@ Invoice entities may include:
 - Billing periods
 - Historical invoices
 - Annual summaries
+
+## Smart heating entity
+
+The authenticated User-service binary sensor **Smart heating** (NL/NL-BE:
+**Slim verwarmen**) retains the `smart_hvac` entity key. Its Boolean
+`isActivated` value reflects **service activation**, not whether a
+heat pump is currently heating.
+
+| Provider result | Binary sensor | Meaning |
+| --- | --- | --- |
+| `isActivated = true` | `on` | Service activated |
+| `isActivated = false` | `off` | Service not activated |
+| Missing or invalid activation value | `unavailable` | Unknown activation |
+
+The `RUNNING` device class is used only for localized active/inactive
+presentation. The `available_on_site` attribute shows whether the
+provider makes this feature available for the configured delivery site:
+it is not the entity's Home Assistant availability or the activation state.
+
+See [Smart heating activation](smart_hvac_activation.md) for details and
+the dependency-release prerequisite.
 
 ## Smart Charging Entities
 

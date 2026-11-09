@@ -17,6 +17,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -160,6 +161,8 @@ class ConfigFlow(config_entries.ConfigFlow):
         except ConnectionException:
             # Network/API issues
             return await self._handle_authentication_failure(reason="connection_error")
+        except AbortFlow:
+            raise
         except Exception as ex:
             # Catch-all for unexpected errors
             _LOGGER.exception(
@@ -310,8 +313,8 @@ class ConfigFlow(config_entries.ConfigFlow):
                     # for backward compatibility (do nothing)
                     # Check if entry with CONF_USERNAME exists, then abort
                     # if CONF_USERNAME in user_input:
-                    if user_input and CONF_USERNAME in user_input:
-                        await self.async_set_unique_id(user_input[CONF_USERNAME])
+                    if CONF_USERNAME in self.sign_in_data:
+                        await self.async_set_unique_id(self.sign_in_data[CONF_USERNAME])
                         self._abort_if_unique_id_configured()
 
                     # Create entry with unique_id as user_sites.deliverySites[0].reference
@@ -381,6 +384,8 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data_schema=self._site_error_schema(),
                 errors=errors,
             )
+        except AbortFlow:
+            raise
         except Exception as err:
             _LOGGER.exception("Failed to retrieve delivery sites: %s", err)
             errors = {"base": "site_retrieval_failed"}

@@ -481,7 +481,7 @@ def test_price_cache_respects_active_contract_segments(
         gas=make_prices("gas", cached_gas),
         energy_country="NL",
     )
-    assert prices._cached_today_prices_cover_time(now_utc) is expected
+    assert prices._cached_prices_active(prices._static_prices_today, now_utc) is expected
 
 
 def test_price_cache_rejects_expired_interval_after_midnight(
@@ -509,7 +509,7 @@ def test_price_cache_rejects_expired_interval_after_midnight(
     )
     # Amsterdam has switched to CET: 23:05 UTC is 00:05 local.
     now_utc = datetime(2026, 10, 28, 23, 5, tzinfo=UTC)
-    assert not prices._cached_today_prices_cover_time(now_utc)
+    assert not prices._cached_prices_active(prices._static_prices_today, now_utc)
 
 
 async def test_renewal_throttle_does_not_reauthenticate(
@@ -1032,6 +1032,46 @@ async def test_site_form_keeps_typed_error_and_recovers(
     assert not result.get("errors")
     assert api.UserSites.await_count == 2
 
+
+
+async def test_site_retry_aborts_on_legacy_username_duplicate(
+    hass: HomeAssistant,
+    mock_auth_success: MagicMock,
+    mock_setup_entry: MagicMock,
+    enable_custom_integrations: None,
+    clock: MagicMock,
+) -> None:
+    """A successful retry must not create a duplicate of a username-keyed entry."""
+    legacy_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Existing legacy account",
+        unique_id=USER_INPUT[CONF_USERNAME],
+        data={},
+    )
+    legacy_entry.add_to_hass(hass)
+
+    api = mock_auth_success.return_value
+    api.UserSites.side_effect = RateLimitException("UserSites", retry_after=120)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={"authentication": True}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input=USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "rate_limited"}
+
+    api.UserSites.side_effect = None
+    clock.return_value = 220.0
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert api.UserSites.await_count == 2
 
 async def test_site_helper_does_not_swallow_or_retry_rate_limits(
     hass: HomeAssistant, mock_auth_success: MagicMock

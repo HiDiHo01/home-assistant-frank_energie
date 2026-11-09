@@ -12,6 +12,7 @@ The following functionality is available without authentication:
 - Gas prices
 - Price statistics
 - Lowest price calculations
+- Binary sensor indicating whether the electricity price is today's lowest
 - Cheapest price windows
 - Tomorrow price availability detection
 - Frank Energie events
@@ -115,12 +116,23 @@ Features include:
 
 ## Smart HVAC
 
-Supported accounts may expose Smart HVAC information.
+Supported accounts may expose the authenticated **Smart heating** binary sensor
+(**Slim verwarmen** in Dutch, **Chauffage intelligent** in French). Its state
+reflects `UserSmartHvac.isActivated` for the selected delivery site:
 
-Features include:
+- `on`: the Smart HVAC **service** is activated.
+- `off`: the service is not activated.
+- `unavailable`: the activation value is missing/invalid or the settings
+  coordinator is unavailable.
 
-- Smart HVAC status
-- Heat pump optimization participation status
+The sensor uses the `RUNNING` device class for the requested localized
+active/inactive labels. **It does not mean the heat pump is currently running.**
+The separate `available_on_site` attribute indicates service eligibility,
+not activation. No device operating or steering status is exposed by this
+binary sensor.
+
+See [Smart heating activation](smart_hvac_activation.md) for the data path,
+compatibility requirement, and precise semantics.
 
 ## PV Systems
 

@@ -10,8 +10,9 @@ import logging
 from typing import TYPE_CHECKING, Final
 
 from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.storage import Store
 
@@ -28,7 +29,7 @@ from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from python_frank_energie.models import ChargeSettings
+    from python_frank_energie.models import ChargeSettings, DeliverySite
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +40,42 @@ PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
 }
 
 PRICE_CACHE_STORE_VERSION: Final[int] = 1
+
+
+def known_site_contracts(site: DeliverySite | None) -> set[str] | None:
+    """Return the selected site's supported contracts when metadata is usable."""
+    if site is None:
+        return None
+    return {kind for kind in ("ELECTRICITY", "GAS") if kind in site.segments} or None
+
+
+@callback
+def async_sync_contract_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    entity_domain: str,
+    supported_unique_ids: dict[str, bool],
+    *,
+    enabled_by_default: set[str] | None = None,
+) -> None:
+    """Update contract-owned registry disables without overriding user choices."""
+    registry = er.async_get(hass)
+    for registered in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if registered.platform != DOMAIN or registered.domain != entity_domain:
+            continue
+        supported = supported_unique_ids.get(registered.unique_id)
+        if supported is False and registered.disabled_by is None:
+            registry.async_update_entity(
+                registered.entity_id,
+                disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+            )
+        elif (
+            supported is True
+            and registered.disabled_by == er.RegistryEntryDisabler.INTEGRATION
+            and enabled_by_default is not None
+            and registered.unique_id in enabled_by_default
+        ):
+            registry.async_update_entity(registered.entity_id, disabled_by=None)
 
 
 def price_cache_store(hass: HomeAssistant, entry_id: str) -> Store:

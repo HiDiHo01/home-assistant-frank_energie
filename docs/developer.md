@@ -2,24 +2,53 @@
 
 This document provides information for contributors and developers working on the Frank Energie Home Assistant integration.
 
+## Home Assistant test environment
+
+Open the repository in GitHub Codespaces or use **Dev Containers: Reopen in Container** in VS Code. The committed container provides Python 3.14, Poetry 2.5.1, and the locked runtime and development dependencies in `.venv`. VS Code uses that interpreter and discovers the `tests` directory with pytest.
+
+For a host installation, use Python 3.14.2 or a newer 3.14 patch and run:
+
+```sh
+uv tool install "poetry==2.5.1"
+poetry env use python3.14
+poetry sync --with dev --no-root
+poetry check --lock
+poetry run python -m pip check
+```
+
+If Python 3.14 is missing, install it with your interpreter manager or use the dev container before running these commands. Keep this environment separate from a production Home Assistant installation.
+
+Run the complete suite against the real Home Assistant test framework:
+
+```sh
+poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
+```
+
+`pytest-homeassistant-custom-component` is a required pytest plugin. Its Home Assistant fixtures exercise setup, config flows, entities, coordinator behavior, and cleanup. The suite mocks provider calls and requires no production credentials. Isolated checks with substitute Home Assistant objects are useful for diagnosis, but do not count as a complete Home Assistant test run.
+
+The existing **Flake8 and pytest** workflow runs the full suite on Python 3.14.2 and the latest 3.14 patch. It also supports **Run workflow** once this workflow revision is on the default branch. Each matrix job uploads its own JUnit report, including when pytest fails. Critical Flake8 errors remain blocking. A separate full-Flake8 gate checks every diagnostic against the measured, reviewable `.github/flake8-baseline.json`: new or increased findings fail CI. The existing C901 and E501 debt must be reduced and removed from this baseline; the targeted E203 exclusion matches Ruff-compatible slice formatting. The full pytest suite still runs after a lint failure when dependency installation and environment verification succeed.
+
+`poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant-custom-component` version together, regenerate the lockfile with the pinned Poetry version, and rerun both matrix entries. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
+
 ## Rate-limit support: dependency release gate
 
 The rate-limit integration changes require the `RateLimitException` API from
 [python-frank-energie PR #206](https://github.com/HiDiHo01/python-frank-energie/pull/206).
 That API is not available in the currently published `2026.9.20` package.
-This companion change must remain a draft until the library fix is released.
+Do not merge this pull request until the library fix is released.
 Before merging, update `manifest.json`, `pyproject.toml`, and `poetry.lock` to
 the actual release containing the fix and rerun the full checks. The existing
 dependency declarations are intentionally unchanged while that version is
 unknown; a normal install of the draft cannot import the new exception yet.
 
-For review before the release, install the exact library commit used for local
-verification after installing the normal development dependencies:
+For compatibility testing before a release, use the current upstream `main`
+branch **only in a development environment** after installing the locked
+dependencies:
 
 ```sh
-poetry install
-poetry run pip install --no-deps --force-reinstall "python-frank-energie @ https://github.com/HiDiHo01/python-frank-energie/archive/38e2595c3ff87373d186fa7763b4d25320bf8f9e.tar.gz"
-poetry run pytest
+poetry sync --with dev --no-root
+poetry run python -m pip install --no-deps --force-reinstall "git+https://github.com/HiDiHo01/python-frank-energie.git@main"
+poetry run python -m pytest tests -ra
 ```
 
 This is a development override, not a production dependency declaration.
