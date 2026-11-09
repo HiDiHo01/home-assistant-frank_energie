@@ -3061,7 +3061,10 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         raise UpdateFailed(f"Failed to fetch today prices: {error}") from error
 
     async def _get_today_prices(
-        self, today: date, tomorrow: date, now_utc: datetime,
+        self,
+        today: date,
+        tomorrow: date,
+        now_utc: datetime,
         required_contracts: set[str],
     ) -> MarketPrices | None:
         """Fetch today's prices if necessary, preserving live cache on failures."""
