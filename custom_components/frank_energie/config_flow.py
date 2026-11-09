@@ -784,6 +784,27 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 pass
         return password_to_validate or ""
 
+    def _preserve_legacy_credentials(
+        self, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Keep data-only credentials usable after later token renewal."""
+        entry = self.config_entry
+        saved_username = entry.data.get(CONF_USERNAME)
+        if not options.get(CONF_USERNAME) and isinstance(saved_username, str):
+            if saved_username:
+                options[CONF_USERNAME] = saved_username
+
+        saved_password = entry.data.get(CONF_PASSWORD)
+        if not options.get(CONF_PASSWORD) and isinstance(saved_password, str):
+            if saved_password:
+                plaintext_password = decrypt_password(self.hass, saved_password)
+                options[CONF_PASSWORD] = (
+                    encrypt_password(self.hass, plaintext_password)
+                    if plaintext_password is not None
+                    else saved_password
+                )
+        return options
+
     def _build_options_and_log_changes(
         self, user_input: dict[str, Any], encrypted_password: str | None
     ) -> dict[str, Any]:
@@ -818,6 +839,8 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         if encrypted_password is not None:
             options[CONF_USERNAME] = user_input[CONF_USERNAME]
             options[CONF_PASSWORD] = encrypted_password
+        else:
+            options = self._preserve_legacy_credentials(options)
 
         defaults = {
             CONF_INTERVAL_SETTINGS: DEFAULT_INTERVAL_SETTINGS,
