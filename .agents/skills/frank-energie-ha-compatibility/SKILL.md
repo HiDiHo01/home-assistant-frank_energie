@@ -22,7 +22,7 @@ Do not apply obsolete guidance, Core-only `dev` tooling, or general dependency-b
 
 ## Verify
 
-Add focused tests that exercise the actual Home Assistant path and failure behavior. Choose relevant `tests/test_init.py`, `tests/test_config_flow.py`, `tests/test_coordinator.py`, and entity-platform tests as appropriate. Run the configured Python and Home Assistant CI matrix, lint/format, and HACS/hassfest checks where relevant. Report commands not executed.
+Add focused tests that exercise the actual Home Assistant path and failure behavior. Choose relevant `tests/test_init.py`, `tests/test_config_flow.py`, `tests/test_coordinator.py`, and entity-platform tests as appropriate. For Home Assistant `2026.11.0` and newer, use the stable official `pytest-homeassistant` plugin matching the Core version; replace former `pytest_homeassistant_custom_component` imports with `pytest_homeassistant`, allow plugin autodiscovery, and avoid installing both plugins. Run the configured Python and Home Assistant CI matrix, lint/format, and HACS/hassfest checks where relevant. Report commands not executed.
 
 ## Output
 
