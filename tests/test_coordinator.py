@@ -28,7 +28,7 @@ from custom_components.frank_energie.coordinator import (
     FrankEnergieStatisticsCoordinator,
 )
 from custom_components.frank_energie import FrankEnergieComponent
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import FrankEnergieException, RequestException
 from python_frank_energie.models import (

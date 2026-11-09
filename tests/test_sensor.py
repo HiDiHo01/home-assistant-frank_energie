@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.util import dt
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     async_fire_time_changed,
     MockConfigEntry,
 )
@@ -694,7 +694,7 @@ async def _parent_and_child_devices_after_add(
     """
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
     from homeassistant.helpers import device_registry as dr
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 
@@ -1166,7 +1166,7 @@ async def _register_sensor_and_get_state(
     the real SensorEntity validation (including ENUM ``options`` validation)
     rather than a hand-rolled stand-in for it."""
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 

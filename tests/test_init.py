@@ -25,7 +25,7 @@ from custom_components.frank_energie.helpers import encrypt_password
 from custom_components.frank_energie.helpers import (
     _get_fernet_key as real_get_fernet_key,
 )
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     MockEntity,
     MockEntityPlatform,
