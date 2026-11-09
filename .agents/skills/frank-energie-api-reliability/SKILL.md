@@ -20,6 +20,16 @@ Keep the API library responsible for GraphQL transport, authentication, parsing,
 5. Verify cache aging and response ordering; a fallback must not be labeled live/current, and an old request must not overwrite newer data.
 6. For price-related fixes, verify hourly/quarter-hour resolution, PT15M/PT60M effective dates, negative prices, UTC versus Amsterdam local dates, and DST days.
 
+## Smart Feed-In API outcome semantics
+
+`user_smart_feed_in()` returns `None` after a **successful** GraphQL
+`userSmartFeedIn: null` response when the account has no feed-in contract.
+The PV coordinator must also record whether this request completed successfully:
+a confirmed null maps to the inactive binary sensor state, while authentication
+skips, failed requests, or missing coordinator data remain unknown. Do not
+turn network failures into an inactive subscription status. Test null,
+active/inactive subscriptions, failure, and subsequent recovery.
+
 ## Smart HVAC status and optional-request isolation
 
 See [Smart heating activation](../../../docs/smart_hvac_activation.md).
