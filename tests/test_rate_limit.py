@@ -922,7 +922,9 @@ async def test_setup_throttling_is_temporary_and_respects_reload(
         )
         assert current_counts == expected_counts
     assert dict(rate_entry.data) == original_data
-    assert dict(rate_entry.options) == original_options
+    # Home Assistant's current entry migration adds the default resolution
+    # independently of a throttled provider request.
+    assert dict(rate_entry.options) == {**original_options, "resolution": "PT15M"}
     assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     if source != "silent_login":
         rate_api.login.assert_not_awaited()
@@ -963,6 +965,11 @@ async def test_login_flows_show_rate_limit_and_recover(
     )
     original_data, original_options = dict(rate_entry.data), dict(rate_entry.options)
     api = mock_auth_success.return_value
+    # Reauth, reconfigure and options must retain site-ownership verification.
+    # Align this isolated API fixture with the selected delivery site.
+    api.UserSites.return_value.deliverySites[0].reference = rate_entry.data[
+        "site_reference"
+    ]
     api.login.side_effect = RateLimitException("Login", retry_after=120)
     manager = (
         hass.config_entries.options if source == "options" else hass.config_entries.flow
