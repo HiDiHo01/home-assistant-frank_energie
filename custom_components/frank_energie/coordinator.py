@@ -1193,7 +1193,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     me_data = await self.api.me(self.site_reference)
                 except (AuthException, AuthRequiredException):
                     raise
-                except (RequestException, FrankEnergieException, ClientError):
+                except (RequestException, FrankEnergieException, ClientError, TimeoutError):
                     _LOGGER.debug("UserSmartHvac status is unavailable for this site")
                 else:
                     user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
@@ -1210,7 +1210,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
 
             return user_data
-        except (AuthException, AuthRequiredException):
+        except AuthRequiredException:
+            raise
+        except AuthException:
             _LOGGER.warning("Authentication failed while fetching user data")
             return None
         except (RequestException, FrankEnergieException, ClientError) as ex:
