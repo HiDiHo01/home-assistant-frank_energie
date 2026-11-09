@@ -284,6 +284,7 @@ async def test_sensors_get_data_of_current_hour(
     frank_energie_config_entry: MockConfigEntry,
     hass: HomeAssistant,
 ):
+    """Verify that current-hour price sensors follow an exact local-time change."""
     import zoneinfo
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
