@@ -82,6 +82,11 @@ Contract entities may include:
 - Delivery address
 - Site information
 
+The **Segments** sensor (NL/NL-BE **Segmenten**) shows the energy types for the
+configured delivery site. Its state is `ELECTRICITY`, `GAS`, or
+`ELECTRICITY, GAS`. It is unavailable when the API has no usable segments for
+that site.
+
 ### Consumption Entities
 
 Consumption entities may include:

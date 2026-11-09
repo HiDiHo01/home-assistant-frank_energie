@@ -42,6 +42,7 @@ from python_frank_energie.exceptions import (
 )
 from python_frank_energie.models import (
     ContractPriceResolutionState,
+    DeliverySite,
     EnodeChargers,
     EnodeVehicle,
     EnodeVehicles,
@@ -75,6 +76,7 @@ from .const import (
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
@@ -341,6 +343,9 @@ class FrankEnergieData(TypedDict):
     user_sites: UserSites | None
     """Optional user sites."""
 
+    delivery_site: DeliverySite | None
+    """Delivery site matching the config entry's site reference."""
+
     enode_chargers: dict[str, EnodeChargers] | None
     """Optional Enode chargers data."""
 
@@ -399,6 +404,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_USAGE: None,
         DATA_USER: None,
         DATA_USER_SITES: None,
+        DATA_DELIVERY_SITE: None,
         DATA_ENODE_CHARGERS: None,
         DATA_BATTERIES: None,
         DATA_BATTERY_DETAILS: [],
@@ -629,8 +635,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return set()
         settings = getattr(self, "settings_coordinator", self)
-        user = settings.data.get(DATA_USER)
-        contracts = known_site_contracts(user)
+        contracts = known_site_contracts(settings.data.get(DATA_DELIVERY_SITE))
         if contracts is not None:
             return contracts
         return {
@@ -1073,12 +1078,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            sites = await self.api.UserSites()
-            if "ELECTRICITY" in sites.segments:
-                self.user_electricity_enabled = True
-            if "GAS" in sites.segments:
-                self.user_gas_enabled = True
-            return sites
+            return await self.api.UserSites()
         except AuthException as ex:
             _LOGGER.warning("Authentication failed while fetching user sites: %s", ex)
             return None
@@ -2453,7 +2453,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         Authentication and pending changes do not override an active API value.
         """
         if self.api.is_authenticated and known_site_contracts(
-            getattr(self, "settings_coordinator", self).data.get(DATA_USER)
+            getattr(self, "settings_coordinator", self).data.get(DATA_DELIVERY_SITE)
         ) == {"GAS"}:
             return "PT60M"
         if self.config_entry is None:
@@ -2616,6 +2616,19 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             result[DATA_USER] = data_user
             result[DATA_USER_SITES] = user_sites
+            if user_sites is not None and (site_reference := self.site_reference):
+                result[DATA_DELIVERY_SITE] = next(
+                    (
+                        site
+                        for site in user_sites.deliverySites
+                        if isinstance(site, DeliverySite)
+                        and site.reference == site_reference
+                    ),
+                    None,
+                )
+            contracts = known_site_contracts(result[DATA_DELIVERY_SITE]) or set()
+            self.user_electricity_enabled = "ELECTRICITY" in contracts
+            self.user_gas_enabled = "GAS" in contracts
             result[DATA_TOKEN_EXPIRES_AT] = _get_token_expires_at(self.api)
             result[DATA_REFRESH_TOKEN_EXPIRES_AT] = _get_refresh_token_expires_at(
                 self.api

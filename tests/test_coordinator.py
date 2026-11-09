@@ -9,6 +9,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
     DATA_INVOICES,
@@ -40,6 +41,7 @@ from python_frank_energie.exceptions import (
 )
 from python_frank_energie.models import (
     ContractPriceResolutionState,
+    DeliverySite,
     MonthSummary,
     Invoices,
     User,
@@ -2755,11 +2757,10 @@ def _price_coordinator_for_cache_test(
 ) -> FrankEnergiePriceCoordinator:
     """Keep the real price-fetch path while isolating settings and disk writes."""
     settings = FrankEnergieSettingsCoordinator(MagicMock(), entry, api)
-    settings.data = (
-        {DATA_USER: SimpleNamespace(userSegments=contracts)}
-        if contracts is not None
-        else {}
-    )
+    if contracts is not None:
+        settings.data[DATA_DELIVERY_SITE] = DeliverySite.from_dict(
+            {"reference": entry.data.get("site_reference"), "segments": contracts}
+        )
     prices = FrankEnergiePriceCoordinator(MagicMock(), entry, api, settings)
     prices._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
     prices._fetch_tomorrow_data = AsyncMock(return_value=None)
