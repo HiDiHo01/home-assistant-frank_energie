@@ -1201,7 +1201,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     self._country_code = country_code
         if not self._connection_id:
             self._connection_id = _extract_electricity_connection_id(user_data)
-            _LOGGER.debug("Electricity connection ID available: %s", self._connection_id is not None)
+            _LOGGER.debug(
+                "Electricity connection ID available: %s",
+                self._connection_id is not None,
+            )
 
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
