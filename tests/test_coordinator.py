@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
@@ -3219,3 +3220,72 @@ async def test_pv_feed_in_skipped_without_authentication(
     mock_frank_energie.user_smart_feed_in.assert_not_awaited()
     assert data[DATA_USER_SMART_FEED_IN] is None
     assert data[DATA_USER_SMART_FEED_IN_FETCHED] is False
+
+
+class TestFindLowestConsecutiveHours:
+    """Tests for FrankEnergieCoordinator._find_lowest_consecutive_hours."""
+
+    @dataclass
+    class _DummyPrice:
+        total: float
+
+    def test_empty_or_too_small(self, coordinator) -> None:
+        """Return None when prices list is empty or shorter than window."""
+        assert coordinator._find_lowest_consecutive_hours([], 4) is None
+        assert (
+            coordinator._find_lowest_consecutive_hours([self._DummyPrice(1.0)], 4)
+            is None
+        )
+        assert (
+            coordinator._find_lowest_consecutive_hours([self._DummyPrice(1.0)], 0)
+            is None
+        )
+        assert (
+            coordinator._find_lowest_consecutive_hours([self._DummyPrice(1.0)], -1)
+            is None
+        )
+
+    def test_window_equals_length(self, coordinator) -> None:
+        """Correctly calculate average when window size equals list length."""
+        prices = [
+            self._DummyPrice(1.0),
+            self._DummyPrice(2.0),
+            self._DummyPrice(3.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, 3)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is prices[0]
+        assert end is prices[2]
+
+    def test_sliding_window_finds_minimum(self, coordinator) -> None:
+        """Find the genuinely lowest window in the middle of a price series."""
+        prices = [
+            self._DummyPrice(10.0),
+            self._DummyPrice(10.0),
+            self._DummyPrice(1.0),
+            self._DummyPrice(2.0),
+            self._DummyPrice(3.0),
+            self._DummyPrice(10.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, 3)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 2.0
+        assert start is prices[2]
+        assert end is prices[4]
+
+    def test_single_element_window(self, coordinator) -> None:
+        """Work correctly with a 1-element window."""
+        prices = [
+            self._DummyPrice(5.0),
+            self._DummyPrice(1.5),
+            self._DummyPrice(3.0),
+        ]
+        result = coordinator._find_lowest_consecutive_hours(prices, 1)
+        assert result is not None
+        avg, start, end = result
+        assert avg == 1.5
+        assert start is prices[1]
+        assert end is prices[1]
