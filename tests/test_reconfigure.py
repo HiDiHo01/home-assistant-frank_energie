@@ -552,6 +552,62 @@ async def test_missing_site_inventory_does_not_replace_credentials(
     reload_entry.assert_not_awaited()
 
 
+@pytest.mark.parametrize("legacy_password_is_encrypted", [False, True])
+async def test_offline_options_preserve_legacy_credentials_after_token_renewal(
+    hass: HomeAssistant,
+    reconfigure_entry: MockConfigEntry,
+    provider_api: MagicMock,
+    legacy_password_is_encrypted: bool,
+) -> None:
+    """Carry data-only credentials into options before token renewal clears data."""
+    saved_options = dict(reconfigure_entry.options)
+    saved_options.pop(CONF_USERNAME)
+    saved_options.pop(CONF_PASSWORD)
+    hass.config_entries.async_update_entry(reconfigure_entry, options=saved_options)
+    legacy_password = (
+        encrypt_password(hass, "legacy-password")
+        if legacy_password_is_encrypted
+        else "legacy-password"
+    )
+    legacy_data = {**reconfigure_entry.data, CONF_PASSWORD: legacy_password}
+    hass.config_entries.async_update_entry(reconfigure_entry, data=legacy_data)
+    provider_api.login.side_effect = ConnectionException("login offline")
+    provider_api.UserSites.side_effect = NetworkError("site discovery offline")
+
+    result = await hass.config_entries.options.async_init(reconfigure_entry.entry_id)
+    saved = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_USERNAME: "legacy@example.com",
+            CONF_PASSWORD: "",
+            "interval_settings": 24,
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert saved["type"] is FlowResultType.CREATE_ENTRY
+    assert reconfigure_entry.options["interval_settings"] == 24
+    assert reconfigure_entry.options["resolution"] == "PT60M"
+    assert reconfigure_entry.options[CONF_USERNAME] == "legacy@example.com"
+    assert decrypt_password(hass, reconfigure_entry.options[CONF_PASSWORD]) == (
+        "legacy-password"
+    )
+    assert dict(reconfigure_entry.data) == legacy_data
+    provider_api.login.assert_not_awaited()
+    provider_api.UserSites.assert_not_awaited()
+
+    # Token renewal later removes credentials from data. Options must retain
+    # a usable encrypted copy for a subsequent silent login.
+    renewed_data = dict(reconfigure_entry.data)
+    renewed_data.pop(CONF_USERNAME, None)
+    renewed_data.pop(CONF_PASSWORD, None)
+    hass.config_entries.async_update_entry(reconfigure_entry, data=renewed_data)
+    assert reconfigure_entry.options[CONF_USERNAME] == "legacy@example.com"
+    assert decrypt_password(hass, reconfigure_entry.options[CONF_PASSWORD]) == (
+        "legacy-password"
+    )
+
+
 @pytest.mark.parametrize("include_blank_password", [False, True])
 async def test_polling_settings_update_without_credential_verification(
     hass: HomeAssistant,
