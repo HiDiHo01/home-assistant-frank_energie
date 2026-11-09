@@ -901,6 +901,72 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             bool(pv_data and pv_data.systems),
         )
 
+    def _populate_optional_interval_schema(
+        self,
+        schema_dict: dict[vol.Marker, Any],
+        available_resources: tuple[bool, bool, bool, bool],
+    ) -> None:
+        """Populate polling controls for resources present in the selected entry."""
+        entry = self.config_entry
+        has_batteries, has_chargers, has_vehicles, has_pv = available_resources
+
+        if has_batteries:
+            schema_dict[
+                vol.Required(
+                    CONF_INTERVAL_BATTERIES,
+                    default=entry.options.get(
+                        CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
+                    ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+            schema_dict[
+                vol.Required(
+                    CONF_INTERVAL_BATTERY_SESSIONS,
+                    default=entry.options.get(
+                        CONF_INTERVAL_BATTERY_SESSIONS,
+                        DEFAULT_INTERVAL_BATTERY_SESSIONS,
+                    ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=1440, mode=NumberSelectorMode.SLIDER)
+            )
+
+        if has_chargers:
+            schema_dict[
+                vol.Required(
+                    CONF_INTERVAL_CHARGERS,
+                    default=entry.options.get(
+                        CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
+                    ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+
+        if has_vehicles:
+            schema_dict[
+                vol.Required(
+                    CONF_INTERVAL_VEHICLES,
+                    default=entry.options.get(
+                        CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
+                    ),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+
+        if has_pv:
+            schema_dict[
+                vol.Required(
+                    CONF_INTERVAL_PV,
+                    default=entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV),
+                )
+            ] = NumberSelector(
+                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
+            )
+
     async def async_step_user(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -973,8 +1039,6 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 )
                 errors = {"base": "unknown_error"}
 
-        has_batteries, has_chargers, has_vehicles, has_pv = self._resource_features()
-
         schema_dict = {
             vol.Required(CONF_USERNAME, default=current_username): str,
             # Leave password blank to avoid exposing it in the UI
@@ -997,62 +1061,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             ),
         }
 
-        if has_batteries:
-            schema_dict[
-                vol.Required(
-                    CONF_INTERVAL_BATTERIES,
-                    default=entry.options.get(
-                        CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
-                    ),
-                )
-            ] = NumberSelector(
-                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-            )
-            schema_dict[
-                vol.Required(
-                    CONF_INTERVAL_BATTERY_SESSIONS,
-                    default=entry.options.get(
-                        CONF_INTERVAL_BATTERY_SESSIONS,
-                        DEFAULT_INTERVAL_BATTERY_SESSIONS,
-                    ),
-                )
-            ] = NumberSelector(
-                NumberSelectorConfig(min=5, max=1440, mode=NumberSelectorMode.SLIDER)
-            )
-
-        if has_chargers:
-            schema_dict[
-                vol.Required(
-                    CONF_INTERVAL_CHARGERS,
-                    default=entry.options.get(
-                        CONF_INTERVAL_CHARGERS, DEFAULT_INTERVAL_CHARGERS
-                    ),
-                )
-            ] = NumberSelector(
-                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-            )
-
-        if has_vehicles:
-            schema_dict[
-                vol.Required(
-                    CONF_INTERVAL_VEHICLES,
-                    default=entry.options.get(
-                        CONF_INTERVAL_VEHICLES, DEFAULT_INTERVAL_VEHICLES
-                    ),
-                )
-            ] = NumberSelector(
-                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-            )
-
-        if has_pv:
-            schema_dict[
-                vol.Required(
-                    CONF_INTERVAL_PV,
-                    default=entry.options.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV),
-                )
-            ] = NumberSelector(
-                NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
-            )
+        self._populate_optional_interval_schema(
+            schema_dict, self._resource_features()
+        )
 
         data_schema = vol.Schema(schema_dict)
 
