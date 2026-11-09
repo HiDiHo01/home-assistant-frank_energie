@@ -82,6 +82,24 @@ Contract entities may include:
 - Delivery address
 - Site information
 
+The **Segments** sensor (NL/NL-BE **Segmenten**) shows the energy types for the
+configured delivery site. Its state is `ELECTRICITY`, `GAS`, or
+`ELECTRICITY, GAS`. It is unavailable when the API has no usable segments for
+that site.
+
+For signed-in entries, the configured delivery site determines where the
+**Refresh Prices** buttons appear.
+
+| Site segments | Devices with a refresh button |
+|---|---|
+| `ELECTRICITY` | Electricity Prices |
+| `GAS` | Gas Prices |
+| `ELECTRICITY` and `GAS` | Electricity Prices and Gas Prices |
+
+For a combined contract, either button requests a refresh from the same price
+coordinator. The original button keeps its registered entity ID when the
+integration moves it or adds the second button.
+
 ### Consumption Entities
 
 Consumption entities may include:
@@ -110,6 +128,27 @@ Invoice entities may include:
 - Billing periods
 - Historical invoices
 - Annual summaries
+
+## Smart heating entity
+
+The authenticated User-service binary sensor **Smart heating** (NL/NL-BE:
+**Slim verwarmen**) retains the `smart_hvac` entity key. Its Boolean
+`isActivated` value reflects **service activation**, not whether a
+heat pump is currently heating.
+
+| Provider result | Binary sensor | Meaning |
+| --- | --- | --- |
+| `isActivated = true` | `on` | Service activated |
+| `isActivated = false` | `off` | Service not activated |
+| Missing or invalid activation value | `unavailable` | Unknown activation |
+
+The `RUNNING` device class is used only for localized active/inactive
+presentation. The `available_on_site` attribute shows whether the
+provider makes this feature available for the configured delivery site:
+it is not the entity's Home Assistant availability or the activation state.
+
+See [Smart heating activation](smart_hvac_activation.md) for details and
+the dependency-release prerequisite.
 
 ## Smart Charging Entities
 

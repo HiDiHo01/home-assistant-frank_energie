@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -9,6 +10,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 MANIFEST_PATH = Path("custom_components") / "frank_energie" / "manifest.json"
+RELEASE_VERSION_PATTERN = re.compile(
+    r"\d{4}\.\d{1,2}\.\d{1,2}(?:r\d+|[ab]\d+|rc\d+|-(?:b|beta|rc|alpha)\.?\d+)?"
+)
 
 
 def _reject_json_constant(constant: str) -> None:
@@ -21,6 +25,11 @@ def update_manifest(version: str) -> str:
     normalized_version = version.strip().removeprefix("v")
     if not normalized_version:
         raise ValueError("The release version must not be empty after removing 'v'.")
+    if RELEASE_VERSION_PATTERN.fullmatch(normalized_version) is None:
+        raise ValueError(
+            "Invalid release version. Expected YYYY.M.D with an optional "
+            "supported prerelease or revision suffix."
+        )
 
     try:
         manifest = json.loads(

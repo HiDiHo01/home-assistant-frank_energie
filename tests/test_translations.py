@@ -72,6 +72,25 @@ def test_translation_keys_alignment():
         )
 
 
+def test_gas_price_component_translation_keys() -> None:
+    """Check renamed gas component keys against canonical and all locale files."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    expected_keys = {"gas_energy_tax", "gas_market_vat"}
+    old_keys = {"gas_tax_only", "gas_tax_vat"}
+    descriptions = {description.key: description for description in SENSOR_TYPES}
+
+    for key in expected_keys:
+        assert descriptions[key].translation_key == key
+
+    for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translated = json.loads(path.read_text(encoding="utf-8"))
+        entity_names = translated["entity"]["sensor"]
+        assert expected_keys <= entity_names.keys(), path
+        assert old_keys.isdisjoint(entity_names), path
+        assert all(entity_names[key]["name"] for key in expected_keys), path
+
+
 def test_select_attributes_translation_keys():
     """Verify that all keys emitted in select entity extra_state_attributes are defined in strings.json.
 

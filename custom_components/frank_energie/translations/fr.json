@@ -118,7 +118,7 @@
         "name": "Injection Intelligente"
       },
       "smart_hvac": {
-        "name": "Chauffage Intelligent"
+        "name": "Chauffage intelligent"
       },
       "smart_push_notification_price_alerts": {
         "name": "Alertes de prix par notification push"
@@ -670,11 +670,11 @@
       "gas_tax_markup": {
         "name": "Prix actuel du gaz, taxes et majoration comprises"
       },
-      "gas_tax_only": {
-        "name": "Taxe actuelle sur le gaz uniquement"
+      "gas_energy_tax": {
+        "name": "Taxe énergétique actuelle sur le gaz (TVA incluse)"
       },
-      "gas_tax_vat": {
-        "name": "Prix actuel de la TVA sur le gaz"
+      "gas_market_vat": {
+        "name": "TVA actuelle sur le prix du marché du gaz"
       },
       "gas_today_avg_all_in": {
         "name": "Prix moyen du gaz aujourd'hui (Tout compris)"

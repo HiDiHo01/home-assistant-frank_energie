@@ -179,20 +179,103 @@ async def test_sensors(
         ).state
         == "0.0225"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_vat_price").state
-        == "0.1845"
+    gas_registry = entity_registry.async_get(hass)
+    gas_vat_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_vat"
     )
+    gas_energy_tax_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_only"
+    )
+    assert gas_vat_entity_id is not None
+    assert gas_energy_tax_entity_id is not None
+    assert hass.states.get(gas_vat_entity_id).state == "0.0615"
     assert (
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_sourcing_price"
         ).state
         == "0.123"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_tax_only").state
-        == "0.0615"
+    assert hass.states.get(gas_energy_tax_entity_id).state == "0.1845"
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "price_component", "expected_value"),
+    [
+        ("elec_tax_only", "energy_tax_price", 0.7268),
+        ("elec_tax_vat", "market_price_tax", 0.1895),
+        ("gas_energy_tax", "energy_tax_price", 0.7268),
+        ("gas_market_vat", "market_price_tax", 0.1895),
+    ],
+)
+def test_current_tax_sensor_price_component_mapping(
+    sensor_key: str, price_component: str, expected_value: float
+) -> None:
+    """Map energy tax and market-price VAT consistently for both fuels."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    current_hour = SimpleNamespace(
+        energy_tax_price=0.7268,
+        market_price_tax=0.1895,
     )
+    data = {
+        const.DATA_ELECTRICITY: SimpleNamespace(current_hour=current_hour),
+        const.DATA_GAS: SimpleNamespace(current_hour=current_hour),
+    }
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert getattr(current_hour, price_component) == expected_value
+    assert description.value_fn(data) == pytest.approx(expected_value)
+
+
+@pytest.mark.parametrize("sensor_key", ["gas_energy_tax", "gas_market_vat"])
+@pytest.mark.parametrize("has_gas_prices", [False, True])
+def test_gas_tax_sensor_missing_current_hour_is_unknown(
+    sensor_key: str, has_gas_prices: bool
+) -> None:
+    """Return None when gas prices or the current gas period are absent."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    gas_prices = SimpleNamespace(current_hour=None) if has_gas_prices else None
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert description.value_fn({const.DATA_GAS: gas_prices}) is None
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "historical_key"),
+    [
+        ("gas_energy_tax", "gas_tax_only"),
+        ("gas_market_vat", "gas_tax_vat"),
+    ],
+)
+def test_gas_sensor_keys_keep_registry_unique_ids(
+    sensor_key: str, historical_key: str
+) -> None:
+    """Preserve existing entity registry identities after renaming sensor keys."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieSensor,
+        SENSOR_TYPES,
+        _sensor_unique_id,
+    )
+
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    entry = MagicMock()
+    entry.entry_id = "existing_entry"
+    entry.unique_id = "site_id"
+    coordinator = MagicMock()
+    coordinator.data = {}
+
+    sensor = FrankEnergieSensor(coordinator, description, entry)
+
+    assert description.translation_key == sensor_key
+    assert sensor.unique_id == f"site_id.{historical_key}"
+    assert _sensor_unique_id(entry, description) == sensor.unique_id
 
 
 async def test_sensors_get_data_of_current_hour(
