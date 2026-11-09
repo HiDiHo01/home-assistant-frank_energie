@@ -217,7 +217,11 @@ def _smart_hvac_state(data: FrankEnergieData) -> bool | None:
     if feature is None:
         return None
 
-    activated = feature.get("isActivated") if isinstance(feature, dict) else getattr(feature, "isActivated", None)
+    activated = (
+        feature.get("isActivated")
+        if isinstance(feature, dict)
+        else getattr(feature, "isActivated", None)
+    )
     return activated if isinstance(activated, bool) else None
 
 
