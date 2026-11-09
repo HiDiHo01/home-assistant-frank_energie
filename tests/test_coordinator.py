@@ -2964,3 +2964,96 @@ async def test_api_resolution_change_invalidates_same_day_price_cache(
     assert price_coordinator.last_fetch_today is not None
     assert price_coordinator.cached_prices_tomorrow is None
     assert price_coordinator.last_fetch_tomorrow is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_uses_main_user_smart_hvac(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Attach site-level UserSmartHvac from Me to the existing user service data."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = None
+    feature = SimpleNamespace(isActivated=True, is_available_on_site=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(return_value=SimpleNamespace(user_smart_hvac=feature))
+    mock_frank_energie.smart_hvac_status = AsyncMock(
+        side_effect=AssertionError("The legacy SmartHvacStatus query must not be called")
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is feature
+    mock_frank_energie.user.assert_awaited_once_with(coordinator.site_reference)
+    mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
+    mock_frank_energie.smart_hvac_status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_preserves_false_hvac_activation(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Preserve explicit False activation independently of service availability."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    feature = SimpleNamespace(isActivated=False, is_available_on_site=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(return_value=SimpleNamespace(user_smart_hvac=feature))
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is feature
+    assert result.smartHvac.isActivated is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "me_data",
+    [SimpleNamespace(user_smart_hvac=None), SimpleNamespace()],
+)
+async def test_fetch_user_data_missing_smart_hvac_is_unknown(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock, me_data: object
+) -> None:
+    """Missing fields and old library models must not invent a False state."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = SimpleNamespace(isActivated=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(return_value=me_data)
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_isolates_smart_hvac_query_failures(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Keep user data when Smart HVAC fails without logging private upstream identifiers."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = None
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        side_effect=RequestException("synthetic-private-identifier")
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+    assert "synthetic-private-identifier" not in caplog.text
