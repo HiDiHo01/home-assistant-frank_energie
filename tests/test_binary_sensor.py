@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    DOMAIN as BINARY_SENSOR_DOMAIN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
@@ -119,7 +122,7 @@ def test_smart_hvac_binary_sensor(mock_coordinator, mock_config_entry):
     mock_coordinator.data = {}
     assert sensor.is_on is None
     assert sensor.available is False
-    assert desc.device_class is None
+    assert desc.device_class == BinarySensorDeviceClass.RUNNING
 
     mock_user = SimpleNamespace(
         smartHvac={"isActivated": True, "isAvailableOnSite": False}
@@ -250,7 +253,7 @@ def _entity_id(hass: HomeAssistant, unique_key: str) -> str:
 async def test_smart_feature_binary_sensors_reach_the_state_machine(
     hass: HomeAssistant,
 ) -> None:
-    """The service activation state must not have a running device class."""
+    """Expose the activation Boolean with the requested running state labels."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
     entry.add_to_hass(hass)
 
@@ -280,7 +283,7 @@ async def test_smart_feature_binary_sensors_reach_the_state_machine(
     hvac_state = hass.states.get(_entity_id(hass, "smart_hvac"))
     assert hvac_state is not None
     assert hvac_state.state == "on"
-    assert "device_class" not in hvac_state.attributes
+    assert hvac_state.attributes["device_class"] == "running"
     assert hvac_state.attributes["available_in_country"] is True
     assert hvac_state.attributes["available_on_site"] is True
     assert "user_id" not in hvac_state.attributes
