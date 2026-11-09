@@ -17,10 +17,12 @@ from python_frank_energie.models import (
     ContractPriceResolutionChangeResult,
     ContractPriceResolutionState,
     User,
+    UserSites,
 )
 
 from custom_components.frank_energie.const import (
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
+    DATA_DELIVERY_SITE,
     DATA_USER,
     DOMAIN,
 )
@@ -85,6 +87,7 @@ def _make_api(user_data: User | None) -> MagicMock:
     api.is_authenticated = True
     api.user = AsyncMock(return_value=user_data)
     api.smart_hvac_status = AsyncMock(return_value=None)
+    api.me = AsyncMock(return_value=None)
     api.contract_price_resolution_state = AsyncMock(
         return_value=ContractPriceResolutionState(
             active_option="PT15M",
@@ -161,6 +164,11 @@ async def _connection_context(
         settings = FrankEnergieSettingsCoordinator(hass, entry, api)
         settings.data = _empty_data()
         settings.data[DATA_USER] = user_data
+        site_data = UserSites.from_dict(
+            {"data": {"userSites": [{"reference": "site-alpha", "segments": ["ELECTRICITY"]}]}}
+        )
+        assert site_data is not None
+        settings.data[DATA_DELIVERY_SITE] = site_data.deliverySites[0]
         prices = FrankEnergiePriceCoordinator(hass, entry, api, settings)
         prices.async_request_refresh = AsyncMock()
         cached_prices_payload = payload["prices_today"]
@@ -342,6 +350,11 @@ async def test_resolution_connections_remain_entry_scoped(
     other_settings = FrankEnergieSettingsCoordinator(hass, other_entry, other_api)
     other_settings.data = _empty_data()
     other_settings.data[DATA_USER] = other_user
+    other_sites = UserSites.from_dict(
+        {"data": {"userSites": [{"reference": "site-beta", "segments": ["ELECTRICITY"]}]}}
+    )
+    assert other_sites is not None
+    other_settings.data[DATA_DELIVERY_SITE] = other_sites.deliverySites[0]
     other_prices = FrankEnergiePriceCoordinator(
         hass, other_entry, other_api, other_settings
     )
@@ -683,3 +696,20 @@ async def test_stale_price_cache_only_fetches_resolution_state_once(
     connection_context.api.contract_price_resolution_state.assert_awaited_once_with(
         "electricity-alpha"
     )
+
+
+async def test_selected_gas_site_has_hourly_resolution(
+    connection_context: _ConnectionContext,
+) -> None:
+    """Follow selected site segments rather than unrelated user connections."""
+    site_data = UserSites.from_dict(
+        {"data": {"userSites": [{"reference": "site-alpha", "segments": ["GAS"]}]}}
+    )
+    assert site_data is not None
+    connection_context.settings.data[DATA_DELIVERY_SITE] = site_data.deliverySites[0]
+    connection_context.settings.data[DATA_USER] = _make_user(None, include_gas=True)
+
+    assert connection_context.prices._price_contracts() == {"GAS"}
+    assert connection_context.prices.resolution == "PT60M"
+    await connection_context.prices._async_update_data()
+    connection_context.api.contract_price_resolution_state.assert_not_awaited()

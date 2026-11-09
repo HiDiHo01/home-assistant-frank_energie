@@ -1,6 +1,8 @@
 name: Ruff
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "custom_components/**/*.py"

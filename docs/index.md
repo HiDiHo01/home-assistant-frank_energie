@@ -25,6 +25,7 @@ Setup instructions, authentication, site selection, reconfiguration, and account
 
 - [User Features](user_features.md)
 - [Smart Charging](smart_charging.md)
+- [Smart heating activation](smart_hvac_activation.md)
 - [Smart Battery](smart_battery.md)
 
 Overview of available functionality and smart energy features.
@@ -108,6 +109,7 @@ Versioning, release workflow, validation, quality standards, and HACS release gu
 | release_process.md | Release workflow |
 | smart_battery.md | Smart Battery functionality |
 | smart_charging.md | Smart Charging functionality |
+| smart_hvac_activation.md | Smart heating service-activation semantics and dependencies |
 | troubleshooting.md | Troubleshooting guide |
 | update_frequency.md | Update and polling behavior |
 | user_features.md | Feature overview |

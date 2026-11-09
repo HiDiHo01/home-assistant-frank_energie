@@ -42,18 +42,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # @v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
-      - name: "Set version number"
+      - name: Set version number
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          python3 ${{ github.workspace }}/.github/helpers/update_manifest.py --version ${GITHUB_REF##*/}
+          python3 .github/helpers/update_manifest.py --version "$RELEASE_TAG"
 
       - name: Combine ZIP
         run: |
-          cd ${{ github.workspace }}/custom_components/frank_energie
-          zip frank_energie.zip -r ./
+          cd custom_components/frank_energie
+          zip -r "$RUNNER_TEMP/frank_energie.zip" .
 
       - name: Upload Release Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.release.tag_name }} ${{ github.workspace }}/custom_components/frank_energie/frank_energie.zip
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/frank_energie.zip" --clobber

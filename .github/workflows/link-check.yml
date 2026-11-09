@@ -63,17 +63,51 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
         with:
           persist-credentials: false
-      - name: Run Lychee
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # @v2
-        with:
-          fail: true
-          args: >-
-            --verbose
-            --no-progress
-            --accept 200,403,429
-            --root-dir .
-            --exclude-file .lycheeignore .
-            README.md
-            docs/**/*.md
+      - name: Install verified Lychee release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LYCHEE_SHA256: "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/lychee-x86_64-unknown-linux-gnu.tar.gz"
+          # Immutable release asset ID and SHA-256 were verified from the
+          # official GitHub release for Lychee v0.24.2. The direct HTML
+          # release URL returns 404 from this CI runner.
+          curl --fail --show-error --silent --location \
+            --retry 3 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 10 --max-time 35 \
+            --header "Accept: application/octet-stream" \
+            --header "Authorization: Bearer $GITHUB_TOKEN" \
+            --output "$archive" \
+            "https://api.github.com/repos/lycheeverse/lychee/releases/assets/409959156"
+          printf '%s  %s\n' "$LYCHEE_SHA256" "$archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/lychee-extract" "$RUNNER_TEMP/lychee-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/lychee-extract"
+          binary_path="$(find "$RUNNER_TEMP/lychee-extract" -maxdepth 3 -type f -name lychee -print -quit)"
+          if [ -z "$binary_path" ]; then
+            echo "::error::Verified Lychee archive contains no executable"
+            exit 1
+          fi
+          install -m 0755 "$binary_path" "$RUNNER_TEMP/lychee-bin/lychee"
+          echo "$RUNNER_TEMP/lychee-bin" >> "$GITHUB_PATH"
+
+      - name: Run Lychee
+        run: |
+          lychee --verbose --no-progress --accept 200,403,429 \
+            --max-retries 5 --retry-wait-time 2 \
+            --root-dir . .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify GitHub Releases via API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The specific HTML page intermittently responds 502 in CI. Check
+          # the equivalent live GitHub API resource instead of accepting 502.
+          release_url="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=1" --jq '.[0].html_url')"
+          if [[ "$release_url" != "https://github.com/$GITHUB_REPOSITORY/releases/tag/"* ]]; then
+            echo "::error::GitHub Releases API did not return a release for this repository"
+            exit 1
+          fi

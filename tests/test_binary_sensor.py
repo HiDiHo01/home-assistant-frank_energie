@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    DOMAIN as BINARY_SENSOR_DOMAIN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
@@ -12,6 +15,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.frank_energie.const import (
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DATA_PV_SYSTEMS,
     DOMAIN,
 )
@@ -85,8 +89,19 @@ def test_smart_feed_in_binary_sensor(mock_coordinator, mock_config_entry):
     desc = BINARY_SENSOR_DESCRIPTIONS[2]
     sensor = FrankEnergieBinarySensor(mock_coordinator, desc, mock_config_entry)
 
-    # Test when data is missing
+    # Without a completed fetch, the activation state is genuinely unknown.
     mock_coordinator.data = {}
+    assert sensor.is_on is None
+
+    # A successful GraphQL null response means no smart feed-in contract.
+    mock_coordinator.data = {
+        DATA_USER_SMART_FEED_IN: None,
+        DATA_USER_SMART_FEED_IN_FETCHED: True,
+    }
+    assert sensor.is_on is False
+
+    # Failed/skipped requests must not be interpreted as an inactive contract.
+    mock_coordinator.data[DATA_USER_SMART_FEED_IN_FETCHED] = False
     assert sensor.is_on is None
 
     # Test when active (dict payload)
@@ -111,63 +126,53 @@ def test_smart_feed_in_binary_sensor(mock_coordinator, mock_config_entry):
 
 
 def test_smart_hvac_binary_sensor(mock_coordinator, mock_config_entry):
-    """Test the smart HVAC binary sensor."""
-    # smart_hvac is index 3
-    desc = BINARY_SENSOR_DESCRIPTIONS[3]
+    """Use strictly typed UserSmartHvac activation instead of equipment state."""
+    desc = next(item for item in BINARY_SENSOR_DESCRIPTIONS if item.key == "smart_hvac")
     sensor = FrankEnergieBinarySensor(mock_coordinator, desc, mock_config_entry)
+    mock_coordinator.last_update_success = True
 
-    # Test when data is missing
     mock_coordinator.data = {}
     assert sensor.is_on is None
     assert sensor.available is False
+    assert desc.device_class == BinarySensorDeviceClass.RUNNING
 
-    # Test when active (dict payload inside mock object)
-    mock_user = MagicMock()
-    mock_user.smartHvac = {"isActivated": True}
+    mock_user = SimpleNamespace(
+        smartHvac={"isActivated": True, "isAvailableOnSite": False}
+    )
     mock_coordinator.data = {DATA_USER: mock_user}
     assert sensor.is_on is True
     assert sensor.available is True
+    assert sensor.extra_state_attributes == {"available_on_site": False}
 
-    # Test when inactive (dict payload inside mock object)
-    mock_user.smartHvac = {"isActivated": False}
-    mock_coordinator.data = {DATA_USER: mock_user}
+    mock_user.smartHvac = {"isActivated": False, "hasAcceptedTerms": True}
     assert sensor.is_on is False
     assert sensor.available is True
+    assert sensor.extra_state_attributes == {"has_accepted_terms": True}
 
-    # Test with object attributes
-    mock_user.smartHvac = MagicMock()
-    mock_user.smartHvac.isActivated = True
+    for invalid_activation in (None, "false", 0, 1, [], {}):
+        mock_user.smartHvac = {"isActivated": invalid_activation}
+        assert sensor.is_on is None
+        assert sensor.available is False
+
+    mock_user.smartHvac = SimpleNamespace(
+        isActivated=True,
+        isAvailableInCountry=True,
+        is_available_on_site=True,
+        has_accepted_terms=True,
+        userId="synthetic-private-id",
+        userCreatedAt="2026-11-09T00:00:00Z",
+    )
     assert sensor.is_on is True
-    assert sensor.available is True
-
-    # Test when smartHvac is None
-    mock_user.smartHvac = None
-    assert sensor.is_on is None
-    assert sensor.available is False
-
-    # Test attributes (dict payload)
-    mock_user.smartHvac = {
-        "isActivated": True,
-        "isAvailableInCountry": True,
-        "userCreatedAt": "2026-06-20T17:00:00Z",
-        "userId": "test-user-id",
+    assert sensor.extra_state_attributes == {
+        "available_in_country": True,
+        "available_on_site": True,
+        "has_accepted_terms": True,
     }
-    mock_coordinator.data = {DATA_USER: mock_user}
-    attrs = sensor.extra_state_attributes
-    assert attrs["available_in_country"] is True
-    assert attrs["user_created_at"] == "2026-06-20T17:00:00Z"
-    assert attrs["user_id"] == "test-user-id"
 
-    # Test attributes (object payload)
-    mock_user.smartHvac = MagicMock()
-    mock_user.smartHvac.isAvailableInCountry = True
-    mock_user.smartHvac.userCreatedAt = "2026-06-20T17:00:00Z"
-    mock_user.smartHvac.userId = "test-user-id"
-    mock_coordinator.data = {DATA_USER: mock_user}
-    attrs = sensor.extra_state_attributes
-    assert attrs["available_in_country"] is True
-    assert attrs["user_created_at"] == "2026-06-20T17:00:00Z"
-    assert attrs["user_id"] == "test-user-id"
+    mock_coordinator.last_update_success = False
+    assert sensor.available is False
+    mock_coordinator.last_update_success = True
+    assert sensor.available is True
 
 
 def test_battery_self_consumption_trading_binary_sensor(
@@ -260,8 +265,7 @@ def _entity_id(hass: HomeAssistant, unique_key: str) -> str:
 async def test_smart_feature_binary_sensors_reach_the_state_machine(
     hass: HomeAssistant,
 ) -> None:
-    """A smart-feature sensor added through the real platform resolves to an
-    on/off state carrying its ``running`` device class and mapped attributes."""
+    """Expose the activation Boolean with the requested running state labels."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
     entry.add_to_hass(hass)
 
@@ -272,7 +276,8 @@ async def test_smart_feature_binary_sensors_reach_the_state_machine(
             smartHvac={
                 "isActivated": True,
                 "isAvailableInCountry": True,
-                "userId": "user-1",
+                "userId": "synthetic-private-id",
+                "isAvailableOnSite": True,
             },
         ),
         DATA_USER_SMART_FEED_IN: {"isActivated": False},
@@ -292,11 +297,42 @@ async def test_smart_feature_binary_sensors_reach_the_state_machine(
     assert hvac_state.state == "on"
     assert hvac_state.attributes["device_class"] == "running"
     assert hvac_state.attributes["available_in_country"] is True
-    assert hvac_state.attributes["user_id"] == "user-1"
+    assert hvac_state.attributes["available_on_site"] is True
+    assert "user_id" not in hvac_state.attributes
+    assert "userId" not in hvac_state.attributes
+    assert "synthetic-private-id" not in repr(hvac_state.attributes)
 
     feed_in_state = hass.states.get(_entity_id(hass, "smart_feed_in"))
     assert feed_in_state is not None
     assert feed_in_state.state == "off"
+
+
+async def test_smart_feed_in_without_contract_is_off_in_state_machine(
+    hass: HomeAssistant,
+) -> None:
+    """A completed null API response renders as off in Home Assistant."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
+    entry.add_to_hass(hass)
+
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+    coordinator.data = {
+        DATA_USER_SMART_FEED_IN: None,
+        DATA_USER_SMART_FEED_IN_FETCHED: True,
+    }
+    description = next(
+        item for item in BINARY_SENSOR_DESCRIPTIONS if item.key == "smart_feed_in"
+    )
+    sensor = FrankEnergieBinarySensor(coordinator, description, entry)
+    await _add_through_real_platform(hass, entry, sensor)
+
+    entity_id = _entity_id(hass, "smart_feed_in")
+    assert hass.states.get(entity_id).state == "off"
+
+    coordinator.data[DATA_USER_SMART_FEED_IN_FETCHED] = False
+    sensor.async_write_ha_state()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unknown"
 
 
 async def test_missing_smart_feature_data_resolves_to_unknown(

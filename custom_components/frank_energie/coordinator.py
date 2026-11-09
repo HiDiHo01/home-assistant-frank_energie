@@ -42,6 +42,7 @@ from python_frank_energie.exceptions import (
 )
 from python_frank_energie.models import (
     ContractPriceResolutionState,
+    DeliverySite,
     EnodeChargers,
     EnodeVehicle,
     EnodeVehicles,
@@ -75,6 +76,7 @@ from .const import (
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
@@ -89,6 +91,7 @@ from .const import (
     DATA_USER,
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DEFAULT_INTERVAL_BATTERIES,
     DEFAULT_INTERVAL_BATTERY_SESSIONS,
     DEFAULT_INTERVAL_CHARGERS,
@@ -341,6 +344,9 @@ class FrankEnergieData(TypedDict):
     user_sites: UserSites | None
     """Optional user sites."""
 
+    delivery_site: DeliverySite | None
+    """Delivery site matching the config entry's site reference."""
+
     enode_chargers: dict[str, EnodeChargers] | None
     """Optional Enode chargers data."""
 
@@ -364,6 +370,9 @@ class FrankEnergieData(TypedDict):
 
     user_smart_feed_in: UserSmartFeedInStatus | None
     """Optional user smart feed-in status."""
+
+    user_smart_feed_in_fetched: bool
+    """Whether the user smart feed-in API request succeeded, including a null response."""
 
     contract_price_resolution_state: ContractPriceResolutionState | None
     """Optional contract price resolution state."""
@@ -399,6 +408,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_USAGE: None,
         DATA_USER: None,
         DATA_USER_SITES: None,
+        DATA_DELIVERY_SITE: None,
         DATA_ENODE_CHARGERS: None,
         DATA_BATTERIES: None,
         DATA_BATTERY_DETAILS: [],
@@ -407,6 +417,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
         DATA_USER_SMART_FEED_IN: None,
+        DATA_USER_SMART_FEED_IN_FETCHED: False,
         DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
         DATA_REFRESH_TOKEN_EXPIRES_AT: None,
         DATA_TOKEN_EXPIRES_AT: None,
@@ -630,8 +641,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return set()
         settings = getattr(self, "settings_coordinator", self)
         settings_data = settings.data
-        user = settings_data.get(DATA_USER) if settings_data else None
-        contracts = known_site_contracts(user)
+        site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
+        contracts = known_site_contracts(site)
         if contracts is not None:
             return contracts
         return {
@@ -1074,12 +1085,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
         try:
-            sites = await self.api.UserSites()
-            if "ELECTRICITY" in sites.segments:
-                self.user_electricity_enabled = True
-            if "GAS" in sites.segments:
-                self.user_gas_enabled = True
-            return sites
+            return await self.api.UserSites()
         except AuthException as ex:
             _LOGGER.warning("Authentication failed while fetching user sites: %s", ex)
             return None
@@ -1174,6 +1180,42 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
             return None
 
+    async def _fetch_user_smart_hvac(self, user_data: User) -> None:
+        """Populate optional UserSmartHvac without invalidating other user data."""
+        # Me.user_smart_hvac is a root-level GraphQL field on python-frank-energie main.
+        user_data.smartHvac = None
+        try:
+            me_data = await self.api.me(self.site_reference)
+        except AuthRequiredException:
+            raise
+        except (
+            AuthException,
+            RequestException,
+            FrankEnergieException,
+            ClientError,
+            TimeoutError,
+        ):
+            _LOGGER.debug("UserSmartHvac status is unavailable for this site")
+        else:
+            user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
+
+    def _update_user_metadata(self, user_data: User | None) -> None:
+        """Update country and connection metadata from the user response."""
+        if not self._country_code and user_data:
+            country_code_raw = user_data.countryCode
+            if isinstance(country_code_raw, str) and country_code_raw:
+                country_code = country_code_raw.upper()
+                if country_code in SUPPORTED_COUNTRIES:
+                    self._country_code = country_code
+        if user_data is not None:
+            selected_connection_id = _extract_electricity_connection_id(user_data)
+            if selected_connection_id != self._connection_id:
+                self._connection_id = selected_connection_id
+                _LOGGER.debug(
+                    "Electricity connection for the selected site %s",
+                    "available" if selected_connection_id else "missing",
+                )
+
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
         if not self.api.is_authenticated:
@@ -1187,31 +1229,15 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             user_data = await self.api.user(self.site_reference)
             if user_data is not None:
-                try:
-                    smart_hvac = await self.api.smart_hvac_status()
-                    if smart_hvac:
-                        user_data.smartHvac = smart_hvac
-                except (RequestException, FrankEnergieException, ClientError) as ex:
-                    _LOGGER.debug(
-                        "Smart HVAC feature is not supported or accessible on this account: %s",
-                        ex,
-                    )
-            if not self._country_code and user_data:
-                country_code_raw = user_data.countryCode
-                if isinstance(country_code_raw, str) and country_code_raw:
-                    country_code = country_code_raw.upper()
-                    if country_code in SUPPORTED_COUNTRIES:
-                        self._country_code = country_code
-            if user_data is not None:
-                self._connection_id = _extract_electricity_connection_id(user_data)
-                _LOGGER.debug(
-                    "Electricity connection %s for the selected site",
-                    "available" if self._connection_id else "missing",
-                )
-
+                await self._fetch_user_smart_hvac(user_data)
+            self._update_user_metadata(user_data)
             return user_data
-        except AuthException as ex:
-            _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
+        except AuthRequiredException:
+            raise ConfigEntryAuthFailed(
+                "Frank Energie authentication is required"
+            ) from None
+        except AuthException:
+            _LOGGER.warning("Authentication failed while fetching user data")
             return None
         except (RequestException, FrankEnergieException, ClientError) as ex:
             _LOGGER.warning("No user data available: %s", ex)
@@ -1396,18 +1422,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
 
-    async def _fetch_user_smart_feed_in(self) -> UserSmartFeedInStatus | None:
-        """Fetch user smart feed-in status from the API."""
+    async def _fetch_user_smart_feed_in(
+        self,
+    ) -> tuple[UserSmartFeedInStatus | None, bool]:
+        """Fetch feed-in status and record whether a null response is authoritative."""
         if not self.api.is_authenticated:
             _LOGGER.debug(
                 "Skipping user smart feed-in fetch because the client is not authenticated"
             )
-            return None
+            return None, False
         try:
-            return await self.api.user_smart_feed_in()
+            status = await self.api.user_smart_feed_in()
+            return status, True
         except Exception as err:
             self._handle_dynamic_fetch_error("user smart feed-in status", err)
-            return None
+            return None, False
 
     async def _fetch_battery_details(self, battery) -> SmartBatteryDetails | None:
         """Fetch details for a single smart battery."""
@@ -2464,24 +2493,26 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     @property
     def resolution(self) -> str:
-        """Effective price resolution used for API queries."""
+        """Prefer a valid API resolution, then configuration, then the default.
+
+        Normalize API values to uppercase for query and cache selection.
+        Authentication and pending changes do not override an active API value.
+        """
         settings_data = getattr(self, "settings_coordinator", self).data
-        user = settings_data.get(DATA_USER) if settings_data else None
-        if self.api.is_authenticated and known_site_contracts(user) == {"GAS"}:
+        site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
+        if self.api.is_authenticated and known_site_contracts(site) == {"GAS"}:
             return "PT60M"
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
 
         configured = self.config_entry.options.get("resolution", DEFAULT_RESOLUTION)
 
-        if (
-            self.api.is_authenticated
-            and self._api_resolution_state is not None
-            and not self._resolution_change_pending
-        ):
+        if self._api_resolution_state is not None:
             active = self._api_resolution_state.activeOption
-            if active in SUPPORTED_RESOLUTIONS:
-                return active
+            if isinstance(active, str):
+                normalized_active = active.upper()
+                if normalized_active in SUPPORTED_RESOLUTIONS:
+                    return normalized_active
             _LOGGER.debug(
                 "Ignoring unsupported contract price resolution %r; using %s",
                 active,
@@ -2631,6 +2662,19 @@ class FrankEnergieSettingsCoordinator(FrankEnergieCoordinator):
             result = _empty_data()
             result[DATA_USER] = data_user
             result[DATA_USER_SITES] = user_sites
+            if user_sites is not None and (site_reference := self.site_reference):
+                result[DATA_DELIVERY_SITE] = next(
+                    (
+                        site
+                        for site in user_sites.deliverySites
+                        if isinstance(site, DeliverySite)
+                        and site.reference == site_reference
+                    ),
+                    None,
+                )
+            contracts = known_site_contracts(result[DATA_DELIVERY_SITE]) or set()
+            self.user_electricity_enabled = "ELECTRICITY" in contracts
+            self.user_gas_enabled = "GAS" in contracts
             result[DATA_TOKEN_EXPIRES_AT] = _get_token_expires_at(self.api)
             result[DATA_REFRESH_TOKEN_EXPIRES_AT] = _get_refresh_token_expires_at(
                 self.api
@@ -2831,7 +2875,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         return False
 
     def _is_cache_resolution_valid(self) -> bool:
-        """Check if the cached resolution matches the configured resolution."""
+        """Check cached price intervals against the effective query resolution."""
         if not self._static_prices_today or not self.config_entry:
             return True
 
@@ -2848,7 +2892,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         if cached_res != expected_res:
             _LOGGER.debug(
-                "Cache resolution (%s) differs from config (%s), invalidating cache",
+                "Cache resolution (%s) differs from effective resolution (%s), invalidating cache",
                 cached_res,
                 expected_res,
             )
@@ -3400,10 +3444,11 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         self.last_fetch_today = now_utc
 
         try:
-            data_pv_systems, data_user_smart_feed_in = await asyncio.gather(
+            data_pv_systems, feed_in_result = await asyncio.gather(
                 self._fetch_smart_pv_systems(),
                 self._fetch_user_smart_feed_in(),
             )
+            data_user_smart_feed_in, feed_in_fetched = feed_in_result
 
             data_pv_summary = {}
             if data_pv_systems and data_pv_systems.systems:
@@ -3436,6 +3481,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
             result[DATA_PV_SYSTEMS] = data_pv_systems
             result[DATA_PV_SUMMARY] = data_pv_summary
             result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
+            result[DATA_USER_SMART_FEED_IN_FETCHED] = feed_in_fetched
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
