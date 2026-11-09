@@ -284,6 +284,8 @@ async def test_smart_feature_binary_sensors_reach_the_state_machine(
     assert hvac_state.attributes["available_in_country"] is True
     assert hvac_state.attributes["available_on_site"] is True
     assert "user_id" not in hvac_state.attributes
+    assert "userId" not in hvac_state.attributes
+    assert "synthetic-private-id" not in repr(hvac_state.attributes)
 
     feed_in_state = hass.states.get(_entity_id(hass, "smart_feed_in"))
     assert feed_in_state is not None
