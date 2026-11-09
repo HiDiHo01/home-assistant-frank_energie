@@ -1,3 +1,4 @@
+# Verify deterministic two-day price fixtures on both Python 3.14 patches.
 name: Temporary HA 2026.11.0 regression verification
 on:
   push:
