@@ -1173,6 +1173,24 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
             return None
 
+    async def _fetch_user_smart_hvac(self, user_data: User) -> None:
+        """Populate optional UserSmartHvac without invalidating other user data."""
+        # Me.user_smart_hvac is a root-level GraphQL field on python-frank-energie main.
+        user_data.smartHvac = None
+        try:
+            me_data = await self.api.me(self.site_reference)
+        except (AuthException, AuthRequiredException):
+            raise
+        except (
+            RequestException,
+            FrankEnergieException,
+            ClientError,
+            TimeoutError,
+        ):
+            _LOGGER.debug("UserSmartHvac status is unavailable for this site")
+        else:
+            user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
+
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
         if not self.api.is_authenticated:
@@ -1186,22 +1204,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             user_data = await self.api.user(self.site_reference)
             if user_data is not None:
-                # UserSmartHvac is a root-level field of Me on python-frank-energie main.
-                # The legacy user() model does not populate its smartHvac field.
-                user_data.smartHvac = None
-                try:
-                    me_data = await self.api.me(self.site_reference)
-                except (AuthException, AuthRequiredException):
-                    raise
-                except (
-                    RequestException,
-                    FrankEnergieException,
-                    ClientError,
-                    TimeoutError,
-                ):
-                    _LOGGER.debug("UserSmartHvac status is unavailable for this site")
-                else:
-                    user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
+                await self._fetch_user_smart_hvac(user_data)
             if not self._country_code and user_data:
                 country_code_raw = user_data.countryCode
                 if isinstance(country_code_raw, str) and country_code_raw:
