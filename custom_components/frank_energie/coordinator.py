@@ -1179,9 +1179,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         user_data.smartHvac = None
         try:
             me_data = await self.api.me(self.site_reference)
-        except (AuthException, AuthRequiredException):
+        except AuthRequiredException:
             raise
         except (
+            AuthException,
             RequestException,
             FrankEnergieException,
             ClientError,
