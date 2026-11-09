@@ -30,7 +30,7 @@ from custom_components.frank_energie.coordinator import (
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
-from python_frank_energie.exceptions import FrankEnergieException, RequestException
+from python_frank_energie.exceptions import AuthRequiredException, FrankEnergieException, NetworkError, RequestException
 from python_frank_energie.models import (
     ContractPriceResolutionState,
     MonthSummary,
@@ -3063,3 +3063,46 @@ async def test_fetch_user_data_isolates_smart_hvac_query_failures(
     assert result is user_data
     assert result.smartHvac is None
     assert "synthetic-private-identifier" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_type", [NetworkError, TimeoutError])
+async def test_fetch_user_data_optional_hvac_transport_error_is_isolated(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    failure_type: type[Exception],
+) -> None:
+    """A failed optional HVAC request must not invalidate the other user data."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = None
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(side_effect=failure_type("temporary failure"))
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_propagates_auth_required(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+) -> None:
+    """Allow the coordinator to trigger a reauthentication flow when required."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        side_effect=AuthRequiredException("synthetic-auth-rejected")
+    )
+
+    with pytest.raises(AuthRequiredException):
+        await coordinator._fetch_user_data()
+
+    mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
