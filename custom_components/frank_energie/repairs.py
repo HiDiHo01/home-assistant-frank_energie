@@ -28,6 +28,31 @@ def _issue_id(kind: str, entry_id: str, device_id: str) -> str:
     return f"stale_{kind}_{entry_id}_{device_id}"
 
 
+def _has_kind_marker(
+    hass: HomeAssistant,
+    entry: "ConfigEntry[FrankEnergieEntryData]",
+    device: dr.DeviceEntry,
+    identifier: str,
+    kind: str,
+) -> bool:
+    """Find a matching entity by unique ID before scanning the device registry."""
+    registry = er.async_get(hass)
+    for platform, marker in INVENTORY_SPECS[kind].markers:
+        entity_id = registry.async_get_entity_id(
+            platform, DOMAIN, f"{DOMAIN}_{identifier}_{marker}"
+        )
+        if entity_id is None:
+            continue
+        entity = registry.async_get(entity_id)
+        if (
+            entity is not None
+            and entity.device_id == device.id
+            and entity.config_entry_id == entry.entry_id
+        ):
+            return True
+    return False
+
+
 def _candidate_identifier(
     hass: HomeAssistant,
     entry: "ConfigEntry[FrankEnergieEntryData]",
@@ -47,6 +72,8 @@ def _candidate_identifier(
     if len(identifiers) != 1:
         return None
     identifier = next(iter(identifiers))
+    if not _has_kind_marker(hass, entry, device, identifier, kind):
+        return None
     unique_ids = {
         entity.unique_id
         for entity in er.async_entries_for_device(
@@ -96,12 +123,6 @@ def async_process_device_inventory(
         ):
             # Avoid entity-registry scans for devices that cannot match this
             # kind (including service and unrelated hardware devices).
-            if kind != "battery" and device.model in (
-                "SmartBattery",
-                "Smart Battery",
-                "Batteries",
-            ):
-                continue
             if any(
                 domain == DOMAIN and identifier.startswith(f"{entry.entry_id}_")
                 for domain, identifier in device.identifiers

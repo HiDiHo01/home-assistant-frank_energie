@@ -13,12 +13,28 @@ class InventorySpec:
     coordinator_attribute: str
     data_key: str
     collection_key: str
+    markers: tuple[tuple[str, str], ...]
 
 
 INVENTORY_SPECS: Final[dict[str, InventorySpec]] = {
-    "battery": InventorySpec("battery_coordinator", DATA_BATTERIES, "batteries"),
-    "charger": InventorySpec("charger_coordinator", DATA_ENODE_CHARGERS, "chargers"),
-    "vehicle": InventorySpec("vehicle_coordinator", DATA_ENODE_VEHICLES, "vehicles"),
+    "battery": InventorySpec(
+        "battery_coordinator",
+        DATA_BATTERIES,
+        "batteries",
+        (
+            ("select", "battery_mode"),
+            ("select", "battery_strategy"),
+            ("number", "consumption_threshold_price"),
+        ),
+    ),
+    "charger": InventorySpec(
+        "charger_coordinator", DATA_ENODE_CHARGERS, "chargers",
+        (("sensor", "charger_brand"),),
+    ),
+    "vehicle": InventorySpec(
+        "vehicle_coordinator", DATA_ENODE_VEHICLES, "vehicles",
+        (("sensor", "vehicle_name"),),
+    ),
 }
 
 

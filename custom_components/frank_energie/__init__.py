@@ -168,23 +168,15 @@ def _device_inventory(
     identifier: str,
 ) -> tuple[FrankEnergieCoordinator, str, str] | None:
     """Select a verified inventory only for a uniquely recognized device kind."""
-    matched_kinds: list[str] = []
-    if f"{DOMAIN}_{identifier}_charger_brand" in registered_unique_ids:
-        matched_kinds.append("charger")
-    if f"{DOMAIN}_{identifier}_vehicle_name" in registered_unique_ids:
-        matched_kinds.append("vehicle")
-    # The device-registry model is mutable: select/number/binary_sensor may
-    # overwrite it with "Smart Battery" or "Batteries". A stable per-battery
-    # unique ID is a safer identifier than the current model name.
-    if any(
-        f"{DOMAIN}_{identifier}_{marker}" in registered_unique_ids
-        for marker in (
-            "battery_mode",
-            "battery_strategy",
-            "consumption_threshold_price",
+    # Use stable entity unique IDs; the model string is mutable across platforms.
+    matched_kinds = [
+        kind
+        for kind, spec in INVENTORY_SPECS.items()
+        if any(
+            f"{DOMAIN}_{identifier}_{marker}" in registered_unique_ids
+            for _, marker in spec.markers
         )
-    ):
-        matched_kinds.append("battery")
+    ]
     if len(matched_kinds) != 1:
         return None
 

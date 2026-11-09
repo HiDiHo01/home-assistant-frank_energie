@@ -327,3 +327,20 @@ async def test_battery_classification_uses_stable_entity_marker(
     # The core removal guard uses the same stable entity marker.
     coordinator.data = {DATA_BATTERIES: empty}
     assert await async_remove_config_entry_device(hass, entry, registry.async_get(device.id))
+
+
+async def test_unrelated_device_does_not_scan_entity_registry(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """Unrelated service or hardware devices are filtered before entity scans."""
+    entry = await frank_energie_setup()
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "unrelated-device")},
+    )
+    with patch(
+        "custom_components.frank_energie.repairs.er.async_entries_for_device",
+        side_effect=AssertionError("Must filter by marker before scanning"),
+    ):
+        async_process_device_inventory(hass, entry, "battery", _inventory("batteries", []))
