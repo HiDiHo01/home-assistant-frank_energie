@@ -159,40 +159,42 @@ async def async_get_config_entry_diagnostics(
         diagnostics["setup_pending"] = True
         return async_redact_data(diagnostics, TO_REDACT)
 
-    diagnostics.update({
-        "coordinator": {
-            "last_update_success": coordinator.last_update_success,
-            "update_interval": str(coordinator.update_interval),
-            "site_reference": coordinator.site_reference,
-            "country_code": coordinator.country_code,
-            "user_country": getattr(coordinator, "_user_country", None),
-            "resolution": coordinator.resolution,
-            "api_resolution": coordinator.api_resolution,
-            "user_electricity_enabled": coordinator.user_electricity_enabled,
-            "user_gas_enabled": coordinator.user_gas_enabled,
-            "last_fetch_today": coordinator.last_fetch_today,
-            "last_fetch_tomorrow": coordinator.last_fetch_tomorrow,
-            "has_cached_prices": coordinator.cached_prices is not None,
-            "has_cached_today": coordinator.cached_prices_today is not None,
-            "has_cached_tomorrow": coordinator.cached_prices_tomorrow is not None,
-            "resolution_change_pending": getattr(
-                coordinator,
-                "_resolution_change_pending",
-                False,
+    diagnostics.update(
+        {
+            "coordinator": {
+                "last_update_success": coordinator.last_update_success,
+                "update_interval": str(coordinator.update_interval),
+                "site_reference": coordinator.site_reference,
+                "country_code": coordinator.country_code,
+                "user_country": getattr(coordinator, "_user_country", None),
+                "resolution": coordinator.resolution,
+                "api_resolution": coordinator.api_resolution,
+                "user_electricity_enabled": coordinator.user_electricity_enabled,
+                "user_gas_enabled": coordinator.user_gas_enabled,
+                "last_fetch_today": coordinator.last_fetch_today,
+                "last_fetch_tomorrow": coordinator.last_fetch_tomorrow,
+                "has_cached_prices": coordinator.cached_prices is not None,
+                "has_cached_today": coordinator.cached_prices_today is not None,
+                "has_cached_tomorrow": coordinator.cached_prices_tomorrow is not None,
+                "resolution_change_pending": getattr(
+                    coordinator,
+                    "_resolution_change_pending",
+                    False,
+                ),
+            },
+            "invoice_coordinator": {
+                "last_update_success": runtime_data.invoice_coordinator.last_update_success,
+                "update_interval": str(runtime_data.invoice_coordinator.update_interval),
+                "has_cached_invoices": (
+                    runtime_data.invoice_coordinator.data.get(DATA_INVOICES) is not None
+                ),
+            },
+            "data": _serialize(coordinator.data),
+            "cached_prices": _serialize(coordinator.cached_prices),
+            "battery_session_coordinators": len(
+                runtime_data.battery_session_coordinators,
             ),
-        },
-        "invoice_coordinator": {
-            "last_update_success": runtime_data.invoice_coordinator.last_update_success,
-            "update_interval": str(runtime_data.invoice_coordinator.update_interval),
-            "has_cached_invoices": (
-                runtime_data.invoice_coordinator.data.get(DATA_INVOICES) is not None
-            ),
-        },
-        "data": _serialize(coordinator.data),
-        "cached_prices": _serialize(coordinator.cached_prices),
-        "battery_session_coordinators": len(
-            runtime_data.battery_session_coordinators,
-        ),
-    })
+        }
+    )
 
     return async_redact_data(diagnostics, TO_REDACT)
