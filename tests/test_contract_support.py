@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RequestException
 from python_frank_energie.models import MarketPrices, PriceData, User, UserSites
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
