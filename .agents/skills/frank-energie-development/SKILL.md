@@ -1,6 +1,6 @@
 ---
 name: frank-energie-development
-description: Develop, debug, review, and test the Frank Energie Home Assistant custom integration. Use for PR review, bug fixes, config flows, price and contract resolution, coordinators, entity platforms, EV charging, batteries, translations, API errors, security, migrations, and CI/quality-scale work in home-assistant-frank_energie.
+description: Develop, debug, review, and test the Frank Energie Home Assistant custom integration. Use for PR review, bug fixes, config flows, price and contract resolution, coordinators, entity platforms, EV charging, Smart HVAC/Smart heating, batteries, translations, API errors, security, migrations, and CI/quality-scale work in home-assistant-frank_energie.
 ---
 
 # Frank Energie development and review
