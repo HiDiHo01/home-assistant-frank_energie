@@ -462,6 +462,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = _empty_data()
+        self.verified_inventory_ids: set[str] | None = None
         self.update_interval = timedelta(
             minutes=15 if self.resolution == "PT15M" else 60
         )
@@ -1301,7 +1302,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
     async def _fetch_enode_chargers(
         self, start_date: date, is_smart_charging: bool
-    ) -> dict[str, EnodeChargers] | None:
+    ) -> EnodeChargers | None:
         """Fetch Enode chargers from the API."""
         if not self.api.is_authenticated:
             return None
@@ -1351,6 +1352,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except Exception as err:
             self._handle_dynamic_fetch_error("enode vehicles", err)
             return None
+
+    def _process_device_inventory(self, kind: str, inventory: object) -> None:
+        """Record a live inventory while isolating repair errors from polling."""
+        if inventory is None:
+            return
+        try:
+            self.verified_inventory_ids = async_process_device_inventory(
+                self.hass, self.config_entry, kind, inventory
+            )
+        except Exception:  # noqa: BLE001 - Repairs must not break polling
+            _LOGGER.exception("Failed to process the %s inventory for Repairs", kind)
 
     async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
         """Fetch Smart PV systems; skips call when no systems were found this session.
@@ -3111,6 +3123,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch battery data."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             if self.last_update_success:
@@ -3152,17 +3165,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_BATTERIES] = data_smart_batteries
-            if data_smart_batteries is not None:
-                try:
-                    async_process_device_inventory(
-                        self.hass, self.config_entry, "battery", data_smart_batteries
-                    )
-                except Exception:  # noqa: BLE001 - Repairs must not break polling
-                    _LOGGER.exception(
-                        "Failed to process the battery inventory for Repairs"
-                    )
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
+            self._process_device_inventory("battery", data_smart_batteries)
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -3192,6 +3197,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch charger data."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             if self.last_update_success:
@@ -3233,15 +3239,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_ENODE_CHARGERS] = data_enode_chargers
-            if data_enode_chargers is not None:
-                try:
-                    async_process_device_inventory(
-                        self.hass, self.config_entry, "charger", data_enode_chargers
-                    )
-                except Exception:  # noqa: BLE001 - Repairs must not break polling
-                    _LOGGER.exception(
-                        "Failed to process the charger inventory for Repairs"
-                    )
+            self._process_device_inventory("charger", data_enode_chargers)
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -3349,6 +3347,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch vehicle data."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             _LOGGER.debug("Skipping vehicle fetch during maintenance window")
@@ -3391,15 +3390,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_ENODE_VEHICLES] = enode_vehicles
-            if enode_vehicles is not None:
-                try:
-                    async_process_device_inventory(
-                        self.hass, self.config_entry, "vehicle", enode_vehicles
-                    )
-                except Exception:  # noqa: BLE001 - Repairs must not break polling
-                    _LOGGER.exception(
-                        "Failed to process the vehicle inventory for Repairs"
-                    )
+            self._process_device_inventory("vehicle", enode_vehicles)
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

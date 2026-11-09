@@ -9,15 +9,20 @@ from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
-from .device_inventory import INVENTORY_SPECS, validated_inventory_ids
+from .device_inventory import (
+    INVENTORY_SPECS,
+    async_identify_inventory_device,
+    validated_inventory_ids,
+)
 
 if TYPE_CHECKING:
-    from . import FrankEnergieEntryData
     from homeassistant.config_entries import ConfigEntry
+
+    from . import FrankEnergieEntryData
+    from .coordinator import FrankEnergieCoordinator
 
 
 _REQUIRED_ABSENT_FETCHES = 2
@@ -28,94 +33,27 @@ def _issue_id(kind: str, entry_id: str, device_id: str) -> str:
     return f"stale_{kind}_{entry_id}_{device_id}"
 
 
-def _has_kind_marker(
-    hass: HomeAssistant,
-    entry: "ConfigEntry[FrankEnergieEntryData]",
-    device: dr.DeviceEntry,
-    identifier: str,
-    kind: str,
-) -> bool:
-    """Find a matching entity by unique ID before scanning the device registry."""
-    registry = er.async_get(hass)
-    for platform, marker in INVENTORY_SPECS[kind].markers:
-        entity_id = registry.async_get_entity_id(
-            platform, DOMAIN, f"{DOMAIN}_{identifier}_{marker}"
-        )
-        if entity_id is None:
-            continue
-        entity = registry.async_get(entity_id)
-        if (
-            entity is not None
-            and entity.device_id == device.id
-            and entity.config_entry_id == entry.entry_id
-        ):
-            return True
-    return False
-
-
-def _candidate_identifier(
-    hass: HomeAssistant,
-    entry: "ConfigEntry[FrankEnergieEntryData]",
-    device: dr.DeviceEntry,
-    kind: str,
-) -> str | None:
-    """Identify a device using the same guarded classification as PR #405."""
-    from . import _device_inventory
-
-    if device.config_entry_id != entry.entry_id or device.entry_type is not None:
-        return None
-    identifiers = {
-        identifier
-        for domain, identifier in device.identifiers
-        if domain == DOMAIN and identifier
-    }
-    if len(identifiers) != 1:
-        return None
-    identifier = next(iter(identifiers))
-    if not _has_kind_marker(hass, entry, device, identifier, kind):
-        return None
-    unique_ids = {
-        entity.unique_id
-        for entity in er.async_entries_for_device(
-            er.async_get(hass), device.id, include_disabled_entities=True
-        )
-        if entity.config_entry_id == entry.entry_id
-    }
-    selected_inventory = _device_inventory(
-        entry.runtime_data, device, unique_ids, identifier
-    )
-    if (
-        selected_inventory is None
-        or selected_inventory[1] != INVENTORY_SPECS[kind].data_key
-    ):
-        return None
-    return identifier
-
-
 @callback
 def async_process_device_inventory(
     hass: HomeAssistant,
     entry: "ConfigEntry[FrankEnergieEntryData]",
     kind: str,
     inventory: object,
-) -> None:
-    """Observe one fresh inventory without additional polling or silent removal.
+) -> set[str] | None:
+    """Update repairs and return the IDs verified by this live inventory.
 
     Missing devices require two complete, independent successful fetches.
     Failed, skipped, or malformed fetches never change or clear repair issues.
     """
     if kind not in INVENTORY_SPECS or entry.runtime_data is None:
-        return
+        return None
     inventory_ids = validated_inventory_ids(
         INVENTORY_SPECS[kind].collection_key, inventory
     )
     if inventory_ids is None:
-        return
+        return None
 
-    runtime_data = entry.runtime_data
-    runtime_data.stale_inventory_epochs[kind] = (
-        runtime_data.stale_inventory_epochs.get(kind, 0) + 1
-    )
+    absences = entry.runtime_data.stale_device_absences
     observed: set[str] = set()
     with ir.async_refresh_issues(
         hass,
@@ -126,29 +64,22 @@ def async_process_device_inventory(
         for device in dr.async_entries_for_config_entry(
             dr.async_get(hass), entry.entry_id
         ):
-            # Avoid entity-registry scans for devices that cannot match this
-            # kind (including service and unrelated hardware devices).
-            if any(
-                domain == DOMAIN and identifier.startswith(f"{entry.entry_id}_")
-                for domain, identifier in device.identifiers
-            ):
-                continue
-
-            issue_id = _issue_id(kind, entry.entry_id, device.id)
-            identifier = _candidate_identifier(hass, entry, device, kind)
-            if identifier is None:
-                # An unidentifiable device must never leave an unfixable repair.
-                # The scoped issue refresh clears its old issue safely.
+            candidate = async_identify_inventory_device(
+                hass, entry, device, expected_kind=kind
+            )
+            if candidate is None:
+                # The scoped refresh retires issues for unidentifiable devices.
                 continue
 
             key = f"{kind}:{device.id}"
             observed.add(key)
-            if identifier in inventory_ids:
-                runtime_data.stale_device_absences.pop(key, None)
+            if candidate[1] in inventory_ids:
+                absences.pop(key, None)
                 continue
 
-            count = runtime_data.stale_device_absences.get(key, 0) + 1
-            runtime_data.stale_device_absences[key] = count
+            issue_id = _issue_id(kind, entry.entry_id, device.id)
+            count = absences.get(key, 0) + 1
+            absences[key] = count
             if count < _REQUIRED_ABSENT_FETCHES:
                 # Existing persistent issues survive a restart: one new
                 # valid fetch is not enough to change their state.
@@ -179,9 +110,10 @@ def async_process_device_inventory(
                 },
             )
 
-    for key in tuple(runtime_data.stale_device_absences):
+    for key in tuple(absences):
         if key.startswith(f"{kind}:") and key not in observed:
-            runtime_data.stale_device_absences.pop(key, None)
+            absences.pop(key)
+    return inventory_ids
 
 
 class StaleDeviceRepairFlow(RepairsFlow):
@@ -229,37 +161,71 @@ class StaleDeviceRepairFlow(RepairsFlow):
         ):
             return self.async_abort(reason="cannot_verify")
 
+        return await self._async_confirm_device_removal(entry, kind, device_id)
+
+    async def _async_confirm_device_removal(
+        self,
+        entry: "ConfigEntry[FrankEnergieEntryData]",
+        kind: str,
+        device_id: str,
+    ) -> RepairsFlowResult:
+        """Revalidate the device and require a newly verified live inventory."""
         registry = dr.async_get(self.hass)
-        device = registry.async_get(device_id)
+        device = registry.async_get(
+            device_id, include_child_devices=False, include_composite_devices=False
+        )
         if device is None:
             return self.async_create_entry(data={})
-        if _candidate_identifier(self.hass, entry, device, kind) is None:
+        candidate = async_identify_inventory_device(
+            self.hass, entry, device, expected_kind=kind
+        )
+        if candidate is None:
+            ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
             return self.async_abort(reason="cannot_verify")
 
         runtime_data = entry.runtime_data
-        coordinator = getattr(runtime_data, INVENTORY_SPECS[kind].coordinator_attribute)
-        previous_epoch = runtime_data.stale_inventory_epochs.get(kind, 0)
+        coordinator: "FrankEnergieCoordinator" = getattr(
+            runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+        )
+        previous_inventory = coordinator.verified_inventory_ids
+        site_reference = coordinator.site_reference
         await coordinator.async_refresh()
 
-        # last_update_success alone is insufficient: a skipped API fetch can
-        # return cached coordinator data while reporting a successful update.
-        if runtime_data.stale_inventory_epochs.get(kind, 0) == previous_epoch:
-            return self.async_abort(reason="cannot_verify")
-
-        current_device = registry.async_get(device_id)
+        # A skipped refresh can still report success for cached display data.
+        inventory = coordinator.verified_inventory_ids
         if (
-            current_device is None
-            or current_device.identifiers != device.identifiers
-            or current_device.config_entry_id != device.config_entry_id
+            inventory is None
+            or inventory is previous_inventory
+            or not coordinator.last_update_success
+            or entry.state is not ConfigEntryState.LOADED
+            or entry.runtime_data is not runtime_data
+            or coordinator.site_reference != site_reference
         ):
             return self.async_abort(reason="cannot_verify")
 
-        from . import async_remove_config_entry_device
-
-        if not await async_remove_config_entry_device(self.hass, entry, device):
+        current_device = registry.async_get(
+            device_id, include_child_devices=False, include_composite_devices=False
+        )
+        if current_device is None:
+            return self.async_create_entry(data={})
+        if (
+            current_device.identifiers != device.identifiers
+            or current_device.config_entry_id != device.config_entry_id
+            or async_identify_inventory_device(
+                self.hass, entry, current_device, expected_kind=kind
+            )
+            != candidate
+        ):
+            return self.async_abort(reason="cannot_verify")
+        if candidate[1] in inventory:
             return self.async_abort(reason="device_restored")
 
-        registry.async_remove_device(device.id)
+        from . import async_remove_config_entry_device
+
+        if not await async_remove_config_entry_device(self.hass, entry, current_device):
+            return self.async_abort(reason="cannot_verify")
+
+        registry.async_remove_device(device_id)
         return self.async_create_entry(data={})
 
 

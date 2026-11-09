@@ -16,7 +16,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
@@ -41,7 +40,7 @@ from .coordinator import (
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
-from .device_inventory import INVENTORY_SPECS, validated_inventory_ids
+from .device_inventory import INVENTORY_SPECS, async_identify_inventory_device
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
 
@@ -68,7 +67,6 @@ class FrankEnergieEntryData:
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
     stale_device_absences: dict[str, int] = field(default_factory=dict)
-    stale_inventory_epochs: dict[str, int] = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -158,48 +156,6 @@ async def async_remove_entry(
     await price_cache_store(hass, entry.entry_id).async_remove()
 
 
-def _device_inventory(
-    runtime_data: FrankEnergieEntryData,
-    device_entry: dr.DeviceEntry,
-    registered_unique_ids: set[str],
-    identifier: str,
-) -> tuple[FrankEnergieCoordinator, str, str] | None:
-    """Select a verified inventory only for a uniquely recognized device kind."""
-    # Use stable entity unique IDs; the model string is mutable across platforms.
-    matched_kinds = [
-        kind
-        for kind, spec in INVENTORY_SPECS.items()
-        if any(
-            f"{DOMAIN}_{identifier}_{marker}" in registered_unique_ids
-            for _, marker in spec.markers
-        )
-    ]
-    if len(matched_kinds) != 1:
-        return None
-
-    inventory_spec = INVENTORY_SPECS[matched_kinds[0]]
-    return (
-        getattr(runtime_data, inventory_spec.coordinator_attribute),
-        inventory_spec.data_key,
-        inventory_spec.collection_key,
-    )
-
-
-def _inventory_confirms_device_absent(
-    coordinator: FrankEnergieCoordinator,
-    data_key: str,
-    collection_key: str,
-    identifier: str,
-) -> bool:
-    """Return True only when valid, successfully refreshed data omits the device."""
-    if not coordinator.last_update_success or not isinstance(coordinator.data, dict):
-        return False
-
-    inventory = coordinator.data.get(data_key)
-    identifiers = validated_inventory_ids(collection_key, inventory)
-    return identifiers is not None and identifier not in identifiers
-
-
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
@@ -210,34 +166,20 @@ async def async_remove_config_entry_device(
     Registry entities remain detectable even when disabled. Fail closed for
     unknown devices, missing data, and failed API requests.
     """
-    if (
-        entry.state is not ConfigEntryState.LOADED
-        or device_entry.config_entry_id != entry.entry_id
-        or device_entry.entry_type is not None
-    ):
+    if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
         return False
 
-    identifiers = {
-        identifier
-        for domain, identifier in device_entry.identifiers
-        if domain == DOMAIN and identifier
-    }
-    if len(identifiers) != 1:
+    device = async_identify_inventory_device(hass, entry, device_entry)
+    if device is None:
         return False
-    identifier = next(iter(identifiers))
-
-    registered_unique_ids = {
-        entity.unique_id
-        for entity in er.async_entries_for_device(
-            er.async_get(hass), device_entry.id, include_disabled_entities=True
-        )
-        if entity.config_entry_id == entry.entry_id
-    }
-    inventory = _device_inventory(
-        entry.runtime_data, device_entry, registered_unique_ids, identifier
+    kind, identifier = device
+    coordinator: FrankEnergieCoordinator = getattr(
+        entry.runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
     )
-    return inventory is not None and _inventory_confirms_device_absent(
-        *inventory, identifier
+    return (
+        coordinator.last_update_success
+        and coordinator.verified_inventory_ids is not None
+        and identifier not in coordinator.verified_inventory_ids
     )
 
 

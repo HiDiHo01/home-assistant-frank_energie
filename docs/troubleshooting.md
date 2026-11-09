@@ -155,11 +155,12 @@ registered entities. Deleting entities can affect automations and dashboards.
 During API maintenance, authentication failures, disabled smart features, or
 incomplete/invalid inventory responses, no removal is offered or performed on
 the basis of those responses. Existing repair issues remain available until a
-successful inventory check establishes that the device returned or was removed.
+successful inventory check finds the device again, or its registry entry can
+no longer be identified as eligible for removal.
 
-The original manual device-removal option remains available and uses the
-same safety checks. The repair mechanism does not call the provider API more
-often unless the user confirms a repair.
+The manual device-removal option uses the latest verified inventory from a
+successful refresh. After a failed or skipped refresh, wait for a successful
+update before trying again. Confirming a repair requests a fresh inventory.
 
 **Minimum supported version: Home Assistant 2026.11.0.** The repair flow uses
 Core's current config-entry-scoped issue registry and issue-refresh APIs.

@@ -21,6 +21,7 @@ from custom_components.frank_energie.const import (
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
 )
+from custom_components.frank_energie.device_inventory import validated_inventory_ids
 from custom_components.frank_energie.helpers import encrypt_password
 from custom_components.frank_energie.helpers import (
     _get_fernet_key as real_get_fernet_key,
@@ -197,7 +198,7 @@ async def test_remove_config_entry_device(
     if scenario != "live-entities":
         # A complete, successful (empty) charger inventory proves absence.
         charger_coordinator = entry.runtime_data.charger_coordinator
-        charger_coordinator.data[DATA_ENODE_CHARGERS] = SimpleNamespace(chargers=[])
+        charger_coordinator.verified_inventory_ids = set()
         charger_coordinator.last_update_success = True
     if scenario == "live-entities":
         # Created by the real setup and carries the live price sensors.
@@ -265,11 +266,11 @@ async def test_remove_config_entry_device(
 
 
 @pytest.mark.parametrize(
-    ("kind", "data_key", "collection_key", "marker", "device_model"),
+    ("kind", "data_key", "collection_key", "platform", "marker"),
     [
-        ("charger", DATA_ENODE_CHARGERS, "chargers", "charger_brand", None),
-        ("vehicle", DATA_ENODE_VEHICLES, "vehicles", "vehicle_name", None),
-        ("battery", DATA_BATTERIES, "batteries", "battery_mode", "SmartBattery"),
+        ("charger", DATA_ENODE_CHARGERS, "chargers", "sensor", "charger_brand"),
+        ("vehicle", DATA_ENODE_VEHICLES, "vehicles", "sensor", "vehicle_name"),
+        ("battery", DATA_BATTERIES, "batteries", "select", "battery_mode"),
     ],
 )
 @pytest.mark.parametrize(
@@ -289,8 +290,8 @@ async def test_remove_device_requires_confirmed_inventory(
     kind: str,
     data_key: str,
     collection_key: str,
+    platform: str,
     marker: str,
-    device_model: str | None,
     inventory_case: str,
     removable: bool,
 ) -> None:
@@ -305,11 +306,10 @@ async def test_remove_device_requires_confirmed_inventory(
     device = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, identifier)},
-        model=device_model,
     )
     entity_registry = er.async_get(hass)
     entity = entity_registry.async_get_or_create(
-        "select" if kind == "battery" else "sensor",
+        platform,
         DOMAIN,
         f"{DOMAIN}_{identifier}_{marker}",
         config_entry=entry,
@@ -340,6 +340,9 @@ async def test_remove_device_requires_confirmed_inventory(
             members = [SimpleNamespace(id=None)]
         inventory = SimpleNamespace(**{collection_key: members})
     coordinator.data[data_key] = inventory
+    coordinator.verified_inventory_ids = validated_inventory_ids(
+        collection_key, inventory
+    )
 
     await client.send_json_auto_id(
         {
