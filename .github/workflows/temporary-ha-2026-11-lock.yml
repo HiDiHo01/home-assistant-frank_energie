@@ -1,4 +1,4 @@
-name: Temporary HA dependency resolution
+name: Temporary HA checkout diagnostic
 on:
   push:
     branches:
@@ -10,27 +10,6 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     steps:
-      - name: Checkout branch
+      - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
-        with:
-          persist-credentials: true
-      - name: Install Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # @v6
-        with:
-          python-version: "3.14.2"
-      - name: Install Poetry
-        run: python -m pip install --only-binary :all: "poetry==2.5.1"
-      - name: Resolve and validate
-        run: |
-          poetry lock
-          poetry check --lock
-      - name: Commit regenerated lockfile
-        run: |
-          git add poetry.lock
-          git diff --cached --quiet && exit 1
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "test(deps): resolve official HA 2026.11.0 plugin"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
