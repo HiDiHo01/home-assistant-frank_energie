@@ -1216,7 +1216,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
             return user_data
         except AuthRequiredException:
-            raise ConfigEntryAuthFailed("Frank Energie authentication is required") from None
+            raise ConfigEntryAuthFailed(
+                "Frank Energie authentication is required"
+            ) from None
         except AuthException:
             _LOGGER.warning("Authentication failed while fetching user data")
             return None
