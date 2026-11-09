@@ -784,9 +784,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 pass
         return password_to_validate or ""
 
-    def _preserve_legacy_credentials(
-        self, options: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _preserve_legacy_credentials(self, options: dict[str, Any]) -> dict[str, Any]:
         """Keep data-only credentials usable after later token renewal."""
         entry = self.config_entry
         saved_username = entry.data.get(CONF_USERNAME)
@@ -975,9 +973,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 )
                 errors = {"base": "unknown_error"}
 
-        has_batteries, has_chargers, has_vehicles, has_pv = (
-            self._resource_features()
-        )
+        has_batteries, has_chargers, has_vehicles, has_pv = self._resource_features()
 
         schema_dict = {
             vol.Required(CONF_USERNAME, default=current_username): str,
