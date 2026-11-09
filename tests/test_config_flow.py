@@ -243,3 +243,33 @@ async def test_options_flow_submit_blank_password(
     # It should preserve the existing password (which decrypts to the original value)
     assert result2["data"]["username"] == "user@example.com"
     assert decrypt_password(hass, result2["data"]["password"]) == "original_secure_pwd"
+
+
+async def test_password_field_uses_password_text_selector(
+    hass: HomeAssistant, config_entry_with_site
+) -> None:
+    """Test that login and options flow schemas configure the password field with a password TextSelector."""
+    from homeassistant.helpers.selector import TextSelector, TextSelectorType
+
+    # 1. Check login form schema
+    init_res = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_USER},
+    )
+    login_form = await hass.config_entries.flow.async_configure(
+        init_res["flow_id"],
+        user_input={"authentication": True},
+    )
+    password_validator = login_form["data_schema"].schema[CONF_PASSWORD]
+    assert isinstance(password_validator, TextSelector)
+    assert password_validator.config["type"] == TextSelectorType.PASSWORD
+    assert password_validator.config["autocomplete"] == "current-password"
+
+    # 2. Check options flow schema
+    options_form = await hass.config_entries.options.async_init(
+        config_entry_with_site.entry_id
+    )
+    options_password_validator = options_form["data_schema"].schema[CONF_PASSWORD]
+    assert isinstance(options_password_validator, TextSelector)
+    assert options_password_validator.config["type"] == TextSelectorType.PASSWORD
+    assert options_password_validator.config["autocomplete"] == "current-password"
