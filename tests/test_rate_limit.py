@@ -1178,6 +1178,78 @@ async def test_empty_sibling_preserves_rate_limit_retry_hint(
     user_result.assert_awaited_once()
 
 
+async def test_public_prices_survive_implicit_token_renewal_throttle(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+) -> None:
+    """A private token cooldown must not block unauthenticated market prices."""
+    coordinator = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
+    market = MarketPrices(
+        electricity=PriceData([], "electricity"),
+        gas=PriceData([], "gas"),
+        energy_country="NL",
+    )
+    public_api = MagicMock()
+    public_api.__aenter__ = AsyncMock(return_value=public_api)
+    public_api.__aexit__ = AsyncMock(return_value=False)
+    public_api.prices = AsyncMock(return_value=market)
+    rate_api.prices.side_effect = RateLimitException(
+        FrankEnergie.RENEW_TOKEN_OPERATIONNAME, retry_after=120
+    )
+
+    with patch(
+        "custom_components.frank_energie.coordinator.FrankEnergie",
+        return_value=public_api,
+    ) as public_client:
+        for _ in range(2):
+            result = await coordinator._fetch_public_prices_for_range(
+                date(2026, 10, 28), date(2026, 10, 29), "NL"
+            )
+            assert result is market
+
+    rate_api.prices.assert_awaited_once()
+    assert public_api.prices.await_count == 2
+    assert all(
+        "auth_token" not in call.kwargs and "refresh_token" not in call.kwargs
+        for call in public_client.call_args_list
+    )
+
+
+async def test_site_ownership_reauth_reuses_entry_cooldown(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    clock: MagicMock,
+) -> None:
+    """A throttled ownership lookup must not bypass the entry's retry deadline."""
+    from custom_components.frank_energie.config_flow import (
+        _async_account_matches_entry,
+    )
+
+    api = MagicMock()
+    api.__aenter__ = AsyncMock(return_value=api)
+    api.__aexit__ = AsyncMock(return_value=False)
+    api.UserSites = AsyncMock(
+        side_effect=RateLimitException("UserSites", retry_after=120)
+    )
+    auth = SimpleNamespace(authToken="sample-access", refreshToken="sample-refresh")
+    with patch(
+        "custom_components.frank_energie.config_flow.FrankEnergie", return_value=api
+    ):
+        with pytest.raises(RateLimitException):
+            await _async_account_matches_entry(
+                hass, rate_entry, auth, USER_INPUT[CONF_USERNAME]
+            )
+        clock.return_value = 150
+        with pytest.raises(RateLimitException) as caught:
+            await _async_account_matches_entry(
+                hass, rate_entry, auth, USER_INPUT[CONF_USERNAME]
+            )
+    assert caught.value.retry_after == 70
+    api.UserSites.assert_awaited_once()
+
+
 async def test_price_source_throttle_propagates_without_another_result(
     hass: HomeAssistant,
     rate_entry: MockConfigEntry,
