@@ -32,6 +32,7 @@ from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import (
+    AuthException,
     AuthRequiredException,
     FrankEnergieException,
     NetworkError,
@@ -3068,6 +3069,39 @@ async def test_fetch_user_data_isolates_smart_hvac_query_failures(
 
     assert result is user_data
     assert result.smartHvac is None
+    assert "synthetic-private-identifier" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_optional_hvac_auth_exception_preserves_other_features(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Isolate optional Me auth failure without dropping valid account data."""
+    caplog.set_level("DEBUG")
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    smart_charging = SimpleNamespace(isActivated=True)
+    smart_trading = SimpleNamespace(isActivated=False)
+    user_data.smartCharging = smart_charging
+    user_data.smartTrading = smart_trading
+    user_data.smartHvac = SimpleNamespace(isActivated=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        side_effect=AuthException("synthetic-private-identifier")
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+    assert result.smartCharging is smart_charging
+    assert result.smartTrading is smart_trading
+    mock_frank_energie.user.assert_awaited_once_with(coordinator.site_reference)
+    mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
     assert "synthetic-private-identifier" not in caplog.text
 
 
