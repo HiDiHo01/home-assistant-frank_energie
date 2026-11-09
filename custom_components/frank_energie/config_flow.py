@@ -847,6 +847,39 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
         return options
 
+    def _resource_features(self) -> tuple[bool, bool, bool, bool]:
+        """Determine optional resource visibility from coordinator data."""
+        runtime_data = getattr(self.config_entry, "runtime_data", None)
+        if not runtime_data:
+            return True, True, True, True
+
+        battery_data = (
+            runtime_data.battery_coordinator.data.get(DATA_BATTERIES)
+            if runtime_data.battery_coordinator.data
+            else None
+        )
+        charger_data = (
+            runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+            if runtime_data.charger_coordinator.data
+            else None
+        )
+        vehicle_data = (
+            runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+            if runtime_data.vehicle_coordinator.data
+            else None
+        )
+        pv_data = (
+            runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS)
+            if runtime_data.pv_coordinator.data
+            else None
+        )
+        return (
+            bool(battery_data and battery_data.batteries),
+            bool(charger_data and charger_data.chargers),
+            bool(vehicle_data and vehicle_data.vehicles),
+            bool(pv_data and pv_data.systems),
+        )
+
     async def async_step_user(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -919,41 +952,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 )
                 errors = {"base": "unknown_error"}
 
-        runtime_data = getattr(entry, "runtime_data", None)
-
-        has_batteries = True
-        has_chargers = True
-        has_vehicles = True
-        has_pv = True
-
-        if runtime_data:
-            battery_data = (
-                runtime_data.battery_coordinator.data.get(DATA_BATTERIES)
-                if runtime_data.battery_coordinator.data
-                else None
-            )
-            has_batteries = bool(battery_data and battery_data.batteries)
-
-            charger_data = (
-                runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS)
-                if runtime_data.charger_coordinator.data
-                else None
-            )
-            has_chargers = bool(charger_data and charger_data.chargers)
-
-            vehicle_data = (
-                runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
-                if runtime_data.vehicle_coordinator.data
-                else None
-            )
-            has_vehicles = bool(vehicle_data and vehicle_data.vehicles)
-
-            pv_data = (
-                runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS)
-                if runtime_data.pv_coordinator.data
-                else None
-            )
-            has_pv = bool(pv_data and pv_data.systems)
+        has_batteries, has_chargers, has_vehicles, has_pv = (
+            self._resource_features()
+        )
 
         schema_dict = {
             vol.Required(CONF_USERNAME, default=current_username): str,
