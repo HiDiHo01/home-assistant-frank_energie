@@ -2369,9 +2369,25 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._static_contract_price_resolution_state = state
             self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
 
-    def _has_selected_electricity_connection(self) -> bool:
-        """Check that a selected electricity connection can receive changes."""
-        return bool(self._connection_id) and self._price_contracts() != {"GAS"}
+    def _can_change_resolution(self) -> bool:
+        """Check the selected connection and known change restrictions."""
+        if not self._connection_id or self._price_contracts() == {"GAS"}:
+            _LOGGER.error(
+                "Cannot set resolution via API: electricity connection_id not available"
+            )
+            return False
+        if self._resolution_change_pending:
+            _LOGGER.warning("Cannot set resolution: a change is already pending")
+            return False
+        if (
+            self._api_resolution_state is not None
+            and not self._api_resolution_state.isChangeRequestPossible
+        ):
+            _LOGGER.warning(
+                "Cannot set resolution via API: isChangeRequestPossible=False"
+            )
+            return False
+        return True
 
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
@@ -2394,23 +2410,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 await self.async_request_refresh()
             return
 
-        if not self._has_selected_electricity_connection():
-            _LOGGER.error(
-                "Cannot set resolution via API: electricity connection_id not available"
-            )
-            return
-
-        if self._resolution_change_pending:
-            _LOGGER.warning("Cannot set resolution: a change is already pending")
-            return
-
-        if (
-            self._api_resolution_state is not None
-            and not self._api_resolution_state.isChangeRequestPossible
-        ):
-            _LOGGER.warning(
-                "Cannot set resolution via API: isChangeRequestPossible=False"
-            )
+        if not self._can_change_resolution():
             return
 
         self._resolution_change_pending = True

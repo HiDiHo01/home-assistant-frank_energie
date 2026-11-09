@@ -24,7 +24,7 @@
     {
       "path": "custom_components/frank_energie/coordinator.py",
       "code": "C901",
-      "message": "'FrankEnergieCoordinator.async_set_resolution' is too complex (16)"
+      "message": "'FrankEnergieCoordinator.async_set_resolution' is too complex (15)"
     },
     {
       "path": "custom_components/frank_energie/coordinator.py",
