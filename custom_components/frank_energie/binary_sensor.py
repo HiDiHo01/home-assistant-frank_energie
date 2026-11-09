@@ -303,6 +303,18 @@ def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
     return current_price.total == min(totals)
 
 
+def _tomorrow_prices_available(data: FrankEnergieData | None) -> bool | None:
+    """Return whether electricity prices exist for tomorrow in Amsterdam."""
+    if data is None:
+        return None
+
+    electricity = data.get(DATA_ELECTRICITY)
+    if electricity is None:
+        return None
+
+    return bool(electricity.tomorrow)
+
+
 def _disabled_haptic_feedback(
     data: FrankEnergieData,
 ) -> bool | None:
@@ -705,6 +717,13 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         icon=ICON,
         service_name=SERVICE_NAME_PRICES,
         value_fn=_electricity_price_lowest_today,
+    ),
+    FrankEnergieBinarySensorDescription(
+        key="tomorrow_prices_available",
+        translation_key="tomorrow_prices_available",
+        icon=ICON,
+        service_name=SERVICE_NAME_PRICES,
+        value_fn=_tomorrow_prices_available,
     ),
 )
 
