@@ -18,7 +18,7 @@ from custom_components.frank_energie import (
     FrankEnergieEntryData,
     async_remove_config_entry_device,
 )
-from custom_components.frank_energie.const import DATA_ENODE_CHARGERS, DOMAIN
+from custom_components.frank_energie.const import DATA_BATTERIES, DATA_ENODE_CHARGERS, DOMAIN
 from custom_components.frank_energie.repairs import (
     _issue_id,
     async_process_device_inventory,
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.asyncio
 _KINDS = [
     ("charger", "chargers", "charger_brand"),
     ("vehicle", "vehicles", "vehicle_name"),
-    ("battery", "batteries", "battery_status"),
+    ("battery", "batteries", "battery_mode"),
 ]
 
 
@@ -304,3 +304,26 @@ async def test_device_removal_rejects_duplicate_inventory_ids(
 
     assert not await async_remove_config_entry_device(hass, entry, device)
     assert dr.async_get(hass).async_get(device.id) is not None
+
+
+@pytest.mark.parametrize(
+    "battery_model", ["SmartBattery", "Smart Battery", "Batteries", None]
+)
+async def test_battery_classification_uses_stable_entity_marker(
+    hass: HomeAssistant, frank_energie_setup, battery_model: str | None
+) -> None:
+    """Recognize battery devices regardless of the mutable registry model."""
+    entry = await frank_energie_setup()
+    device, _ = _register_device(hass, entry, "battery", "battery_mode")
+    registry = dr.async_get(hass)
+    registry.async_update_device(device.id, model=battery_model)
+    empty = _inventory("batteries", [])
+    async_process_device_inventory(hass, entry, "battery", empty)
+    async_process_device_inventory(hass, entry, "battery", empty)
+    assert _repair_exists(hass, _issue_id("battery", entry.entry_id, device.id))
+
+    coordinator = entry.runtime_data.battery_coordinator
+    coordinator.last_update_success = True
+    # The core removal guard uses the same stable entity marker.
+    coordinator.data = {DATA_BATTERIES: empty}
+    assert await async_remove_config_entry_device(hass, entry, registry.async_get(device.id))

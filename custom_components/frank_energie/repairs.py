@@ -12,19 +12,14 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
-from .const import DATA_BATTERIES, DATA_ENODE_CHARGERS, DATA_ENODE_VEHICLES, DOMAIN
-from .device_inventory import validated_inventory_ids
+from .const import DOMAIN
+from .device_inventory import INVENTORY_SPECS, validated_inventory_ids
 
 if TYPE_CHECKING:
     from . import FrankEnergieEntryData
     from homeassistant.config_entries import ConfigEntry
 
 
-_INVENTORIES: dict[str, tuple[str, str]] = {
-    "battery": (DATA_BATTERIES, "batteries"),
-    "charger": (DATA_ENODE_CHARGERS, "chargers"),
-    "vehicle": (DATA_ENODE_VEHICLES, "vehicles"),
-}
 _REQUIRED_ABSENT_FETCHES = 2
 
 
@@ -62,7 +57,7 @@ def _candidate_identifier(
     selected_inventory = _device_inventory(
         entry.runtime_data, device, unique_ids, identifier
     )
-    if selected_inventory is None or selected_inventory[1] != _INVENTORIES[kind][0]:
+    if selected_inventory is None or selected_inventory[1] != INVENTORY_SPECS[kind].data_key:
         return None
     return identifier
 
@@ -79,9 +74,9 @@ def async_process_device_inventory(
     Missing devices require two complete, independent successful fetches.
     Failed, skipped, or malformed fetches never change or clear repair issues.
     """
-    if kind not in _INVENTORIES or entry.runtime_data is None:
+    if kind not in INVENTORY_SPECS or entry.runtime_data is None:
         return
-    inventory_ids = validated_inventory_ids(_INVENTORIES[kind][1], inventory)
+    inventory_ids = validated_inventory_ids(INVENTORY_SPECS[kind].collection_key, inventory)
     if inventory_ids is None:
         return
 
@@ -101,9 +96,11 @@ def async_process_device_inventory(
         ):
             # Avoid entity-registry scans for devices that cannot match this
             # kind (including service and unrelated hardware devices).
-            if kind == "battery" and device.model != "SmartBattery":
-                continue
-            if kind != "battery" and device.model == "SmartBattery":
+            if kind != "battery" and device.model in (
+                "SmartBattery",
+                "Smart Battery",
+                "Batteries",
+            ):
                 continue
             if any(
                 domain == DOMAIN and identifier.startswith(f"{entry.entry_id}_")
@@ -190,7 +187,7 @@ class StaleDeviceRepairFlow(RepairsFlow):
         device_id = data.get("device_id")
         if (
             not isinstance(kind, str)
-            or kind not in _INVENTORIES
+            or kind not in INVENTORY_SPECS
             or not isinstance(entry_id, str)
             or not isinstance(device_id, str)
             or self.issue_id != _issue_id(kind, entry_id, device_id)
@@ -214,11 +211,9 @@ class StaleDeviceRepairFlow(RepairsFlow):
             return self.async_abort(reason="cannot_verify")
 
         runtime_data = entry.runtime_data
-        coordinator = {
-            "battery": runtime_data.battery_coordinator,
-            "charger": runtime_data.charger_coordinator,
-            "vehicle": runtime_data.vehicle_coordinator,
-        }[kind]
+        coordinator = getattr(
+            runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+        )
         previous_epoch = runtime_data.stale_inventory_epochs.get(kind, 0)
         await coordinator.async_refresh()
 

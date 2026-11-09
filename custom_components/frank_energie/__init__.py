@@ -44,7 +44,7 @@ from .coordinator import (
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
-from .device_inventory import validated_inventory_ids
+from .device_inventory import INVENTORY_SPECS, validated_inventory_ids
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
 
@@ -168,20 +168,32 @@ def _device_inventory(
     identifier: str,
 ) -> tuple[FrankEnergieCoordinator, str, str] | None:
     """Select a verified inventory only for a uniquely recognized device kind."""
-    inventories: list[tuple[FrankEnergieCoordinator, str, str]] = []
+    matched_kinds: list[str] = []
     if f"{DOMAIN}_{identifier}_charger_brand" in registered_unique_ids:
-        inventories.append(
-            (runtime_data.charger_coordinator, DATA_ENODE_CHARGERS, "chargers")
-        )
+        matched_kinds.append("charger")
     if f"{DOMAIN}_{identifier}_vehicle_name" in registered_unique_ids:
-        inventories.append(
-            (runtime_data.vehicle_coordinator, DATA_ENODE_VEHICLES, "vehicles")
+        matched_kinds.append("vehicle")
+    # The device-registry model is mutable: select/number/binary_sensor may
+    # overwrite it with "Smart Battery" or "Batteries". A stable per-battery
+    # unique ID is a safer identifier than the current model name.
+    if any(
+        f"{DOMAIN}_{identifier}_{marker}" in registered_unique_ids
+        for marker in (
+            "battery_mode",
+            "battery_strategy",
+            "consumption_threshold_price",
         )
-    if device_entry.model == "SmartBattery":
-        inventories.append(
-            (runtime_data.battery_coordinator, DATA_BATTERIES, "batteries")
-        )
-    return inventories[0] if len(inventories) == 1 else None
+    ):
+        matched_kinds.append("battery")
+    if len(matched_kinds) != 1:
+        return None
+
+    inventory_spec = INVENTORY_SPECS[matched_kinds[0]]
+    return (
+        getattr(runtime_data, inventory_spec.coordinator_attribute),
+        inventory_spec.data_key,
+        inventory_spec.collection_key,
+    )
 
 
 def _inventory_confirms_device_absent(
