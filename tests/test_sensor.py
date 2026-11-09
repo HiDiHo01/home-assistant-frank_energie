@@ -292,13 +292,12 @@ async def test_sensors_get_data_of_current_hour(
     now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Return the same two-day data on every request: concurrent refreshes may
+    # complete in any order, so a sequential today/tomorrow cycle is unreliable.
     aioclient_responses.add(
-        start_of_day, [0.3] * 12 + [0.15] * 12, [1.75] * 6 + [1.23] * 18
-    )
-    aioclient_responses.add(
-        start_of_day + timedelta(days=1),
-        [0.25] * 12 + [0.1] * 12,
-        [1.23] * 6 + [1.11] * 18,
+        start_of_day,
+        [0.3] * 12 + [0.15] * 12 + [0.25] * 12 + [0.1] * 12,
+        [1.75] * 6 + [1.23] * 18 + [1.23] * 6 + [1.11] * 18,
     )
     aioclient_responses.cyclic()
 
