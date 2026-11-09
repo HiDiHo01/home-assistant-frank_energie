@@ -111,10 +111,12 @@ jobs:
               raise SystemExit("Home Assistant tests require Python 3.14.2 or a newer 3.14 patch.")
 
           import_module("homeassistant.core")
-          import_module("pytest_homeassistant_custom_component")
+          import_module("pytest_homeassistant")
           print(f"Python: {sys.version.split()[0]}")
-          for package_name in ("homeassistant", "pytest", "pytest-homeassistant-custom-component"):
+          for package_name in ("homeassistant", "pytest", "pytest-homeassistant"):
               print(f"{package_name}: {version(package_name)}")
+          if version("homeassistant") != "2026.11.0" or version("pytest-homeassistant") != "2026.11.0":
+              raise SystemExit("Home Assistant and pytest-homeassistant must both be 2026.11.0")
           PY
 
       - name: Register flake8 problem matcher

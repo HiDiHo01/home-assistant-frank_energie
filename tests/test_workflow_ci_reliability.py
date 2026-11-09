@@ -4,6 +4,7 @@ import importlib.util
 import json
 import re
 import subprocess
+import tomllib
 from collections import Counter
 from pathlib import Path
 from types import ModuleType
@@ -182,6 +183,26 @@ def test_ci_reuses_existing_matrix_for_upstream_main() -> None:
     assert "matrix.library-source == 'upstream-main'" in str(upstream_install["if"])
     assert "python-frank-energie.git@main" in str(upstream_install["run"])
     assert not (WORKFLOWS / "test-pr349-python-frank-energie-main.yml").exists()
+
+def test_homeassistant_test_dependencies_match_the_official_plugin() -> None:
+    """Ensure Core and the official test plugin share the same locked version."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dev_dependencies = project["tool"]["poetry"]["group"]["dev"]["dependencies"]
+    assert dev_dependencies["homeassistant"] == "==2026.11.0"
+    assert dev_dependencies["pytest-homeassistant"] == "==2026.11.0"
+    assert "pytest-homeassistant-custom-component" not in dev_dependencies
+    assert (
+        "pytest-homeassistant"
+        in project["tool"]["pytest"]["ini_options"]["required_plugins"]
+    )
+
+    lock_data = tomllib.loads((ROOT / "poetry.lock").read_text(encoding="utf-8"))
+    locked_versions = {
+        package["name"]: package["version"] for package in lock_data["package"]
+    }
+    assert locked_versions["homeassistant"] == "2026.11.0"
+    assert locked_versions["pytest-homeassistant"] == "2026.11.0"
+    assert "pytest-homeassistant-custom-component" not in locked_versions
 
 
 def test_flake8_parser_recognizes_diagnostics() -> None:
