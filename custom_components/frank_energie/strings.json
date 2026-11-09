@@ -117,7 +117,7 @@
         "name": "Smart Feed-In"
       },
       "smart_hvac": {
-        "name": "Smart HVAC"
+        "name": "Smart HVAC activated"
       },
       "smart_push_notification_price_alerts": {
         "name": "Smart push notification price alerts"
