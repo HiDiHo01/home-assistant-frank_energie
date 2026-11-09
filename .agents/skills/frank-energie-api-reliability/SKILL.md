@@ -1,6 +1,6 @@
 ---
 name: frank-energie-api-reliability
-description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limiting, invoice isolation, price cache freshness, partial GraphQL responses, and asynchronous cancellation in the Home Assistant integration.
+description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limiting, invoice isolation, price cache freshness, partial GraphQL responses, site-scoped Smart HVAC status and availability, and asynchronous cancellation in the Home Assistant integration.
 ---
 
 # Frank Energie API and coordinator reliability
