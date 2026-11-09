@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
@@ -3107,7 +3108,7 @@ async def test_fetch_user_data_propagates_auth_required(
         side_effect=AuthRequiredException("synthetic-auth-rejected")
     )
 
-    with pytest.raises(AuthRequiredException):
+    with pytest.raises(ConfigEntryAuthFailed, match="authentication is required"):
         await coordinator._fetch_user_data()
 
     mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
