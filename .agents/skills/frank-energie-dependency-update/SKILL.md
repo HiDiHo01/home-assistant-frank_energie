@@ -21,6 +21,31 @@ The integration depends on the separately maintained [python-frank-energie libra
 6. Validate against the configured Python/Home Assistant CI matrix; include focused regression tests, the full pytest suite when feasible, Ruff/Flake8, HACS/hassfest, and dependency consistency checks as applicable.
 7. Inspect the final diff for accidental dependency upgrades, new permissions, changes to public behavior, and secrets.
 
+## Smart HVAC release gate
+
+For the authenticated Smart heating / Slim verwarmen entity, follow
+[the documented data contract](../../../docs/smart_hvac_activation.md):
+
+- The site-specific `api.me(site_reference)` response on
+  `python-frank-energie/main` has `Me.user_smart_hvac`, populated from
+  root-level `userSmartHvac(siteReference:)`. The pinned package
+  `python-frank-energie==2026.9.20` lacks this support.
+- Do not declare this feature production-ready solely because the
+  integration's mocked pytest suite passes. Before merge, verify a **released**
+  library version exposes `Me.user_smart_hvac` and the expected
+  `isActivated`, `isAvailableOnSite`, `hasAcceptedTerms`, and
+  `isAvailableInCountry` fields.
+- Update `custom_components/frank_energie/manifest.json`,
+  `pyproject.toml`, and `poetry.lock` together for the real published
+  version. Never guess a version or pin an unreleased branch in production.
+- Test both activated and deactivated services, missing data, site isolation,
+  authentication/reauthentication, optional-request failures, and the real
+  Home Assistant entity presentation. Keep the `smart_hvac` entity's stable
+  ID and its deliberate `RUNNING` display class; this class does not mean
+  the physical heat pump is running.
+- Recheck release availability when revisiting a draft PR; keep the draft
+  release gate visible until deployment compatibility is demonstrated.
+
 ## Reporting
 
 Document old and new versions, verified source release/change evidence, all changed dependency declarations, compatibility impact, exact executed checks/results, and any unknowns. Never claim CI or an upstream release was verified without evidence.
