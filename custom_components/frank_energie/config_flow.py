@@ -670,24 +670,11 @@ class ConfigFlow(config_entries.ConfigFlow):
             ConnectionException: If a network-related error occurs.
         """
         async with FrankEnergie() as api:
-            try:
-                return await api.login(
-                    user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
-                )
-            except AuthException:
-                _LOGGER.warning(
-                    "Authentication failed for user %s", user_input[CONF_USERNAME]
-                )
-                # Trigger login flow with friendly error
-                raise AuthException("invalid_auth")
-            except ConnectionException:
-                _LOGGER.error("Connection error for user %s", user_input[CONF_USERNAME])
-                raise ConnectionException("connection_error")
-            except Exception as ex:
-                _LOGGER.exception(
-                    "Unexpected error for user %s: %s", user_input[CONF_USERNAME], ex
-                )
-                raise RuntimeError("unknown_error") from ex
+            # Let the login flow classify failures and sanitize their logging.
+            # Never log provider exception text or account identifiers here.
+            return await api.login(
+                user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+            )
 
     async def _handle_authentication_success(
         self, user_input: dict[str, Any], auth: Authentication
@@ -800,13 +787,12 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         return password_to_validate or ""
 
     def _build_options_and_log_changes(
-        self, user_input: dict[str, Any], encrypted_password: str
+        self, user_input: dict[str, Any], encrypted_password: str | None
     ) -> dict[str, Any]:
-        """Build the new options dictionary and log any changes in polling intervals."""
+        """Build options, updating credentials only when newly verified."""
         entry = self.config_entry
         options = {
-            CONF_USERNAME: user_input[CONF_USERNAME],
-            CONF_PASSWORD: encrypted_password,
+            **entry.options,
             CONF_INTERVAL_SETTINGS: int(
                 user_input.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS)
             ),
@@ -831,6 +817,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 user_input.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV)
             ),
         }
+        if encrypted_password is not None:
+            options[CONF_USERNAME] = user_input[CONF_USERNAME]
+            options[CONF_PASSWORD] = encrypted_password
 
         defaults = {
             CONF_INTERVAL_SETTINGS: DEFAULT_INTERVAL_SETTINGS,
@@ -876,6 +865,17 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
+            if (
+                user_input[CONF_USERNAME] == current_username
+                and not user_input.get(CONF_PASSWORD)
+            ):
+                # No credential change: local polling options must remain
+                # editable even if authentication or site discovery is down.
+                options = self._build_options_and_log_changes(
+                    user_input, encrypted_password=None
+                )
+                return self.async_create_entry(title=entry.title, data=options)
+
             password_to_validate = self._get_password_to_validate(
                 user_input, current_password
             )
