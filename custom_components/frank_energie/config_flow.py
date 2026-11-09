@@ -188,6 +188,15 @@ class ConfigFlow(config_entries.ConfigFlow):
             for entry in self._async_current_entries()
         )
 
+    async def _async_select_site(self, site_reference: str) -> ConfigFlowResult:
+        """Select a site while preventing duplicates of legacy account entries."""
+        if self._legacy_site_already_configured(site_reference):
+            return self.async_abort(reason="already_configured")
+        self.sign_in_data[CONF_SITE] = site_reference
+        site_titles = self.sign_in_data.get("site_titles", {})
+        self.sign_in_data["site_title"] = site_titles.get(site_reference)
+        return await self._async_create_entry(self.sign_in_data)
+
     async def async_step_site(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -195,12 +204,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Handle possible multi site accounts."""
         if user_input and user_input.get(CONF_SITE) is not None:
-            if self._legacy_site_already_configured(user_input[CONF_SITE]):
-                return self.async_abort(reason="already_configured")
-            self.sign_in_data[CONF_SITE] = user_input[CONF_SITE]
-            site_titles = self.sign_in_data.get("site_titles", {})
-            self.sign_in_data["site_title"] = site_titles.get(user_input[CONF_SITE])
-            return await self._async_create_entry(self.sign_in_data)
+            return await self._async_select_site(user_input[CONF_SITE])
 
         data_schema = vol.Schema(
             {

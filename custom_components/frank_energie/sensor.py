@@ -1755,7 +1755,6 @@ def _sensor_unique_id(
     return f"{entry.unique_id}.{legacy_key}"
 
 
-
 def _monthly_cost_attributes(data: FrankEnergieData) -> dict[str, object]:
     """Preserve meter-reading metadata without invoice data."""
     result: dict[str, object] = {}
@@ -1769,6 +1768,7 @@ def _monthly_cost_attributes(data: FrankEnergieData) -> dict[str, object]:
     if description:
         result["Description"] = description
     return result
+
 
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(

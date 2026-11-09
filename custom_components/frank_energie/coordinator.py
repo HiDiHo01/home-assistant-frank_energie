@@ -2131,14 +2131,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Fetch both price sources independently and preserve useful results."""
         public_result, user_result = await asyncio.gather(
             self._price_source_or_throttle(
-                self._fetch_public_prices_for_range(
-                    start_date, end_date, country_code
-                )
+                self._fetch_public_prices_for_range(start_date, end_date, country_code)
             ),
             self._price_source_or_throttle(
-                self._fetch_user_prices_for_range(
-                    start_date, end_date, country_code
-                )
+                self._fetch_user_prices_for_range(start_date, end_date, country_code)
             ),
         )
         public_prices, public_error = public_result

@@ -913,7 +913,14 @@ async def test_setup_throttling_is_temporary_and_respects_reload(
             rate_api.renew_token.await_count,
             rate_api.login.await_count,
         )
-        assert current_counts == counts
+        # Valid-token site discovery remains allowed during login cooldowns;
+        # repeat authentication and renewal are still suppressed.
+        expected_counts = (
+            (counts[0] + 1, counts[1], counts[2])
+            if source == "silent_login"
+            else counts
+        )
+        assert current_counts == expected_counts
     assert dict(rate_entry.data) == original_data
     assert dict(rate_entry.options) == original_options
     assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
@@ -1159,6 +1166,7 @@ async def test_valid_token_site_lookup_ignores_login_cooldown(
     """Login throttling may not stop site discovery with an existing valid token."""
     coordinator = FrankEnergieSettingsCoordinator(hass, rate_entry, rate_api)
     rate_api.UserSites.return_value = SimpleNamespace(
+        reference="site-1",
         deliverySites=[
             SimpleNamespace(
                 reference="site-1",
@@ -1166,11 +1174,9 @@ async def test_valid_token_site_lookup_ignores_login_cooldown(
                     street="Example Street", houseNumber="1", houseNumberAddition=""
                 ),
             )
-        ]
+        ],
     )
-    login_attempt = AsyncMock(
-        side_effect=RateLimitException("Login", retry_after=120)
-    )
+    login_attempt = AsyncMock(side_effect=RateLimitException("Login", retry_after=120))
     with pytest.raises(RateLimitException):
         await coordinator.rate_limits.async_call(
             "login", login_attempt, authenticated=False
@@ -1200,7 +1206,6 @@ def test_monthly_cost_reading_date_survives_missing_invoice(
         DATA_INVOICES: None,
     }
     assert description.attr_fn(data) == {"Last update": "2026-10-28"}
-
 
 
 def test_multisite_legacy_id_only_blocks_matching_site(hass: HomeAssistant) -> None:
