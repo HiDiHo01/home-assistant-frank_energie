@@ -34,7 +34,7 @@
     {
       "path": "custom_components/frank_energie/coordinator.py",
       "code": "C901",
-      "message": "'FrankEnergiePriceCoordinator._async_update_data' is too complex (16)"
+      "message": "'FrankEnergiePriceCoordinator._async_update_data' is too complex (15)"
     },
     {
       "path": "custom_components/frank_energie/coordinator.py",

@@ -2369,6 +2369,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             self._static_contract_price_resolution_state = state
             self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
 
+    def _has_selected_electricity_connection(self) -> bool:
+        """Check that a selected electricity connection can receive changes."""
+        return bool(self._connection_id) and self._price_contracts() != {"GAS"}
+
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
         if not self.api.is_authenticated:
@@ -2390,7 +2394,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 await self.async_request_refresh()
             return
 
-        if not self._connection_id or self._price_contracts() == {"GAS"}:
+        if not self._has_selected_electricity_connection():
             _LOGGER.error(
                 "Cannot set resolution via API: electricity connection_id not available"
             )
