@@ -1061,9 +1061,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             ),
         }
 
-        self._populate_optional_interval_schema(
-            schema_dict, self._resource_features()
-        )
+        self._populate_optional_interval_schema(schema_dict, self._resource_features())
 
         data_schema = vol.Schema(schema_dict)
 
