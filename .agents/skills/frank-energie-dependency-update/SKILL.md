@@ -1,6 +1,6 @@
 ---
 name: frank-energie-dependency-update
-description: Safely update python-frank-energie and other runtime or development dependencies in the Frank Energie Home Assistant integration. Use for library version bumps, manifest and Poetry synchronization, dependency security updates, compatibility verification, and dependency-related CI failures.
+description: Safely update python-frank-energie and other runtime or development dependencies in the Frank Energie Home Assistant integration. Use for library version bumps, manifest and Poetry synchronization, dependency security updates, Smart HVAC release gating, compatibility verification, and dependency-related CI failures.
 ---
 
 # Frank Energie dependency upgrade
