@@ -31,9 +31,11 @@ requested active/inactive wording, not physical operating telemetry.
 
 When the settings coordinator fetches `api.me(site_reference)` as an
 optional Smart HVAC request, preserve already-valid `api.user()` data
-on expected network, request, or timeout failures. Do not swallow
-`asyncio.CancelledError` or suppress authentication-required failures
-that should trigger Home Assistant reauthentication. Never log raw upstream
+on expected network, request, timeout, or optional `AuthException`
+failures. Do not swallow `asyncio.CancelledError` or
+`AuthRequiredException`, which must trigger Home Assistant reauthentication.
+Regression-test that optional `AuthException` keeps Smart Charging/Smart
+Trading data while avoiding sensitive exception logs. Never log raw upstream
 payloads, personal identifiers, GraphQL variables or tokens.
 
 Check that the selected config-entry site's reference is used consistently
