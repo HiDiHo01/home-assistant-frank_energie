@@ -947,7 +947,7 @@
         }
       },
       "smart_hvac": {
-        "name": "Slim verwarmen geactiveerd"
+        "name": "Slimme HVAC"
       },
       "disabled_haptic_feedback": {
         "name": "Haptische feedback uitgeschakeld"
