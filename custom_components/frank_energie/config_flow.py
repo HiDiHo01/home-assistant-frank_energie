@@ -879,7 +879,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
     @staticmethod
     def _login_failure_reason(error: Exception) -> str:
         """Map typed login throttles and authentication failures to form errors."""
-        return "rate_limited" if isinstance(error, RateLimitException) else "invalid_auth"
+        return (
+            "rate_limited" if isinstance(error, RateLimitException) else "invalid_auth"
+        )
 
     async def async_step_user(
         self,

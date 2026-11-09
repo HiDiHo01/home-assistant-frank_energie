@@ -3060,6 +3060,45 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             raise rate_limit_update_failed(error, self.update_interval) from error
         raise UpdateFailed(f"Failed to fetch today prices: {error}") from error
 
+    async def _get_today_prices(
+        self, today: date, tomorrow: date, now_utc: datetime,
+        required_contracts: set[str],
+    ) -> MarketPrices | None:
+        """Fetch today's prices if necessary, preserving live cache on failures."""
+        cached = self._static_prices_today
+        if (
+            cached is not None
+            and self.last_fetch_today is not None
+            and _amsterdam_date(self.last_fetch_today) == today
+            and self._prices_cover_date(
+                cached, today, required_contracts=required_contracts
+            )
+        ):
+            return cached
+
+        try:
+            fetched = await self._fetch_prices_with_fallback(
+                today, tomorrow, use_fallback=True
+            )
+            prices_today = self._carry_forward_previous_day(fetched, today)
+            self._update_today_prices(prices_today)
+            if not self._price_fetch_used_cache and self._prices_cover_date(
+                fetched, today, required_contracts=required_contracts
+            ):
+                self.last_fetch_today = now_utc
+                self._today_prices_logged = True
+            else:
+                self.last_fetch_today = None
+                self._today_prices_logged = False
+                _LOGGER.warning(
+                    "Today's prices for %s are incomplete or came from cache; "
+                    "retrying on next refresh",
+                    today,
+                )
+            return prices_today
+        except Exception as err:
+            return await self._use_cached_prices_on_fetch_failure(err, now_utc)
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch price data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -3115,45 +3154,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                 self.cached_prices_tomorrow = None
                 self.last_fetch_tomorrow = None
 
-            if (
-                self._static_prices_today is None
-                or self.last_fetch_today is None
-                or _amsterdam_date(self.last_fetch_today) != today
-                or not self._prices_cover_date(
-                    self._static_prices_today,
-                    today,
-                    required_contracts=required_contracts,
-                )
-            ):
-                try:
-                    fetched_prices_today = await self._fetch_prices_with_fallback(
-                        today, tomorrow, use_fallback=True
-                    )
-                    prices_today = self._carry_forward_previous_day(
-                        fetched_prices_today, today
-                    )
-                    self._update_today_prices(prices_today)
-                    if not self._price_fetch_used_cache and self._prices_cover_date(
-                        fetched_prices_today,
-                        today,
-                        required_contracts=required_contracts,
-                    ):
-                        self.last_fetch_today = now_utc
-                        self._today_prices_logged = True
-                    else:
-                        self.last_fetch_today = None
-                        self._today_prices_logged = False
-                        _LOGGER.warning(
-                            "Today's prices for %s are incomplete or came from cache; "
-                            "retrying on next refresh",
-                            today,
-                        )
-                except Exception as err:
-                    prices_today = await self._use_cached_prices_on_fetch_failure(
-                        err, now_utc
-                    )
-            else:
-                prices_today = self._static_prices_today
+            prices_today = await self._get_today_prices(
+                today, tomorrow, now_utc, required_contracts
+            )
 
             prices_tomorrow = await self._refresh_tomorrow_cache(
                 today, tomorrow, now_utc
