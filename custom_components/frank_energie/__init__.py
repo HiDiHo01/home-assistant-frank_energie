@@ -412,16 +412,15 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         """Fetch site reference and human-readable title."""
         _LOGGER.debug("Getting site reference and title for coordinator")
 
-        # Site discovery after a failed silent login must honor the original
-        # login cooldown instead of retrying UserSites and token renewal.
-        coordinator.rate_limits.check_authentication_recovery()
-
+        # Saved valid tokens can still retrieve sites during a login cooldown.
+        # Apply the login cooldown only if site discovery requires auth recovery.
         try:
             # Haal de 'UserSites' gegevens op van de coordinator API
             user_sites_data: UserSites = await coordinator.async_api_call(
                 "UserSites", coordinator.api.UserSites
             )
         except AuthException:
+            coordinator.rate_limits.check_authentication_recovery()
             _LOGGER.debug(
                 "Authentication failed during site fetch, attempting token renewal"
             )

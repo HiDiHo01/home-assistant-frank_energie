@@ -22,7 +22,7 @@ jobs:
   run:
     permissions:
       contents: read
-    name: Run flake8/pytest (Python ${{ matrix.python-version }})
+    name: Run flake8/pytest (Python ${{ matrix.python-version }} / ${{ matrix.library-source }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -31,6 +31,9 @@ jobs:
         # 3.14.2 is the minimum Python version pyproject.toml declares
         # support for; 3.14 tracks the latest 3.14.x patch release.
         python-version: ["3.14.2", "3.14"]
+        # Run upstream-main compatibility only for PR #349.
+        # Other pull requests and main retain the locked dependency matrix.
+        library-source: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.number == 349 && '["locked","upstream-main"]' || '["locked"]') }}
 
     steps:
       - name: Harden Runner
@@ -41,6 +44,7 @@ jobs:
             api.github.com:443
             raw.githubusercontent.com:443
             github.com:443
+            codeload.github.com:443
             install.python-poetry.org:443
             nodejs.org:443
             pypi.org:443
@@ -87,6 +91,13 @@ jobs:
           poetry sync --with dev --no-root
           poetry run python -m pip check
 
+      - name: Install python-frank-energie main for PR349 compatibility checks
+        if: ${{ matrix.library-source == 'upstream-main' }}
+        run: |
+          git ls-remote https://github.com/HiDiHo01/python-frank-energie.git refs/heads/main
+          poetry run python -m pip install --no-deps --force-reinstall "git+https://github.com/HiDiHo01/python-frank-energie.git@main"
+          poetry run python -m pip check
+
       - name: Verify Home Assistant test environment
         id: environment
         run: |
@@ -129,7 +140,7 @@ jobs:
         if: ${{ !cancelled() && steps.pytest.outcome != 'skipped' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: pytest-python-${{ matrix.python-version }}
+          name: pytest-${{ matrix.library-source }}-python-${{ matrix.python-version }}
           path: pytest-results.xml
           if-no-files-found: error
           retention-days: 14

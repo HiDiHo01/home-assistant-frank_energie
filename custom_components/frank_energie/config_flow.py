@@ -172,6 +172,22 @@ class ConfigFlow(config_entries.ConfigFlow):
             )
             return await self._handle_authentication_failure(reason="unknown_error")
 
+    def _legacy_site_already_configured(
+        self, site_reference: str, *, single_site: bool = False
+    ) -> bool:
+        """Check legacy username-based entries against the selected delivery site."""
+        username = self.sign_in_data.get(CONF_USERNAME)
+        if not username:
+            return False
+        return any(
+            entry.unique_id == username
+            and (
+                entry.data.get(CONF_SITE) == site_reference
+                or (single_site and not entry.data.get(CONF_SITE))
+            )
+            for entry in self._async_current_entries()
+        )
+
     async def async_step_site(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -179,6 +195,8 @@ class ConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Handle possible multi site accounts."""
         if user_input and user_input.get(CONF_SITE) is not None:
+            if self._legacy_site_already_configured(user_input[CONF_SITE]):
+                return self.async_abort(reason="already_configured")
             self.sign_in_data[CONF_SITE] = user_input[CONF_SITE]
             site_titles = self.sign_in_data.get("site_titles", {})
             self.sign_in_data["site_title"] = site_titles.get(user_input[CONF_SITE])
@@ -313,9 +331,10 @@ class ConfigFlow(config_entries.ConfigFlow):
                     # for backward compatibility (do nothing)
                     # Check if entry with CONF_USERNAME exists, then abort
                     # if CONF_USERNAME in user_input:
-                    if CONF_USERNAME in self.sign_in_data:
-                        await self.async_set_unique_id(self.sign_in_data[CONF_USERNAME])
-                        self._abort_if_unique_id_configured()
+                    if self._legacy_site_already_configured(
+                        first_site.reference, single_site=True
+                    ):
+                        return self.async_abort(reason="already_configured")
 
                     # Create entry with unique_id as user_sites.deliverySites[0].reference
                     self.sign_in_data[CONF_SITE] = first_site.reference

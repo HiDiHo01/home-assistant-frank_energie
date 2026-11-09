@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1091,3 +1091,133 @@ async def test_site_helper_does_not_swallow_or_retry_rate_limits(
     assert raised.value is error
     api.UserSites.assert_awaited_once()
     sleep.assert_not_awaited()
+
+
+@pytest.mark.parametrize("throttled_source", ["public", "user"])
+async def test_rate_limited_price_source_keeps_successful_sibling(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+    throttled_source: str,
+) -> None:
+    """A throttle must not discard the other price source's completed result."""
+    coordinator = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
+    public = MagicMock(spec=MarketPrices)
+    user = MagicMock(spec=MarketPrices)
+    public_result = AsyncMock(return_value=public)
+    user_result = AsyncMock(return_value=user)
+    if throttled_source == "public":
+        public_result.side_effect = RateLimitException("prices", retry_after=120)
+        expected = (None, user)
+    else:
+        user_result.side_effect = RateLimitException("UserPrices", retry_after=120)
+        expected = (public, None)
+
+    with (
+        patch.object(coordinator, "_fetch_public_prices_for_range", public_result),
+        patch.object(coordinator, "_fetch_user_prices_for_range", user_result),
+    ):
+        actual = await coordinator._fetch_price_sources(
+            date(2026, 10, 28), date(2026, 10, 29), "NL"
+        )
+
+    assert actual == expected
+    public_result.assert_awaited_once()
+    user_result.assert_awaited_once()
+
+
+async def test_price_source_throttle_propagates_without_another_result(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+    settings: FrankEnergieSettingsCoordinator,
+) -> None:
+    """Without either source, preserve the original server retry hint."""
+    coordinator = FrankEnergiePriceCoordinator(hass, rate_entry, rate_api, settings)
+    public_result = AsyncMock(return_value=None)
+    user_result = AsyncMock(
+        side_effect=RateLimitException("UserPrices", retry_after=120)
+    )
+
+    with (
+        patch.object(coordinator, "_fetch_public_prices_for_range", public_result),
+        patch.object(coordinator, "_fetch_user_prices_for_range", user_result),
+    ):
+        with pytest.raises(RateLimitException) as raised:
+            await coordinator._fetch_price_sources(
+                date(2026, 10, 28), date(2026, 10, 29), "NL"
+            )
+    assert raised.value.retry_after == 120
+
+
+async def test_valid_token_site_lookup_ignores_login_cooldown(
+    hass: HomeAssistant,
+    rate_entry: MockConfigEntry,
+    rate_api: MagicMock,
+) -> None:
+    """Login throttling may not stop site discovery with an existing valid token."""
+    coordinator = FrankEnergieSettingsCoordinator(hass, rate_entry, rate_api)
+    rate_api.UserSites.return_value = SimpleNamespace(
+        deliverySites=[
+            SimpleNamespace(
+                reference="site-1",
+                address=SimpleNamespace(
+                    street="Example Street", houseNumber="1", houseNumberAddition=""
+                ),
+            )
+        ]
+    )
+    login_attempt = AsyncMock(
+        side_effect=RateLimitException("Login", retry_after=120)
+    )
+    with pytest.raises(RateLimitException):
+        await coordinator.rate_limits.async_call(
+            "login", login_attempt, authenticated=False
+        )
+
+    component = FrankEnergieComponent(hass, rate_entry)
+    site_reference, site_title = await component._get_site_reference_and_title(
+        coordinator
+    )
+
+    assert site_reference == "site-1"
+    assert site_title == "Example Street 1"
+    rate_api.UserSites.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "sensor_key",
+    ["expected_costs_per_day_this_month", "costs_per_day_till_now_this_month"],
+)
+def test_monthly_cost_reading_date_survives_missing_invoice(
+    sensor_key: str,
+) -> None:
+    """Missing invoices must not remove a valid month-summary reading date."""
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    data = {
+        DATA_MONTH_SUMMARY: SimpleNamespace(lastMeterReadingDate="2026-10-28"),
+        DATA_INVOICES: None,
+    }
+    assert description.attr_fn(data) == {"Last update": "2026-10-28"}
+
+
+
+def test_multisite_legacy_id_only_blocks_matching_site(hass: HomeAssistant) -> None:
+    """A username-keyed legacy entry blocks its site, not another delivery site."""
+    legacy = MockConfigEntry(
+        domain=DOMAIN,
+        title="Legacy account",
+        unique_id=USER_INPUT[CONF_USERNAME],
+        data={"site_reference": "site-1"},
+    )
+    legacy.add_to_hass(hass)
+
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow.sign_in_data = {CONF_USERNAME: USER_INPUT[CONF_USERNAME]}
+
+    assert flow._legacy_site_already_configured("site-1")
+    assert not flow._legacy_site_already_configured("site-2")
+    assert flow._legacy_site_already_configured("site-1", single_site=True)
+    assert not flow._legacy_site_already_configured("site-2", single_site=True)

@@ -168,6 +168,20 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     )
 
 
+
+def test_ci_reuses_existing_matrix_for_upstream_main() -> None:
+    """Exercise PR349 upstream main without adding a duplicate test workflow."""
+    workflow = _read_workflow("ci.yaml")
+    matrix = workflow["jobs"]["run"]["strategy"]["matrix"]
+    assert "github.event.pull_request.number == 349" in matrix["library-source"]
+    assert '["locked","upstream-main"]' in matrix["library-source"]
+    upstream_install = _named_step(
+        "ci.yaml", "run", "Install python-frank-energie main for PR349 compatibility checks"
+    )
+    assert "matrix.library-source == 'upstream-main'" in str(upstream_install["if"])
+    assert "python-frank-energie.git@main" in str(upstream_install["run"])
+    assert not (WORKFLOWS / "test-pr349-python-frank-energie-main.yml").exists()
+
 def test_flake8_parser_recognizes_diagnostics() -> None:
     """Parse structured Flake8 output rather than inspecting status alone."""
     module = _load_baseline_checker()

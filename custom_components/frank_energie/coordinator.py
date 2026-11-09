@@ -2115,6 +2115,39 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Failed to fetch user prices: %s", err)
             return None
 
+    @staticmethod
+    async def _price_source_or_throttle(
+        source: Awaitable[MarketPrices | None],
+    ) -> tuple[MarketPrices | None, RateLimitException | None]:
+        """Capture only a resource throttle without discarding the other source."""
+        try:
+            return await source, None
+        except RateLimitException as error:
+            return None, error
+
+    async def _fetch_price_sources(
+        self, start_date: date, end_date: date, country_code: str
+    ) -> tuple[MarketPrices | None, MarketPrices | None]:
+        """Fetch both price sources independently and preserve useful results."""
+        public_result, user_result = await asyncio.gather(
+            self._price_source_or_throttle(
+                self._fetch_public_prices_for_range(
+                    start_date, end_date, country_code
+                )
+            ),
+            self._price_source_or_throttle(
+                self._fetch_user_prices_for_range(
+                    start_date, end_date, country_code
+                )
+            ),
+        )
+        public_prices, public_error = public_result
+        user_prices, user_error = user_result
+        if public_prices is None and user_prices is None:
+            if rate_limit_error := public_error or user_error:
+                raise rate_limit_error
+        return public_prices, user_prices
+
     async def _fetch_prices_with_fallback(
         self, start_date: date, end_date: date, use_fallback: bool = True
     ) -> MarketPrices | None:
@@ -2134,9 +2167,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
         _LOGGER.debug("Fetching prices concurrently (use_fallback=%s)", use_fallback)
-        public_prices, user_prices = await asyncio.gather(
-            self._fetch_public_prices_for_range(start_date, end_date, country_code),
-            self._fetch_user_prices_for_range(start_date, end_date, country_code),
+        public_prices, user_prices = await self._fetch_price_sources(
+            start_date, end_date, country_code
         )
         public_is_live = public_prices is not None
 
