@@ -7,7 +7,7 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.14.2,<4.0"
-python-frank-energie = "==2026.11.9"
+python-frank-energie = ">=2026.11.9"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0"
