@@ -1476,7 +1476,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None, False
         try:
-            status = await self.async_api_call("user_smart_feed_in", self.api.user_smart_feed_in)
+            status = await self.async_api_call(
+                "user_smart_feed_in", self.api.user_smart_feed_in
+            )
             return status, True
         except RateLimitException:
             # Preserve independent PV data while the feed-in request cools down.

@@ -481,7 +481,9 @@ def test_price_cache_respects_active_contract_segments(
         gas=make_prices("gas", cached_gas),
         energy_country="NL",
     )
-    assert prices._cached_prices_active(prices._static_prices_today, now_utc) is expected
+    assert (
+        prices._cached_prices_active(prices._static_prices_today, now_utc) is expected
+    )
 
 
 def test_price_cache_rejects_expired_interval_after_midnight(
@@ -677,13 +679,11 @@ async def test_optional_hvac_throttle_keeps_user_settings(
     settings.data[DATA_USER] = SimpleNamespace(smartHvac=True)
     user = SimpleNamespace(smartHvac=None, countryCode="NL", connections=[])
     rate_api.user.return_value = user
-    rate_api.smart_hvac_status.side_effect = RateLimitException(
-        "SmartHvac", retry_after=120
-    )
+    rate_api.me = AsyncMock(side_effect=RateLimitException("Me", retry_after=120))
     assert await settings._fetch_user_data() is user
     assert user.smartHvac is True
     assert await settings._fetch_user_data() is user
-    rate_api.smart_hvac_status.assert_awaited_once()
+    rate_api.me.assert_awaited_once_with(settings.site_reference)
 
 
 async def test_price_resolution_rate_limit_keeps_last_state(
@@ -1033,7 +1033,6 @@ async def test_site_form_keeps_typed_error_and_recovers(
     assert api.UserSites.await_count == 2
 
 
-
 async def test_site_retry_aborts_on_legacy_username_duplicate(
     hass: HomeAssistant,
     mock_auth_success: MagicMock,
@@ -1072,6 +1071,7 @@ async def test_site_retry_aborts_on_legacy_username_duplicate(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     assert api.UserSites.await_count == 2
+
 
 async def test_site_helper_does_not_swallow_or_retry_rate_limits(
     hass: HomeAssistant, mock_auth_success: MagicMock
