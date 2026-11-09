@@ -1,3 +1,5 @@
+"""Refresh buttons for the Frank Energie integration."""
+
 import logging
 from dataclasses import dataclass
 
@@ -11,13 +13,15 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
+    DATA_DELIVERY_SITE,
     DOMAIN,
     SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_GAS_PRICES,
     SERVICE_NAME_PRICES,
     VERSION,
 )
 
-from .helpers import device_translation_key
+from .helpers import device_translation_key, known_site_contracts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,17 +38,22 @@ async def async_setup_entry(
 ) -> None:
     """Set up refresh buttons for Frank Energie coordinators."""
     runtime_data = entry.runtime_data
+    settings = runtime_data.settings_coordinator
+    price_service = SERVICE_NAME_PRICES
+    if settings.api.is_authenticated and known_site_contracts(
+        settings.data.get(DATA_DELIVERY_SITE)
+    ) == {"GAS"}:
+        price_service = SERVICE_NAME_GAS_PRICES
 
     entities: list[ButtonEntity] = []
 
-    # Main prices coordinator — always present
     entities.append(
         FrankEnergieRefreshButton(
             coordinator=runtime_data.coordinator,
             description=FrankEnergieButtonEntityDescription(
                 key="refresh_prices",
                 name="Refresh Frank Energie Prices",
-                service_name=SERVICE_NAME_PRICES,
+                service_name=price_service,
             ),
             entry=entry,
         )

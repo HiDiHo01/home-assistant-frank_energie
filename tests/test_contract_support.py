@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RequestException
@@ -24,13 +24,18 @@ from custom_components.frank_energie.const import (
     DATA_ELECTRICITY,
     DATA_GAS,
     DOMAIN,
+    SERVICE_NAME_GAS_PRICES,
+    SERVICE_NAME_PRICES,
     TIMEZONE_AMSTERDAM,
 )
 from custom_components.frank_energie.coordinator import (
     FrankEnergiePriceCoordinator,
     FrankEnergieSettingsCoordinator,
 )
-from custom_components.frank_energie.helpers import async_sync_contract_entities
+from custom_components.frank_energie.helpers import (
+    async_sync_contract_entities,
+    service_device_info,
+)
 from custom_components.frank_energie.sensor import SENSOR_TYPES, FrankEnergieSensor
 
 CONTRACT_CASES = [("ELECTRICITY",), ("GAS",), ("ELECTRICITY", "GAS")]
@@ -134,6 +139,7 @@ async def test_contract_setup_reload_and_rollover(
     )
     entry.add_to_hass(hass)
     registry = er.async_get(hass)
+    devices = dr.async_get(hass)
     registered_segments = registry.async_get_or_create(
         "sensor",
         DOMAIN,
@@ -180,6 +186,24 @@ async def test_contract_setup_reload_and_rollover(
                     "select", DOMAIN, f"{entry.entry_id}_resolution"
                 )
             ) is ("ELECTRICITY" in contracts)
+            electricity_device = devices.async_get_device_by_identifier(
+                (DOMAIN, entry.entry_id), entry.entry_id
+            )
+            gas_device = devices.async_get_device_by_identifier(
+                (DOMAIN, f"{entry.entry_id}_{SERVICE_NAME_GAS_PRICES}"), entry.entry_id
+            )
+            assert (electricity_device is not None) is ("ELECTRICITY" in contracts)
+            assert (gas_device is not None) is ("GAS" in contracts)
+            price_device = electricity_device or gas_device
+            assert price_device is not None
+            button_id = registry.async_get_entity_id(
+                "button", DOMAIN, f"{entry.entry_id}_refresh_prices"
+            )
+            assert button_id is not None
+            button = registry.async_get(button_id)
+            assert button is not None
+            assert button.device_id == price_device.id
+            assert hass.states.get(button_id) is not None
 
         assert_prices()
         prices = entry.runtime_data.price_coordinator
@@ -205,6 +229,53 @@ async def test_contract_setup_reload_and_rollover(
         async_fire_time_changed(hass, midnight)
         await hass.async_block_till_done()
         assert_prices()
+
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_existing_refresh_button_moves_to_gas_device(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Keep the registered button ID when its parent changes to Gas Prices."""
+    freezer.move_to("2026-07-20T12:15:00Z")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "site_reference": "test-site",
+            "access_token": "test-token",
+            "token": "test-refresh",
+        },
+        unique_id="test-site",
+    )
+    entry.add_to_hass(hass)
+    devices = dr.async_get(hass)
+    previous_device = devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **service_device_info(entry.entry_id, SERVICE_NAME_PRICES),
+    )
+    registry = er.async_get(hass)
+    previous_button = registry.async_get_or_create(
+        "button",
+        DOMAIN,
+        f"{entry.entry_id}_refresh_prices",
+        config_entry=entry,
+        device_id=previous_device.id,
+        suggested_object_id="frank_energie_electricity_prices_refresh_prices",
+    )
+    api = _api_for_contracts(("GAS",), 60)
+    with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        gas_device = devices.async_get_device_by_identifier(
+            (DOMAIN, f"{entry.entry_id}_{SERVICE_NAME_GAS_PRICES}"), entry.entry_id
+        )
+        assert gas_device is not None
+        button = registry.async_get(previous_button.entity_id)
+        assert button is not None
+        assert button.device_id == gas_device.id
+        assert hass.states.get(previous_button.entity_id) is not None
 
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
