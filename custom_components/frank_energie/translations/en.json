@@ -670,11 +670,11 @@
       "gas_tax_markup": {
         "name": "Current gas price including tax and markup"
       },
-      "gas_tax_only": {
-        "name": "Current gas tax only"
+      "gas_energy_tax": {
+        "name": "Current gas energy tax (incl. VAT)"
       },
-      "gas_tax_vat": {
-        "name": "Current gas VAT price"
+      "gas_market_vat": {
+        "name": "Current gas VAT on market price"
       },
       "gas_today_avg_all_in": {
         "name": "Average gas price today (All-in)"

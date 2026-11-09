@@ -59,6 +59,7 @@ are unavailable rather than silently treated as inactive, and that
 - Verify the GraphQL selection and parsed model in the dependency version pinned in `manifest.json`. `UserSites.segments` describes the first returned site. Match the config entry's site reference in `UserSites.deliverySites` and read that `DeliverySite.segments`. Treat a missing match or unusable segments as unknown.
 - Mock the API boundary and parse sanitized payloads with the actual `User.from_dict()` and `UserSites.from_dict()` models. `MagicMock(spec=User)` allows assignments to attributes absent from the real model, which can make a regression test pass with an invented field such as `userSegments`. If a model double is necessary, apply `spec_set` to a real instance.
 - Reproduce the failure with those models before applying the fix. Test electricity-only, gas-only, and dual contracts with the selected site after another site that has different segments. Verify the existing entity ID, contract-dependent entity setup, and sensor recovery when the selected site reappears. [Contract regression tests](../../../tests/test_contract_support.py)
+- Check the device registry and include refresh buttons in contract tests. Their `device_info` can create a price device independently of sensor setup. Verify that moving a button to another price device preserves its registered entity ID.
 
 ## Regression tests
 
