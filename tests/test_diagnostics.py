@@ -192,12 +192,21 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
             "street": "Main Street",
             "houseNumber": "10",
             "houseNumberAddition": "A",
+            "postalCode": "1234 AB",
             "zipCode": "1234 AB",
             "city": "Amsterdam",
             "latitude": 52.3676,
             "longitude": 4.9041,
             "vin": "1HGCR2F83HA000000",
             "inverter_serial_numbers": ["INV-123456"],
+            "jwt": "eyJhbGciOi...",
+            "secret": "top-secret",
+            "otp": "123456",
+            "macAddress": "00:11:22:33:44:55",
+            "ip": "192.168.1.100",
+            "contractReference": "CR-9999",
+            "batterySerialNumber": "BAT-777",
+            "deviceSerialNumber": "DEV-888",
         }
     )
 
@@ -218,12 +227,21 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["data"]["street"] == "**REDACTED**"
     assert diagnostics["data"]["houseNumber"] == "**REDACTED**"
     assert diagnostics["data"]["houseNumberAddition"] == "**REDACTED**"
+    assert diagnostics["data"]["postalCode"] == "**REDACTED**"
     assert diagnostics["data"]["zipCode"] == "**REDACTED**"
     assert diagnostics["data"]["city"] == "**REDACTED**"
     assert diagnostics["data"]["latitude"] == "**REDACTED**"
     assert diagnostics["data"]["longitude"] == "**REDACTED**"
     assert diagnostics["data"]["vin"] == "**REDACTED**"
     assert diagnostics["data"]["inverter_serial_numbers"] == "**REDACTED**"
+    assert diagnostics["data"]["jwt"] == "**REDACTED**"
+    assert diagnostics["data"]["secret"] == "**REDACTED**"
+    assert diagnostics["data"]["otp"] == "**REDACTED**"
+    assert diagnostics["data"]["macAddress"] == "**REDACTED**"
+    assert diagnostics["data"]["ip"] == "**REDACTED**"
+    assert diagnostics["data"]["contractReference"] == "**REDACTED**"
+    assert diagnostics["data"]["batterySerialNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["deviceSerialNumber"] == "**REDACTED**"
 
     assert diagnostics["data"]["safe"] == "value"
 
