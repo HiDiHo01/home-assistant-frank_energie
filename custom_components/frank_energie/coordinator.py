@@ -1186,15 +1186,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         try:
             user_data = await self.api.user(self.site_reference)
             if user_data is not None:
+                # UserSmartHvac is a root-level field of Me on python-frank-energie main.
+                # The legacy user() model does not populate its smartHvac field.
+                user_data.smartHvac = None
                 try:
-                    smart_hvac = await self.api.smart_hvac_status()
-                    if smart_hvac:
-                        user_data.smartHvac = smart_hvac
-                except (RequestException, FrankEnergieException, ClientError) as ex:
-                    _LOGGER.debug(
-                        "Smart HVAC feature is not supported or accessible on this account: %s",
-                        ex,
-                    )
+                    me_data = await self.api.me(self.site_reference)
+                except (AuthException, AuthRequiredException):
+                    raise
+                except (RequestException, FrankEnergieException, ClientError):
+                    _LOGGER.debug("UserSmartHvac status is unavailable for this site")
+                else:
+                    user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
             if not self._country_code and user_data:
                 country_code_raw = user_data.countryCode
                 if isinstance(country_code_raw, str) and country_code_raw:
@@ -1208,8 +1210,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 )
 
             return user_data
-        except AuthException as ex:
-            _LOGGER.warning("Authentication failed while fetching user data: %s", ex)
+        except (AuthException, AuthRequiredException):
+            _LOGGER.warning("Authentication failed while fetching user data")
             return None
         except (RequestException, FrankEnergieException, ClientError) as ex:
             _LOGGER.warning("No user data available: %s", ex)
