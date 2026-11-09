@@ -20,12 +20,15 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 from python_frank_energie import Authentication, FrankEnergie
 from python_frank_energie.exceptions import (
@@ -204,7 +207,11 @@ class ConfigFlow(config_entries.ConfigFlow):
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_PASSWORD): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                    )
+                ),
                 vol.Optional("timeout", default=5): int,
             }
         )
@@ -407,7 +414,11 @@ class ConfigFlow(config_entries.ConfigFlow):
         return vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_PASSWORD): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                    )
+                ),
                 vol.Optional("timeout", default=5): int,
             }
         )
@@ -630,7 +641,11 @@ class ConfigFlow(config_entries.ConfigFlow):
                     CONF_USERNAME,
                     default=user_input.get(CONF_USERNAME, "") if user_input else "",
                 ): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_PASSWORD): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                    )
+                ),
             }
         )
 
@@ -652,7 +667,11 @@ class ConfigFlow(config_entries.ConfigFlow):
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME, default=username or ""): str,
-                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_PASSWORD): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                    )
+                ),
             }
         )
 
@@ -1042,7 +1061,11 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         schema_dict = {
             vol.Required(CONF_USERNAME, default=current_username): str,
             # Leave password blank to avoid exposing it in the UI
-            vol.Optional(CONF_PASSWORD, default=""): str,
+            vol.Optional(CONF_PASSWORD, default=""): TextSelector(
+                TextSelectorConfig(
+                    type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                )
+            ),
             vol.Required(
                 CONF_INTERVAL_SETTINGS,
                 default=entry.options.get(
