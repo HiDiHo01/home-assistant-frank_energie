@@ -28,11 +28,15 @@ INVENTORY_SPECS: Final[dict[str, InventorySpec]] = {
         ),
     ),
     "charger": InventorySpec(
-        "charger_coordinator", DATA_ENODE_CHARGERS, "chargers",
+        "charger_coordinator",
+        DATA_ENODE_CHARGERS,
+        "chargers",
         (("sensor", "charger_brand"),),
     ),
     "vehicle": InventorySpec(
-        "vehicle_coordinator", DATA_ENODE_VEHICLES, "vehicles",
+        "vehicle_coordinator",
+        DATA_ENODE_VEHICLES,
+        "vehicles",
         (("sensor", "vehicle_name"),),
     ),
 }

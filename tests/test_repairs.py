@@ -18,7 +18,11 @@ from custom_components.frank_energie import (
     FrankEnergieEntryData,
     async_remove_config_entry_device,
 )
-from custom_components.frank_energie.const import DATA_BATTERIES, DATA_ENODE_CHARGERS, DOMAIN
+from custom_components.frank_energie.const import (
+    DATA_BATTERIES,
+    DATA_ENODE_CHARGERS,
+    DOMAIN,
+)
 from custom_components.frank_energie.repairs import (
     _issue_id,
     async_process_device_inventory,
@@ -326,7 +330,9 @@ async def test_battery_classification_uses_stable_entity_marker(
     coordinator.last_update_success = True
     # The core removal guard uses the same stable entity marker.
     coordinator.data = {DATA_BATTERIES: empty}
-    assert await async_remove_config_entry_device(hass, entry, registry.async_get(device.id))
+    assert await async_remove_config_entry_device(
+        hass, entry, registry.async_get(device.id)
+    )
 
 
 async def test_unrelated_device_does_not_scan_entity_registry(
@@ -343,4 +349,6 @@ async def test_unrelated_device_does_not_scan_entity_registry(
         "custom_components.frank_energie.repairs.er.async_entries_for_device",
         side_effect=AssertionError("Must filter by marker before scanning"),
     ):
-        async_process_device_inventory(hass, entry, "battery", _inventory("batteries", []))
+        async_process_device_inventory(
+            hass, entry, "battery", _inventory("batteries", [])
+        )

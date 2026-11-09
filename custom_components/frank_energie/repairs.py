@@ -84,7 +84,10 @@ def _candidate_identifier(
     selected_inventory = _device_inventory(
         entry.runtime_data, device, unique_ids, identifier
     )
-    if selected_inventory is None or selected_inventory[1] != INVENTORY_SPECS[kind].data_key:
+    if (
+        selected_inventory is None
+        or selected_inventory[1] != INVENTORY_SPECS[kind].data_key
+    ):
         return None
     return identifier
 
@@ -103,7 +106,9 @@ def async_process_device_inventory(
     """
     if kind not in INVENTORY_SPECS or entry.runtime_data is None:
         return
-    inventory_ids = validated_inventory_ids(INVENTORY_SPECS[kind].collection_key, inventory)
+    inventory_ids = validated_inventory_ids(
+        INVENTORY_SPECS[kind].collection_key, inventory
+    )
     if inventory_ids is None:
         return
 
@@ -232,9 +237,7 @@ class StaleDeviceRepairFlow(RepairsFlow):
             return self.async_abort(reason="cannot_verify")
 
         runtime_data = entry.runtime_data
-        coordinator = getattr(
-            runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
-        )
+        coordinator = getattr(runtime_data, INVENTORY_SPECS[kind].coordinator_attribute)
         previous_epoch = runtime_data.stale_inventory_epochs.get(kind, 0)
         await coordinator.async_refresh()
 
