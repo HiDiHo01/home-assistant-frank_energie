@@ -5174,9 +5174,7 @@ async def async_setup_entry(
             return pv_coordinator
         if description.service_name == SERVICE_NAME_ENODE_VEHICLES:
             return vehicle_coordinator
-        if description.service_name == SERVICE_NAME_SETTINGS:
-            return settings_coordinator
-        if description.service_name == SERVICE_NAME_USER:
+        if description.service_name in (SERVICE_NAME_SETTINGS, SERVICE_NAME_USER):
             return settings_coordinator
         return price_coordinator
 

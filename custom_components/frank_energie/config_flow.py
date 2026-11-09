@@ -348,12 +348,6 @@ class ConfigFlow(config_entries.ConfigFlow):
                     step_id="site", data_schema=vol.Schema(options), errors=errors
                 )
 
-        except RateLimitException:
-            return self.async_show_form(
-                step_id="site",
-                data_schema=self._site_error_schema(),
-                errors={"base": "rate_limited"},
-            )
         except AuthException:
             _LOGGER.error("Authentication failed during site fetch")
             return self.async_show_form(
@@ -368,22 +362,8 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data_schema=data_schema,
                 errors={"base": "connection_error"},
             )
-        except NoDeliverySitesError as err:
-            _LOGGER.error("No delivery sites found: %s", err)
-            errors = {"base": "no_delivery_sites"}
-            return self.async_show_form(
-                step_id="site",
-                data_schema=self._site_error_schema(),
-                errors=errors,
-            )
-        except NoSitesFoundError as err:
-            _LOGGER.error("No suitable sites found: %s", err)
-            errors = {"base": "no_suitable_sites"}
-            return self.async_show_form(
-                step_id="site",
-                data_schema=self._site_error_schema(),
-                errors=errors,
-            )
+        except (RateLimitException, NoDeliverySitesError, NoSitesFoundError) as err:
+            return self._site_error_form(err)
         except AbortFlow:
             raise
         except Exception as err:
@@ -398,6 +378,22 @@ class ConfigFlow(config_entries.ConfigFlow):
     def _site_error_schema(self) -> vol.Schema:
         """Allow retrying site lookup using the existing authenticated tokens."""
         return vol.Schema({})
+
+    def _site_error_form(self, err: Exception) -> ConfigFlowResult:
+        """Render known site-fetch failures without losing their error categories."""
+        if isinstance(err, RateLimitException):
+            reason = "rate_limited"
+        elif isinstance(err, NoDeliverySitesError):
+            _LOGGER.error("No delivery sites found: %s", err)
+            reason = "no_delivery_sites"
+        else:
+            _LOGGER.error("No suitable sites found: %s", err)
+            reason = "no_suitable_sites"
+        return self.async_show_form(
+            step_id="site",
+            data_schema=self._site_error_schema(),
+            errors={"base": reason},
+        )
 
     async def async_step_user(
         self, user_input: Optional[dict[str, Any]] = None
@@ -880,6 +876,11 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
         return options
 
+    @staticmethod
+    def _login_failure_reason(error: Exception) -> str:
+        """Map typed login throttles and authentication failures to form errors."""
+        return "rate_limited" if isinstance(error, RateLimitException) else "invalid_auth"
+
     async def async_step_user(
         self,
         user_input: Optional[dict[str, Any]] = None,
@@ -930,10 +931,8 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
                 return self.async_create_entry(title=entry.title, data=options)
 
-            except RateLimitException:
-                errors = {"base": "rate_limited"}
-            except AuthException:
-                errors = {"base": "invalid_auth"}
+            except (RateLimitException, AuthException) as err:
+                errors = {"base": self._login_failure_reason(err)}
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:

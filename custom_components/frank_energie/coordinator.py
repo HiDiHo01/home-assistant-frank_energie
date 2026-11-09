@@ -3043,6 +3043,23 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             energy_type=new_prices.energy_type,
         )
 
+    async def _use_cached_prices_on_fetch_failure(
+        self, error: Exception, now_utc: datetime
+    ) -> MarketPrices:
+        """Preserve a live price cache on fetch failures without hiding throttles."""
+        if not isinstance(error, RateLimitException):
+            await self._handle_fetch_exceptions(error)
+        cached = self._static_prices_today
+        if cached is not None and self._cached_prices_active(cached, now_utc):
+            _LOGGER.warning(
+                "Failed to fetch today prices, falling back to cached data: %s",
+                error,
+            )
+            return cached
+        if isinstance(error, RateLimitException):
+            raise rate_limit_update_failed(error, self.update_interval) from error
+        raise UpdateFailed(f"Failed to fetch today prices: {error}") from error
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch price data."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -3132,23 +3149,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
                             today,
                         )
                 except Exception as err:
-                    rate_limited = isinstance(err, RateLimitException)
-                    if not rate_limited:
-                        await self._handle_fetch_exceptions(err)
-                    if self._cached_prices_active(self._static_prices_today, now_utc):
-                        _LOGGER.warning(
-                            "Failed to fetch today prices, falling back to cached data: %s",
-                            err,
-                        )
-                        prices_today = self._static_prices_today
-                    elif rate_limited:
-                        raise rate_limit_update_failed(
-                            err, self.update_interval
-                        ) from err
-                    else:
-                        raise UpdateFailed(
-                            f"Failed to fetch today prices: {err}"
-                        ) from err
+                    prices_today = await self._use_cached_prices_on_fetch_failure(
+                        err, now_utc
+                    )
             else:
                 prices_today = self._static_prices_today
 
@@ -3655,6 +3658,25 @@ class FrankEnergieBatterySessionCoordinator(
             config_entry=config_entry,
         )
 
+    def _session_date_window(self) -> tuple[date, date]:
+        """Validate access and determine the month-to-date session time window."""
+        today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        if not self.api.is_authenticated:
+            raise UpdateFailed("API client is not authenticated.")
+        if not self.device_id:
+            raise UpdateFailed("No device ID provided for smart battery sessions.")
+        start = min(today.replace(day=1), today - timedelta(days=1))
+        return start, today + timedelta(days=1)
+
+    def _cached_sessions_or_raise(
+        self, error: UpdateFailed
+    ) -> SmartBatterySessions | None:
+        """Reuse the last successful sessions only after a failed refresh."""
+        if self.last_update_success:
+            _LOGGER.warning("%s", error)
+            return self.data
+        raise error
+
     async def _async_update_data(self) -> SmartBatterySessions | None:
         """
         Fetch smart battery session data.
@@ -3666,17 +3688,7 @@ class FrankEnergieBatterySessionCoordinator(
             UpdateFailed: If an error occurs during data fetching.
         """
         try:
-            today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
-            tomorrow = today + timedelta(days=1)
-
-            if not self.api.is_authenticated:
-                raise UpdateFailed("API client is not authenticated.")
-
-            if not self.device_id:
-                raise UpdateFailed("No device ID provided for smart battery sessions.")
-
-            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
-            mtd_start = min(today.replace(day=1), today - timedelta(days=1))
+            mtd_start, tomorrow = self._session_date_window()
             return await self.rate_limits.async_call(
                 "smart_battery_sessions",
                 lambda: self.api.smart_battery_sessions(
@@ -3685,10 +3697,7 @@ class FrankEnergieBatterySessionCoordinator(
             )
 
         except UpdateFailed as ex:
-            if self.last_update_success:
-                _LOGGER.warning(str(ex))
-                return self.data
-            raise
+            return self._cached_sessions_or_raise(ex)
         except AuthException as ex:
             _LOGGER.debug(
                 "Authentication tokens expired, attempting token renewal: %s", ex
