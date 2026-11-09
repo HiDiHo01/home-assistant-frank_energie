@@ -169,7 +169,6 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     )
 
 
-
 def test_homeassistant_test_dependencies_match_the_official_plugin() -> None:
     """Ensure Core and the official test plugin share the same locked version."""
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -177,14 +176,14 @@ def test_homeassistant_test_dependencies_match_the_official_plugin() -> None:
     assert dev_dependencies["homeassistant"] == "==2026.11.0"
     assert dev_dependencies["pytest-homeassistant"] == "==2026.11.0"
     assert "pytest-homeassistant-custom-component" not in dev_dependencies
-    assert "pytest-homeassistant" in project["tool"]["pytest"]["ini_options"][
-        "required_plugins"
-    ]
+    assert (
+        "pytest-homeassistant"
+        in project["tool"]["pytest"]["ini_options"]["required_plugins"]
+    )
 
     lock_data = tomllib.loads((ROOT / "poetry.lock").read_text(encoding="utf-8"))
     locked_versions = {
-        package["name"]: package["version"]
-        for package in lock_data["package"]
+        package["name"]: package["version"] for package in lock_data["package"]
     }
     assert locked_versions["homeassistant"] == "2026.11.0"
     assert locked_versions["pytest-homeassistant"] == "2026.11.0"
