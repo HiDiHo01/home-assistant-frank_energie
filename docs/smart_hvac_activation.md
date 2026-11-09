@@ -104,5 +104,6 @@ poetry run python .github/helpers/check_flake8_baseline.py
 ```
 
 See [the developer guide](developer.md), [the integration development
-skill](../.agents/skills/frank-energie-development/SKILL.md) and
-[the skills index](../SKILLS.md). Always report checks not executed.
+skill](../.agents/skills/frank-energie-development/SKILL.md), and
+the [dependency-update skill](../.agents/skills/frank-energie-dependency-update/SKILL.md).
+Always report checks not executed.
