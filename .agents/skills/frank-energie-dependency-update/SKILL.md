@@ -26,10 +26,11 @@ The integration depends on the separately maintained [python-frank-energie libra
 For the authenticated Smart heating / Slim verwarmen entity, follow
 [the documented data contract](../../../docs/smart_hvac_activation.md):
 
-- The site-specific `api.me(site_reference)` response on
-  `python-frank-energie/main` has `Me.user_smart_hvac`, populated from
-  root-level `userSmartHvac(siteReference:)`. The pinned package
-  `python-frank-energie==2026.9.20` lacks this support.
+- Verify the **published version pinned in `manifest.json`**, not just
+  `python-frank-energie/main`, exposes the site-specific `api.me(site_reference)`
+  `Me.user_smart_hvac` response populated from `userSmartHvac(siteReference:)`.
+  The released `2026.11.9` client contains the Smart HVAC additions, but
+  future version changes require fresh contract and compatibility checks.
 - Do not declare this feature production-ready solely because the
   integration's mocked pytest suite passes. Before merge, verify a **released**
   library version exposes `Me.user_smart_hvac` and the expected
