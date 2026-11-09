@@ -165,7 +165,13 @@ async def _connection_context(
         settings.data = _empty_data()
         settings.data[DATA_USER] = user_data
         site_data = UserSites.from_dict(
-            {"data": {"userSites": [{"reference": "site-alpha", "segments": ["ELECTRICITY"]}]}}
+            {
+                "data": {
+                    "userSites": [
+                        {"reference": "site-alpha", "segments": ["ELECTRICITY"]}
+                    ]
+                }
+            }
         )
         assert site_data is not None
         settings.data[DATA_DELIVERY_SITE] = site_data.deliverySites[0]
@@ -351,7 +357,11 @@ async def test_resolution_connections_remain_entry_scoped(
     other_settings.data = _empty_data()
     other_settings.data[DATA_USER] = other_user
     other_sites = UserSites.from_dict(
-        {"data": {"userSites": [{"reference": "site-beta", "segments": ["ELECTRICITY"]}]}}
+        {
+            "data": {
+                "userSites": [{"reference": "site-beta", "segments": ["ELECTRICITY"]}]
+            }
+        }
     )
     assert other_sites is not None
     other_settings.data[DATA_DELIVERY_SITE] = other_sites.deliverySites[0]
@@ -659,12 +669,10 @@ async def test_effective_resolution_change_invalidates_today_cache(
         ctx.prices._fetch_prices_with_fallback.return_value
     )
     ctx.prices.last_fetch_today = datetime.now(UTC)
-    ctx.api.contract_price_resolution_state.return_value = (
-        ContractPriceResolutionState(
-            active_option="PT60M",
-            available_options=["PT15M", "PT60M"],
-            is_change_request_possible=True,
-        )
+    ctx.api.contract_price_resolution_state.return_value = ContractPriceResolutionState(
+        active_option="PT60M",
+        available_options=["PT15M", "PT60M"],
+        is_change_request_possible=True,
     )
 
     await ctx.prices._async_update_data()
