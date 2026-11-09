@@ -47,10 +47,12 @@ EANs and device IDs are never exposed as Smart HVAC state attributes.
    numbers and other truthy values must never be coerced into Boolean states.
 
 A failed optional Smart HVAC request must not invalidate otherwise valid user
-data. Handle expected API/network/timeout failures without exposing upstream
-response details in logs, and propagate authentication-required failures to
-Home Assistant reauthentication. Keep cancellation safe and preserve
-coordinator-based availability.
+data. Handle expected API, network, timeout **and non-required authentication**
+(`AuthException`) failures without exposing upstream response details in
+logs; retain the existing Smart Charging and Smart Trading data. Propagate
+`AuthRequiredException` to Home Assistant reauthentication, because that
+indicates the account must authenticate again. Keep cancellation safe and
+preserve coordinator-based availability.
 
 ## Translations and entity identity
 
