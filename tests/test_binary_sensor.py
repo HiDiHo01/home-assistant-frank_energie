@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.frank_energie.const import (
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DATA_PV_SYSTEMS,
     DOMAIN,
 )
@@ -88,8 +89,19 @@ def test_smart_feed_in_binary_sensor(mock_coordinator, mock_config_entry):
     desc = BINARY_SENSOR_DESCRIPTIONS[2]
     sensor = FrankEnergieBinarySensor(mock_coordinator, desc, mock_config_entry)
 
-    # Test when data is missing
+    # Without a completed fetch, the activation state is genuinely unknown.
     mock_coordinator.data = {}
+    assert sensor.is_on is None
+
+    # A successful GraphQL null response means no smart feed-in contract.
+    mock_coordinator.data = {
+        DATA_USER_SMART_FEED_IN: None,
+        DATA_USER_SMART_FEED_IN_FETCHED: True,
+    }
+    assert sensor.is_on is False
+
+    # Failed/skipped requests must not be interpreted as an inactive contract.
+    mock_coordinator.data[DATA_USER_SMART_FEED_IN_FETCHED] = False
     assert sensor.is_on is None
 
     # Test when active (dict payload)
@@ -293,6 +305,34 @@ async def test_smart_feature_binary_sensors_reach_the_state_machine(
     feed_in_state = hass.states.get(_entity_id(hass, "smart_feed_in"))
     assert feed_in_state is not None
     assert feed_in_state.state == "off"
+
+
+async def test_smart_feed_in_without_contract_is_off_in_state_machine(
+    hass: HomeAssistant,
+) -> None:
+    """A completed null API response renders as off in Home Assistant."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id="frank_energie")
+    entry.add_to_hass(hass)
+
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+    coordinator.data = {
+        DATA_USER_SMART_FEED_IN: None,
+        DATA_USER_SMART_FEED_IN_FETCHED: True,
+    }
+    description = next(
+        item for item in BINARY_SENSOR_DESCRIPTIONS if item.key == "smart_feed_in"
+    )
+    sensor = FrankEnergieBinarySensor(coordinator, description, entry)
+    await _add_through_real_platform(hass, entry, sensor)
+
+    entity_id = _entity_id(hass, "smart_feed_in")
+    assert hass.states.get(entity_id).state == "off"
+
+    coordinator.data[DATA_USER_SMART_FEED_IN_FETCHED] = False
+    sensor.async_write_ha_state()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unknown"
 
 
 async def test_missing_smart_feature_data_resolves_to_unknown(

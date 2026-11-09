@@ -32,6 +32,7 @@ from .const import (
     DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DOMAIN,
     ICON,
     SERVICE_NAME_BATTERIES,
@@ -117,6 +118,14 @@ def _extract_activation_state(
             ),
         )
     )
+
+
+def _smart_feed_in_state(data: FrankEnergieData) -> bool | None:
+    """Distinguish a confirmed missing contract from an unsuccessful API fetch."""
+    status = data.get(DATA_USER_SMART_FEED_IN)
+    if status is None:
+        return False if data.get(DATA_USER_SMART_FEED_IN_FETCHED) is True else None
+    return _extract_activation_state(status)
 
 
 def _user_feature_state(
@@ -626,9 +635,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: _extract_activation_state(
-            data.get(DATA_USER_SMART_FEED_IN),
-        ),
+        value_fn=_smart_feed_in_state,
         attr_fn=lambda data: _extract_activation_attributes(
             data.get(DATA_USER_SMART_FEED_IN),
         ),

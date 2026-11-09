@@ -206,6 +206,7 @@ DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 DATA_PV_SYSTEMS: Final[str] = "smart_pv_systems"
 DATA_PV_SUMMARY: Final[str] = "smart_pv_summary"
 DATA_USER_SMART_FEED_IN: Final[str] = "user_smart_feed_in"
+DATA_USER_SMART_FEED_IN_FETCHED: Final[str] = "user_smart_feed_in_fetched"
 DATA_TOKEN_EXPIRES_AT: Final[str] = "auth_token_expires_at"
 DATA_REFRESH_TOKEN_EXPIRES_AT: Final[str] = "refresh_token_expires_at"
 

@@ -15,6 +15,8 @@ from custom_components.frank_energie.const import (
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
     DATA_USER,
+    DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     TIMEZONE_AMSTERDAM,
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
@@ -47,6 +49,7 @@ from python_frank_energie.models import (
     User,
     PriceData,
     MarketPrices,
+    UserSmartFeedInStatus,
 )
 from aiohttp import ClientError
 
@@ -3147,3 +3150,72 @@ async def test_fetch_user_data_propagates_auth_required(
         await coordinator._fetch_user_data()
 
     mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
+
+
+@pytest.mark.asyncio
+async def test_pv_feed_in_distinguishes_null_from_failure_and_recovers(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Confirm a missing contract without treating API failures as inactivity."""
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.smart_pv_systems = AsyncMock(return_value=None)
+    mock_frank_energie.user_smart_feed_in = AsyncMock(return_value=None)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    pv_coordinator = FrankEnergiePVCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    with patch.object(pv_coordinator, "_should_skip_api_calls", return_value=False):
+        no_contract = await pv_coordinator._async_update_data()
+        assert no_contract[DATA_USER_SMART_FEED_IN] is None
+        assert no_contract[DATA_USER_SMART_FEED_IN_FETCHED] is True
+
+        mock_frank_energie.user_smart_feed_in.side_effect = RequestException(
+            "Temporary API failure"
+        )
+        failed = await pv_coordinator._async_update_data()
+        assert failed[DATA_USER_SMART_FEED_IN] is None
+        assert failed[DATA_USER_SMART_FEED_IN_FETCHED] is False
+
+        mock_frank_energie.user_smart_feed_in.side_effect = None
+        for is_activated in (True, False):
+            status = UserSmartFeedInStatus(
+                has_accepted_terms=True,
+                is_activated=is_activated,
+                is_app_onboarding_available=True,
+                is_available_in_country=True,
+                user_created_at=datetime(2026, 11, 9, tzinfo=UTC),
+                user_id="synthetic-user",
+            )
+            mock_frank_energie.user_smart_feed_in.return_value = status
+            recovered = await pv_coordinator._async_update_data()
+            assert recovered[DATA_USER_SMART_FEED_IN] is status
+            assert recovered[DATA_USER_SMART_FEED_IN_FETCHED] is True
+
+
+@pytest.mark.asyncio
+async def test_pv_feed_in_skipped_without_authentication(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Do not interpret an unauthenticated skipped request as no contract."""
+    mock_frank_energie.is_authenticated = False
+    mock_frank_energie.smart_pv_systems = AsyncMock(return_value=None)
+    mock_frank_energie.user_smart_feed_in = AsyncMock()
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    pv_coordinator = FrankEnergiePVCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    with patch.object(pv_coordinator, "_should_skip_api_calls", return_value=False):
+        data = await pv_coordinator._async_update_data()
+
+    mock_frank_energie.user_smart_feed_in.assert_not_awaited()
+    assert data[DATA_USER_SMART_FEED_IN] is None
+    assert data[DATA_USER_SMART_FEED_IN_FETCHED] is False

@@ -91,6 +91,7 @@ from .const import (
     DATA_USER,
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DEFAULT_INTERVAL_BATTERIES,
     DEFAULT_INTERVAL_BATTERY_SESSIONS,
     DEFAULT_INTERVAL_CHARGERS,
@@ -370,6 +371,9 @@ class FrankEnergieData(TypedDict):
     user_smart_feed_in: UserSmartFeedInStatus | None
     """Optional user smart feed-in status."""
 
+    user_smart_feed_in_fetched: bool
+    """Whether the user smart feed-in API request succeeded, including a null response."""
+
     contract_price_resolution_state: ContractPriceResolutionState | None
     """Optional contract price resolution state."""
 
@@ -413,6 +417,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
         DATA_USER_SMART_FEED_IN: None,
+        DATA_USER_SMART_FEED_IN_FETCHED: False,
         DATA_CONTRACT_PRICE_RESOLUTION_STATE: None,
         DATA_REFRESH_TOKEN_EXPIRES_AT: None,
         DATA_TOKEN_EXPIRES_AT: None,
@@ -1413,18 +1418,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             )
             return None
 
-    async def _fetch_user_smart_feed_in(self) -> UserSmartFeedInStatus | None:
-        """Fetch user smart feed-in status from the API."""
+    async def _fetch_user_smart_feed_in(
+        self,
+    ) -> tuple[UserSmartFeedInStatus | None, bool]:
+        """Fetch feed-in status and record whether a null response is authoritative."""
         if not self.api.is_authenticated:
             _LOGGER.debug(
                 "Skipping user smart feed-in fetch because the client is not authenticated"
             )
-            return None
+            return None, False
         try:
-            return await self.api.user_smart_feed_in()
+            status = await self.api.user_smart_feed_in()
+            return status, True
         except Exception as err:
             self._handle_dynamic_fetch_error("user smart feed-in status", err)
-            return None
+            return None, False
 
     async def _fetch_battery_details(self, battery) -> SmartBatteryDetails | None:
         """Fetch details for a single smart battery."""
@@ -3297,10 +3305,11 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         self.last_fetch_today = now_utc
 
         try:
-            data_pv_systems, data_user_smart_feed_in = await asyncio.gather(
+            data_pv_systems, feed_in_result = await asyncio.gather(
                 self._fetch_smart_pv_systems(),
                 self._fetch_user_smart_feed_in(),
             )
+            data_user_smart_feed_in, feed_in_fetched = feed_in_result
 
             data_pv_summary = {}
             if data_pv_systems and data_pv_systems.systems:
@@ -3333,6 +3342,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
             result[DATA_PV_SYSTEMS] = data_pv_systems
             result[DATA_PV_SUMMARY] = data_pv_summary
             result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
+            result[DATA_USER_SMART_FEED_IN_FETCHED] = feed_in_fetched
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
