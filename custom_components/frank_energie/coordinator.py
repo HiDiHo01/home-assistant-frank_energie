@@ -2780,12 +2780,12 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             and self._price_contracts() != {"GAS"}
             and not self._resolution_change_pending
             and self._resolution_state_connection_id != self._connection_id
+            and await self._refresh_current_resolution_state() is None
         ):
-            if await self._refresh_current_resolution_state() is None:
-                raise UpdateFailed(
-                    "Cannot verify resolution change eligibility for the "
-                    "selected electricity connection; retry after the next refresh"
-                )
+            raise UpdateFailed(
+                "Cannot verify resolution change eligibility for the "
+                "selected electricity connection; retry after the next refresh"
+            )
         await super().async_set_resolution(value)
 
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
