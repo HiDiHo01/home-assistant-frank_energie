@@ -1193,7 +1193,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     me_data = await self.api.me(self.site_reference)
                 except (AuthException, AuthRequiredException):
                     raise
-                except (RequestException, FrankEnergieException, ClientError, TimeoutError):
+                except (
+                    RequestException,
+                    FrankEnergieException,
+                    ClientError,
+                    TimeoutError,
+                ):
                     _LOGGER.debug("UserSmartHvac status is unavailable for this site")
                 else:
                     user_data.smartHvac = getattr(me_data, "user_smart_hvac", None)
