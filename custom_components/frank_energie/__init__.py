@@ -44,6 +44,7 @@ from .coordinator import (
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
+from .device_inventory import validated_inventory_ids
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
 
@@ -194,23 +195,8 @@ def _inventory_confirms_device_absent(
         return False
 
     inventory = coordinator.data.get(data_key)
-    devices = getattr(inventory, collection_key, None)
-    if not isinstance(devices, list):
-        # None also represents a skipped or failed fetch in the current API.
-        return False
-
-    for device in devices:
-        device_id = (
-            device.get("id")
-            if isinstance(device, dict)
-            else getattr(device, "id", None)
-        )
-        if not isinstance(device_id, str) or not device_id:
-            # An invalid partial response must not authorize deletion.
-            return False
-        if device_id == identifier:
-            return False
-    return True
+    identifiers = validated_inventory_ids(collection_key, inventory)
+    return identifiers is not None and identifier not in identifiers
 
 
 async def async_remove_config_entry_device(

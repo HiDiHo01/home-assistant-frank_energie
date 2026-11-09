@@ -15,7 +15,7 @@ Do not apply obsolete guidance, Core-only `dev` tooling, or general dependency-b
 
 ## Official pytest-plugin migration trigger
 
-When a **stable PyPI release** of Home Assistant Core's official `pytest-homeassistant` supports this repository's declared minimum Core/Python versions, the migration away from `pytest-homeassistant-custom-component` is **mandatory**. Validate the release and dependency metadata against the matching tagged Core source and the [official migration guide](https://github.com/home-assistant/core/blob/2026.11.0/packages/pytest-homeassistant/README.md); do not install overlapping pytest plugins, take an unverified prerelease, or bypass the CI version gate.
+The stable published `pytest-homeassistant==2026.11.0` supports Home Assistant 2026.11.0 and Python 3.14.2+. The migration away from `pytest-homeassistant-custom-component` is **mandatory** and must remain in place on this branch. Validate the release and dependency metadata against the matching tagged Core source and the [official migration guide](https://github.com/home-assistant/core/blob/2026.11.0/packages/pytest-homeassistant/README.md); do not install overlapping pytest plugins, take an unverified prerelease, or bypass the CI version gate.
 
 Follow `AGENTS.md` and the [dependency-upgrade skill](../frank-energie-dependency-update/SKILL.md) to migrate imports, fixtures, pytest configuration, dependency declarations and the Poetry lockfile, then exercise the full test matrix. Keep the PR blocked until the supported Core and complete tests pass.
 

@@ -434,7 +434,7 @@ Use the testing framework and conventions already established in the repository,
 * Use Poetry 2.5.1. Select the interpreter with `poetry env use python3.14` and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
 * Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
 * Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
-* Until a compatible stable official `pytest-homeassistant` release is published, the existing `pytest-homeassistant-custom-component` configuration is a temporary dependency only. Once the release is available, replace that requirement and its fixtures with the official package as mandated above. Always use real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
+* Use the published official `pytest-homeassistant` plugin, pinned to the supported Home Assistant Core release (`2026.11.0`). The deprecated `pytest-homeassistant-custom-component` plugin must not remain in the dependency graph. Always use real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
 * Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
 * Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
 * Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.

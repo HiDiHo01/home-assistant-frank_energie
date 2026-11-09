@@ -14,9 +14,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 
-from custom_components.frank_energie import FrankEnergieEntryData
+from custom_components.frank_energie import (
+    FrankEnergieEntryData,
+    async_remove_config_entry_device,
+)
 from custom_components.frank_energie.const import DATA_ENODE_CHARGERS, DOMAIN
 from custom_components.frank_energie.repairs import (
+    _issue_id,
     async_process_device_inventory,
 )
 
@@ -57,11 +61,6 @@ def _inventory(collection_key: str, identifiers: list[object]) -> SimpleNamespac
     return SimpleNamespace(**{collection_key: identifiers})
 
 
-def _issue_id(entry_id: str, kind: str, device_id: str) -> str:
-    """Return the stable issue identifier used by the integration."""
-    return f"stale_{kind}_{entry_id}_{device_id}"
-
-
 def _repair_exists(hass: HomeAssistant, issue_id: str) -> bool:
     """Check the actual Home Assistant issue registry."""
     return (DOMAIN, issue_id) in ir.async_get(hass).issues
@@ -78,7 +77,7 @@ async def test_stale_device_requires_two_fresh_inventories(
     """Raise one persistent repair after two valid absences and clear on return."""
     entry = await frank_energie_setup()
     device, entity = _register_device(hass, entry, kind, marker)
-    issue_id = _issue_id(entry.entry_id, kind, device.id)
+    issue_id = _issue_id(kind, entry.entry_id, device.id)
     missing = _inventory(collection_key, [])
 
     async_process_device_inventory(hass, entry, kind, missing)
@@ -123,7 +122,7 @@ async def test_invalid_inventory_never_creates_or_clears_repair(
     """Skipped, partial, malformed, and duplicate inventories preserve repairs."""
     entry = await frank_energie_setup()
     device, _ = _register_device(hass, entry, kind, marker)
-    issue_id = _issue_id(entry.entry_id, kind, device.id)
+    issue_id = _issue_id(kind, entry.entry_id, device.id)
     valid_empty = _inventory(collection_key, [])
     async_process_device_inventory(hass, entry, kind, valid_empty)
     async_process_device_inventory(hass, entry, kind, valid_empty)
@@ -163,7 +162,7 @@ async def test_disabled_registry_entity_does_not_hide_stale_device(
     empty = _inventory(collection_key, [])
     async_process_device_inventory(hass, entry, kind, empty)
     async_process_device_inventory(hass, entry, kind, empty)
-    assert _repair_exists(hass, _issue_id(entry.entry_id, kind, device.id))
+    assert _repair_exists(hass, _issue_id(kind, entry.entry_id, device.id))
 
 
 async def test_unknown_device_never_gets_repair(
@@ -185,7 +184,7 @@ async def test_unknown_device_never_gets_repair(
     empty = _inventory("chargers", [])
     async_process_device_inventory(hass, entry, "charger", empty)
     async_process_device_inventory(hass, entry, "charger", empty)
-    assert not _repair_exists(hass, _issue_id(entry.entry_id, "charger", device.id))
+    assert not _repair_exists(hass, _issue_id("charger", entry.entry_id, device.id))
 
 
 @pytest.mark.parametrize("current_state", ["missing", "present", "fetch_failed"])
@@ -198,7 +197,7 @@ async def test_repair_flow_revalidates_before_removing_device(
     assert await async_setup_component(hass, "repairs", {})
     entry = await frank_energie_setup()
     device, entity = _register_device(hass, entry, "charger", "charger_brand")
-    issue_id = _issue_id(entry.entry_id, "charger", device.id)
+    issue_id = _issue_id("charger", entry.entry_id, device.id)
     empty = _inventory("chargers", [])
     async_process_device_inventory(hass, entry, "charger", empty)
     async_process_device_inventory(hass, entry, "charger", empty)
@@ -227,7 +226,7 @@ async def test_repair_flow_revalidates_before_removing_device(
 
     with patch.object(
         coordinator,
-        "async_request_refresh",
+        "async_refresh",
         new_callable=AsyncMock,
         side_effect=_mock_fresh_refresh,
     ) as refresh:
@@ -254,7 +253,7 @@ async def test_entry_scoped_issue_preserves_ignored_state(
     """Let Core own the issue lifecycle without losing user dismissals."""
     entry = await frank_energie_setup()
     device, _ = _register_device(hass, entry, "charger", "charger_brand")
-    issue_id = _issue_id(entry.entry_id, "charger", device.id)
+    issue_id = _issue_id("charger", entry.entry_id, device.id)
     empty = _inventory("chargers", [])
     async_process_device_inventory(hass, entry, "charger", empty)
     async_process_device_inventory(hass, entry, "charger", empty)
@@ -267,3 +266,41 @@ async def test_entry_scoped_issue_preserves_ignored_state(
     dismissed_issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
     assert dismissed_issue is not None
     assert dismissed_issue.dismissed_version is not None
+
+
+async def test_unidentifiable_device_clears_unfixable_repair(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """Drop the issue, but not the device, when its type can no longer be proved."""
+    entry = await frank_energie_setup()
+    device, entity = _register_device(hass, entry, "charger", "charger_brand")
+    empty = _inventory("chargers", [])
+    async_process_device_inventory(hass, entry, "charger", empty)
+    async_process_device_inventory(hass, entry, "charger", empty)
+    issue_id = _issue_id("charger", entry.entry_id, device.id)
+    assert _repair_exists(hass, issue_id)
+
+    er.async_get(hass).async_remove(entity.entity_id)
+    async_process_device_inventory(hass, entry, "charger", empty)
+
+    assert not _repair_exists(hass, issue_id)
+    assert dr.async_get(hass).async_get(device.id) is not None
+
+
+async def test_device_removal_rejects_duplicate_inventory_ids(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """A malformed complete inventory cannot authorize deletion."""
+    entry = await frank_energie_setup()
+    device, _ = _register_device(hass, entry, "charger", "charger_brand")
+    coordinator = entry.runtime_data.charger_coordinator
+    coordinator.last_update_success = True
+    coordinator.data = {
+        DATA_ENODE_CHARGERS: _inventory(
+            "chargers",
+            [SimpleNamespace(id="other"), SimpleNamespace(id="other")],
+        )
+    }
+
+    assert not await async_remove_config_entry_device(hass, entry, device)
+    assert dr.async_get(hass).async_get(device.id) is not None

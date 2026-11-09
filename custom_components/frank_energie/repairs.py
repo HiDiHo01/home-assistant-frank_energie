@@ -13,6 +13,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DATA_BATTERIES, DATA_ENODE_CHARGERS, DATA_ENODE_VEHICLES, DOMAIN
+from .device_inventory import validated_inventory_ids
 
 if TYPE_CHECKING:
     from . import FrankEnergieEntryData
@@ -30,23 +31,6 @@ _REQUIRED_ABSENT_FETCHES = 2
 def _issue_id(kind: str, entry_id: str, device_id: str) -> str:
     """Return a stable, config-entry-scoped repair identifier."""
     return f"stale_{kind}_{entry_id}_{device_id}"
-
-
-def _inventory_ids(kind: str, inventory: object) -> set[str] | None:
-    """Validate the complete API inventory before trusting absence."""
-    collection = getattr(inventory, _INVENTORIES[kind][1], None)
-    if not isinstance(collection, list):
-        return None
-
-    identifiers: set[str] = set()
-    for item in collection:
-        item_id = (
-            item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
-        )
-        if not isinstance(item_id, str) or not item_id or item_id in identifiers:
-            return None
-        identifiers.add(item_id)
-    return identifiers
 
 
 def _candidate_identifier(
@@ -97,7 +81,7 @@ def async_process_device_inventory(
     """
     if kind not in _INVENTORIES or entry.runtime_data is None:
         return
-    inventory_ids = _inventory_ids(kind, inventory)
+    inventory_ids = validated_inventory_ids(_INVENTORIES[kind][1], inventory)
     if inventory_ids is None:
         return
 
@@ -115,12 +99,23 @@ def async_process_device_inventory(
         for device in dr.async_entries_for_config_entry(
             dr.async_get(hass), entry.entry_id
         ):
+            # Avoid entity-registry scans for devices that cannot match this
+            # kind (including service and unrelated hardware devices).
+            if kind == "battery" and device.model != "SmartBattery":
+                continue
+            if kind != "battery" and device.model == "SmartBattery":
+                continue
+            if any(
+                domain == DOMAIN and identifier.startswith(f"{entry.entry_id}_")
+                for domain, identifier in device.identifiers
+            ):
+                continue
+
             issue_id = _issue_id(kind, entry.entry_id, device.id)
             identifier = _candidate_identifier(hass, entry, device, kind)
             if identifier is None:
-                # The device still exists, but its kind can no longer be
-                # verified. Preserve any existing issue, including ignore state.
-                refresh.async_keep([issue_id])
+                # An unidentifiable device must never leave an unfixable repair.
+                # The scoped issue refresh clears its old issue safely.
                 continue
 
             key = f"{kind}:{device.id}"
@@ -225,14 +220,19 @@ class StaleDeviceRepairFlow(RepairsFlow):
             "vehicle": runtime_data.vehicle_coordinator,
         }[kind]
         previous_epoch = runtime_data.stale_inventory_epochs.get(kind, 0)
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh()
 
         # last_update_success alone is insufficient: a skipped API fetch can
         # return cached coordinator data while reporting a successful update.
         if runtime_data.stale_inventory_epochs.get(kind, 0) == previous_epoch:
             return self.async_abort(reason="cannot_verify")
 
-        if registry.async_get(device_id) != device:
+        current_device = registry.async_get(device_id)
+        if (
+            current_device is None
+            or current_device.identifiers != device.identifiers
+            or current_device.config_entry_id != device.config_entry_id
+        ):
             return self.async_abort(reason="cannot_verify")
 
         from . import async_remove_config_entry_device
