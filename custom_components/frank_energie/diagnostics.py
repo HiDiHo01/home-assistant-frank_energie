@@ -184,7 +184,9 @@ async def async_get_config_entry_diagnostics(
             },
             "invoice_coordinator": {
                 "last_update_success": runtime_data.invoice_coordinator.last_update_success,
-                "update_interval": str(runtime_data.invoice_coordinator.update_interval),
+                "update_interval": str(
+                    runtime_data.invoice_coordinator.update_interval
+                ),
                 "has_cached_invoices": (
                     runtime_data.invoice_coordinator.data.get(DATA_INVOICES) is not None
                 ),
