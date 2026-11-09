@@ -631,7 +631,7 @@ async def test_silent_login_authentication_failure_preserves_saved_state(
         await settings._try_renew_token()
 
     assert raised.value.__cause__ is None
-    assert "expired" not in str(raised.value)
+    assert str(raised.value) == "Authentication has expired"
     assert dict(rate_entry.data) == original_data
     assert dict(rate_entry.options) == original_options
     assert not settings._auth_lock.locked()
@@ -1203,6 +1203,7 @@ async def test_public_prices_survive_implicit_token_renewal_throttle(
         "custom_components.frank_energie.coordinator.FrankEnergie",
         return_value=public_api,
     ) as public_client:
+        public_client.RENEW_TOKEN_OPERATIONNAME = FrankEnergie.RENEW_TOKEN_OPERATIONNAME
         for _ in range(2):
             result = await coordinator._fetch_public_prices_for_range(
                 date(2026, 10, 28), date(2026, 10, 29), "NL"
