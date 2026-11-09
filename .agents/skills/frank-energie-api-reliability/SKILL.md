@@ -20,6 +20,28 @@ Keep the API library responsible for GraphQL transport, authentication, parsing,
 5. Verify cache aging and response ordering; a fallback must not be labeled live/current, and an old request must not overwrite newer data.
 6. For price-related fixes, verify hourly/quarter-hour resolution, PT15M/PT60M effective dates, negative prices, UTC versus Amsterdam local dates, and DST days.
 
+## Smart HVAC status and optional-request isolation
+
+See [Smart heating activation](../../../docs/smart_hvac_activation.md).
+The User-service `smart_hvac` entity is driven by the strictly Boolean
+`UserSmartHvac.isActivated` for the selected delivery site. Do not
+substitute `isAvailableOnSite`, an equipment operational status, or a
+truthy string. `RUNNING` is an intentional UI device class for the
+requested active/inactive wording, not physical operating telemetry.
+
+When the settings coordinator fetches `api.me(site_reference)` as an
+optional Smart HVAC request, preserve already-valid `api.user()` data
+on expected network, request, or timeout failures. Do not swallow
+`asyncio.CancelledError` or suppress authentication-required failures
+that should trigger Home Assistant reauthentication. Never log raw upstream
+payloads, personal identifiers, GraphQL variables or tokens.
+
+Check that the selected config-entry site's reference is used consistently
+and originates from the established `UserSites` discovery/selection flow,
+not a hard-coded or environment-provided fallback. Verify unknown values
+are unavailable rather than silently treated as inactive, and that
+`CoordinatorEntity.available` follows the settings refresh state.
+
 ## Regression tests
 
 Use existing tests such as `tests/test_coordinator.py`, `tests/test_price_cache.py`, `tests/test_price_coordinator_liveness.py`, `tests/test_contract_support.py`, and `tests/test_market_price_resolution_validation.py` for focused changes; extend scenarios with deterministic `AsyncMock` responses and synthetic identifiers. Confirm both preserved unrelated data and accurate failed-resource availability. Check that `caplog`, diagnostics and exception messages never contain credentials, customer-specific identifiers, or raw sensitive API responses.
