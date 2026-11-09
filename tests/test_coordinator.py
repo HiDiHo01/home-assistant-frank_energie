@@ -2938,6 +2938,8 @@ async def test_api_resolution_change_invalidates_same_day_price_cache(
     price_coordinator = FrankEnergiePriceCoordinator(
         MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
     )
+    # The resolution endpoint requires a selected electricity connection.
+    price_coordinator._connection_id = "selected-electricity"
 
     now_utc = datetime.now(UTC)
     cached_prices = _make_market_prices_with_resolution(15, now_utc.isoformat())
