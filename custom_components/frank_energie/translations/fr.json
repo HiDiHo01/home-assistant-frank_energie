@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured%]",
       "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
@@ -11,7 +12,8 @@
       "no_delivery_sites": "Aucun site de livraison trouvé pour ce compte.",
       "no_suitable_sites": "Aucun site de livraison approprié trouvé. Vérifiez que votre compte dispose de contrats de livraison actifs.",
       "site_retrieval_failed": "Erreur lors de la récupération des sites de livraison. Veuillez réessayer plus tard.",
-      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails."
+      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
+      "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -1099,6 +1101,12 @@
         },
         "title": "Se connecter à Frank Energie"
       }
+    },
+    "error": {
+      "connection_error": "Erreur de connexion à l'API Frank Energie.",
+      "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
+      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
+      "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     }
   },
   "title": "Frank Energie"
