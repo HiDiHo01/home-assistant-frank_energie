@@ -72,6 +72,16 @@ def test_translation_keys_alignment():
         )
 
 
+def test_reconfigure_success_abort_translation() -> None:
+    """Require a localized success message for reconfiguration in every locale."""
+    expected = "[%key:common::config_flow::abort::reconfigure_successful%]"
+    for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation = json.loads(path.read_text(encoding="utf-8"))
+        assert translation["config"]["abort"]["reconfigure_successful"] == expected, (
+            f"{path.name} must define the native reconfigure success translation"
+        )
+
+
 def test_gas_price_component_translation_keys() -> None:
     """Check renamed gas component keys against canonical and all locale files."""
     from custom_components.frank_energie.sensor import SENSOR_TYPES
