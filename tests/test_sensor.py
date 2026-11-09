@@ -201,11 +201,12 @@ async def test_sensors_get_data_of_current_hour(
     frank_energie_config_entry: MockConfigEntry,
     hass: HomeAssistant,
 ):
+    """Verify hourly price changes without relying on the CI runner's clock."""
     import zoneinfo
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     tz = zoneinfo.ZoneInfo("Europe/Amsterdam")
-    now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
+    now = datetime(2026, 2, 12, 5, 15, tzinfo=tz)
     freezer.move_to(now)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     aioclient_responses.add(
@@ -236,9 +237,9 @@ async def test_sensors_get_data_of_current_hour(
     )
 
     # Change time to 12:15
-    now = datetime.now(tz).replace(hour=12, minute=15, second=0, microsecond=0)
+    now = now.replace(hour=12, minute=15)
     freezer.move_to(now)
-    await trigger_update(hass, 7 * 3600)
+    await trigger_update(hass)
 
     assert (
         hass.states.get(
@@ -417,7 +418,7 @@ async def test_sensors_quarter_hour_prices(
 
     # Cross into the next interval: previous/next both shift by one slot.
     freezer.move_to(now.replace(minute=22))
-    await trigger_update(hass, 7 * 3600)
+    await trigger_update(hass)
 
     assert state("previous_quarter_hour_electricity_price_all_in").state == "0.3"
     assert state("next_quarter_hour_electricity_price_all_in").state == "0.32"
