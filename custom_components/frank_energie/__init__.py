@@ -26,9 +26,6 @@ from python_frank_energie.models import UserSites
 
 from .const import (
     CONF_COORDINATOR,
-    DATA_BATTERIES,
-    DATA_ENODE_CHARGERS,
-    DATA_ENODE_VEHICLES,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
