@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant import config_entries
@@ -321,7 +321,9 @@ async def test_sensors_get_data_of_current_hour(
     # Change time to 12:15
     now = datetime.now(tz).replace(hour=12, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
-    await trigger_update(hass, 7 * 3600)
+    # The clock has already advanced; firing seven hours later can expire prices.
+    async_fire_time_changed(hass, now.astimezone(UTC) + timedelta(seconds=1))
+    await hass.async_block_till_done()
 
     assert (
         hass.states.get(
