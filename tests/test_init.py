@@ -269,7 +269,7 @@ async def test_remove_config_entry_device(
     [
         ("charger", DATA_ENODE_CHARGERS, "chargers", "charger_brand", None),
         ("vehicle", DATA_ENODE_VEHICLES, "vehicles", "vehicle_name", None),
-        ("battery", DATA_BATTERIES, "batteries", "battery_status", "SmartBattery"),
+        ("battery", DATA_BATTERIES, "batteries", "battery_mode", "SmartBattery"),
     ],
 )
 @pytest.mark.parametrize(
@@ -309,7 +309,7 @@ async def test_remove_device_requires_confirmed_inventory(
     )
     entity_registry = er.async_get(hass)
     entity = entity_registry.async_get_or_create(
-        "sensor",
+        "select" if kind == "battery" else "sensor",
         DOMAIN,
         f"{DOMAIN}_{identifier}_{marker}",
         config_entry=entry,

@@ -51,7 +51,7 @@ def _register_device(
         model="SmartBattery" if kind == "battery" else None,
     )
     entity = er.async_get(hass).async_get_or_create(
-        "sensor",
+        "select" if kind == "battery" else "sensor",
         DOMAIN,
         f"{DOMAIN}_{identifier}_{marker}",
         config_entry=entry,
