@@ -117,7 +117,7 @@
         "name": "Injection Intelligente"
       },
       "smart_hvac": {
-        "name": "Chauffage Intelligent"
+        "name": "Chauffage intelligent activé"
       },
       "smart_push_notification_price_alerts": {
         "name": "Alertes de prix par notification push"
