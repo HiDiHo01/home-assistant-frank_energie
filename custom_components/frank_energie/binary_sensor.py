@@ -637,6 +637,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         translation_key="smart_hvac",
         icon="mdi:heat-pump",
         authenticated=True,
+        device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
         value_fn=_smart_hvac_state,
         available_fn=_smart_hvac_available,
