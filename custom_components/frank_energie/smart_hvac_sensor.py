@@ -1,4 +1,4 @@
-"""Home Assistant sensors for the Smart Heating service and its equipment."""
+"""Register Smart Heating sensors on service and physical devices."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -41,7 +41,7 @@ _DEVICE_ID_PREFIX: Final = "smart_hvac_device"
 
 @dataclass(frozen=True, kw_only=True)
 class _DeviceSensorDescription(SensorEntityDescription):
-    """Describe a device metadata or provider summary sensor."""
+    """Describe a sensor backed by equipment metadata or a device summary."""
 
     summary_value: Callable[[SmartHvacSummary], _SummaryValue] | None = None
 
@@ -120,12 +120,12 @@ class _SmartHvacCountSensor(
 
     @property
     def available(self) -> bool:
-        """Return whether the corresponding collection was fetched."""
+        """Require a successful coordinator update and a known collection."""
         return super().available and self.native_value is not None
 
     @property
     def native_value(self) -> int | None:
-        """Count the records only when the upstream collection is known."""
+        """Return the record count or ``None`` when the collection is unknown."""
         data = self.coordinator.data
         records = data.requests if self._account_scope else data.devices
         return len(records) if records is not None else None
@@ -142,7 +142,7 @@ class _SmartHvacCountSensor(
 class _SmartHvacSiteSensor(
     CoordinatorEntity[FrankEnergieSettingsCoordinator], SensorEntity
 ):
-    """Show site eligibility flags and the optional Smart Heating profile date."""
+    """Expose the profile creation timestamp and the selected site's flags."""
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -152,14 +152,14 @@ class _SmartHvacSiteSensor(
     def __init__(
         self, coordinator: FrankEnergieSettingsCoordinator, entry_id: str
     ) -> None:
-        """Use the settings coordinator's existing site response."""
+        """Attach the site's profile sensor to the Smart Heating service."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry_id}_{self._attr_translation_key}"
         self._attr_device_info = service_device_info(entry_id, SERVICE_NAME_SMART_HVAC)
 
     @property
     def available(self) -> bool:
-        """Use the settings refresh status and the presence of the site feature."""
+        """Require a successful settings refresh with Smart Heating site data."""
         return (
             super().available
             and getattr(self.coordinator.data.get(DATA_USER), "smartHvac", None)
@@ -168,7 +168,7 @@ class _SmartHvacSiteSensor(
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the creation timestamp when it carries a valid time zone."""
+        """Return the profile creation timestamp in UTC when its offset is known."""
         feature = getattr(self.coordinator.data.get(DATA_USER), "smartHvac", None)
         value = getattr(feature, "userCreatedAt", None)
         if not isinstance(value, str):
@@ -190,7 +190,7 @@ class _SmartHvacSiteSensor(
 class _SmartHvacDeviceSensor(
     CoordinatorEntity[FrankEnergieSmartHvacCoordinator], SensorEntity
 ):
-    """Expose a single equipment field without coupling it to other equipment."""
+    """Expose one equipment or summary value on the corresponding device."""
 
     _attr_has_entity_name = True
     entity_description: _DeviceSensorDescription
@@ -204,7 +204,7 @@ class _SmartHvacDeviceSensor(
         description: _DeviceSensorDescription,
         device_identifier: str,
     ) -> None:
-        """Register an opaque, config-entry-scoped identity for this entity."""
+        """Preserve the sensor's unique ID and attach it to the physical device."""
         super().__init__(coordinator)
         self.entity_description = description
         self._device_id = device_id
@@ -222,7 +222,7 @@ class _SmartHvacDeviceSensor(
 
     @property
     def available(self) -> bool:
-        """Keep inventory metadata and summary availability independent."""
+        """Require inventory data and a successful read for summary sensors."""
         return self._device is not None and (
             self.entity_description.summary_value is None
             or self._device_id in self.coordinator.data.summaries
@@ -230,7 +230,7 @@ class _SmartHvacDeviceSensor(
 
     @property
     def native_value(self) -> _SummaryValue:
-        """Use the device name or the summary's unmodified provider value."""
+        """Return the equipment display name or the provider's summary value."""
         value_fn = self.entity_description.summary_value
         if value_fn is None:
             return device.display_name if (device := self._device) is not None else None
@@ -269,7 +269,7 @@ def _async_remove_missing_equipment(
     active_fingerprints: set[str],
     active_identifiers: set[str],
 ) -> None:
-    """Remove absent devices and equipment sensors from a confirmed inventory."""
+    """Remove registry entries for equipment missing from a confirmed inventory."""
     registry = er.async_get(hass)
     prefix = f"{entry_id}_{_EQUIPMENT_ID_PREFIX}_"
     for entity in er.async_entries_for_config_entry(registry, entry_id):
@@ -302,7 +302,11 @@ def _async_sync_equipment(
     devices: dict[str, SmartHvacDevice],
     known_devices: dict[str, SmartHvacDevice] | None,
 ) -> tuple[dict[str, SmartHvacDevice], list[_SmartHvacDeviceSensor]]:
-    """Update physical devices and return sensors for newly discovered equipment."""
+    """Reconcile the device registry with a confirmed site inventory.
+
+    Update metadata in place and remove equipment missing from the inventory.
+    Return the new snapshot and sensors for newly discovered devices.
+    """
     current = {
         sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
         for device_id, device in devices.items()
@@ -356,7 +360,11 @@ def async_setup_smart_hvac_sensors(
     entry: ConfigEntry[FrankEnergieEntryData],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Discover the service and its equipment during setup and later refreshes."""
+    """Set up Smart Heating discovery for an authenticated config entry.
+
+    Add entities after settings confirm site activation, both at setup and
+    on later refreshes. Remove the settings and inventory listeners on unload.
+    """
     settings = entry.runtime_data.settings_coordinator
     if (
         not settings.api.is_authenticated
@@ -370,7 +378,7 @@ def async_setup_smart_hvac_sensors(
 
     @callback
     def _async_sync_sensors() -> None:
-        """Register newly available service, account and equipment sensors."""
+        """Add newly available sensors after the site activation check."""
         nonlocal known_devices, requests_added, service_added
         if not _site_has_active_smart_hvac(settings):
             return

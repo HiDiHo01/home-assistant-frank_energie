@@ -73,7 +73,7 @@ Use modern Python syntax and target **Python 3.14+**, subject to the actual Pyth
 ### Required conventions
 
 * Use type annotations for all functions, methods, parameters, and return values.
-* Write descriptive docstrings for modules, classes, functions, and methods.
+* Add or update clear docstrings for every new or modified Python module, class, method, and function. Follow the surrounding code's conventions and lead with the purpose. Explain inputs, return values, side effects, or errors when callers need that context.
 * Use `snake_case` for variables and functions.
 * Use `PascalCase` for classes.
 * Prefix internal implementation methods with `_`.
@@ -644,7 +644,7 @@ For every code modification:
 
 * Highlight the important changes in the final report.
 * Keep changes focused and reviewable.
-* Add docstrings to new modules, classes, functions, and methods.
+* Verify that docstrings follow the [Python standards](#4-python-standards) and describe the current behavior.
 * Ensure all imports are used.
 * Verify return types and asynchronous behavior.
 * Validate inputs at the appropriate boundary.
@@ -734,7 +734,8 @@ Review this repository as a senior Python engineer specializing in Home Assistan
 
 ## Python quality
 
-* Require complete and accurate type hints and docstrings for functions and methods.
+* Require complete and accurate type hints for functions and methods.
+* Check the docstrings of new and modified modules, classes, methods, and functions for accuracy and consistency with the surrounding code.
 * Prefer modern Python syntax, snake_case names, and built-in generic types.
 * Avoid unnecessary imports, mutable defaults, broad exception handling, and redundant abstractions.
 * Use lazy `%` formatting in logging calls.

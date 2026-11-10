@@ -182,7 +182,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> dict[str, object]:
-    """Return diagnostics for a config entry."""
+    """Return redacted config-entry diagnostics, including optional HVAC counts."""
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
     coordinator = runtime_data.coordinator

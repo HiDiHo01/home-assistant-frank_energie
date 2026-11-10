@@ -51,7 +51,7 @@ This skill is a task workflow, not a replacement for repository policy.
 
 1. **Establish behavior:** Read nearby code and tests; reproduce the issue or establish a failing regression where feasible.
 2. **Assess impact:** Check config-entry setup/reauth/reconfigure/migration, affected entities, resource isolation, cached data, translation keys, and cross-contract behavior.
-3. **Implement:** Make focused changes with complete type hints and docstrings. Follow the repository's Python conventions, complexity thresholds, lazy logging formatting, and privacy-safe error handling.
+3. **Implement:** Make focused changes with complete type hints. Add or update docstrings in the surrounding style. Follow the repository's complexity thresholds, lazy logging formatting, and privacy-safe error handling. [Python standards](../../../AGENTS.md#4-python-standards)
 4. **Exercise edge cases:** Use deterministic mocks; test missing/null API fields, auth/timeout/rate-limit behavior, recovery, reload/unload, concurrency, negative prices, and timezone transitions when relevant.
 5. **Localize correctly:** When adding or changing translation keys, update `custom_components/frank_energie/strings.json` and **every** `translations/*.json` file (currently `en.json`, `fr.json`, `nl.json`, `nl-BE.json`). Preserve placeholders, enum keys, and shared translation references; run `tests/test_translations.py`.
 6. **Review and report:** Check the final diff for backwards compatibility, unrelated edits, security leaks, unused code, and behavior changes. Summarize what changed, why, executed checks, results, and remaining limitations.

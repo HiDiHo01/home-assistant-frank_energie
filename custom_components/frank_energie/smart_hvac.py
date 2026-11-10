@@ -1,4 +1,4 @@
-"""Fetch Smart Heating data and share the selected site's service status."""
+"""Poll Smart Heating data and interpret the selected site's feature flags."""
 
 import asyncio
 import logging
@@ -42,10 +42,14 @@ class SmartHvacRequestStatus(TypedDict):
 
 @dataclass(frozen=True, slots=True)
 class SmartHvacData:
-    """Independent site inventory, device summaries, and account requests."""
+    """Store independent Smart Heating results for one config entry.
+
+    ``None`` indicates an unknown inventory or request collection. Empty
+    collections confirm zero records. Only successful summary reads have
+    a key in ``summaries``, including successful null responses.
+    """
 
     devices: dict[str, SmartHvacDevice] | None = None
-    # A present key with a null summary represents a successful provider response.
     summaries: dict[str, SmartHvacSummary | None] = field(default_factory=dict)
     requests: tuple[SmartHvacRequestStatus, ...] | None = None
 
@@ -68,7 +72,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         api: FrankEnergie,
         site_reference: str,
     ) -> None:
-        """Initialize the coordinator for the already selected site."""
+        """Bind HVAC polling to the config entry and its selected delivery site."""
         super().__init__(
             hass,
             _LOGGER,
@@ -83,13 +87,18 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         self._retry_at = 0.0
 
     def _requests_paused(self) -> bool:
-        """Check maintenance and rate-limit gates before starting a request."""
+        """Return whether maintenance or provider backoff blocks requests."""
         return api_maintenance_active(datetime.now(UTC)) or monotonic() < self._retry_at
 
     async def _async_read[T](
         self, operation: str, method: Callable[..., Awaitable[T]], *args: str
     ) -> _ReadResult[T]:
-        """Read one HVAC resource with isolated, redacted failure handling."""
+        """Read one HVAC resource within the request timeout.
+
+        Return an unread result for skipped or failed optional reads and defer
+        further requests after rate limiting. Raise ``ConfigEntryAuthFailed``
+        when Home Assistant needs to start reauthentication.
+        """
         if self._requests_paused():
             return _ReadResult()
         try:
@@ -109,7 +118,11 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         return _ReadResult()
 
     async def _async_update_data(self) -> SmartHvacData:
-        """Refresh the inventory and account requests, then read summaries serially."""
+        """Refresh inventory and account requests, then read summaries in sequence.
+
+        Keep the previous snapshot when maintenance or backoff pauses the
+        refresh before any reads start.
+        """
         if not self._api.is_authenticated:
             return SmartHvacData()
         if self._requests_paused():
@@ -149,7 +162,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
 
 
 def smart_hvac_activation(data: FrankEnergieData) -> bool | None:
-    """Return only a strictly typed Smart Heating service activation state."""
+    """Return the Boolean service activation flag, or ``None`` if unknown."""
     feature = getattr(data.get(DATA_USER), "smartHvac", None)
     activated = (
         feature.get("isActivated")
@@ -160,7 +173,7 @@ def smart_hvac_activation(data: FrankEnergieData) -> bool | None:
 
 
 def smart_hvac_site_attributes(data: FrankEnergieData) -> dict[str, object]:
-    """Return the site's three independent, non-identifying capability flags."""
+    """Return the available Boolean site flags for entity attributes."""
     feature = getattr(data.get(DATA_USER), "smartHvac", None)
     if isinstance(feature, dict):
         flags = {

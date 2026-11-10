@@ -255,7 +255,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.entry.async_on_unload(unsub)
 
     async def setup(self) -> bool:
-        """Set up the Frank Energie component from a config entry."""
+        """Initialize coordinators and load the platforms for this config entry.
+
+        Refresh settings first. Start Smart Heating polling for authenticated
+        entries with a selected delivery site.
+        """
         _LOGGER.debug("Setting up Frank Energie component")
 
         # For backwards compatibility, update the unique ID
