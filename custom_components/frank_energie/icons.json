@@ -1,5 +1,10 @@
 {
   "entity": {
+    "binary_sensor": {
+      "smart_hvac": {
+        "default": "mdi:heat-pump"
+      }
+    },
     "sensor": {
       "smart_hvac_connection_requests": {
         "default": "mdi:link-variant"
