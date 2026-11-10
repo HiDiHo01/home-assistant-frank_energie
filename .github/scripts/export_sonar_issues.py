@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -169,7 +169,7 @@ def _export_issues(
         "pullRequest": pull_request,
         "issueStatuses": ["OPEN", "CONFIRMED"],
         "sinceLeakPeriod": pull_request is not None,
-        "exportedAt": datetime.now(timezone.utc).isoformat(),
+        "exportedAt": datetime.now(UTC).isoformat(),
         "total": expected_total,
         "issues": issues,
     }
