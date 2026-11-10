@@ -2297,9 +2297,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 lowest_sum = current_sum
                 lowest_index = start_index
                 lowest_exact = exact_sum
-            elif math.isclose(
-                current_sum, lowest_sum, rel_tol=1e-12, abs_tol=1e-12
-            ):
+            elif math.isclose(current_sum, lowest_sum, rel_tol=1e-12, abs_tol=1e-12):
                 # Exact comparisons preserve the first of equally priced
                 # blocks. Activate this accumulator only for close totals.
                 if exact_sum is None:
@@ -2314,9 +2312,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     lowest_exact = sum(
                         (
                             Decimal(str(prices[position].total))
-                            for position in range(
-                                lowest_index, lowest_index + window
-                            )
+                            for position in range(lowest_index, lowest_index + window)
                         ),
                         Decimal(0),
                     )
