@@ -29,6 +29,7 @@ If all meaningful changes are already present with equivalent behavior, cite the
 ## Validate findings
 
 - Confirm each potential issue against the actual code and relevant tests, not merely an automated comment or a Sonar annotation.
+- If the SonarQube Cloud issue page is unavailable, match the issue key in the GitHub annotations for the `SonarCloud Code Analysis` check run on the current PR head. Verify the new issue count after the fix because the quality gate can pass with open findings.
 - Prioritize observable faults: broken setup/reauth/reconfigure, entity or registry identity changes, electricity-only/gas-only/dual contract failures, unsafe caching, invoice isolation, wrong PT15M/PT60M behavior, DST mistakes, cancellation errors, and leaked customer data.
 - For each actionable finding, give severity, file and line, reproducible scenario, expected versus actual behavior, impact, and a minimal correction.
 - Identify pre-existing, duplicate, invalid, or already-fixed observations distinctly; do not classify style preferences or unrelated technical debt as introduced defects.

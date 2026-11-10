@@ -345,6 +345,14 @@ async def test_hvac_entries_isolate_site_data_and_reload(
     await old_coordinator.async_refresh()
     api.smart_hvacs.assert_not_awaited()
 
+    api.smart_hvacs.return_value = []
+    with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
+        assert await hass.config_entries.async_reload(primary.entry_id)
+        await hass.async_block_till_done()
+    assert er.async_get(hass).async_get(primary_sensor.entity_id) is None
+    assert _state(hass, _sensor(hass, primary, "smart_hvac_device_count")).state == "0"
+    assert _state(hass, other_sensor).state == "Fixture Model B"
+
 
 async def test_hvac_anonymous_entry(
     hass: HomeAssistant,

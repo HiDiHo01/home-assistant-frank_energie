@@ -283,6 +283,31 @@ def _async_remove_missing_sensors(
 
 
 @callback
+def _async_sync_equipment(
+    hass: HomeAssistant,
+    entry_id: str,
+    coordinator: FrankEnergieSmartHvacCoordinator,
+    devices: dict[str, SmartHvacDevice],
+    known_devices: set[str] | None,
+) -> tuple[set[str], list[_SmartHvacDeviceSensor]]:
+    """Reconcile the confirmed inventory and return newly discovered sensors."""
+    current = {
+        sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
+        for device_id, device in devices.items()
+    }
+    active_devices = set(current)
+    if active_devices == known_devices:
+        return active_devices, []
+
+    _async_remove_missing_sensors(hass, entry_id, active_devices)
+    return active_devices, [
+        _SmartHvacDeviceSensor(coordinator, entry_id, current[key], key, description)
+        for key in sorted(active_devices - (known_devices or set()))
+        for description in _DEVICE_SENSORS
+    ]
+
+
+@callback
 def async_setup_smart_hvac_sensors(
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
@@ -301,33 +326,9 @@ def async_setup_smart_hvac_sensors(
     known_devices: set[str] | None = None
 
     @callback
-    def _async_sync_equipment(
-        devices: dict[str, SmartHvacDevice],
-    ) -> list[_SmartHvacDeviceSensor]:
-        """Reconcile active equipment and add only newly discovered sensors."""
-        nonlocal known_devices
-        current = {
-            sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
-            for device_id, device in devices.items()
-        }
-        active_devices = set(current)
-        if active_devices == known_devices:
-            return []
-        _async_remove_missing_sensors(hass, entry_id, active_devices)
-        new_sensors = [
-            _SmartHvacDeviceSensor(
-                coordinator, entry_id, current[key], key, description
-            )
-            for key in sorted(active_devices - (known_devices or set()))
-            for description in _DEVICE_SENSORS
-        ]
-        known_devices = active_devices
-        return new_sensors
-
-    @callback
     def _async_sync_sensors() -> None:
         """Register newly available service, account and equipment sensors."""
-        nonlocal requests_added, service_added
+        nonlocal known_devices, requests_added, service_added
         devices = coordinator.data.devices if coordinator.last_update_success else None
         sensors: list[SensorEntity] = []
         if not service_added and (devices or _site_supports_smart_hvac(settings)):
@@ -344,7 +345,10 @@ def async_setup_smart_hvac_sensors(
             )
             requests_added = True
         if devices is not None:
-            sensors.extend(_async_sync_equipment(devices))
+            known_devices, equipment_sensors = _async_sync_equipment(
+                hass, entry_id, coordinator, devices, known_devices
+            )
+            sensors.extend(equipment_sensors)
         if sensors:
             async_add_entities(sensors)
 
