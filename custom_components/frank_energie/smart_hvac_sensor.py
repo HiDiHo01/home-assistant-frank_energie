@@ -271,8 +271,7 @@ def _site_has_active_smart_hvac(settings: FrankEnergieSettingsCoordinator) -> bo
 def _site_confirmed_inactive(settings: FrankEnergieSettingsCoordinator) -> bool:
     """Require a successful settings read confirming deactivation."""
     return (
-        settings.last_update_success
-        and smart_hvac_activation(settings.data) is False
+        settings.last_update_success and smart_hvac_activation(settings.data) is False
     )
 
 
