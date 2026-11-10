@@ -112,6 +112,28 @@ defines no unit or statistics class for this value. Frank's status strings
 describe the provider's operational and steering states. The separate
 activation sensor continues to describe the service.
 
+The HVAC sensors use Home Assistant icon translations in `icons.json`.
+These are neutral defaults, not assertions about current device activity:
+
+| Sensor translation key | Default MDI icon |
+| --- | --- |
+| `smart_hvac_equipment` | `mdi:heat-pump-outline` |
+| `smart_hvac_operational_status` | `mdi:list-status` |
+| `smart_hvac_steering_status` | `mdi:tune-variant` |
+| `smart_hvac_operational_status_timestamp` | `mdi:clock-check-outline` |
+| `smart_hvac_first_session_date` | `mdi:calendar-start` |
+| `smart_hvac_last_session_date` | `mdi:calendar-end` |
+| `smart_hvac_total_result` | `mdi:currency-eur` |
+| `smart_hvac_device_count` | `mdi:counter` |
+| `smart_hvac_profile_created_at` | `mdi:account-clock-outline` |
+| `smart_hvac_connection_requests` | `mdi:link-variant` |
+
+The operational and steering states retain their default icons even for
+unrecognized upstream values. The linked equipment and service sensors retain
+their existing translation keys and entity identities. The `mdi:currency-eur`
+icon describes a financial result; the EUR unit and two-decimal display are
+handled separately in PR #442.
+
 The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
 `smart_hvac_connect_requests()`, and `smart_hvac_summary(device_id)`
 every 15 minutes outside the API maintenance window. The inventory provides
