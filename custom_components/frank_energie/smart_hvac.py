@@ -62,7 +62,7 @@ class SmartHvacData:
 
 @dataclass(frozen=True, slots=True)
 class _ReadResult[T]:
-    """Track successful reads separately from optional null values."""
+    """Distinguish successful, skipped, and failed reads, including null results."""
 
     value: T | None = None
     fetched: bool = False
