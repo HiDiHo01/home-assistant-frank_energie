@@ -224,10 +224,14 @@ class _SmartHvacDeviceSensor(
 
     @property
     def available(self) -> bool:
-        """Require inventory data and a successful read for summary sensors."""
+        """Require inventory and a fresh, successful summary read."""
+        data = self.coordinator.data
         return self._device is not None and (
             self.entity_description.summary_value is None
-            or self._device_id in self.coordinator.data.summaries
+            or (
+                self._device_id in data.summaries
+                and self._device_id not in data.stale_summaries
+            )
         )
 
     @property
