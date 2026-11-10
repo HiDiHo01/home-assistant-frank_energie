@@ -128,7 +128,9 @@ def _export_issues(
         for issue in current_issues:
             issue_key = issue.get("key")
             if not isinstance(issue_key, str) or not issue_key:
-                raise RuntimeError(f"SonarQube returned an invalid issue on page {page}")
+                raise RuntimeError(
+                    f"SonarQube returned an invalid issue on page {page}"
+                )
             if issue_key in issue_keys:
                 raise RuntimeError(
                     "SonarQube returned duplicate issues between pages; retry"
