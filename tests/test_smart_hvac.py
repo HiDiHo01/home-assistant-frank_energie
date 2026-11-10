@@ -174,9 +174,7 @@ async def test_hvac_steering_status_enum_and_unknown_provider_values(
     """Localize known HVAC status keys without changing unknown upstream states."""
     entry = _entry(hass)
     api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
-    api.smart_hvac_summary.return_value = SmartHvacSummary(
-        steering_status="INACTIVE"
-    )
+    api.smart_hvac_summary.return_value = SmartHvacSummary(steering_status="INACTIVE")
     await _setup(hass, entry, api)
 
     steering_sensor = _sensor(hass, entry, "smart_hvac_steering_status")
@@ -202,9 +200,7 @@ async def test_hvac_steering_status_enum_and_unknown_provider_values(
     ]
     assert _sensor(hass, entry, "smart_hvac_steering_status").unique_id == unique_id
 
-    api.smart_hvac_summary.return_value = SmartHvacSummary(
-        steering_status="ACTIVE"
-    )
+    api.smart_hvac_summary.return_value = SmartHvacSummary(steering_status="ACTIVE")
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     state = _state(hass, steering_sensor)
