@@ -210,7 +210,6 @@ async def test_hvac_steering_status_enum_and_unknown_provider_values(
     assert state.attributes["options"] == ["active", "inactive"]
 
 
-
 @pytest.mark.parametrize(
     ("total_result", "expected_state"),
     [
@@ -253,13 +252,18 @@ async def test_hvac_total_result_eur_display_metadata(
     assert state.attributes["unit_of_measurement"] == CURRENCY_EURO
     assert state.attributes["device_class"] == "monetary"
     assert "state_class" not in state.attributes
-    assert entry.runtime_data.smart_hvac_coordinator.data.summaries[
-        "fixture-device"
-    ].total_result == total_result
+    assert (
+        entry.runtime_data.smart_hvac_coordinator.data.summaries[
+            "fixture-device"
+        ].total_result
+        == total_result
+    )
 
     await entry.runtime_data.smart_hvac_coordinator.async_refresh()
     await hass.async_block_till_done()
-    assert _sensor(hass, entry, "smart_hvac_total_result").unique_id == initial_unique_id
+    assert (
+        _sensor(hass, entry, "smart_hvac_total_result").unique_id == initial_unique_id
+    )
 
 
 async def test_hvac_site_device_and_account_diagnostics(
@@ -327,7 +331,10 @@ async def test_hvac_site_device_and_account_diagnostics(
     assert profile["available_on_site"] is True
     assert profile["available_in_country"] is True
     assert profile["has_accepted_terms"] is False
-    assert states["smart_hvac_total_result"].attributes["unit_of_measurement"] == CURRENCY_EURO
+    assert (
+        states["smart_hvac_total_result"].attributes["unit_of_measurement"]
+        == CURRENCY_EURO
+    )
     assert states["smart_hvac_total_result"].attributes["device_class"] == "monetary"
     assert "state_class" not in states["smart_hvac_total_result"].attributes
 
