@@ -107,10 +107,17 @@ the device stable across refreshes. Existing equipment sensors keep their
 entity IDs and unique IDs when they move from the service to the device. The
 service holds the device count and profile information.
 
-The total result uses the number returned by Frank. The confirmed read model
-defines no unit or statistics class for this value. Frank's status strings
-describe the provider's operational and steering states. The separate
-activation sensor continues to describe the service.
+The total result uses the numeric value returned by Frank, with Home Assistant's
+`MONETARY` sensor class, an `EUR` native unit and a suggested display precision
+of two decimals. The sensor retains the unrounded numeric value, including
+negative and zero results, and does not define a statistics class. The public
+[Frank Energie explanation of Smart Heating results](https://klantenservice.frankenergie.nl/hc/nl-nl/articles/38784303873426-Hoe-zie-ik-mijn-totale-opbrengsten)
+describes monetary savings and bonuses. The SDK's `SmartHvacSummary.total_result`
+model does **not** explicitly specify a unit or prove that the GraphQL number is
+already measured in whole euros; confirm that unit/scale against actual
+provider evidence before merging. Frank's status strings describe the provider's
+operational and steering states. The separate activation sensor continues to
+describe the service.
 
 The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
 `smart_hvac_connect_requests()`, and `smart_hvac_summary(device_id)`
