@@ -56,8 +56,7 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
             "secrets.SONAR_TOKEN || '' }}"
         ),
         "PULL_REQUEST": (
-            "${{ github.event.pull_request.number || "
-            "inputs.pull_request || '' }}"
+            "${{ github.event.pull_request.number || inputs.pull_request || '' }}"
         ),
     }
     assert '--pull-request "$PULL_REQUEST"' in steps["Export open findings"]["run"]
