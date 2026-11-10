@@ -812,6 +812,27 @@
       "deadline": {
         "name": "Vertrektijd"
       },
+      "charging_hour_monday": {
+        "name": "Vertrektijd maandag"
+      },
+      "charging_hour_tuesday": {
+        "name": "Vertrektijd dinsdag"
+      },
+      "charging_hour_wednesday": {
+        "name": "Vertrektijd woensdag"
+      },
+      "charging_hour_thursday": {
+        "name": "Vertrektijd donderdag"
+      },
+      "charging_hour_friday": {
+        "name": "Vertrektijd vrijdag"
+      },
+      "charging_hour_saturday": {
+        "name": "Vertrektijd zaterdag"
+      },
+      "charging_hour_sunday": {
+        "name": "Vertrektijd zondag"
+      },
       "charge_settings_id": {
         "name": "Laadinstellingen ID"
       },
