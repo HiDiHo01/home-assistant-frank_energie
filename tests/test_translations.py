@@ -125,17 +125,41 @@ def test_smart_hvac_total_savings_translations() -> None:
     [
         (
             "en",
-            ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+            (
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ),
             "Departure time ",
         ),
         (
             "nl",
-            ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+            (
+                "maandag",
+                "dinsdag",
+                "woensdag",
+                "donderdag",
+                "vrijdag",
+                "zaterdag",
+                "zondag",
+            ),
             "Vertrektijd ",
         ),
         (
             "nl-BE",
-            ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+            (
+                "maandag",
+                "dinsdag",
+                "woensdag",
+                "donderdag",
+                "vrijdag",
+                "zaterdag",
+                "zondag",
+            ),
             "Vertrektijd ",
         ),
         (
@@ -169,9 +193,7 @@ async def test_vehicle_weekday_departure_translations(
         for description in ENODE_VEHICLE_SENSOR_TYPES
         if description.key.startswith("charging_hour_")
     }
-    assert set(weekday_descriptions) == {
-        f"charging_hour_{day}" for day in WEEKDAYS
-    }
+    assert set(weekday_descriptions) == {f"charging_hour_{day}" for day in WEEKDAYS}
 
     for weekday, localized_day in zip(WEEKDAYS, localized_days, strict=True):
         key = f"charging_hour_{weekday}"
@@ -423,9 +445,7 @@ def test_no_unused_or_missing_translation_keys():
         for description in ENODE_VEHICLE_SENSOR_TYPES
         if description.key.startswith("charging_hour_")
     }
-    assert dynamic_vehicle_keys == {
-        f"charging_hour_{weekday}" for weekday in WEEKDAYS
-    }
+    assert dynamic_vehicle_keys == {f"charging_hour_{weekday}" for weekday in WEEKDAYS}
 
     # Verify that all translation keys in strings.json are used in the codebase
     all_used_entity_keys = (
