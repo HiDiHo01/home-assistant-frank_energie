@@ -17,10 +17,10 @@
         "default": "mdi:calendar-end"
       },
       "smart_hvac_operational_status": {
-        "default": "mdi:information-outline"
+        "default": "mdi:list-status"
       },
       "smart_hvac_operational_status_timestamp": {
-        "default": "mdi:clock-outline"
+        "default": "mdi:clock-check-outline"
       },
       "smart_hvac_profile_created_at": {
         "default": "mdi:account-clock-outline"
@@ -29,7 +29,7 @@
         "default": "mdi:tune-variant"
       },
       "smart_hvac_total_result": {
-        "default": "mdi:chart-line"
+        "default": "mdi:currency-eur"
       }
     }
   }
