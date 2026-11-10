@@ -618,7 +618,6 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     FrankEnergieBinarySensorDescription(
         key="smart_hvac",
         translation_key="smart_hvac",
-        icon="mdi:heat-pump",
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
