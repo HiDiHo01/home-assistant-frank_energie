@@ -4,10 +4,10 @@ import importlib.util
 import io
 import json
 import sys
-from secrets import token_hex
 from pathlib import Path
+from secrets import token_hex
 from types import ModuleType
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
@@ -214,3 +214,112 @@ def test_cli_writes_valid_json_for_empty_project(
     assert payload["pullRequest"] is None
     assert payload["sinceLeakPeriod"] is False
     assert payload["exportedAt"].endswith("+00:00")
+
+
+@pytest.mark.parametrize("total", [True, False, -1])
+def test_validate_issue_page_rejects_invalid_total(
+    exporter: ModuleType, total: bool | int
+) -> None:
+    """Reject boolean or negative pagination totals instead of treating them as counts."""
+    with pytest.raises(RuntimeError, match="invalid issue pagination"):
+        exporter._validate_issue_page({"total": total, "issues": []}, 1)
+
+
+def test_export_rejects_results_over_hard_limit(
+    exporter: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Abort over-limit exports before accumulating any response issues."""
+    pages_requested: list[int] = []
+
+    def fake_fetch(
+        project_key: str, pull_request: str | None, page: int, token: str
+    ) -> dict[str, object]:
+        """Return a reported count above the supported pagination maximum."""
+        pages_requested.append(page)
+        return {"total": exporter._MAX_RESULTS + 1, "issues": []}
+
+    monkeypatch.setattr(exporter, "_fetch_page", fake_fetch)
+    with pytest.raises(RuntimeError, match="over 10,000 findings"):
+        exporter._export_issues("my_project", "433", "")
+    assert pages_requested == [1]
+
+
+@pytest.mark.parametrize(
+    ("response_body", "expected_message"),
+    [
+        (b"{not valid json", "invalid JSON"),
+        (b"[]", "invalid response"),
+    ],
+)
+def test_fetch_page_rejects_invalid_json_or_non_object(
+    exporter: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    response_body: bytes,
+    expected_message: str,
+) -> None:
+    """Reject malformed JSON and JSON values without the required object shape."""
+
+    def fake_urlopen(request: Request, timeout: int) -> io.BytesIO:
+        """Return invalid Sonar API response content in an in-memory stream."""
+        return io.BytesIO(response_body)
+
+    monkeypatch.setattr(exporter, "urlopen", fake_urlopen)
+    with pytest.raises(RuntimeError, match=expected_message):
+        exporter._fetch_page("my_project", "433", 1, "")
+
+
+def test_fetch_page_sanitizes_network_errors(
+    exporter: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omit upstream exception text and bearer credentials from network failures."""
+    synthetic_token = token_hex(16)
+
+    def fake_urlopen(request: Request, timeout: int) -> io.BytesIO:
+        """Simulate a network error containing an untrusted diagnostic string."""
+        raise URLError(f"Upstream diagnostic {synthetic_token}")
+
+    monkeypatch.setattr(exporter, "urlopen", fake_urlopen)
+    with pytest.raises(RuntimeError, match="Cannot connect to SonarQube Cloud") as error:
+        exporter._fetch_page("my_project", "433", 1, synthetic_token)
+    assert synthetic_token not in str(error.value)
+
+
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_cli_failure_preserves_output_and_sanitizes_error(
+    exporter: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    existing_output: bool,
+) -> None:
+    """Return failure without creating or replacing a JSON artifact or leaking tokens."""
+    output = tmp_path / "sonar-open-issues.json"
+    original_content = '{"existing": true}\n'
+    if existing_output:
+        output.write_text(original_content, encoding="utf-8")
+    synthetic_token = token_hex(16)
+    monkeypatch.setenv("SONAR_TOKEN", synthetic_token)
+    monkeypatch.setattr(exporter, "_OUTPUT_PATH", output)
+    monkeypatch.setattr(sys, "argv", ["export_sonar_issues.py"])
+
+    def fake_export(
+        project_key: str, pull_request: str | None, token: str
+    ) -> dict[str, object]:
+        """Fail with a known sanitized error while validating credential handling."""
+        assert project_key == "HiDiHo01_home-assistant-frank_energie"
+        assert pull_request is None
+        assert token == synthetic_token
+        raise RuntimeError("SonarQube API returned invalid JSON on page 1")
+
+    monkeypatch.setattr(exporter, "_export_issues", fake_export)
+    assert exporter.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.strip() == (
+        "SonarQube issue export failed: SonarQube API returned invalid JSON on page 1"
+    )
+    assert synthetic_token not in captured.err
+    if existing_output:
+        assert output.read_text(encoding="utf-8") == original_content
+    else:
+        assert not output.exists()
