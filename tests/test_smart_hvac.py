@@ -12,6 +12,7 @@ from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.icon import async_get_icons
 from pytest_homeassistant.common import MockConfigEntry
 from python_frank_energie.exceptions import (
     AuthRequiredException,
@@ -149,7 +150,7 @@ def _sensor(hass: HomeAssistant, entry: MockConfigEntry, key: str) -> er.Registr
 async def test_hvac_site_device_and_account_diagnostics(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
-    """Expose verified device and account fields with their distinct scopes."""
+    """Expose device and account fields and icons with their distinct scopes."""
     entry = _entry(hass)
     api.smart_hvacs.return_value = [_equipment("private-fixture-device", "Model A")]
     api.smart_hvac_summary.return_value = SmartHvacSummary.from_dict(
@@ -208,10 +209,15 @@ async def test_hvac_site_device_and_account_diagnostics(
         if sensor.translation_key in {"smart_hvac", "smart_hvac_connection_requests"}
     }
     assert account_states["smart_hvac"].state == "off"
+    assert account_states["smart_hvac"].attributes["icon"] == "mdi:heat-pump"
     assert account_states["smart_hvac_connection_requests"].state == "1"
     assert account_states["smart_hvac_connection_requests"].attributes["requests"] == [
         {"brand": "Fixture Heating", "status": "PENDING", "has_reported_error": True}
     ]
+    hvac_icons = (await async_get_icons(hass, "entity", (DOMAIN,)))[DOMAIN]["sensor"]
+    for key in states.keys() | {"smart_hvac_connection_requests"}:
+        assert hvac_icons[key]["default"].startswith("mdi:")
+
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
     assert diagnostics["smart_hvac"] == {
         "last_update_success": True,
