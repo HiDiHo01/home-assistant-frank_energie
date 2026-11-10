@@ -1066,8 +1066,7 @@ def test_enode_vehicle_battery_capacity_from_parsed_model(
     assert sensor.available is (battery_capacity is not None)
     assert sensor.unique_id == "frank_energie_veh_123_battery_capacity"
     assert (
-        capacity_description.native_unit_of_measurement
-        == UnitOfEnergy.KILO_WATT_HOUR
+        capacity_description.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
     )
 
     battery_level_description = next(
@@ -1095,9 +1094,7 @@ def test_enode_vehicle_battery_capacity_handles_nullable_raw_data(
     from custom_components.frank_energie.sensor import ENODE_VEHICLE_SENSOR_TYPES
 
     description = next(
-        item
-        for item in ENODE_VEHICLE_SENSOR_TYPES
-        if item.key == "battery_capacity"
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "battery_capacity"
     )
 
     assert description.value_fn({"chargeState": charge_state}) == expected_capacity
