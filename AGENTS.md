@@ -73,7 +73,7 @@ Use modern Python syntax and target **Python 3.14+**, subject to the actual Pyth
 ### Required conventions
 
 * Use type annotations for all functions, methods, parameters, and return values.
-* Write descriptive docstrings for modules, classes, functions, and methods.
+* Add or update clear docstrings for every new or modified Python module, class, method, and function. Follow the surrounding code's conventions and lead with the purpose. Explain inputs, return values, side effects, or errors when callers need that context.
 * Use `snake_case` for variables and functions.
 * Use `PascalCase` for classes.
 * Prefix internal implementation methods with `_`.
@@ -236,6 +236,7 @@ Use `DataUpdateCoordinator` when entities share a common data source or polling 
 * Use an appropriate `update_interval` based on the provider's capabilities, rate limits, and data freshness.
 * Avoid unnecessary API requests.
 * Prevent concurrent duplicate refreshes.
+* In refreshes that make multiple requests, check the maintenance window and provider backoff before each call. Bound per-device requests and preserve successful results from independent resources.
 * Use coordinator success and failure handling correctly.
 * Raise `UpdateFailed` for failures that prevent a successful coordinator refresh.
 * Use `ConfigEntryAuthFailed` when authentication must trigger reauthentication.
@@ -292,6 +293,8 @@ Do not misuse entity platforms to avoid implementing the correct behavior.
 
 * Subscribe to events in the correct lifecycle methods.
 * Register cleanup callbacks for subscriptions and listeners.
+* Give inventory-backed entities stable, config-entry-scoped unique IDs. Use separate namespaces for equipment and for site or account aggregates. Use opaque keys when provider identifiers are sensitive.
+* Reconcile equipment registry entries only after a successful, authoritative inventory read. Preserve entries during failed refreshes, add newly discovered equipment while the entry is loaded, and test that a returning device can register again.
 * Close device connections and client resources when the entry unloads.
 * Implement `async_will_remove_from_hass` only when entity-specific cleanup is necessary.
 * Use supported callbacks to trigger state updates.
@@ -423,6 +426,7 @@ Use the testing framework and conventions already established in the repository,
 * Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
 * Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
 * Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.
+* Verify that the CI runner's OS and architecture offer builds for the exact minimum Python patch and the latest supported patch. Pin a supported runner image when a rolling label moves to an OS that lacks the minimum build. [Published GitHub Actions Python builds](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
 * Run Flake8 with `--jobs=1 --extend-exclude=.venv` so local virtual environments are excluded and checks work in environments with restricted process creation.
 * Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
 * Test sensor value mapping with real parsed dependency models as well as relevant raw/nullable payloads; cover correct units, availability, stable entity IDs, zero versus missing values, and operational states that must not suppress a known measurement.
@@ -643,7 +647,7 @@ For every code modification:
 
 * Highlight the important changes in the final report.
 * Keep changes focused and reviewable.
-* Add docstrings to new modules, classes, functions, and methods.
+* Verify that docstrings follow the [Python standards](#4-python-standards) and describe the current behavior.
 * Ensure all imports are used.
 * Verify return types and asynchronous behavior.
 * Validate inputs at the appropriate boundary.
@@ -733,7 +737,8 @@ Review this repository as a senior Python engineer specializing in Home Assistan
 
 ## Python quality
 
-* Require complete and accurate type hints and docstrings for functions and methods.
+* Require complete and accurate type hints for functions and methods.
+* Check the docstrings of new and modified modules, classes, methods, and functions for accuracy and consistency with the surrounding code.
 * Prefer modern Python syntax, snake_case names, and built-in generic types.
 * Avoid unnecessary imports, mutable defaults, broad exception handling, and redundant abstractions.
 * Use lazy `%` formatting in logging calls.

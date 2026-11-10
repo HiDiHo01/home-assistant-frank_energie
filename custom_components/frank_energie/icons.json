@@ -1,0 +1,36 @@
+{
+  "entity": {
+    "sensor": {
+      "smart_hvac_connection_requests": {
+        "default": "mdi:link-variant"
+      },
+      "smart_hvac_device_count": {
+        "default": "mdi:counter"
+      },
+      "smart_hvac_equipment": {
+        "default": "mdi:heat-pump-outline"
+      },
+      "smart_hvac_first_session_date": {
+        "default": "mdi:calendar-start"
+      },
+      "smart_hvac_last_session_date": {
+        "default": "mdi:calendar-end"
+      },
+      "smart_hvac_operational_status": {
+        "default": "mdi:information-outline"
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "default": "mdi:clock-outline"
+      },
+      "smart_hvac_profile_created_at": {
+        "default": "mdi:account-clock-outline"
+      },
+      "smart_hvac_steering_status": {
+        "default": "mdi:tune-variant"
+      },
+      "smart_hvac_total_result": {
+        "default": "mdi:chart-line"
+      }
+    }
+  }
+}

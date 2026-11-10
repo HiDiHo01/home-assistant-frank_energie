@@ -135,8 +135,11 @@ The separate `available_on_site` attribute indicates service eligibility,
 not activation. No device operating or steering status is exposed by this
 binary sensor.
 
-See [Smart heating activation](smart_hvac_activation.md) for the data path,
-compatibility requirement, and precise semantics.
+When Frank confirms activation for the delivery site, the **Smart heating**
+service shows the number of linked devices and the site's profile information.
+Each linked device, such as a heat pump, appears separately with its own
+statuses, session dates, and total result. The **User** service shows the
+account-level connection request count for activated sites. [Smart heating activation and equipment data](smart_hvac_activation.md)
 
 ## PV Systems
 

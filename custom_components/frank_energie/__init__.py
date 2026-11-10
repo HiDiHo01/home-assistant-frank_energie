@@ -46,6 +46,7 @@ from .coordinator import (
 )
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
+from .smart_hvac import FrankEnergieSmartHvacCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
@@ -69,6 +70,7 @@ class FrankEnergieEntryData:
     vehicle_coordinator: FrankEnergieVehicleCoordinator
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
+    smart_hvac_coordinator: FrankEnergieSmartHvacCoordinator | None = None
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -253,7 +255,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.entry.async_on_unload(unsub)
 
     async def setup(self) -> bool:
-        """Set up the Frank Energie component from a config entry."""
+        """Initialize coordinators and load the platforms for this config entry.
+
+        Refresh settings first. Start Smart Heating polling for authenticated
+        entries with a selected delivery site.
+        """
         _LOGGER.debug("Setting up Frank Energie component")
 
         # For backwards compatibility, update the unique ID
@@ -326,18 +332,28 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         )
 
         try:
-            # settings_coordinator refreshes first; the other six only read its
-            # data and not each other's, so they refresh concurrently.
+            # The other coordinators can refresh concurrently once settings are ready.
             _LOGGER.debug("Performing initial refresh for sub-coordinators")
             await settings_coordinator.async_config_entry_first_refresh()
-            await asyncio.gather(
+            refreshes = [
                 price_coordinator.async_config_entry_first_refresh(),
                 statistics_coordinator.async_config_entry_first_refresh(),
                 battery_coordinator.async_config_entry_first_refresh(),
                 charger_coordinator.async_config_entry_first_refresh(),
                 pv_coordinator.async_config_entry_first_refresh(),
                 vehicle_coordinator.async_config_entry_first_refresh(),
-            )
+            ]
+            if api.is_authenticated and (
+                site_reference := settings_coordinator.site_reference
+            ):
+                smart_hvac_coordinator = FrankEnergieSmartHvacCoordinator(
+                    self.hass, self.entry, api, site_reference
+                )
+                self.entry.runtime_data.smart_hvac_coordinator = smart_hvac_coordinator
+                refreshes.append(
+                    smart_hvac_coordinator.async_config_entry_first_refresh()
+                )
+            await asyncio.gather(*refreshes)
 
             # Forward entry setups to platforms
             _LOGGER.debug("Forwarding entry setups to platforms")
