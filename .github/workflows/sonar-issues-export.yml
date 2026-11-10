@@ -1,6 +1,11 @@
 name: Export SonarQube Issues
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/sonar-issues-export.yml
+      - .github/scripts/export_sonar_issues.py
+      - tests/test_sonar_issues_export.py
   workflow_dispatch:
     inputs:
       pull_request:
@@ -46,8 +51,9 @@ jobs:
 
       - name: Export open findings
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          PULL_REQUEST: ${{ inputs.pull_request }}
+          # PRs run untrusted branch code; never expose Sonar credentials to it.
+          SONAR_TOKEN: ${{ github.event_name == 'workflow_dispatch' && secrets.SONAR_TOKEN || '' }}
+          PULL_REQUEST: ${{ github.event.pull_request.number || inputs.pull_request || '' }}
         run: |
           python .github/scripts/export_sonar_issues.py \
             --pull-request "$PULL_REQUEST" \
