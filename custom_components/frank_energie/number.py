@@ -257,31 +257,29 @@ async def async_setup_entry(
     enode_chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
     if enode_chargers and enode_chargers.chargers:
         for charger in enode_chargers.chargers:
-            entities.append(
-                FrankEnergieEnodeChargeLimitNumber(
-                    charger_coordinator,
-                    charger.id,
-                    "minChargeLimit",
-                    translation_key="min_charge_limit",
-                    is_vehicle=False,
-                )
-            )
-            entities.append(
-                FrankEnergieEnodeChargeLimitNumber(
-                    charger_coordinator,
-                    charger.id,
-                    "maxChargeLimit",
-                    translation_key="max_charge_limit",
-                    is_vehicle=False,
-                )
-            )
-            entities.append(
-                FrankEnergieEnodeChargeLimitNumber(
-                    charger_coordinator,
-                    charger.id,
-                    "initialCharge",
-                    translation_key="initial_charge",
-                    is_vehicle=False,
+            entities.extend(
+                (
+                    FrankEnergieEnodeChargeLimitNumber(
+                        charger_coordinator,
+                        charger.id,
+                        "minChargeLimit",
+                        translation_key="min_charge_limit",
+                        is_vehicle=False,
+                    ),
+                    FrankEnergieEnodeChargeLimitNumber(
+                        charger_coordinator,
+                        charger.id,
+                        "maxChargeLimit",
+                        translation_key="max_charge_limit",
+                        is_vehicle=False,
+                    ),
+                    FrankEnergieEnodeChargeLimitNumber(
+                        charger_coordinator,
+                        charger.id,
+                        "initialCharge",
+                        translation_key="initial_charge",
+                        is_vehicle=False,
+                    ),
                 )
             )
 
