@@ -1112,10 +1112,8 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         device_class=SensorDeviceClass.ENERGY,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            data.get("chargeState", {}).get("batteryCapacity")
-            if isinstance(data, dict)
-            else None
+        value_fn=lambda data: (data.get("chargeState") or {}).get(
+            "batteryCapacity"
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
