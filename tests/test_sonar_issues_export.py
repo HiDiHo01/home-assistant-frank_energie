@@ -37,7 +37,8 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict)
     events = workflow.get("on", workflow.get(True))
-    assert set(events) == {"workflow_dispatch"}
+    assert set(events) == {"workflow_dispatch", "pull_request"}
+    assert ".github/scripts/export_sonar_issues.py" in events["pull_request"]["paths"]
     assert events["workflow_dispatch"]["inputs"]["pull_request"]["type"] == "string"
     assert workflow["permissions"] == {"contents": "read"}
 
@@ -46,8 +47,8 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
     steps = {step["name"]: step for step in job["steps"]}
     assert steps["Harden Runner"]["with"]["egress-policy"] == "block"
     assert steps["Export open findings"]["env"] == {
-        "SONAR_TOKEN": "${{ secrets.SONAR_TOKEN }}",
-        "PULL_REQUEST": "${{ inputs.pull_request }}",
+        "SONAR_TOKEN": "${{ github.event_name == 'workflow_dispatch' && secrets.SONAR_TOKEN || '' }}",
+        "PULL_REQUEST": "${{ github.event.pull_request.number || inputs.pull_request || '' }}",
     }
     assert '--pull-request "$PULL_REQUEST"' in steps["Export open findings"]["run"]
 
