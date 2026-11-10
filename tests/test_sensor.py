@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from homeassistant import config_entries
@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.util import dt
-from pytest_homeassistant.common import (
+from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     MockConfigEntry,
 )
@@ -284,7 +284,6 @@ async def test_sensors_get_data_of_current_hour(
     frank_energie_config_entry: MockConfigEntry,
     hass: HomeAssistant,
 ):
-    """Verify that current-hour price sensors follow an exact local-time change."""
     import zoneinfo
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
@@ -292,12 +291,13 @@ async def test_sensors_get_data_of_current_hour(
     now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    # Return the same two-day data on every request: concurrent refreshes may
-    # complete in any order, so a sequential today/tomorrow cycle is unreliable.
     aioclient_responses.add(
-        start_of_day,
-        [0.3] * 12 + [0.15] * 12 + [0.25] * 12 + [0.1] * 12,
-        [1.75] * 6 + [1.23] * 18 + [1.23] * 6 + [1.11] * 18,
+        start_of_day, [0.3] * 12 + [0.15] * 12, [1.75] * 6 + [1.23] * 18
+    )
+    aioclient_responses.add(
+        start_of_day + timedelta(days=1),
+        [0.25] * 12 + [0.1] * 12,
+        [1.23] * 6 + [1.11] * 18,
     )
     aioclient_responses.cyclic()
 
@@ -321,9 +321,7 @@ async def test_sensors_get_data_of_current_hour(
     # Change time to 12:15
     now = datetime.now(tz).replace(hour=12, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
-    # The clock has already advanced; firing seven hours later can expire prices.
-    async_fire_time_changed(hass, now.astimezone(UTC) + timedelta(seconds=1))
-    await hass.async_block_till_done()
+    await trigger_update(hass, 7 * 3600)
 
     assert (
         hass.states.get(
@@ -779,7 +777,7 @@ async def _parent_and_child_devices_after_add(
     """
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
     from homeassistant.helpers import device_registry as dr
-    from pytest_homeassistant.common import MockEntityPlatform
+    from pytest_homeassistant_custom_component.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 
@@ -1251,7 +1249,7 @@ async def _register_sensor_and_get_state(
     the real SensorEntity validation (including ENUM ``options`` validation)
     rather than a hand-rolled stand-in for it."""
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-    from pytest_homeassistant.common import MockEntityPlatform
+    from pytest_homeassistant_custom_component.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 

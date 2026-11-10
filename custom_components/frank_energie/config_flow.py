@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 import voluptuous as vol
-from aiohttp import ClientError
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.const import (
@@ -18,7 +17,6 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -28,16 +26,9 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
 )
 from python_frank_energie import Authentication, FrankEnergie
-from python_frank_energie.exceptions import (
-    AuthException,
-    AuthRequiredException,
-    ConnectionException,
-    NetworkError,
-)
+from python_frank_energie.exceptions import AuthException, ConnectionException
 
 from .const import (
-    CONFIG_ENTRY_MINOR_VERSION,
-    CONFIG_ENTRY_VERSION,
     CONF_SITE,
     DOMAIN,
     CONF_INTERVAL_SETTINGS,
@@ -64,46 +55,26 @@ from .helpers import decrypt_password, encrypt_password
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
 
+VERSION = 2
+MINOR_VERSION = 1
 
-async def _async_account_matches_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    auth: Authentication,
-    username: str,
-) -> bool:
-    """Verify site access before replacing credentials, preserving legacy account identity."""
-    if CONF_SITE not in entry.data:
-        saved_username = entry.options.get(CONF_USERNAME) or entry.data.get(
-            CONF_USERNAME
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old config entry format."""
+
+    if entry.version < 2:
+        new_options = dict(entry.options)
+
+        if "resolution" not in new_options:
+            new_options["resolution"] = "PT15M"
+
+        hass.config_entries.async_update_entry(
+            entry,
+            options=new_options,
+            version=2,
         )
-        return (
-            isinstance(saved_username, str)
-            and bool(saved_username)
-            and saved_username.casefold() == username.casefold()
-        )
 
-    site_reference = entry.data[CONF_SITE]
-    if not isinstance(site_reference, str) or not site_reference:
-        return False
-
-    try:
-        async with FrankEnergie(
-            clientsession=async_get_clientsession(hass),
-            auth_token=auth.authToken,
-            refresh_token=auth.refreshToken,
-        ) as api:
-            user_sites = await api.UserSites()
-    except AuthRequiredException as err:
-        raise AuthException("Site verification requires valid credentials") from err
-    except (ClientError, NetworkError, TimeoutError) as err:
-        raise ConnectionException(
-            "Unable to verify the configured delivery site"
-        ) from err
-
-    return user_sites is not None and any(
-        getattr(site, "reference", None) == site_reference
-        for site in user_sites.deliverySites
-    )
+    return True
 
 
 async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -141,8 +112,7 @@ async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> 
 class ConfigFlow(config_entries.ConfigFlow):
     """Handle the config flow for Frank Energie."""
 
-    VERSION = CONFIG_ENTRY_VERSION
-    MINOR_VERSION = CONFIG_ENTRY_MINOR_VERSION
+    VERSION = 1
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -167,10 +137,6 @@ class ConfigFlow(config_entries.ConfigFlow):
         try:
             # Attempt authentication with the API
             auth = await self._authenticate(user_input)
-            if self._reauth_entry and not await _async_account_matches_entry(
-                self.hass, self._reauth_entry, auth, user_input[CONF_USERNAME]
-            ):
-                return self._show_login_form(errors={"base": "wrong_account"})
             # Successful login
             return await self._handle_authentication_success(user_input, auth)
 
@@ -181,11 +147,11 @@ class ConfigFlow(config_entries.ConfigFlow):
             # Network/API issues
             return await self._handle_authentication_failure(reason="connection_error")
         except Exception as ex:
-            # Keep traceback frames without exposing provider messages or chained errors.
-            sanitized_exception = RuntimeError(type(ex).__name__)
+            # Catch-all for unexpected errors
             _LOGGER.exception(
-                "Unexpected error during login",
-                exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
+                "Unexpected error during login for user %s: %s",
+                user_input.get(CONF_USERNAME, "UNKNOWN"),
+                ex,
             )
             return await self._handle_authentication_failure(reason="unknown_error")
 
@@ -434,9 +400,30 @@ class ConfigFlow(config_entries.ConfigFlow):
         user_input: Optional[dict[str, Any]] = None,
         errors: Optional[dict[str, str]] = None,
     ) -> ConfigFlowResult:
-        """Validate credentials for the entry selected by Home Assistant."""
-        self._reauth_entry = self._get_reconfigure_entry()
-        return await self.async_step_login(user_input, errors)
+        """Handle the reconfiguration step."""
+        if self._reauth_entry is None:
+            self._reauth_entry = self.hass.config_entries.async_get_entry(
+                self.context["entry_id"]
+            )
+
+        if not user_input:
+            return self._show_login_form()
+
+        validation_errors = self._validate_login_input(user_input)
+
+        if validation_errors:
+            return self._show_login_form(errors=validation_errors)
+
+        try:
+            auth = await self._authenticate(user_input)
+        except AuthException:
+            return await self._handle_authentication_failure(reason="invalid_auth")
+        except ConnectionException:
+            return await self._handle_authentication_failure(reason="connection_error")
+        except Exception:
+            return await self._handle_authentication_failure(reason="unknown_error")
+
+        return await self._handle_authentication_success(user_input, auth)
 
     async def _get_available_sites(self, username: str) -> list[dict[str, str]]:
         """Retrieve and normalize available delivery sites for the user."""
@@ -643,9 +630,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         # Try to pre-fill username from reauth entry or last user input
         username = None
         if self._reauth_entry:
-            username = self._reauth_entry.options.get(
-                CONF_USERNAME
-            ) or self._reauth_entry.data.get(CONF_USERNAME)
+            username = self._reauth_entry.data.get(CONF_USERNAME)
         elif user_input:
             username = user_input.get(CONF_USERNAME)
 
@@ -670,9 +655,24 @@ class ConfigFlow(config_entries.ConfigFlow):
             ConnectionException: If a network-related error occurs.
         """
         async with FrankEnergie() as api:
-            # Let the login flow classify failures and sanitize their logging.
-            # Never log provider exception text or account identifiers here.
-            return await api.login(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
+            try:
+                return await api.login(
+                    user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+                )
+            except AuthException:
+                _LOGGER.warning(
+                    "Authentication failed for user %s", user_input[CONF_USERNAME]
+                )
+                # Trigger login flow with friendly error
+                raise AuthException("invalid_auth")
+            except ConnectionException:
+                _LOGGER.error("Connection error for user %s", user_input[CONF_USERNAME])
+                raise ConnectionException("connection_error")
+            except Exception as ex:
+                _LOGGER.exception(
+                    "Unexpected error for user %s: %s", user_input[CONF_USERNAME], ex
+                )
+                raise RuntimeError("unknown_error") from ex
 
     async def _handle_authentication_success(
         self, user_input: dict[str, Any], auth: Authentication
@@ -701,11 +701,13 @@ class ConfigFlow(config_entries.ConfigFlow):
             updated_data.pop(CONF_USERNAME, None)
             updated_data.pop(CONF_PASSWORD, None)
 
-            return self.async_update_reload_and_abort(
-                self._reauth_entry,
-                data=updated_data,
-                options=updated_options,
+            self.hass.config_entries.async_update_entry(
+                self._reauth_entry, data=updated_data, options=updated_options
             )
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+            )
+            return self.async_abort(reason="reauth_successful")
         return await self.async_step_site(self.sign_in_data)
 
     async def _handle_authentication_failure(
@@ -784,32 +786,14 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 pass
         return password_to_validate or ""
 
-    def _preserve_legacy_credentials(self, options: dict[str, Any]) -> dict[str, Any]:
-        """Keep data-only credentials usable after later token renewal."""
-        entry = self.config_entry
-        saved_username = entry.data.get(CONF_USERNAME)
-        if not options.get(CONF_USERNAME) and isinstance(saved_username, str):
-            if saved_username:
-                options[CONF_USERNAME] = saved_username
-
-        saved_password = entry.data.get(CONF_PASSWORD)
-        if not options.get(CONF_PASSWORD) and isinstance(saved_password, str):
-            if saved_password:
-                plaintext_password = decrypt_password(self.hass, saved_password)
-                options[CONF_PASSWORD] = (
-                    encrypt_password(self.hass, plaintext_password)
-                    if plaintext_password is not None
-                    else saved_password
-                )
-        return options
-
     def _build_options_and_log_changes(
-        self, user_input: dict[str, Any], encrypted_password: str | None
+        self, user_input: dict[str, Any], encrypted_password: str
     ) -> dict[str, Any]:
-        """Build options, updating credentials only when newly verified."""
+        """Build the new options dictionary and log any changes in polling intervals."""
         entry = self.config_entry
         options = {
-            **entry.options,
+            CONF_USERNAME: user_input[CONF_USERNAME],
+            CONF_PASSWORD: encrypted_password,
             CONF_INTERVAL_SETTINGS: int(
                 user_input.get(CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS)
             ),
@@ -834,11 +818,6 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 user_input.get(CONF_INTERVAL_PV, DEFAULT_INTERVAL_PV)
             ),
         }
-        if encrypted_password is not None:
-            options[CONF_USERNAME] = user_input[CONF_USERNAME]
-            options[CONF_PASSWORD] = encrypted_password
-        else:
-            options = self._preserve_legacy_credentials(options)
 
         defaults = {
             CONF_INTERVAL_SETTINGS: DEFAULT_INTERVAL_SETTINGS,
@@ -868,47 +847,117 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
         return options
 
-    def _resource_features(self) -> tuple[bool, bool, bool, bool]:
-        """Determine optional resource visibility from coordinator data."""
-        runtime_data = getattr(self.config_entry, "runtime_data", None)
-        if not runtime_data:
-            return True, True, True, True
-
-        battery_data = (
-            runtime_data.battery_coordinator.data.get(DATA_BATTERIES)
-            if runtime_data.battery_coordinator.data
-            else None
-        )
-        charger_data = (
-            runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS)
-            if runtime_data.charger_coordinator.data
-            else None
-        )
-        vehicle_data = (
-            runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
-            if runtime_data.vehicle_coordinator.data
-            else None
-        )
-        pv_data = (
-            runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS)
-            if runtime_data.pv_coordinator.data
-            else None
-        )
-        return (
-            bool(battery_data and battery_data.batteries),
-            bool(charger_data and charger_data.chargers),
-            bool(vehicle_data and vehicle_data.vehicles),
-            bool(pv_data and pv_data.systems),
-        )
-
-    def _populate_optional_interval_schema(
+    async def async_step_user(
         self,
-        schema_dict: dict[vol.Marker, Any],
-        available_resources: tuple[bool, bool, bool, bool],
-    ) -> None:
-        """Populate polling controls for resources present in the selected entry."""
+        user_input: Optional[dict[str, Any]] = None,
+        errors: Optional[dict[str, str]] = None,
+    ) -> ConfigFlowResult:
+        """Handle a flow initialized by the user."""
         entry = self.config_entry
-        has_batteries, has_chargers, has_vehicles, has_pv = available_resources
+
+        current_username = (
+            entry.options.get(CONF_USERNAME) or entry.data.get(CONF_USERNAME) or ""
+        )
+        current_password = (
+            entry.options.get(CONF_PASSWORD) or entry.data.get(CONF_PASSWORD) or ""
+        )
+
+        if user_input is not None:
+            password_to_validate = self._get_password_to_validate(
+                user_input, current_password
+            )
+
+            try:
+                async with FrankEnergie() as api:
+                    auth = await api.login(
+                        user_input[CONF_USERNAME], password_to_validate
+                    )
+
+                # Encrypt password before storing in options
+                encrypted_password = encrypt_password(self.hass, password_to_validate)
+                options = self._build_options_and_log_changes(
+                    user_input, encrypted_password
+                )
+
+                # Update tokens in data
+                updated_data = {
+                    **entry.data,
+                    CONF_ACCESS_TOKEN: auth.authToken,
+                    CONF_TOKEN: auth.refreshToken,
+                }
+                # Clean up plaintext credentials from data if any
+                updated_data.pop(CONF_USERNAME, None)
+                updated_data.pop(CONF_PASSWORD, None)
+
+                self.hass.config_entries.async_update_entry(entry, data=updated_data)
+
+                return self.async_create_entry(title=entry.title, data=options)
+
+            except AuthException:
+                errors = {"base": "invalid_auth"}
+            except ConnectionException:
+                errors = {"base": "connection_error"}
+            except Exception as ex:
+                _LOGGER.exception("Unexpected error in options flow: %s", ex)
+                errors = {"base": "unknown_error"}
+
+        runtime_data = getattr(entry, "runtime_data", None)
+
+        has_batteries = True
+        has_chargers = True
+        has_vehicles = True
+        has_pv = True
+
+        if runtime_data:
+            battery_data = (
+                runtime_data.battery_coordinator.data.get(DATA_BATTERIES)
+                if runtime_data.battery_coordinator.data
+                else None
+            )
+            has_batteries = bool(battery_data and battery_data.batteries)
+
+            charger_data = (
+                runtime_data.charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+                if runtime_data.charger_coordinator.data
+                else None
+            )
+            has_chargers = bool(charger_data and charger_data.chargers)
+
+            vehicle_data = (
+                runtime_data.vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+                if runtime_data.vehicle_coordinator.data
+                else None
+            )
+            has_vehicles = bool(vehicle_data and vehicle_data.vehicles)
+
+            pv_data = (
+                runtime_data.pv_coordinator.data.get(DATA_PV_SYSTEMS)
+                if runtime_data.pv_coordinator.data
+                else None
+            )
+            has_pv = bool(pv_data and pv_data.systems)
+
+        schema_dict = {
+            vol.Required(CONF_USERNAME, default=current_username): str,
+            # Leave password blank to avoid exposing it in the UI
+            vol.Optional(CONF_PASSWORD, default=""): str,
+            vol.Required(
+                CONF_INTERVAL_SETTINGS,
+                default=entry.options.get(
+                    CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
+                ),
+            ): NumberSelector(
+                NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
+            ),
+            vol.Required(
+                CONF_INTERVAL_STATISTICS,
+                default=entry.options.get(
+                    CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
+                ),
+            ): NumberSelector(
+                NumberSelectorConfig(min=15, max=1440, mode=NumberSelectorMode.SLIDER)
+            ),
+        }
 
         if has_batteries:
             schema_dict[
@@ -966,102 +1015,6 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             ] = NumberSelector(
                 NumberSelectorConfig(min=5, max=60, mode=NumberSelectorMode.SLIDER)
             )
-
-    async def async_step_user(
-        self,
-        user_input: Optional[dict[str, Any]] = None,
-        errors: Optional[dict[str, str]] = None,
-    ) -> ConfigFlowResult:
-        """Handle a flow initialized by the user."""
-        entry = self.config_entry
-
-        current_username = (
-            entry.options.get(CONF_USERNAME) or entry.data.get(CONF_USERNAME) or ""
-        )
-        current_password = (
-            entry.options.get(CONF_PASSWORD) or entry.data.get(CONF_PASSWORD) or ""
-        )
-
-        if user_input is not None:
-            if user_input[CONF_USERNAME] == current_username and not user_input.get(
-                CONF_PASSWORD
-            ):
-                # No credential change: local polling options must remain
-                # editable even if authentication or site discovery is down.
-                options = self._build_options_and_log_changes(
-                    user_input, encrypted_password=None
-                )
-                return self.async_create_entry(title=entry.title, data=options)
-
-            password_to_validate = self._get_password_to_validate(
-                user_input, current_password
-            )
-
-            try:
-                async with FrankEnergie() as api:
-                    auth = await api.login(
-                        user_input[CONF_USERNAME], password_to_validate
-                    )
-                if not await _async_account_matches_entry(
-                    self.hass, entry, auth, user_input[CONF_USERNAME]
-                ):
-                    return await self.async_step_user(errors={"base": "wrong_account"})
-
-                # Encrypt password before storing in options
-                encrypted_password = encrypt_password(self.hass, password_to_validate)
-                options = self._build_options_and_log_changes(
-                    user_input, encrypted_password
-                )
-
-                # Update tokens in data
-                updated_data = {
-                    **entry.data,
-                    CONF_ACCESS_TOKEN: auth.authToken,
-                    CONF_TOKEN: auth.refreshToken,
-                }
-                # Clean up plaintext credentials from data if any
-                updated_data.pop(CONF_USERNAME, None)
-                updated_data.pop(CONF_PASSWORD, None)
-
-                self.hass.config_entries.async_update_entry(entry, data=updated_data)
-
-                return self.async_create_entry(title=entry.title, data=options)
-
-            except AuthException:
-                errors = {"base": "invalid_auth"}
-            except ConnectionException:
-                errors = {"base": "connection_error"}
-            except Exception as ex:
-                sanitized_exception = RuntimeError(type(ex).__name__)
-                _LOGGER.exception(
-                    "Unexpected error in options flow",
-                    exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
-                )
-                errors = {"base": "unknown_error"}
-
-        schema_dict = {
-            vol.Required(CONF_USERNAME, default=current_username): str,
-            # Leave password blank to avoid exposing it in the UI
-            vol.Optional(CONF_PASSWORD, default=""): str,
-            vol.Required(
-                CONF_INTERVAL_SETTINGS,
-                default=entry.options.get(
-                    CONF_INTERVAL_SETTINGS, DEFAULT_INTERVAL_SETTINGS
-                ),
-            ): NumberSelector(
-                NumberSelectorConfig(min=1, max=72, mode=NumberSelectorMode.SLIDER)
-            ),
-            vol.Required(
-                CONF_INTERVAL_STATISTICS,
-                default=entry.options.get(
-                    CONF_INTERVAL_STATISTICS, DEFAULT_INTERVAL_STATISTICS
-                ),
-            ): NumberSelector(
-                NumberSelectorConfig(min=15, max=1440, mode=NumberSelectorMode.SLIDER)
-            ),
-        }
-
-        self._populate_optional_interval_schema(schema_dict, self._resource_features())
 
         data_schema = vol.Schema(schema_dict)
 

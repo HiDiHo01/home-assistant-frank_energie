@@ -12,12 +12,12 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from python_frank_energie.models import PriceData
-from pytest_homeassistant.common import (
+from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     MockEntityPlatform,
     async_fire_time_changed,
 )
-from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.frank_energie.binary_sensor import (
     BINARY_SENSOR_DESCRIPTIONS,
@@ -393,11 +393,7 @@ async def test_setup_routes_price_entity_to_its_own_coordinator(
     assert price_entities[0].unique_id == f"site-one_{SENSOR_KEY}"
     assert price_entities[0].device_info["identifiers"] == {(DOMAIN, entry.entry_id)}
     if not authenticated:
-        assert {entity.entity_description.key for entity in entities} == {
-            SENSOR_KEY,
-            "tomorrow_prices_available",
-        }
-        assert all(entity.coordinator is price for entity in entities)
+        assert entities == price_entities
     else:
         for entity in entities:
             if entity.entity_description.authenticated:

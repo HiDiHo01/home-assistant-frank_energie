@@ -640,9 +640,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return set()
         settings = getattr(self, "settings_coordinator", self)
-        settings_data = settings.data
-        site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
-        contracts = known_site_contracts(site)
+        contracts = known_site_contracts(settings.data.get(DATA_DELIVERY_SITE))
         if contracts is not None:
             return contracts
         return {
@@ -1207,14 +1205,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 country_code = country_code_raw.upper()
                 if country_code in SUPPORTED_COUNTRIES:
                     self._country_code = country_code
-        if user_data is not None:
-            selected_connection_id = _extract_electricity_connection_id(user_data)
-            if selected_connection_id != self._connection_id:
-                self._connection_id = selected_connection_id
-                _LOGGER.debug(
-                    "Electricity connection for the selected site %s",
-                    "available" if selected_connection_id else "missing",
-                )
+        if not self._connection_id:
+            self._connection_id = _extract_electricity_connection_id(user_data)
+            _LOGGER.debug(
+                "Electricity connection ID available: %s",
+                self._connection_id is not None,
+            )
 
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
@@ -2350,45 +2346,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     api_value,
                 )
 
-    def _selected_electricity_connection_id(self) -> str | None:
-        """Read the selected connection from authoritative settings when available."""
-        settings = getattr(self, "settings_coordinator", self)
-        settings_data = settings.data
-        user = settings_data.get(DATA_USER) if settings_data else None
-        if user is not None:
-            return _extract_electricity_connection_id(user)
-        return self._connection_id
-
-    async def _refresh_resolution_state_after_change(self, connection_id: str) -> None:
-        """Update the published status after a successful resolution request."""
-        state = await self._fetch_contract_price_resolution_state(connection_id)
-        if (
-            state is not None
-            and self._selected_electricity_connection_id() == connection_id
-        ):
-            self._static_contract_price_resolution_state = state
-            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
-
-    def _can_change_resolution(self) -> bool:
-        """Check the selected connection and known change restrictions."""
-        if not self._connection_id or self._price_contracts() == {"GAS"}:
-            _LOGGER.error(
-                "Cannot set resolution via API: electricity connection_id not available"
-            )
-            return False
-        if self._resolution_change_pending:
-            _LOGGER.warning("Cannot set resolution: a change is already pending")
-            return False
-        if (
-            self._api_resolution_state is not None
-            and not self._api_resolution_state.isChangeRequestPossible
-        ):
-            _LOGGER.warning(
-                "Cannot set resolution via API: isChangeRequestPossible=False"
-            )
-            return False
-        return True
-
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
         if not self.api.is_authenticated:
@@ -2410,34 +2367,33 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 await self.async_request_refresh()
             return
 
-        if not self._can_change_resolution():
+        if not self._connection_id or self._price_contracts() == {"GAS"}:
+            _LOGGER.error(
+                "Cannot set resolution via API: electricity connection_id not available"
+            )
+            return
+
+        if self._resolution_change_pending:
+            _LOGGER.warning("Cannot set resolution: a change is already pending")
+            return
+
+        if (
+            self._api_resolution_state is not None
+            and not self._api_resolution_state.isChangeRequestPossible
+        ):
+            _LOGGER.warning(
+                "Cannot set resolution via API: isChangeRequestPossible=False"
+            )
             return
 
         self._resolution_change_pending = True
-        requested_connection_id = self._connection_id
 
         async def _mutation() -> None:
             try:
-                if (
-                    self._selected_electricity_connection_id()
-                    != requested_connection_id
-                ):
-                    raise UpdateFailed(
-                        "Electricity connection changed before the resolution request; retry"
-                    )
                 result = await self.api.contract_price_resolution_request_change(
-                    requested_connection_id,
+                    self._connection_id,
                     cast(Resolution, value),
                 )
-                if (
-                    self._selected_electricity_connection_id()
-                    != requested_connection_id
-                ):
-                    _LOGGER.warning(
-                        "Electricity connection changed while a resolution request was "
-                        "in flight; not applying the previous connection's response"
-                    )
-                    return
 
                 if result is None:
                     raise UpdateFailed("Resolution change request failed: no response")
@@ -2478,11 +2434,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         options={**self.config_entry.options, "resolution": value},
                     )
 
-                # Publish only a status verified for the current connection.
+                # Re-fetch resolution state to update our internal tracker immediately
                 try:
-                    await self._refresh_resolution_state_after_change(
-                        requested_connection_id
+                    state = await self._fetch_contract_price_resolution_state(
+                        self._connection_id
                     )
+                    if state:
+                        self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
                 except Exception as err:
                     _LOGGER.debug(
                         "Failed to re-fetch resolution state after successful change: %s",
@@ -2502,9 +2460,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         Normalize API values to uppercase for query and cache selection.
         Authentication and pending changes do not override an active API value.
         """
-        settings_data = getattr(self, "settings_coordinator", self).data
-        site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
-        if self.api.is_authenticated and known_site_contracts(site) == {"GAS"}:
+        if self.api.is_authenticated and known_site_contracts(
+            getattr(self, "settings_coordinator", self).data.get(DATA_DELIVERY_SITE)
+        ) == {"GAS"}:
             return "PT60M"
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
@@ -2707,87 +2665,6 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self.update_interval = None
         self.store = price_cache_store(hass, config_entry.entry_id)
 
-        self._resolution_state_connection_id: str | None = None
-
-    def _clear_resolution_state(self) -> None:
-        """Discard status that is not verified for the selected connection."""
-        self._resolution_state_connection_id = None
-        self._api_resolution_state = None
-        self._static_contract_price_resolution_state = None
-        self._resolution_change_pending = False
-        if self.data is not None:
-            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = None
-
-    def _sync_connection_id(self) -> None:
-        """Synchronize from selected-site settings without clearing on outages."""
-        settings_data = self.settings_coordinator.data
-        user_data = settings_data.get(DATA_USER) if settings_data else None
-        if user_data is None:
-            return
-
-        connection_id = _extract_electricity_connection_id(user_data)
-        if connection_id != self._connection_id:
-            previous_connection_id = self._connection_id
-            self._connection_id = connection_id
-            self._clear_resolution_state()
-            if previous_connection_id is not None:
-                # Prices from the previous connection may use another resolution.
-                self._static_prices_today = None
-                self.last_fetch_today = None
-                self.cached_prices_tomorrow = None
-                self.last_fetch_tomorrow = None
-
-    async def _refresh_resolution_state_after_change(self, connection_id: str) -> None:
-        """Refresh published change status only for the selected connection."""
-        self._sync_connection_id()
-        if self._connection_id == connection_id:
-            await self._refresh_current_resolution_state()
-
-    async def _refresh_current_resolution_state(
-        self,
-    ) -> ContractPriceResolutionState | None:
-        """Fetch current connection status and avoid reusing another site's state."""
-        connection_id = self._connection_id
-        if connection_id is None:
-            self._clear_resolution_state()
-            return None
-
-        state = await self._fetch_contract_price_resolution_state(connection_id)
-        # Account settings may change while the API request is in flight.
-        self._sync_connection_id()
-        if connection_id != self._connection_id:
-            self._clear_resolution_state()
-            return None
-        if state is None:
-            # A failed fetch says nothing about the connection: keep a state
-            # already verified for it, so the effective resolution can't flip.
-            if self._resolution_state_connection_id != connection_id:
-                self._clear_resolution_state()
-            return None
-
-        self._resolution_state_connection_id = connection_id
-        self._static_contract_price_resolution_state = state
-        if self.data is not None:
-            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
-        return state
-
-    async def async_set_resolution(self, value: str) -> None:
-        """Validate change eligibility against this connection's current state."""
-        self._sync_connection_id()
-        if (
-            self.api.is_authenticated
-            and self._connection_id is not None
-            and self._price_contracts() != {"GAS"}
-            and not self._resolution_change_pending
-            and self._resolution_state_connection_id != self._connection_id
-            and await self._refresh_current_resolution_state() is None
-        ):
-            raise UpdateFailed(
-                "Cannot verify resolution change eligibility for the "
-                "selected electricity connection; retry after the next refresh"
-            )
-        await super().async_set_resolution(value)
-
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
         """Parse cached data dictionary into coordinator state."""
         if prices_today_dict := cached_data.get("prices_today"):
@@ -2797,8 +2674,6 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             self.cached_prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
 
         if resolution_state_dict := cached_data.get("contract_price_resolution_state"):
-            # A disk cache does not prove the connection still has these rights.
-            self._resolution_state_connection_id = None
             data_contract_price_resolution_state = _dict_to_resolution_state(
                 resolution_state_dict
             )
@@ -2951,30 +2826,9 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         return now_local.time() < time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
 
     async def async_config_entry_first_refresh(self) -> None:
-        """Restore valid prices, then verify the selected connection's status."""
-        self._sync_connection_id()
+        """Perform first refresh."""
         cached_data_loaded = await self._async_setup()
         now_utc = dt_util.utcnow()
-
-        if cached_data_loaded:
-            cache_is_fresh = self._is_cache_fresh(now_utc)
-            if (
-                cache_is_fresh
-                and self.api.is_authenticated
-                and self._connection_id is not None
-                and self._price_contracts() != {"GAS"}
-                and not self._should_skip_api_calls(now_utc)
-            ):
-                await self._refresh_current_resolution_state()
-            else:
-                self._clear_resolution_state()
-
-            if not self._is_cache_resolution_valid():
-                self._static_prices_today = None
-                self.last_fetch_today = None
-                self.cached_prices_tomorrow = None
-                self.last_fetch_tomorrow = None
-                cached_data_loaded = False
 
         if not cached_data_loaded or not self._is_cache_fresh(now_utc):
             _LOGGER.debug("No fresh cache found, performing initial API fetch")
@@ -3097,7 +2951,6 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         skip_api_calls = self._should_skip_api_calls(now_utc)
         required_contracts = self._price_contracts()
-        self._sync_connection_id()
         self._reconcile_resolution()
         self._adjust_update_interval(now_utc)
 
@@ -3114,6 +2967,10 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         ):
             self._tomorrow_prices_logged = False
 
+        user_data = self.settings_coordinator.data.get(DATA_USER)
+        if extracted_conn_id := _extract_electricity_connection_id(user_data):
+            self._connection_id = extracted_conn_id
+
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
             if not self.last_update_success:
@@ -3124,13 +2981,13 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
             prices_tomorrow = self.cached_prices_tomorrow
         else:
-            # Verify the account's interval before reusing prices from the cache.
-            # On transient errors, retain state verified for this connection.
-            fetched_resolution_state = await self._refresh_current_resolution_state()
+            # Resolve the active interval before deciding whether today's cached
+            # prices can be reused. The account may override the configured value.
             data_contract_price_resolution_state = (
-                fetched_resolution_state
-                if fetched_resolution_state is not None
-                else self._static_contract_price_resolution_state
+                await self._fetch_contract_price_resolution_state(self._connection_id)
+            )
+            self._static_contract_price_resolution_state = (
+                data_contract_price_resolution_state
             )
             if not self._is_cache_resolution_valid():
                 _LOGGER.debug(

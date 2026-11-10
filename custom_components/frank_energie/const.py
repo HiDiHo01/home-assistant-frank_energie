@@ -3,7 +3,7 @@ Constants used in the Frank Energie integration.
 """
 
 # const.py
-# date 2026.11.9
+# date 2026.9.20
 
 import logging
 from dataclasses import dataclass
@@ -33,9 +33,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2026.11.9"
-CONFIG_ENTRY_VERSION: Final[int] = 2
-CONFIG_ENTRY_MINOR_VERSION: Final[int] = 1
+VERSION: Final[str] = "2026.9.20"
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"

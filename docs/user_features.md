@@ -18,10 +18,6 @@ The following functionality is available without authentication:
 - Frank Energie events
 - Manual price refresh controls
 
-The enabled-by-default **Tomorrow electricity prices available** binary sensor
-reports publication through its `on`/`off` state, for public market-data setups and authenticated sites with electricity
-contracts. Authenticated gas-only sites do not create the electricity sensor. See [Tomorrow Price Availability](entities.md#tomorrow-price-availability)
-for missing-data, failure, and local-midnight behavior.
 ### Electricity Price Resolution
 
 The integration supports multiple electricity market resolutions:

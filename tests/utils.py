@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from http import HTTPStatus
 
 from homeassistant.const import CONTENT_TYPE_JSON
-from pytest_homeassistant.test_util.aiohttp import (
+from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMockResponse,
 )
 

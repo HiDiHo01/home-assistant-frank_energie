@@ -37,7 +37,7 @@ EANs and device IDs are never exposed as Smart HVAC state attributes.
    reference to query Smart HVAC data.
 2. The settings coordinator retains `api.user(site_reference)` for existing
    user/account entities.
-3. In the published **python-frank-energie 2026.11.9** client, the separate
+3. In the current **python-frank-energie main branch**, the separate
    `api.me(site_reference)` request includes the root-level GraphQL field
    `userSmartHvac(siteReference: $siteReference)`.
 4. The library parses this field as `Me.user_smart_hvac`. The settings
@@ -69,20 +69,18 @@ entity's existing unique ID and the User service device association unchanged.
 
 ## Library dependency and release gate
 
-The published [python-frank-energie 2026.11.9 source](https://github.com/HiDiHo01/python-frank-energie/blob/v2026.11.9/python_frank_energie/models.py)
-includes `Me.user_smart_hvac`, populated by the site-scoped
-`userSmartHvac(siteReference: $siteReference)` query. The integration's
-`manifest.json` pins `python-frank-energie==2026.11.9`, `pyproject.toml`
-requires `python-frank-energie>=2026.11.9`, and `poetry.lock` resolves
-`2026.11.9`. The former **unpublished-client release blocker is cleared**.
+This workflow requires `Me.user_smart_hvac` from
+[python-frank-energie main](https://github.com/HiDiHo01/python-frank-energie/blob/main/python_frank_energie/models.py).
+The currently pinned published dependency `python-frank-energie==2026.9.20`
+does **not** supply that field. With this dependency the sensor cannot obtain
+the new activation value, even when an account has activated the service.
 
-Future client upgrades must verify the *published* package, synchronize the
-runtime manifest, Poetry declaration and lockfile, and test the actual
-Home Assistant integration. Mocked tests alone cannot establish live account
-activation or site-specific API availability; evaluate those separately
-before claiming deployment compatibility. Do not use an unreleased Git branch
-as a production requirement or keep a PR draft solely for this now-resolved
-library publication gate.
+Keep the implementation PR **draft** until the library change is published
+and the integration's `manifest.json`, `pyproject.toml` and `poetry.lock`
+are updated consistently. Do not pin a production requirement to an
+unreleased Git branch. The passing Home Assistant suite with the old
+dependency does **not** demonstrate compatibility with the new released
+model; verify the actual package before merge.
 
 This integration does not yet expose Smart HVAC inventory, operational
 status, steering status, or actual heat-pump running state as a separate
