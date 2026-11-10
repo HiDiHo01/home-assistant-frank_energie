@@ -44,10 +44,13 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
 
     job = workflow["jobs"]["export"]
     assert job["permissions"] == {"contents": "read"}
+    assert job["if"] == (
+        "github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'"
+    )
     steps = {step["name"]: step for step in job["steps"]}
     assert steps["Harden Runner"]["with"]["egress-policy"] == "block"
     assert steps["Export open findings"]["env"] == {
-        "SONAR_TOKEN": "${{ github.event_name == 'workflow_dispatch' && secrets.SONAR_TOKEN || '' }}",
+        "SONAR_TOKEN": "${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && secrets.SONAR_TOKEN || '' }}",
         "PULL_REQUEST": "${{ github.event.pull_request.number || inputs.pull_request || '' }}",
     }
     assert '--pull-request "$PULL_REQUEST"' in steps["Export open findings"]["run"]
