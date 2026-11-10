@@ -354,7 +354,6 @@ def _async_sync_equipment(
     return current, sensors
 
 
-
 @callback
 def _async_prune_inactive_equipment(
     hass: HomeAssistant,
