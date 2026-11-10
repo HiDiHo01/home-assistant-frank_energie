@@ -86,10 +86,11 @@ library publication gate.
 
 ## Smart heating service device
 
-The integration adds one **Frank Energie - Smart heating** service device for
-the selected delivery site when Frank reports site eligibility, service
-activation, or linked equipment. The activation binary sensor and the
-account-wide connection request count are on the **User** service.
+The integration adds the **Frank Energie - Smart heating** service device,
+its sensors, and the account-wide connection request sensor when Frank confirms
+`UserSmartHvac.isActivated = true` for the selected delivery site. The
+activation binary sensor and the connection request count appear on the
+**User** service. The binary sensor shows the site's activation status.
 
 | Group | Data |
 | --- | --- |

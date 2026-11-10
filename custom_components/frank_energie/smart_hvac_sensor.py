@@ -256,12 +256,9 @@ class _SmartHvacDeviceSensor(
         return {key: value for key, value in attributes.items() if value is not None}
 
 
-def _site_supports_smart_hvac(settings: FrankEnergieSettingsCoordinator) -> bool:
-    """Use explicit feature activation or site eligibility for discovery."""
-    return settings.last_update_success and (
-        smart_hvac_activation(settings.data) is True
-        or smart_hvac_site_attributes(settings.data).get("available_on_site") is True
-    )
+def _site_has_active_smart_hvac(settings: FrankEnergieSettingsCoordinator) -> bool:
+    """Require confirmed Smart Heating activation for this delivery site."""
+    return settings.last_update_success and smart_hvac_activation(settings.data) is True
 
 
 @callback
@@ -329,9 +326,12 @@ def async_setup_smart_hvac_sensors(
     def _async_sync_sensors() -> None:
         """Register newly available service, account and equipment sensors."""
         nonlocal known_devices, requests_added, service_added
+        if not _site_has_active_smart_hvac(settings):
+            return
+
         devices = coordinator.data.devices if coordinator.last_update_success else None
         sensors: list[SensorEntity] = []
-        if not service_added and (devices or _site_supports_smart_hvac(settings)):
+        if not service_added:
             sensors.append(_SmartHvacCountSensor(coordinator, entry_id))
             sensors.append(_SmartHvacSiteSensor(settings, entry_id))
             service_added = True

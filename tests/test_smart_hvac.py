@@ -48,7 +48,7 @@ def api(freezer: FrozenDateTimeFactory) -> AsyncMock:
     """Mock the provider boundary for an authenticated entry with a selected site."""
     freezer.move_to(datetime(2026, 7, 20, 10, 15, tzinfo=UTC))
     client = _api_for_contracts(("ELECTRICITY",), 15)
-    client.me.return_value = _profile(available=True)
+    client.me.return_value = _profile(available=True, activated=True)
     client.smart_hvacs.return_value = []
     client.smart_hvac_connect_requests.return_value = []
     return client
@@ -208,7 +208,7 @@ async def test_hvac_site_device_and_account_diagnostics(
         for sensor in _service_entities(hass, entry, SERVICE_NAME_USER)
         if sensor.translation_key in {"smart_hvac", "smart_hvac_connection_requests"}
     }
-    assert account_states["smart_hvac"].state == "off"
+    assert account_states["smart_hvac"].state == "on"
     assert account_states["smart_hvac"].attributes["icon"] == "mdi:heat-pump"
     assert account_states["smart_hvac_connection_requests"].state == "1"
     assert account_states["smart_hvac_connection_requests"].attributes["requests"] == [
@@ -308,19 +308,58 @@ async def test_hvac_inventory_changes_and_recovery(
     assert _state(hass, first_sensor).state == "Fixture Model A"
 
 
+async def test_hvac_waits_for_confirmed_site_activation(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Register HVAC sensors when Frank confirms activation during a refresh."""
+    api.me.return_value = _profile(available=True, activated=False)
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+
+    registry = dr.async_get(hass)
+    service_identifier = (DOMAIN, f"{entry.entry_id}_{SERVICE_NAME_SMART_HVAC}")
+    assert (
+        registry.async_get_device_by_identifier(
+            service_identifier, config_entry_id=entry.entry_id
+        )
+        is None
+    )
+    user_keys = {
+        sensor.translation_key
+        for sensor in _service_entities(hass, entry, SERVICE_NAME_USER)
+    }
+    assert "smart_hvac" in user_keys
+    assert "smart_hvac_connection_requests" not in user_keys
+
+    api.me.return_value = _profile(available=False, activated=True)
+    await entry.runtime_data.settings_coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert _state(hass, _sensor(hass, entry, "smart_hvac_device_count")).state == "1"
+    assert (
+        _state(hass, _sensor(hass, entry, "smart_hvac_equipment")).state
+        == "Fixture Model A"
+    )
+    assert "smart_hvac_connection_requests" in {
+        sensor.translation_key
+        for sensor in _service_entities(hass, entry, SERVICE_NAME_USER)
+    }
+
+
 async def test_hvac_entries_isolate_site_data_and_reload(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
     """Keep two sites isolated even when their inventories reuse an equipment ID."""
     other_api = _api_for_contracts(("ELECTRICITY",), 15)
-    other_api.me.return_value = _profile(available=False)
+    other_api.me.return_value = _profile(available=False, activated=True)
     other_api.smart_hvacs.return_value = []
     other_api.smart_hvac_connect_requests.return_value = []
     primary = _entry(hass)
     await _setup(hass, primary, api)
     other = _entry(hass, "other-site")
     await _setup(hass, other, other_api)
-    assert _service_entities(hass, other) == []
+    assert _state(hass, _sensor(hass, other, "smart_hvac_device_count")).state == "0"
     api.smart_hvacs.return_value = [_equipment("shared-fixture-id", "Model A")]
     other_api.smart_hvacs.return_value = [_equipment("shared-fixture-id", "Model B")]
     old_coordinator = primary.runtime_data.smart_hvac_coordinator

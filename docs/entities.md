@@ -169,9 +169,9 @@ presentation. The `available_on_site` attribute shows whether the
 provider makes this feature available for the configured delivery site:
 it is not the entity's Home Assistant availability or the activation state.
 
-The **Smart heating** service device groups linked equipment, its operational
-and steering statuses, and session information by delivery site. Connection
-requests are shown on the **User** service because they apply to the account.
+For activated delivery sites, the **Smart heating** service device groups
+linked equipment, its operational and steering statuses, and session
+information. The **User** service shows the account-level connection requests.
 See [Smart heating activation and equipment data](smart_hvac_activation.md).
 
 ## Smart Charging Entities

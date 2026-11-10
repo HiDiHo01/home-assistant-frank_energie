@@ -56,6 +56,11 @@ are unavailable rather than silently treated as inactive, and that
 
 ### Smart HVAC equipment and connection requests
 
+Register the Smart Heating service and its related sensors only after the
+settings coordinator confirms `UserSmartHvac.isActivated is True` for the
+selected delivery site. Test that an eligible site with linked equipment
+adds the entities only when activation arrives on a later settings refresh.
+
 1. Confirm the typed read methods and selected fields in the published client version pinned in `manifest.json`. Reuse the settings coordinator's `Me.user_smart_hvac` response. The inventory and detail queries select the same device metadata in the current client, so use `smart_hvacs(site_reference)` for discovery and verify a specific need before issuing a detail request. [Smart heating data contract](../../../docs/smart_hvac_activation.md)
 2. Poll equipment independently. Fetch `smart_hvac_summary(device_id)` once per active inventory record per poll, one device at a time. Keep valid inventory and other summaries when a summary fails. Check the maintenance window and retry deadline before each provider call, including calls later in the same refresh.
 3. Treat `smart_hvac_connect_requests()` as account data and place it on the User service. Preserve Frank's raw operational and steering status values. Assign units, runtime meanings, or current setting values only when the released read contract confirms them.
