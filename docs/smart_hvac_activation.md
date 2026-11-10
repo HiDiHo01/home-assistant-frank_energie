@@ -112,13 +112,13 @@ The sensor displayed as **Total savings** (Dutch: **Totale besparingen**; French
 key and uses the numeric value returned by Frank, with Home Assistant's
 `MONETARY` sensor class, an `EUR` native unit and a suggested display precision
 of two decimals. The sensor retains the unrounded numeric value, including
-negative and zero results, and does not define a statistics class. Frank Energie's customer-service article *Hoe zie ik mijn totale opbrengsten?*
-describes monetary savings and bonuses. The SDK's `SmartHvacSummary.total_result`
-model does **not** explicitly specify a unit or prove that the GraphQL number is
-already measured in whole euros; confirm that unit/scale against actual
-provider evidence before merging. Frank's status strings describe the provider's
-operational and steering states. The separate activation sensor continues to
-describe the service.
+negative and zero results, and does not define a statistics class.
+The integration maintainer has confirmed that the provider's
+`SmartHvacSummary.total_result` is denominated in **euros, not eurocents**.
+Therefore no cent-to-euro scaling is applied. The public Python client models
+this as a nullable float; the amount and its precision are passed through
+unchanged. Frank's status strings describe the provider's operational and
+steering states. The separate activation sensor continues to describe the service.
 
 The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
 `smart_hvac_connect_requests()`, and `smart_hvac_summary(device_id)`
