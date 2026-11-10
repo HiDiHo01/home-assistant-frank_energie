@@ -89,9 +89,7 @@ def test_smart_hvac_steering_status_translations() -> None:
     }
     for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
         translation = json.loads(path.read_text(encoding="utf-8"))
-        states = translation["entity"]["sensor"]["smart_hvac_steering_status"][
-            "state"
-        ]
+        states = translation["entity"]["sensor"]["smart_hvac_steering_status"]["state"]
         assert states == expected_states[path.name], (
             f"{path.name} must translate HVAC active and inactive states"
         )
