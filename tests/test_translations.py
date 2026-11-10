@@ -3,6 +3,7 @@
 import ast
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.components.sensor import SensorDeviceClass
@@ -184,6 +185,7 @@ async def test_vehicle_weekday_departure_translations(
     from custom_components.frank_energie.const import DOMAIN
     from custom_components.frank_energie.sensor import (
         ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
         WEEKDAYS,
     )
 
@@ -204,10 +206,18 @@ async def test_vehicle_weekday_departure_translations(
         assert description.translation_key == key
         assert description.entity_category is EntityCategory.DIAGNOSTIC
         assert description.device_class is SensorDeviceClass.TIMESTAMP
-        assert description.unique_id_fn is not None
-        assert description.unique_id_fn({"id": "fixture-vehicle"}) == (
-            f"fixture-vehicle_{key}"
+
+        # Verify the real entity's stable fallback ID: the description does
+        # not retain the optional unique_id_fn passed by its factory.
+        sensor = EnodeVehicleSensor(
+            hass=hass,
+            coordinator=MagicMock(),
+            description=description,
+            vehicle_data={"id": "fixture-vehicle"},
+            vehicle_index=0,
         )
+        assert sensor.unique_id == f"{DOMAIN}_fixture-vehicle_{key}"
+        assert sensor.device_info["identifiers"] == {(DOMAIN, "fixture-vehicle")}
 
 
 def test_reconfigure_success_abort_translation() -> None:
