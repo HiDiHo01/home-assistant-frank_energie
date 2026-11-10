@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -30,6 +31,7 @@ from .helpers import api_maintenance_active
 _LOGGER = logging.getLogger(__name__)
 _UPDATE_INTERVAL: Final = timedelta(minutes=15)
 _REQUEST_TIMEOUT: Final = 10
+_MAX_RETRY_DELAY_SECONDS: Final = 86400
 
 
 class SmartHvacRequestStatus(TypedDict):
@@ -116,8 +118,19 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
                 "Frank Energie authentication is required"
             ) from None
         except RateLimitException as err:
+            retry_after = err.retry_after
+            provider_delay = (
+                min(retry_after, _MAX_RETRY_DELAY_SECONDS)
+                if (
+                    isinstance(retry_after, int | float)
+                    and not isinstance(retry_after, bool)
+                    and math.isfinite(retry_after)
+                    and retry_after > 0
+                )
+                else 0
+            )
             self._retry_at = monotonic() + max(
-                _UPDATE_INTERVAL.total_seconds(), err.retry_after or 0
+                _UPDATE_INTERVAL.total_seconds(), provider_delay
             )
             _LOGGER.debug("Smart Heating rate limited while fetching %s", operation)
         except (FrankEnergieException, ClientError, TimeoutError, JSONDecodeError):
