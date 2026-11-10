@@ -111,7 +111,7 @@ The total result uses the numeric value returned by Frank, with Home Assistant's
 `MONETARY` sensor class, an `EUR` native unit and a suggested display precision
 of two decimals. The sensor retains the unrounded numeric value, including
 negative and zero results, and does not define a statistics class. The public
-[Frank Energie explanation of Smart Heating results](https://klantenservice.frankenergie.nl/hc/nl-nl/articles/38784303873426-Hoe-zie-ik-mijn-totale-opbrengsten)
+Frank Energie's customer-service article *Hoe zie ik mijn totale opbrengsten?*
 describes monetary savings and bonuses. The SDK's `SmartHvacSummary.total_result`
 model does **not** explicitly specify a unit or prove that the GraphQL number is
 already measured in whole euros; confirm that unit/scale against actual
