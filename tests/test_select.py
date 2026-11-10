@@ -724,7 +724,9 @@ async def test_select_option_does_not_disclose_sensitive_option(
         "battery_mode",
     )
 
-    with caplog.at_level(logging.DEBUG, logger="custom_components.frank_energie.select"):
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.frank_energie.select"
+    ):
         await entity.async_select_option(synthetic_secret)
 
     mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
