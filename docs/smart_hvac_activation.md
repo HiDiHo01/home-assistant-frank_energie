@@ -139,8 +139,14 @@ These are neutral defaults, not assertions about current device activity:
 The operational and steering states retain their default icons even for
 unrecognized upstream values. The linked equipment and service sensors retain
 their existing translation keys and entity identities. The `mdi:currency-eur`
-icon describes a financial result; the EUR unit and two-decimal display are
-handled separately in PR #442.
+icon identifies a financial result; the sensor's existing monetary metadata
+supplies the EUR unit and two-decimal display precision independently of its icon.
+
+The account-level `smart_hvac` binary sensor (**Smart heating** / **Slim
+verwarmen**) intentionally retains `mdi:heat-pump`, configured in
+`binary_sensor.py`. Its state reports **service activation**, not whether any
+physical heat pump is currently heating. The integration test confirms that
+this existing icon is preserved.
 
 The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
 `smart_hvac_connect_requests()`, and `smart_hvac_summary(device_id)`
