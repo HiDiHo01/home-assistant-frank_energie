@@ -429,7 +429,11 @@
         "name": "Operational status"
       },
       "smart_hvac_steering_status": {
-        "name": "Steering status"
+        "name": "Steering status",
+        "state": {
+          "active": "Active",
+          "inactive": "Inactive"
+        }
       },
       "smart_hvac_operational_status_timestamp": {
         "name": "Operational status timestamp"
