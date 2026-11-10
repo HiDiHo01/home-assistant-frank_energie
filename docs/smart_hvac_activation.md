@@ -120,12 +120,16 @@ time. On rate limiting, the coordinator waits at least one polling interval
 and honors a longer provider retry delay. Site flags and profile time come
 from the settings coordinator's existing site response.
 
-A successful empty inventory produces a count of zero. A failed inventory
-refresh makes the equipment readings unavailable and retains the physical
-devices and their sensor registrations. A successful inventory refresh adds
-new equipment and removes the devices and sensors for equipment that Frank
-has removed. A successful null device summary produces unknown summary
-values. An unsuccessful summary makes only that equipment's summary unavailable.
+A successful empty inventory produces a count of zero. A successful null
+inventory or connection-request response produces an unknown count; a skipped
+or failed request makes the corresponding existing count sensor unavailable.
+The coordinator retains explicit read-success flags for both collections.
+A failed inventory refresh retains the physical devices and registrations.
+A successful inventory refresh removes devices and sensors for equipment that
+Frank has removed, even after service deactivation; new equipment is created
+only while the service is active. A successful null device summary produces
+unknown summary values. An unsuccessful summary makes only that equipment's
+summary unavailable.
 
 Local entities show the equipment's display name. Device and request IDs are
 used internally. Downloadable HVAC diagnostics contain counts and update
