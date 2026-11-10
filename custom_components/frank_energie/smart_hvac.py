@@ -48,6 +48,8 @@ class SmartHvacData:
     The fetched flags distinguish a successful null response from a skipped
     or failed read. Empty collections confirm zero records. Only successful
     summary reads have a key in ``summaries``, including null responses.
+    Skipped summary reads retain previous values in ``summaries``, but
+    ``stale_summaries`` prevents treating those values as fresh.
     """
 
     devices: dict[str, SmartHvacDevice] | None = None
@@ -55,6 +57,7 @@ class SmartHvacData:
     requests: tuple[SmartHvacRequestStatus, ...] | None = None
     devices_fetched: bool = False
     requests_fetched: bool = False
+    stale_summaries: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +66,7 @@ class _ReadResult[T]:
 
     value: T | None = None
     fetched: bool = False
+    skipped: bool = False
 
 
 class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
@@ -98,12 +102,12 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
     ) -> _ReadResult[T]:
         """Read one HVAC resource within the request timeout.
 
-        Return an unread result for skipped or failed optional reads and defer
+        Distinguish skipped requests from attempted failures and defer
         further requests after rate limiting. Raise ``ConfigEntryAuthFailed``
         when Home Assistant needs to start reauthentication.
         """
         if self._requests_paused():
-            return _ReadResult()
+            return _ReadResult(skipped=True)
         try:
             async with asyncio.timeout(_REQUEST_TIMEOUT):
                 return _ReadResult(await method(*args), fetched=True)
@@ -145,12 +149,16 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
                 if device.deleted_at is None
             }
         summaries: dict[str, SmartHvacSummary | None] = {}
+        stale_summaries: set[str] = set()
         for device_id in devices or {}:
             summary = await self._async_read(
                 "device summary", self._api.smart_hvac_summary, device_id
             )
             if summary.fetched:
                 summaries[device_id] = summary.value
+            elif summary.skipped and device_id in self.data.summaries:
+                summaries[device_id] = self.data.summaries[device_id]
+                stale_summaries.add(device_id)
         safe_requests: tuple[SmartHvacRequestStatus, ...] | None = None
         if requests.value is not None:
             safe_requests = tuple(
@@ -167,6 +175,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
             requests=safe_requests,
             devices_fetched=inventory.fetched,
             requests_fetched=requests.fetched,
+            stale_summaries=frozenset(stale_summaries),
         )
 
 
