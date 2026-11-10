@@ -10,6 +10,7 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.frank_energie.const import (
     DATA_BATTERY_DETAILS,
+    DATA_BATTERY_SETTINGS,
     DATA_ENODE_VEHICLES,
     DATA_ENODE_CHARGERS,
     DEFAULT_ENERGY_TAX_ODE,
@@ -67,17 +68,15 @@ async def test_battery_threshold_number_action(mock_coordinator, mock_config_ent
     )
 
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
-    mock_coordinator.api.smart_battery_update_settings.return_value = True
 
     entity = FrankEnergieBatteryThresholdNumber(
         mock_coordinator, mock_config_entry, battery_id
     )
     await entity.async_set_native_value(0.35)
 
-    mock_coordinator.api.smart_battery_update_settings.assert_called_once_with(
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
         battery_id, {"selfConsumptionTradingThresholdPrice": 0.35}
     )
-    mock_coordinator.async_request_refresh.assert_called_once()
 
 
 def test_battery_threshold_number_availability(mock_coordinator, mock_config_entry):
@@ -102,11 +101,77 @@ def test_battery_threshold_number_availability(mock_coordinator, mock_config_ent
     mock_coordinator.data = {DATA_BATTERY_DETAILS: [mock_battery]}
     assert entity.available is False
 
-    # Available when battery mode is SELF_CONSUMPTION_MIX
-    mock_battery.smart_battery.settings.battery_mode = (
-        SmartBatteryMode.SELF_CONSUMPTION_MIX
+    # Available in both self-consumption modes, as in the Frank Energie app
+    for mode in (
+        SmartBatteryMode.SELF_CONSUMPTION_MIX,
+        SmartBatteryMode.SELF_CONSUMPTION,
+    ):
+        mock_battery.smart_battery.settings.battery_mode = mode
+        assert entity.available is True
+
+
+def _threshold_setting(
+    *, updatable: bool, amounts: tuple[float, ...] = (0.3, 0.2, 0.35, 0.25)
+) -> SimpleNamespace:
+    """Mirror the smartBatterySettings threshold block."""
+    return SimpleNamespace(
+        self_consumption_trading_threshold_price=SimpleNamespace(
+            current=0.2,
+            updatable=updatable,
+            options=[SimpleNamespace(amount=a) for a in amounts],
+        )
     )
-    assert entity.available is True
+
+
+def _threshold_data(
+    battery_id: str, adjustable: SimpleNamespace | None, trading_algorithm=None
+) -> dict:
+    """Coordinator data for a self-consuming battery with a 0.20 threshold."""
+    settings = SimpleNamespace(
+        battery_mode=SmartBatteryMode.SELF_CONSUMPTION_MIX,
+        self_consumption_trading_threshold_price=0.2,
+        trading_algorithm=trading_algorithm,
+    )
+    battery = SimpleNamespace(
+        smart_battery=SimpleNamespace(id=battery_id, brand="HYXi", settings=settings)
+    )
+    return {
+        DATA_BATTERY_DETAILS: [battery],
+        DATA_BATTERY_SETTINGS: {battery_id: adjustable} if adjustable else {},
+    }
+
+
+@pytest.mark.parametrize(
+    ("trading_algorithm", "adjustable", "expected"),
+    [
+        # Per-battery settings decide when the library provides them
+        (None, _threshold_setting(updatable=False), False),
+        (None, _threshold_setting(updatable=True), True),
+        # Updatable but no prices on offer: hidden, as in the app
+        (None, _threshold_setting(updatable=True, amounts=()), False),
+        # Otherwise only T1 batteries may change the threshold
+        ("t2", None, False),
+        ("t1", None, True),
+        # Unknown or absent algorithm keeps the mode-only check
+        ("unknown", None, True),
+        (None, None, True),
+    ],
+)
+def test_battery_threshold_number_availability_follows_battery_settings(
+    mock_coordinator, mock_config_entry, trading_algorithm, adjustable, expected
+):
+    """The threshold is only offered where the Frank Energie app offers it."""
+    battery_id = "bat_123"
+    mock_coordinator.data = _threshold_data(battery_id, adjustable, trading_algorithm)
+
+    entity = FrankEnergieBatteryThresholdNumber(
+        mock_coordinator, mock_config_entry, battery_id
+    )
+
+    assert entity.available is expected
+    if adjustable and adjustable.self_consumption_trading_threshold_price.options:
+        assert entity.native_min_value == pytest.approx(0.2)
+        assert entity.native_max_value == pytest.approx(0.35)
 
 
 def test_enode_charge_limit_number_properties(mock_coordinator):
@@ -349,3 +414,65 @@ async def test_config_number_set_value_goes_through_ha_range_validation(
 # entities via MockEntityPlatform (see test_binary_sensor.py). Until then the
 # range/step checks on those two classes stay at the direct-call unit level
 # above and never see HA's own number.set_value validation.
+
+
+@pytest.mark.asyncio
+async def test_battery_threshold_number_rejects_value_not_offered(
+    mock_coordinator, mock_config_entry
+):
+    """Only threshold prices the battery offers are sent, and a successful
+    change refetches the battery's settings."""
+    battery_id = "bat_123"
+    mock_coordinator.data = _threshold_data(
+        battery_id, _threshold_setting(updatable=True)
+    )
+    entity = FrankEnergieBatteryThresholdNumber(
+        mock_coordinator, mock_config_entry, battery_id
+    )
+
+    with pytest.raises(ValueError, match="not one of the offered values"):
+        await entity.async_set_native_value(0.27)
+    mock_coordinator.async_update_battery_settings.assert_not_called()
+
+    await entity.async_set_native_value(0.25)
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
+        battery_id, {"selfConsumptionTradingThresholdPrice": 0.25}
+    )
+
+
+@pytest.mark.asyncio
+async def test_battery_threshold_number_rejects_any_value_without_offered_prices(
+    mock_coordinator, mock_config_entry
+):
+    """A threshold block without prices accepts no value, not the static range."""
+    battery_id = "bat_123"
+    mock_coordinator.data = _threshold_data(
+        battery_id, _threshold_setting(updatable=True, amounts=())
+    )
+    entity = FrankEnergieBatteryThresholdNumber(
+        mock_coordinator, mock_config_entry, battery_id
+    )
+
+    with pytest.raises(ValueError, match="not one of the offered values"):
+        await entity.async_set_native_value(0.25)
+    mock_coordinator.async_update_battery_settings.assert_not_called()
+
+
+def test_battery_threshold_number_falls_back_to_per_battery_mode(
+    mock_coordinator, mock_config_entry
+):
+    """Without a known mode in the details, the per-battery mode decides."""
+    battery_id = "bat_123"
+    adjustable = _threshold_setting(updatable=True)
+    adjustable.battery_mode = SimpleNamespace(
+        current=SmartBatteryMode.SELF_CONSUMPTION_MIX
+    )
+    data = _threshold_data(battery_id, adjustable)
+    data[DATA_BATTERY_DETAILS][0].smart_battery.settings.battery_mode = None
+    mock_coordinator.data = data
+
+    entity = FrankEnergieBatteryThresholdNumber(
+        mock_coordinator, mock_config_entry, battery_id
+    )
+
+    assert entity.available is True
