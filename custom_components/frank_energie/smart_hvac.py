@@ -46,10 +46,10 @@ class SmartHvacData:
 
     ``None`` represents a null or unknown inventory/request collection.
     The fetched flags distinguish a successful null response from a skipped
-    or failed read. Empty collections confirm zero records. Only successful
-    summary reads have a key in ``summaries``, including null responses.
-    Skipped summary reads retain previous values in ``summaries``, but
-    ``stale_summaries`` prevents treating those values as fresh.
+    or failed read. Empty collections confirm zero records. Successful
+    summary reads (including null values) and skipped reads with prior
+    values are stored in ``summaries``. ``stale_summaries`` identifies
+    retained values that must not be exposed as fresh.
     """
 
     devices: dict[str, SmartHvacDevice] | None = None
