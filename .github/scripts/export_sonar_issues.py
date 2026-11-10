@@ -86,6 +86,46 @@ def _fetch_page(
     return data
 
 
+def _validate_issue_page(
+    response: dict[str, object], page: int
+) -> tuple[int, list[dict[str, object]]]:
+    """Validate the total and issues list before accepting an API page."""
+    total = response.get("total")
+    current_issues = response.get("issues")
+    if (
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or total < 0
+        or not isinstance(current_issues, list)
+        or not all(isinstance(issue, dict) for issue in current_issues)
+    ):
+        raise RuntimeError(
+            f"SonarQube API returned invalid issue pagination on page {page}"
+        )
+    return total, current_issues
+
+
+def _append_unique_issues(
+    current_issues: list[dict[str, object]],
+    issues: list[dict[str, object]],
+    issue_keys: set[str],
+    page: int,
+) -> None:
+    """Reject malformed/duplicate issue keys before adding a response page."""
+    for issue in current_issues:
+        issue_key = issue.get("key")
+        if not isinstance(issue_key, str) or not issue_key:
+            raise RuntimeError(
+                f"SonarQube returned an invalid issue on page {page}"
+            )
+        if issue_key in issue_keys:
+            raise RuntimeError(
+                "SonarQube returned duplicate issues between pages; retry"
+            )
+        issue_keys.add(issue_key)
+        issues.append(issue)
+
+
 def _export_issues(
     project_key: str,
     pull_request: str | None,
@@ -99,19 +139,7 @@ def _export_issues(
 
     while True:
         response = _fetch_page(project_key, pull_request, page, token)
-        total = response.get("total")
-        current_issues = response.get("issues")
-
-        if (
-            not isinstance(total, int)
-            or isinstance(total, bool)
-            or total < 0
-            or not isinstance(current_issues, list)
-            or not all(isinstance(issue, dict) for issue in current_issues)
-        ):
-            raise RuntimeError(
-                f"SonarQube API returned invalid issue pagination on page {page}"
-            )
+        total, current_issues = _validate_issue_page(response, page)
 
         if expected_total is None:
             expected_total = total
@@ -125,18 +153,7 @@ def _export_issues(
                 "SonarQube findings changed between pages; retry the export"
             )
 
-        for issue in current_issues:
-            issue_key = issue.get("key")
-            if not isinstance(issue_key, str) or not issue_key:
-                raise RuntimeError(
-                    f"SonarQube returned an invalid issue on page {page}"
-                )
-            if issue_key in issue_keys:
-                raise RuntimeError(
-                    "SonarQube returned duplicate issues between pages; retry"
-                )
-            issue_keys.add(issue_key)
-            issues.append(issue)
+        _append_unique_issues(current_issues, issues, issue_keys, page)
 
         if len(issues) == expected_total:
             break
