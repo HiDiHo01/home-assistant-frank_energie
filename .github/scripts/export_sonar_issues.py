@@ -193,10 +193,9 @@ def main() -> int:
         result = _export_issues(
             project_key, pull_request, os.environ.get("SONAR_TOKEN", "").strip()
         )
-        _OUTPUT_PATH.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        with _OUTPUT_PATH.open("w", encoding="utf-8") as output_file:
+            json.dump(result, output_file, ensure_ascii=False, indent=2)
+            output_file.write("\n")
     except (OSError, RuntimeError, ValueError) as error:
         print(f"SonarQube issue export failed: {error}", file=sys.stderr)
         return 1
