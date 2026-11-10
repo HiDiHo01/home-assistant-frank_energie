@@ -95,6 +95,24 @@ def test_smart_hvac_steering_status_translations() -> None:
         )
 
 
+def test_smart_hvac_total_savings_translations() -> None:
+    """Keep the total-savings sensor key stable and localize its display name."""
+    expected_names = {
+        "strings.json": "Total savings",
+        "en.json": "Total savings",
+        "nl.json": "Totale besparingen",
+        "nl-BE.json": "Totale besparingen",
+        "fr.json": "Économies totales",
+        "fr-BE.json": "Économies totales",
+    }
+    for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation = json.loads(path.read_text(encoding="utf-8"))
+        sensor = translation["entity"]["sensor"]["smart_hvac_total_result"]
+        assert sensor["name"] == expected_names[path.name], (
+            f"{path.name} must localize the existing total-savings sensor key"
+        )
+
+
 def test_reconfigure_success_abort_translation() -> None:
     """Require a localized success message for reconfiguration in every locale."""
     expected = "[%key:common::config_flow::abort::reconfigure_successful%]"
