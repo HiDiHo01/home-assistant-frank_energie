@@ -423,25 +423,37 @@ async def test_sensors_hour_price_attr(
     assert price_attr == pytest.approx([1.75] * 6 + [1.23] * 24 + [0.75] * 18)
 
     # For the other sensors just check if the prices attribute is there
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_electricity_prices_current_electricity_market_price"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_electricity_prices_current_electricity_market_price"
+            ).attributes["prices"]
+        )
+        == 48
     )
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
+            ).attributes["prices"]
+        )
+        == 48
     )
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_gas_prices_current_gas_market_price"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_gas_prices_current_gas_market_price"
+            ).attributes["prices"]
+        )
+        == 48
     )
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
+            ).attributes["prices"]
+        )
+        == 48
     )
 
 
@@ -1020,6 +1032,103 @@ def _make_tesla_model_3(last_seen: datetime) -> object:
         is_reachable=True,
         last_seen=last_seen,
     )
+
+
+@pytest.mark.parametrize("battery_capacity", [86.5, 0.0, None])
+def test_enode_vehicle_battery_capacity_from_parsed_model(
+    hass: HomeAssistant,
+    battery_capacity: float | None,
+) -> None:
+    """Expose the reported capacity for a parsed vehicle even when unplugged."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.const import UnitOfEnergy
+    from python_frank_energie.models import EnodeVehicle, EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(last_seen=datetime.now(UTC))
+    assert isinstance(vehicle, EnodeVehicle)
+    vehicle.charge_state.battery_capacity = battery_capacity
+    vehicle.charge_state.battery_level = 94
+    vehicle.charge_state.is_plugged_in = False
+
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
+    coordinator.last_update_success = True
+
+    capacity_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "battery_capacity"
+    )
+    sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=capacity_description,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+
+    assert sensor.native_value == battery_capacity
+    assert sensor.available is (battery_capacity is not None)
+    assert sensor.unique_id == "frank_energie_veh_123_battery_capacity"
+    assert (
+        capacity_description.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
+    )
+
+    battery_level_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "battery_level"
+    )
+    assert battery_level_description.value_fn(vehicle) == 94
+
+    charge_limit_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "charge_limit"
+    )
+    charge_limit_sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=charge_limit_description,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+    assert charge_limit_sensor.native_value == 100
+    assert charge_limit_sensor.available is True
+    assert charge_limit_sensor.unique_id == "frank_energie_veh_123_charge_limit"
+    assert sensor.device_info["identifiers"] == {("frank_energie", "veh_123")}
+    assert sensor.device_info["name"] == "Tesla Model 3"
+
+
+@pytest.mark.parametrize(
+    ("charge_state", "expected_capacity"),
+    [
+        ({"batteryCapacity": 86.5}, 86.5),
+        ({"batteryCapacity": None}, None),
+        ({}, None),
+        (None, None),
+    ],
+)
+def test_enode_vehicle_battery_capacity_handles_nullable_raw_data(
+    charge_state: dict[str, float | None] | None,
+    expected_capacity: float | None,
+) -> None:
+    """Preserve dictionary compatibility and handle missing API charge values."""
+    from custom_components.frank_energie.sensor import ENODE_VEHICLE_SENSOR_TYPES
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "battery_capacity"
+    )
+
+    assert description.value_fn({"chargeState": charge_state}) == expected_capacity
+    assert description.value_fn({}) is None
 
 
 def test_enode_vehicle_available_does_not_crash_without_available_fn(
