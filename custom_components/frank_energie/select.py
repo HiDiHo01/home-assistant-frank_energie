@@ -24,6 +24,7 @@ from .const import (
     API_CONF_URL,
     ATTRIBUTION,
     BATTERY_MODE_OPTIONS,
+    BATTERY_MODE_STATES,
     BATTERY_STRATEGY_OPTIONS,
     BATTERY_TRADING_MODES,
     ENODE_CHARGING_MODE_OPTIONS,
@@ -334,6 +335,7 @@ class FrankEnergieBatteryBaseSelect(
         self.entity_description = description
         self._entry = entry
         self._battery_id = battery_id
+        self._last_logged_missing_option: str | None = None
 
         battery = self._get_battery()
         sb = battery.smart_battery if battery else None
@@ -365,6 +367,19 @@ class FrankEnergieBatteryBaseSelect(
         """Return this entity's block of the per-battery ``smartBatterySettings``."""
         return battery_adjustable_setting(
             self.coordinator.data, self._battery_id, self._setting_name
+        )
+
+    def _safe_option_for_log(self, option: str) -> str:
+        """Return a trusted mode or strategy label, never an untrusted API value."""
+        known_options = (
+            BATTERY_MODE_STATES
+            if self._setting_name == "battery_mode"
+            else BATTERY_STRATEGY_OPTIONS
+        )
+        # Return a trusted catalog string, not the untrusted option argument.
+        return next(
+            (known for known in known_options if known == option and known != "unknown"),
+            "[redacted]",
         )
 
     @property
@@ -405,7 +420,16 @@ class FrankEnergieBatteryBaseSelect(
                 and (state := battery_state_value(getattr(option, "code", None)))
             ]
         if current and current not in options:
+            if self._last_logged_missing_option != current:
+                _LOGGER.debug(
+                    "Smart battery %s current option missing from selectable options: %s",
+                    self.entity_description.key,
+                    self._safe_option_for_log(current),
+                )
+                self._last_logged_missing_option = current
             options.append(current)
+        else:
+            self._last_logged_missing_option = None
         return options
 
     @property
@@ -452,13 +476,21 @@ class FrankEnergieBatteryBaseSelect(
             # to display the API's current value, not to authorize a mutation.
             if option == self.current_option:
                 return
+            _LOGGER.debug(
+                "Rejected smart battery %s option missing from selectable options: %s",
+                self.entity_description.key,
+                self._safe_option_for_log(option),
+            )
             raise HomeAssistantError(
                 f"Smart battery setting {api_key} is not selectable for this battery"
             )
 
-        # The option comes from provider/user data and may contain secrets.
-        # Keep it for the validated API mutation, but never include it in logs.
-        _LOGGER.debug("Submitting a smart battery setting update")
+        # Only trusted catalog labels are logged; keep the original option
+        # unchanged for the API mutation, including new upstream option codes.
+        _LOGGER.debug(
+            "Submitting a smart battery setting update (option: %s)",
+            self._safe_option_for_log(option),
+        )
         success = await self.coordinator.async_update_battery_settings(
             self._battery_id, {api_key: option.upper()}
         )
