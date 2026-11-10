@@ -4,6 +4,7 @@
     "abort": {
       "already_configured": "Account is al toegevoegd",
       "reauth_successful": "Opnieuw inloggen gelukt",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
@@ -12,7 +13,8 @@
       "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
       "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
       "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw.",
-      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie."
+      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
+      "wrong_account": "Dit account heeft geen toegang tot het ingestelde afleveradres. Meld je aan met het account dat bij deze configuratie hoort."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -84,6 +86,12 @@
           "interval_pv": "Ophaalinterval - PV (5-60 minuten, standaard: 5)"
         }
       }
+    },
+    "error": {
+      "connection_error": "Verbindingsfout met Frank Energie API.",
+      "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
+      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
+      "wrong_account": "Dit account heeft geen toegang tot het ingestelde afleveradres. Meld je aan met het account dat bij deze configuratie hoort."
     }
   },
   "device": {
@@ -888,6 +896,9 @@
       }
     },
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Elektriciteitsprijzen morgen beschikbaar"
+      },
       "smartcharging_isactivated": {
         "name": "Slim laden",
         "state_attributes": {
