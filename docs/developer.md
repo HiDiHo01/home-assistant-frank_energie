@@ -356,6 +356,35 @@ Typical workflow:
 6. Run Hassfest.
 7. Open a pull request.
 
+## SonarQube Cloud issue export (JSON)
+
+The read-only [Export SonarQube Issues](../.github/workflows/sonar-issues-export.yml)
+GitHub Actions workflow downloads open and confirmed SonarQube Cloud findings.
+
+1. After this workflow is merged into the default branch, open **Actions →
+   Export SonarQube Issues → Run workflow**.
+2. Enter a **pull_request** number (for example, `433`) to export the open
+   findings on that PR's new code, matching the SonarQube PR issues page.
+   Leave the field empty to export all open and confirmed project findings.
+3. Download the **sonar-open-issues** artifact from the completed workflow run.
+   It contains `sonar-open-issues.json` with the project key, optional PR,
+   applied filters, UTC export time, total count, and all matching issues.
+
+The export uses `sonar-project.properties` for the project key and follows
+API pagination beyond the first 100 issues. It fails instead of publishing
+an incomplete, malformed or inconsistent result. No issues are modified and
+no Sonar token is printed. Public projects may work anonymously; if the
+project needs authentication, add a repository Actions secret named
+`SONAR_TOKEN` containing a SonarQube Cloud token with **Browse** access.
+Never put that token in a URL, workflow input, or committed file. A missing
+or insufficient token yields a failed run rather than a misleading empty export.
+The artifact is retained for 14 days.
+
+For local, offline regression checks, run
+`poetry run pytest -q tests/test_sonar_issues_export.py`.
+The actual API download is exercised only when the manual workflow is run
+with access to SonarQube Cloud.
+
 ## Documentation
 
 When adding features:
