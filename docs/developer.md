@@ -375,7 +375,9 @@ without exposing `SONAR_TOKEN`. PR-triggered artifacts are snapshots taken
 at execution time; run the manual export after Sonar's analysis has finished
 when you need the latest findings.
 
-The export uses `sonar-project.properties` for the project key and follows
+The exporter reads only this repository's fixed `sonar-project.properties`
+and writes only the fixed `sonar-open-issues.json` filename; no CLI paths
+are accepted, preventing arbitrary file reads or writes. The export follows
 API pagination beyond the first 100 issues. It fails instead of publishing
 an incomplete, malformed or inconsistent result. No issues are modified and
 no Sonar token is printed. Public projects may work anonymously; if the
