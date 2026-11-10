@@ -354,6 +354,35 @@ def _async_sync_equipment(
     return current, sensors
 
 
+
+@callback
+def _async_prune_inactive_equipment(
+    hass: HomeAssistant,
+    entry_id: str,
+    coordinator: FrankEnergieSmartHvacCoordinator,
+    devices: dict[str, SmartHvacDevice],
+    known_devices: dict[str, SmartHvacDevice] | None,
+) -> dict[str, SmartHvacDevice] | None:
+    """Remove absent equipment without discovering new devices for an inactive site."""
+    current = {
+        sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
+        for device_id, device in devices.items()
+    }
+    identifiers = {
+        f"{entry_id}_{_DEVICE_ID_PREFIX}_"
+        f"{sha256(dumps((coordinator.site_reference, device.id)).encode()).hexdigest()}"
+        for device in devices.values()
+    }
+    _async_remove_missing_equipment(hass, entry_id, set(current), identifiers)
+    if known_devices is None:
+        return None
+    return {
+        fingerprint: device
+        for fingerprint, device in current.items()
+        if fingerprint in known_devices
+    }
+
+
 @callback
 def async_setup_smart_hvac_sensors(
     hass: HomeAssistant,
@@ -380,10 +409,18 @@ def async_setup_smart_hvac_sensors(
     def _async_sync_sensors() -> None:
         """Add newly available sensors after the site activation check."""
         nonlocal known_devices, requests_added, service_added
+        devices = coordinator.data.devices if coordinator.last_update_success else None
         if not _site_has_active_smart_hvac(settings):
+            if (
+                settings.last_update_success
+                and smart_hvac_activation(settings.data) is False
+                and devices is not None
+            ):
+                known_devices = _async_prune_inactive_equipment(
+                    hass, entry_id, coordinator, devices, known_devices
+                )
             return
 
-        devices = coordinator.data.devices if coordinator.last_update_success else None
         sensors: list[SensorEntity] = []
         if not service_added:
             sensors.append(_SmartHvacCountSensor(coordinator, entry_id))
