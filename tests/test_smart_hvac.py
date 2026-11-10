@@ -351,9 +351,7 @@ async def test_hvac_site_device_and_account_diagnostics(
         {"brand": "Fixture Heating", "status": "PENDING", "has_reported_error": True}
     ]
     hvac_icons = (await async_get_icons(hass, "entity", (DOMAIN,)))[DOMAIN]
-    assert hvac_icons["binary_sensor"] == {
-        "smart_hvac": {"default": "mdi:heat-pump"}
-    }
+    assert hvac_icons["binary_sensor"] == {"smart_hvac": {"default": "mdi:heat-pump"}}
     assert "state" not in hvac_icons["binary_sensor"]["smart_hvac"]
     expected_icons = {
         "smart_hvac_connection_requests": "mdi:link-variant",
