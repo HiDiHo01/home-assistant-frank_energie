@@ -20,36 +20,57 @@ from homeassistant.core import HomeAssistant
 
 from . import FrankEnergieEntryData
 
+# Security: Keys redacted to prevent leaking credentials, personal data, and identifiers
+# in exported diagnostics, fulfilling SPECS/redact_spec.md requirements.
 TO_REDACT: set[str] = {
     CONF_ACCESS_TOKEN,
     CONF_TOKEN,
     CONF_USERNAME,
     CONF_PASSWORD,
+    "Authorization",
+    "authorization",
     "authToken",
+    "bearer",
+    "jwt",
     "refreshToken",
     "auth_token",
     "accessToken",
     "access_token",
     "refresh_token",
     "password",
+    "passwd",
+    "secret",
+    "otp",
+    "mfa_code",
     "username",
     "email",
     "phone",
+    "mobile",
+    "telephone",
     "address",
     "street",
     "houseNumber",
     "houseNumberAddition",
+    "postalCode",
     "zipCode",
     "city",
+    "connectionAddress",
+    "deliveryAddress",
     "latitude",
     "longitude",
     "customer_id",
     "customerId",
     "account_id",
     "accountId",
+    "userId",
+    "userCreatedAt",
+    "personId",
     "title",
     "contract_id",
     "contractId",
+    "contractReference",
+    "contractNumber",
+    "agreementId",
     "site_reference",
     "siteReference",
     "reference",
@@ -65,29 +86,47 @@ TO_REDACT: set[str] = {
     "connectionId",
     "bankAccountNumber",
     "EAN",
+    "ean",
+    "electricityEAN",
+    "electricity_ean",
+    "gasEAN",
+    "gas_ean",
+    "meteringPoint",
     "cluster",
     "firstName",
     "lastName",
+    "fullName",
+    "displayName",
     "emailAddress",
     "phoneNumber",
     "mobileNumber",
-    "ean",
-    "electricity_ean",
-    "gas_ean",
     "serial_number",
     "serialNumber",
+    "deviceSerialNumber",
+    "batterySerialNumber",
     "battery_id",
     "batteryId",
     "charger_id",
     "chargerId",
     "vehicle_id",
     "vehicleId",
+    "vehicleIdentificationNumber",
     "device_id",
     "deviceId",
+    "hardwareId",
     "installation_id",
     "installationId",
+    "pvSystemId",
+    "providerAccountId",
+    "providerUserId",
     "vin",
     "inverter_serial_numbers",
+    "ip",
+    "ipv4",
+    "ipv6",
+    "mac",
+    "macAddress",
+    "hostname",
 }
 
 
@@ -143,7 +182,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> dict[str, object]:
-    """Return diagnostics for a config entry."""
+    """Return redacted config-entry diagnostics, including optional HVAC counts."""
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
     coordinator = runtime_data.coordinator
@@ -182,5 +221,16 @@ async def async_get_config_entry_diagnostics(
             runtime_data.battery_session_coordinators,
         ),
     }
+    if (smart_hvac := runtime_data.smart_hvac_coordinator) is not None:
+        snapshot = smart_hvac.data
+        diagnostics["smart_hvac"] = {
+            "last_update_success": smart_hvac.last_update_success,
+            "device_count": len(snapshot.devices)
+            if snapshot.devices is not None
+            else None,
+            "connection_request_count": (
+                len(snapshot.requests) if snapshot.requests is not None else None
+            ),
+        }
 
     return async_redact_data(diagnostics, TO_REDACT)

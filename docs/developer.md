@@ -24,9 +24,11 @@ Run the complete suite against the real Home Assistant test framework:
 poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
 ```
 
-`pytest-homeassistant-custom-component` is a required pytest plugin. Its Home Assistant fixtures exercise setup, config flows, entities, coordinator behavior, and cleanup. The suite mocks provider calls and requires no production credentials. Isolated checks with substitute Home Assistant objects are useful for diagnosis, but do not count as a complete Home Assistant test run.
+`pytest-homeassistant` is the official, required pytest plugin. Pin it to the same version as Home Assistant Core (currently `2026.11.0`) and do not install it alongside the superseded `pytest-homeassistant-custom-component`. Its Home Assistant fixtures exercise setup, config flows, entities, coordinator behavior, and cleanup. The suite mocks provider calls and requires no production credentials. Isolated checks with substitute Home Assistant objects are useful for diagnosis, but do not count as a complete Home Assistant test run.
 
 The existing **Flake8 and pytest** workflow runs the full suite on Python 3.14.2 and the latest 3.14 patch. It also supports **Run workflow** once this workflow revision is on the default branch. Each matrix job uploads its own JUnit report, including when pytest fails. Critical Flake8 errors remain blocking. A separate full-Flake8 gate checks every diagnostic against the measured, reviewable `.github/flake8-baseline.json`: new or increased findings fail CI. The existing C901 and E501 debt must be reduced and removed from this baseline; the targeted E203 exclusion matches Ruff-compatible slice formatting. The full pytest suite still runs after a lint failure when dependency installation and environment verification succeed.
+
+The workflow uses Ubuntu 24.04 because GitHub publishes the pinned Python 3.14.2 build for that runner. [GitHub Actions Python builds](https://github.com/actions/python-versions)
 
 `poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant-custom-component` version together, regenerate the lockfile with the pinned Poetry version, and rerun both matrix entries. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
 
@@ -355,6 +357,43 @@ Typical workflow:
 5. Run test suite.
 6. Run Hassfest.
 7. Open a pull request.
+
+## SonarQube Cloud issue export (JSON)
+
+The read-only [Export SonarQube Issues](../.github/workflows/sonar-issues-export.yml)
+GitHub Actions workflow downloads open and confirmed SonarQube Cloud findings.
+
+1. After this workflow is merged into the default branch, open **Actions →
+   Export SonarQube Issues → Run workflow**.
+2. Enter a **pull_request** number (for example, `433`) to export the open
+   findings on that PR's new code, matching the SonarQube PR issues page.
+   Leave the field empty to export all open and confirmed project findings.
+3. Download the **sonar-open-issues** artifact from the completed workflow run.
+   It contains `sonar-open-issues.json` with the project key, optional PR,
+   applied filters, UTC export time, total count, and all matching issues.
+
+Changes to the exporter workflow or script also run this read-only check on PRs,
+without exposing `SONAR_TOKEN`. PR-triggered artifacts are snapshots taken
+at execution time; run the manual export after Sonar's analysis has finished
+when you need the latest findings.
+
+The exporter reads only this repository's fixed `sonar-project.properties`
+and writes only the fixed `sonar-open-issues.json` filename; no CLI paths
+are accepted, preventing arbitrary file reads or writes. The export follows
+API pagination beyond the first 100 issues. It fails instead of publishing
+an incomplete, malformed or inconsistent result. No issues are modified and
+no Sonar token is printed. Public projects may work anonymously; if the
+project needs authentication, run the workflow from `main` and add a
+repository Actions secret named
+`SONAR_TOKEN` containing a SonarQube Cloud token with **Browse** access.
+Never put that token in a URL, workflow input, or committed file. A missing
+or insufficient token yields a failed run rather than a misleading empty export.
+The artifact is retained for 14 days.
+
+For local, offline regression checks, run
+`poetry run pytest -q tests/test_sonar_issues_export.py`.
+The actual API download is exercised only when the manual workflow is run
+with access to SonarQube Cloud.
 
 ## Documentation
 

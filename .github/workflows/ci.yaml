@@ -23,7 +23,9 @@ jobs:
     permissions:
       contents: read
     name: Run flake8/pytest (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Python 3.14.2 has a verified Ubuntu 24.04 build, but not Ubuntu 26.04.
+    # Pin the runner so both declared Python matrix entries remain installable.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -34,7 +36,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # @v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -100,10 +102,12 @@ jobs:
               raise SystemExit("Home Assistant tests require Python 3.14.2 or a newer 3.14 patch.")
 
           import_module("homeassistant.core")
-          import_module("pytest_homeassistant_custom_component")
+          import_module("pytest_homeassistant")
           print(f"Python: {sys.version.split()[0]}")
-          for package_name in ("homeassistant", "pytest", "pytest-homeassistant-custom-component"):
+          for package_name in ("homeassistant", "pytest", "pytest-homeassistant"):
               print(f"{package_name}: {version(package_name)}")
+          if version("homeassistant") != "2026.11.0" or version("pytest-homeassistant") != "2026.11.0":
+              raise SystemExit("Home Assistant and pytest-homeassistant must both be 2026.11.0")
           PY
 
       - name: Register flake8 problem matcher

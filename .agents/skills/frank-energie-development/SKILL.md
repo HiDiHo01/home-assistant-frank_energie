@@ -47,13 +47,24 @@ This skill is a task workflow, not a replacement for repository policy.
 - **Entity correctness:** Preserve state class, device class, units, attributes, availability, translations, events, and platform lifecycle. Do not invent service registrations: verify actual code before documenting services or actions.
 - **Smart HVAC activation:** Follow [the Smart heating contract](../../../docs/smart_hvac_activation.md). `UserSmartHvac.isActivated` means **service activation**, not equipment runtime; `isAvailableOnSite` is independent of activation and entity availability. Preserve the configured delivery site's identity and the existing `smart_hvac` entity key/unique ID. The `RUNNING` device class is an intentional **display** choice, not proof of physical operation; keep names as feature names (EN: Smart heating; NL/NL-BE: Slim verwarmen; FR: Chauffage intelligent) without appending a Boolean state word. Do not expose identifying attributes. Test strict booleans, null/malformed fields, optional API errors and authentication, coordinator availability and localized Home Assistant state. `python-frank-energie/main` support alone is not enough to merge: require an actual compatible library release and synchronized dependency declarations.
 
+## Verified regression patterns: typed Enode models and CI runners
+
+Lessons verified while fixing [vehicle battery capacity issue #432](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/432) in [PR #433](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/433):
+
+- **Trace parsed values through the full path:** check the GraphQL field, `python-frank-energie` model, vehicle coordinator, entity description, and Home Assistant sensor. A successfully parsed provider value may still disappear in the integration's presentation layer.
+- **Preserve model contracts:** `EnodeVehicles.vehicles` contains `EnodeVehicle` dataclasses; nested `charge_state` is `ChargeState`. Their `DictLikeMixin.get()` normalizes camelCase API keys, but `isinstance(vehicle, dict)` is false. Match the actual runtime type and its supported accessors instead of assuming a raw JSON dictionary.
+- **Preserve measurement meaning:** `charge_state.battery_capacity` is capacity in **kWh**, `battery_level` is state of charge in **%**. A vehicle may report a valid capacity while unplugged/not charging. Treat `None` as missing, retain a genuine numeric `0` if supplied, and never derive capacity from the current percentage.
+- **Make regressions representative:** construct real `EnodeVehicle`/`ChargeState` models in tests, not only dictionaries or permissive mocks. Assert state value, unit, entity unique ID, availability for null/zero cases, and independence from plug-in status and battery percentage. Add raw/dict-shaped tests only when that compatibility is part of the actual contract.
+- **Distinguish CI infrastructure from application defects:** when a pinned Python patch cannot be installed on `ubuntu-latest`, inspect the official [actions/python-versions manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json) for the runner OS. For #432, Python 3.14.2 had an Ubuntu 24.04 build but no Ubuntu 26.04 build. Keep both the minimum-patch and latest-patch jobs, and choose a runner with verified binaries rather than dropping coverage; reverify compatibility for future image changes.
+- **Use actual formatter and current-head evidence:** run the repository-pinned Ruff formatter in check/diff mode, apply its exact diff, and inspect all CI jobs again after the last commit. A previous head's green checks do not validate the new head. Report suite counts and infrastructure failures separately.
+
 ## Make and verify changes
 
 1. **Establish behavior:** Read nearby code and tests; reproduce the issue or establish a failing regression where feasible.
 2. **Assess impact:** Check config-entry setup/reauth/reconfigure/migration, affected entities, resource isolation, cached data, translation keys, and cross-contract behavior.
-3. **Implement:** Make focused changes with complete type hints and docstrings. Follow the repository's Python conventions, complexity thresholds, lazy logging formatting, and privacy-safe error handling.
+3. **Implement:** Make focused changes with complete type hints. Add or update docstrings in the surrounding style. Follow the repository's complexity thresholds, lazy logging formatting, and privacy-safe error handling. [Python standards](../../../AGENTS.md#4-python-standards)
 4. **Exercise edge cases:** Use deterministic mocks; test missing/null API fields, auth/timeout/rate-limit behavior, recovery, reload/unload, concurrency, negative prices, and timezone transitions when relevant.
-5. **Localize correctly:** When adding or changing translation keys, update `custom_components/frank_energie/strings.json` and **every** `translations/*.json` file (currently `en.json`, `fr.json`, `nl.json`, `nl-BE.json`). Preserve placeholders, enum keys, and shared translation references; run `tests/test_translations.py`.
+5. **Localize correctly.** When adding or changing translation keys, update `custom_components/frank_energie/strings.json` and **every** `translations/*.json` file. See the [localization guide](../../../LOCALIZATION.md) for supported locales. Preserve placeholders, enum keys, and shared translation references. Run `tests/test_translations.py`.
 6. **Review and report:** Check the final diff for backwards compatibility, unrelated edits, security leaks, unused code, and behavior changes. Summarize what changed, why, executed checks, results, and remaining limitations.
 
 ## Validation commands
@@ -82,6 +93,12 @@ ruff format --check --diff custom_components tests
 ```
 
 For workflow or release-manifest changes, also run `poetry run pytest -q tests/test_workflow_*.py tests/test_release_manifest.py` with the Node.js version defined by CI. Use GitHub Actions `ci.yaml`, `ruff.yml`, `validate.yml`, and `quality_scale.yml` for the authoritative matrix and validation gates. Check HACS and hassfest when the relevant jobs run. For documentation-only changes, check skill metadata, paths, links, and the PR diff; do not claim that a documentation check proves runtime correctness.
+
+### Python setup failures in CI
+
+1. Read the failing Python setup step and identify the actual runner image, architecture, and requested patch. Check that combination against the official build manifest before changing the Python matrix or dependencies. [GitHub Actions Python build manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
+2. If a rolling runner label moved to an image without the minimum patch, choose a fixed image with builds for both matrix entries. Reproduce locally with the exact minimum interpreter and the existing Poetry lock.
+3. Run the workflow regression tests and verify that both Python jobs reach pytest and pass on the current PR head. Record interpreter setup failures separately from test failures.
 
 ## PR and completion rules
 

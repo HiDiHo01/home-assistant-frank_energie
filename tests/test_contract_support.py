@@ -8,13 +8,14 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RequestException
 from python_frank_energie.models import MarketPrices, PriceData, User, UserSites
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
@@ -196,14 +197,19 @@ async def test_contract_setup_reload_and_rollover(
             assert (gas_device is not None) is ("GAS" in contracts)
             price_device = electricity_device or gas_device
             assert price_device is not None
-            button_id = registry.async_get_entity_id(
-                "button", DOMAIN, f"{entry.entry_id}_refresh_prices"
-            )
-            assert button_id is not None
-            button = registry.async_get(button_id)
-            assert button is not None
-            assert button.device_id == price_device.id
-            assert hass.states.get(button_id) is not None
+            expected_buttons = {f"{entry.entry_id}_refresh_prices": price_device.id}
+            if electricity_device is not None and gas_device is not None:
+                expected_buttons[f"{entry.entry_id}_refresh_gas_prices"] = gas_device.id
+            buttons = [
+                item
+                for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+                if item.domain == "button" and item.platform == DOMAIN
+            ]
+            assert {
+                item.unique_id: item.device_id for item in buttons
+            } == expected_buttons
+            assert all(item.translation_key == "refresh_prices" for item in buttons)
+            assert all(hass.states.get(item.entity_id) is not None for item in buttons)
 
         assert_prices()
         prices = entry.runtime_data.price_coordinator
@@ -276,6 +282,77 @@ async def test_existing_refresh_button_moves_to_gas_device(
         assert button is not None
         assert button.device_id == gas_device.id
         assert hass.states.get(previous_button.entity_id) is not None
+
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize("single_contract", ["ELECTRICITY", "GAS"])
+async def test_extra_price_button_follows_dual_contract(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, single_contract: str
+) -> None:
+    """Refresh from either device and restore the extra button after a contract change."""
+    freezer.move_to("2026-07-20T12:15:00Z")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "site_reference": "test-site",
+            "access_token": "test-token",
+            "token": "test-refresh",
+        },
+        unique_id="test-site",
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    legacy_button = registry.async_get_or_create(
+        "button",
+        DOMAIN,
+        f"{entry.entry_id}_refresh_prices",
+        config_entry=entry,
+        suggested_object_id="existing_price_refresh",
+    )
+    dual_api = _api_for_contracts(("ELECTRICITY", "GAS"), 60)
+    single_api = _api_for_contracts((single_contract,), 60)
+    with patch(
+        "custom_components.frank_energie.FrankEnergie",
+        side_effect=[dual_api, single_api, dual_api],
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        gas_button_id = registry.async_get_entity_id(
+            "button", DOMAIN, f"{entry.entry_id}_refresh_gas_prices"
+        )
+        assert gas_button_id is not None
+        with patch.object(
+            entry.runtime_data.coordinator,
+            "async_request_refresh",
+            new_callable=AsyncMock,
+        ) as refresh:
+            for entity_id in (legacy_button.entity_id, gas_button_id):
+                await hass.services.async_call(
+                    "button", "press", {"entity_id": entity_id}, blocking=True
+                )
+            assert refresh.await_count == 2
+
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        disabled_button = registry.async_get(gas_button_id)
+        assert disabled_button is not None
+        assert disabled_button.disabled_by == er.RegistryEntryDisabler.INTEGRATION
+        disabled_state = hass.states.get(gas_button_id)
+        assert disabled_state is None or disabled_state.state == STATE_UNAVAILABLE
+        assert hass.states.get(legacy_button.entity_id) is not None
+
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        restored_button = registry.async_get(gas_button_id)
+        assert restored_button is not None
+        assert restored_button.disabled_by is None
+        restored_state = hass.states.get(gas_button_id)
+        assert restored_state is not None
+        assert restored_state.state != STATE_UNAVAILABLE
+        assert hass.states.get(legacy_button.entity_id) is not None
 
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()

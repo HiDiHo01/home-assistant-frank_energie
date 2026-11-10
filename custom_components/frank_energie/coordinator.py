@@ -8,10 +8,11 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import math
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Final, TypedDict, cast
 from zoneinfo import ZoneInfo
 
@@ -54,6 +55,7 @@ from python_frank_energie.models import (
     PriceData,
     Resolution,
     SmartBatteries,
+    SmartBattery,
     SmartBatteryDetails,
     SmartBatterySessions,
     SmartPvSystems,
@@ -75,6 +77,7 @@ from .const import (
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
+    DATA_BATTERY_SETTINGS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -107,10 +110,20 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
-from .helpers import decrypt_password, known_site_contracts, price_cache_store
+from .helpers import (
+    api_maintenance_active,
+    decrypt_password,
+    known_site_contracts,
+    price_cache_store,
+)
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
+
+# Battery options and change windows change rarely; refetch them at most this often.
+BATTERY_SETTINGS_REFRESH_INTERVAL: Final[timedelta] = timedelta(minutes=30)
+# Retry ambiguous empty responses and transient failures without discarding cache.
+BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL: Final[timedelta] = timedelta(minutes=15)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
     "Authentication tokens expired, trying to renew them (%s)"
 )
@@ -362,6 +375,9 @@ class FrankEnergieData(TypedDict):
     battery_sessions: list[SmartBatterySessions]
     """Optional smart battery sessions data."""
 
+    smart_battery_settings: dict[str, object]
+    """Per-battery adjustable settings and options, keyed by battery ID."""
+
     smart_pv_systems: SmartPvSystems | None
     """Optional smart PV systems data."""
 
@@ -413,6 +429,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_BATTERIES: None,
         DATA_BATTERY_DETAILS: [],
         DATA_BATTERY_SESSIONS: [],
+        DATA_BATTERY_SETTINGS: {},
         DATA_ENODE_VEHICLES: None,
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
@@ -528,7 +545,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> bool:
         """Return True when API calls should be skipped."""
 
-        return now_utc.hour == 0 and 0 <= now_utc.minute < 60
+        return api_maintenance_active(now_utc)
 
     def _is_not_in_delivery_site(
         self, data_month_summary, data_invoices, user_sites
@@ -640,7 +657,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             return set()
         settings = getattr(self, "settings_coordinator", self)
-        contracts = known_site_contracts(settings.data.get(DATA_DELIVERY_SITE))
+        settings_data = settings.data
+        site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
+        contracts = known_site_contracts(site)
         if contracts is not None:
             return contracts
         return {
@@ -1205,12 +1224,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 country_code = country_code_raw.upper()
                 if country_code in SUPPORTED_COUNTRIES:
                     self._country_code = country_code
-        if not self._connection_id:
-            self._connection_id = _extract_electricity_connection_id(user_data)
-            _LOGGER.debug(
-                "Electricity connection ID available: %s",
-                self._connection_id is not None,
-            )
+        if user_data is not None:
+            selected_connection_id = _extract_electricity_connection_id(user_data)
+            if selected_connection_id != self._connection_id:
+                self._connection_id = selected_connection_id
+                _LOGGER.debug(
+                    "Electricity connection for the selected site %s",
+                    "available" if selected_connection_id else "missing",
+                )
 
     async def _fetch_user_data(self) -> User | None:
         """Fetch user data from the API."""
@@ -1504,50 +1525,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except Exception as err:
             self._handle_dynamic_fetch_error(f"sessions for battery {battery.id}", err)
             return None
-
-    async def _fetch_battery_details_and_sessions(
-        self, battery, start_date: date, tomorrow: date
-    ) -> tuple[SmartBatteryDetails | None, SmartBatterySessions | None]:
-        """Fetch details and sessions for each smart battery concurrently."""
-        if not battery:
-            return None, None
-
-        _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
-        return await asyncio.gather(
-            self._fetch_battery_details(battery),
-            self._fetch_battery_sessions(battery, start_date, tomorrow),
-        )
-
-    async def _get_battery_details_and_sessions(
-        self,
-        data_smart_batteries: SmartBatteries | None,
-        start_date: date,
-        tomorrow: date,
-    ) -> tuple[list[SmartBatteryDetails], list[SmartBatterySessions]]:
-        """Fetch details and sessions for all smart batteries concurrently."""
-        details_list: list[SmartBatteryDetails] = []
-        sessions_list: list[SmartBatterySessions] = []
-
-        if not (data_smart_batteries and data_smart_batteries.batteries):
-            _LOGGER.debug("No smart batteries found")
-            return details_list, sessions_list
-
-        battery_tasks = [
-            self._fetch_battery_details_and_sessions(battery, start_date, tomorrow)
-            for battery in data_smart_batteries.batteries
-            if battery
-        ]
-        if not battery_tasks:
-            return details_list, sessions_list
-
-        results = await asyncio.gather(*battery_tasks)
-        for details, sessions in results:
-            if details:
-                details_list.append(details)
-            if sessions:
-                sessions_list.append(sessions)
-
-        return details_list, sessions_list
 
     async def _fetch_tomorrow_data(
         self,
@@ -2346,6 +2323,45 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     api_value,
                 )
 
+    def _selected_electricity_connection_id(self) -> str | None:
+        """Read the selected connection from authoritative settings when available."""
+        settings = getattr(self, "settings_coordinator", self)
+        settings_data = settings.data
+        user = settings_data.get(DATA_USER) if settings_data else None
+        if user is not None:
+            return _extract_electricity_connection_id(user)
+        return self._connection_id
+
+    async def _refresh_resolution_state_after_change(self, connection_id: str) -> None:
+        """Update the published status after a successful resolution request."""
+        state = await self._fetch_contract_price_resolution_state(connection_id)
+        if (
+            state is not None
+            and self._selected_electricity_connection_id() == connection_id
+        ):
+            self._static_contract_price_resolution_state = state
+            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
+
+    def _can_change_resolution(self) -> bool:
+        """Check the selected connection and known change restrictions."""
+        if not self._connection_id or self._price_contracts() == {"GAS"}:
+            _LOGGER.error(
+                "Cannot set resolution via API: electricity connection_id not available"
+            )
+            return False
+        if self._resolution_change_pending:
+            _LOGGER.warning("Cannot set resolution: a change is already pending")
+            return False
+        if (
+            self._api_resolution_state is not None
+            and not self._api_resolution_state.isChangeRequestPossible
+        ):
+            _LOGGER.warning(
+                "Cannot set resolution via API: isChangeRequestPossible=False"
+            )
+            return False
+        return True
+
     async def async_set_resolution(self, value: str) -> None:
         """Update resolution safely via mutation queue."""
         if not self.api.is_authenticated:
@@ -2367,33 +2383,34 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 await self.async_request_refresh()
             return
 
-        if not self._connection_id or self._price_contracts() == {"GAS"}:
-            _LOGGER.error(
-                "Cannot set resolution via API: electricity connection_id not available"
-            )
-            return
-
-        if self._resolution_change_pending:
-            _LOGGER.warning("Cannot set resolution: a change is already pending")
-            return
-
-        if (
-            self._api_resolution_state is not None
-            and not self._api_resolution_state.isChangeRequestPossible
-        ):
-            _LOGGER.warning(
-                "Cannot set resolution via API: isChangeRequestPossible=False"
-            )
+        if not self._can_change_resolution():
             return
 
         self._resolution_change_pending = True
+        requested_connection_id = self._connection_id
 
         async def _mutation() -> None:
             try:
+                if (
+                    self._selected_electricity_connection_id()
+                    != requested_connection_id
+                ):
+                    raise UpdateFailed(
+                        "Electricity connection changed before the resolution request; retry"
+                    )
                 result = await self.api.contract_price_resolution_request_change(
-                    self._connection_id,
+                    requested_connection_id,
                     cast(Resolution, value),
                 )
+                if (
+                    self._selected_electricity_connection_id()
+                    != requested_connection_id
+                ):
+                    _LOGGER.warning(
+                        "Electricity connection changed while a resolution request was "
+                        "in flight; not applying the previous connection's response"
+                    )
+                    return
 
                 if result is None:
                     raise UpdateFailed("Resolution change request failed: no response")
@@ -2434,13 +2451,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                         options={**self.config_entry.options, "resolution": value},
                     )
 
-                # Re-fetch resolution state to update our internal tracker immediately
+                # Publish only a status verified for the current connection.
                 try:
-                    state = await self._fetch_contract_price_resolution_state(
-                        self._connection_id
+                    await self._refresh_resolution_state_after_change(
+                        requested_connection_id
                     )
-                    if state:
-                        self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
                 except Exception as err:
                     _LOGGER.debug(
                         "Failed to re-fetch resolution state after successful change: %s",
@@ -2460,9 +2475,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         Normalize API values to uppercase for query and cache selection.
         Authentication and pending changes do not override an active API value.
         """
-        if self.api.is_authenticated and known_site_contracts(
-            getattr(self, "settings_coordinator", self).data.get(DATA_DELIVERY_SITE)
-        ) == {"GAS"}:
+        settings_data = getattr(self, "settings_coordinator", self).data
+        site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
+        if self.api.is_authenticated and known_site_contracts(site) == {"GAS"}:
             return "PT60M"
         if self.config_entry is None:
             return DEFAULT_RESOLUTION
@@ -2665,6 +2680,87 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         self.update_interval = None
         self.store = price_cache_store(hass, config_entry.entry_id)
 
+        self._resolution_state_connection_id: str | None = None
+
+    def _clear_resolution_state(self) -> None:
+        """Discard status that is not verified for the selected connection."""
+        self._resolution_state_connection_id = None
+        self._api_resolution_state = None
+        self._static_contract_price_resolution_state = None
+        self._resolution_change_pending = False
+        if self.data is not None:
+            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = None
+
+    def _sync_connection_id(self) -> None:
+        """Synchronize from selected-site settings without clearing on outages."""
+        settings_data = self.settings_coordinator.data
+        user_data = settings_data.get(DATA_USER) if settings_data else None
+        if user_data is None:
+            return
+
+        connection_id = _extract_electricity_connection_id(user_data)
+        if connection_id != self._connection_id:
+            previous_connection_id = self._connection_id
+            self._connection_id = connection_id
+            self._clear_resolution_state()
+            if previous_connection_id is not None:
+                # Prices from the previous connection may use another resolution.
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+
+    async def _refresh_resolution_state_after_change(self, connection_id: str) -> None:
+        """Refresh published change status only for the selected connection."""
+        self._sync_connection_id()
+        if self._connection_id == connection_id:
+            await self._refresh_current_resolution_state()
+
+    async def _refresh_current_resolution_state(
+        self,
+    ) -> ContractPriceResolutionState | None:
+        """Fetch current connection status and avoid reusing another site's state."""
+        connection_id = self._connection_id
+        if connection_id is None:
+            self._clear_resolution_state()
+            return None
+
+        state = await self._fetch_contract_price_resolution_state(connection_id)
+        # Account settings may change while the API request is in flight.
+        self._sync_connection_id()
+        if connection_id != self._connection_id:
+            self._clear_resolution_state()
+            return None
+        if state is None:
+            # A failed fetch says nothing about the connection: keep a state
+            # already verified for it, so the effective resolution can't flip.
+            if self._resolution_state_connection_id != connection_id:
+                self._clear_resolution_state()
+            return None
+
+        self._resolution_state_connection_id = connection_id
+        self._static_contract_price_resolution_state = state
+        if self.data is not None:
+            self.data[DATA_CONTRACT_PRICE_RESOLUTION_STATE] = state
+        return state
+
+    async def async_set_resolution(self, value: str) -> None:
+        """Validate change eligibility against this connection's current state."""
+        self._sync_connection_id()
+        if (
+            self.api.is_authenticated
+            and self._connection_id is not None
+            and self._price_contracts() != {"GAS"}
+            and not self._resolution_change_pending
+            and self._resolution_state_connection_id != self._connection_id
+            and await self._refresh_current_resolution_state() is None
+        ):
+            raise UpdateFailed(
+                "Cannot verify resolution change eligibility for the "
+                "selected electricity connection; retry after the next refresh"
+            )
+        await super().async_set_resolution(value)
+
     def _parse_cached_data(self, cached_data: dict[str, Any]) -> None:
         """Parse cached data dictionary into coordinator state."""
         if prices_today_dict := cached_data.get("prices_today"):
@@ -2674,6 +2770,8 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             self.cached_prices_tomorrow = _dict_to_market_prices(prices_tomorrow_dict)
 
         if resolution_state_dict := cached_data.get("contract_price_resolution_state"):
+            # A disk cache does not prove the connection still has these rights.
+            self._resolution_state_connection_id = None
             data_contract_price_resolution_state = _dict_to_resolution_state(
                 resolution_state_dict
             )
@@ -2826,9 +2924,30 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         return now_local.time() < time(TOMORROW_PUBLICATION_HOUR_LOCAL, 0)
 
     async def async_config_entry_first_refresh(self) -> None:
-        """Perform first refresh."""
+        """Restore valid prices, then verify the selected connection's status."""
+        self._sync_connection_id()
         cached_data_loaded = await self._async_setup()
         now_utc = dt_util.utcnow()
+
+        if cached_data_loaded:
+            cache_is_fresh = self._is_cache_fresh(now_utc)
+            if (
+                cache_is_fresh
+                and self.api.is_authenticated
+                and self._connection_id is not None
+                and self._price_contracts() != {"GAS"}
+                and not self._should_skip_api_calls(now_utc)
+            ):
+                await self._refresh_current_resolution_state()
+            else:
+                self._clear_resolution_state()
+
+            if not self._is_cache_resolution_valid():
+                self._static_prices_today = None
+                self.last_fetch_today = None
+                self.cached_prices_tomorrow = None
+                self.last_fetch_tomorrow = None
+                cached_data_loaded = False
 
         if not cached_data_loaded or not self._is_cache_fresh(now_utc):
             _LOGGER.debug("No fresh cache found, performing initial API fetch")
@@ -2951,6 +3070,7 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
 
         skip_api_calls = self._should_skip_api_calls(now_utc)
         required_contracts = self._price_contracts()
+        self._sync_connection_id()
         self._reconcile_resolution()
         self._adjust_update_interval(now_utc)
 
@@ -2967,10 +3087,6 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
         ):
             self._tomorrow_prices_logged = False
 
-        user_data = self.settings_coordinator.data.get(DATA_USER)
-        if extracted_conn_id := _extract_electricity_connection_id(user_data):
-            self._connection_id = extracted_conn_id
-
         if skip_api_calls:
             _LOGGER.debug("Skipping price API calls during maintenance window")
             if not self.last_update_success:
@@ -2981,13 +3097,13 @@ class FrankEnergiePriceCoordinator(FrankEnergieCoordinator):
             )
             prices_tomorrow = self.cached_prices_tomorrow
         else:
-            # Resolve the active interval before deciding whether today's cached
-            # prices can be reused. The account may override the configured value.
+            # Verify the account's interval before reusing prices from the cache.
+            # On transient errors, retain state verified for this connection.
+            fetched_resolution_state = await self._refresh_current_resolution_state()
             data_contract_price_resolution_state = (
-                await self._fetch_contract_price_resolution_state(self._connection_id)
-            )
-            self._static_contract_price_resolution_state = (
-                data_contract_price_resolution_state
+                fetched_resolution_state
+                if fetched_resolution_state is not None
+                else self._static_contract_price_resolution_state
             )
             if not self._is_cache_resolution_valid():
                 _LOGGER.debug(
@@ -3147,6 +3263,233 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
             )
         )
+        # Last known ``smartBatterySettings`` per battery, when each was fetched,
+        # when a failed or empty request may be retried, and how often each was
+        # invalidated, so a request that overlaps a change is not marked fresh.
+        self._battery_settings: dict[str, object] = {}
+        self._battery_settings_fetched_at: dict[str, datetime] = {}
+        self._battery_settings_retry_after: dict[str, datetime] = {}
+        self._battery_settings_generation: dict[str, int] = {}
+        # Per-battery request numbers: the last one issued and the last one
+        # recorded, so an older response can never overwrite a newer one.
+        self._battery_settings_requested: dict[str, int] = {}
+        self._battery_settings_recorded: dict[str, int] = {}
+
+    async def async_update_battery_settings(
+        self, battery_id: str, settings: dict[str, object]
+    ) -> bool:
+        """Send a smart battery setting change through the mutation queue.
+
+        Changes are serialized, so overlapping changes are applied in the order
+        they were requested and the last requested value wins. A successful
+        change invalidates the battery's settings before the next queued change
+        starts, then requests a refresh to show the pending change.
+        """
+        outcome: list[bool] = []
+
+        async def _update() -> None:
+            applied = bool(
+                await self.api.smart_battery_update_settings(battery_id, settings)
+            )
+            if applied:
+                self.invalidate_battery_settings(battery_id)
+            outcome.append(applied)
+
+        await self._mutation_queue.add(_update)
+        success = bool(outcome and outcome[0])
+        if success:
+            await self.async_request_refresh()
+        return success
+
+    def invalidate_battery_settings(self, battery_id: str) -> None:
+        """Refetch a battery's settings on the next refresh, e.g. after a change."""
+        self._battery_settings_fetched_at.pop(battery_id, None)
+        self._battery_settings_retry_after.pop(battery_id, None)
+        self._battery_settings_generation[battery_id] = (
+            self._battery_settings_generation.get(battery_id, 0) + 1
+        )
+
+    def _battery_settings_are_fresh(self, battery_id: str, now: datetime) -> bool:
+        """Skip requests while settings are fresh or a retry cooldown is active."""
+        retry_after = self._battery_settings_retry_after.get(battery_id)
+        if retry_after is not None:
+            return now < retry_after
+
+        fetched_at = self._battery_settings_fetched_at.get(battery_id)
+        return (
+            battery_id in self._battery_settings
+            and fetched_at is not None
+            and now - fetched_at < BATTERY_SETTINGS_REFRESH_INTERVAL
+        )
+
+    async def _fetch_battery_settings(
+        self, battery: SmartBattery, now: datetime
+    ) -> tuple[bool, object | None, timedelta | None]:
+        """Fetch the adjustable settings and allowed options of one smart battery.
+
+        Returns ``(fetched, settings, retry_delay)``. ``fetched`` is False when
+        the settings are still fresh (see ``BATTERY_SETTINGS_REFRESH_INTERVAL``
+        and ``invalidate_battery_settings``), when the request failed, and on
+        library releases without ``smart_battery_settings``, where the battery
+        entities keep their static option lists. ``retry_delay`` is set when
+        the request did not produce settings. The library returns None both
+        for a battery without settings and for GraphQL errors or malformed
+        responses, so None keeps the known settings and is retried at the
+        normal refresh interval. Only authentication failures propagate: the
+        settings only refine which options the entities offer, so they must
+        never fail the battery update.
+        """
+        if not hasattr(self.api, "smart_battery_settings"):
+            return False, None, None
+        if self._battery_settings_are_fresh(battery.id, now):
+            return False, None, None
+
+        try:
+            settings = await self.api.smart_battery_settings(battery.id)
+        except (AuthException, AuthRequiredException):
+            raise
+        except Exception as err:
+            # Same authentication shape that ``_handle_fetch_exceptions`` handles.
+            if isinstance(err, RequestException) and str(err).startswith("user-error:"):
+                raise
+            # Deliberately not ``_handle_dynamic_fetch_error``: it re-raises
+            # network errors on the first refresh, and settings must never fail
+            # the update.
+            retry_delay = BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL
+            retry_after = getattr(err, "retry_after", None)
+            if (
+                isinstance(err, RequestException)
+                and isinstance(retry_after, int | float)
+                and not isinstance(retry_after, bool)
+                and math.isfinite(retry_after)
+                and retry_after > 0
+            ):
+                # New clients have a rate-limit error; older pinned clients do
+                # not export that class. Respect a bounded Retry-After hint.
+                retry_delay = max(
+                    retry_delay, timedelta(seconds=min(retry_after, 86400))
+                )
+
+            # Upstream error messages can contain private account data.
+            _LOGGER.debug(
+                "Failed to fetch settings for battery %s: %s",
+                battery.id,
+                type(err).__name__,
+            )
+            return False, None, retry_delay
+
+        if settings is None:
+            return False, None, BATTERY_SETTINGS_REFRESH_INTERVAL
+        return True, settings, None
+
+    async def _fetch_battery_data(
+        self, battery: SmartBattery, start_date: date, tomorrow: date, now: datetime
+    ) -> tuple[
+        SmartBatteryDetails | None,
+        SmartBatterySessions | None,
+        tuple[bool, object | None, timedelta | None],
+    ]:
+        """Fetch details, sessions and settings for one smart battery concurrently."""
+        _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
+        return await asyncio.gather(
+            self._fetch_battery_details(battery),
+            self._fetch_battery_sessions(battery, start_date, tomorrow),
+            self._fetch_battery_settings(battery, now),
+        )
+
+    def _record_battery_settings(
+        self,
+        battery_id: str,
+        fetched: bool,
+        settings: object | None,
+        request: tuple[int, int],
+        now: datetime,
+        retry_delay: timedelta | None,
+    ) -> object | None:
+        """Keep valid settings and guard both success and retry timestamps.
+
+        Generation and request ordering prevent an older response from changing
+        the cache or its cooldown after an overlapping mutation or newer fetch.
+        A request without settings keeps the last known settings and schedules
+        a retry after ``retry_delay``.
+        """
+        generation, request_number = request
+        current = self._battery_settings_generation.get(battery_id, 0) == generation
+        newest = request_number > self._battery_settings_recorded.get(battery_id, 0)
+        if current and newest:
+            if retry_delay is not None:
+                self._battery_settings_retry_after[battery_id] = now + retry_delay
+                self._battery_settings_recorded[battery_id] = request_number
+            elif fetched:
+                self._battery_settings[battery_id] = settings
+                self._battery_settings_recorded[battery_id] = request_number
+                self._battery_settings_fetched_at[battery_id] = now
+                self._battery_settings_retry_after.pop(battery_id, None)
+
+        return self._battery_settings.get(battery_id)
+
+    def _start_battery_settings_request(self, battery_id: str) -> tuple[int, int]:
+        """Return the battery's generation and a new, increasing request number."""
+        request_number = self._battery_settings_requested.get(battery_id, 0) + 1
+        self._battery_settings_requested[battery_id] = request_number
+        return (self._battery_settings_generation.get(battery_id, 0), request_number)
+
+    async def _get_battery_data(
+        self,
+        data_smart_batteries: SmartBatteries | None,
+        start_date: date,
+        tomorrow: date,
+    ) -> tuple[
+        list[SmartBatteryDetails], list[SmartBatterySessions], dict[str, object]
+    ]:
+        """Fetch details, sessions and settings for all smart batteries concurrently.
+
+        Fetched settings and their timestamps are only recorded once every
+        battery's requests completed, and a result is only marked fresh when the
+        battery was not invalidated while it was in flight. Batteries whose
+        settings were not refetched keep their last known settings, including
+        batteries that were briefly missing from the battery list.
+        """
+        details_list: list[SmartBatteryDetails] = []
+        sessions_list: list[SmartBatterySessions] = []
+        settings_by_battery: dict[str, object] = {}
+
+        batteries = [
+            battery
+            for battery in (
+                data_smart_batteries.batteries if data_smart_batteries else []
+            )
+            if battery and battery.id
+        ]
+        if not batteries:
+            _LOGGER.debug("No smart batteries found")
+            return details_list, sessions_list, settings_by_battery
+
+        now = datetime.now(UTC)
+        requests = {
+            battery.id: self._start_battery_settings_request(battery.id)
+            for battery in batteries
+        }
+        results = await asyncio.gather(
+            *(
+                self._fetch_battery_data(battery, start_date, tomorrow, now)
+                for battery in batteries
+            )
+        )
+        for battery, (details, sessions, (fetched, settings, retry_delay)) in zip(
+            batteries, results
+        ):
+            if details:
+                details_list.append(details)
+            if sessions:
+                sessions_list.append(sessions)
+            known = self._record_battery_settings(
+                battery.id, fetched, settings, requests[battery.id], now, retry_delay
+            )
+            if known is not None:
+                settings_by_battery[battery.id] = known
+
+        return details_list, sessions_list, settings_by_battery
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch battery data."""
@@ -3169,9 +3512,8 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             (
                 data_smart_battery_details,
                 data_smart_battery_sessions,
-            ) = await self._get_battery_details_and_sessions(
-                data_smart_batteries, start_date, tomorrow
-            )
+                data_smart_battery_settings,
+            ) = await self._get_battery_data(data_smart_batteries, start_date, tomorrow)
 
             if data_smart_batteries and data_smart_batteries.batteries:
                 self.update_interval = timedelta(
@@ -3193,6 +3535,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             result[DATA_BATTERIES] = data_smart_batteries
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
+            result[DATA_BATTERY_SETTINGS] = data_smart_battery_settings
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

@@ -4,7 +4,7 @@ from datetime import datetime
 from os.path import abspath, dirname
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 root_dir = abspath(dirname(__file__) + "/../custom_components/")
 sys.path.append(root_dir)
@@ -177,6 +177,7 @@ def mock_coordinator():
     coordinator.api = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
     coordinator.async_update_enode_charge_settings = AsyncMock()
+    coordinator.async_update_battery_settings = AsyncMock(return_value=True)
     return coordinator
 
 

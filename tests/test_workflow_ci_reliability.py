@@ -4,6 +4,7 @@ import importlib.util
 import json
 import re
 import subprocess
+import tomllib
 from collections import Counter
 from pathlib import Path
 from types import ModuleType
@@ -151,12 +152,13 @@ def test_quality_workflow_performs_json_validation_without_tier_claims() -> None
 
 
 def test_ci_blocks_new_full_flake8_violations() -> None:
-    """Ensure the full linter has a gate and the Python matrix is retained."""
+    """Retain the lint gate and a runner that supports both Python builds."""
     workflow = _read_workflow("ci.yaml")
     jobs = workflow["jobs"]
     assert isinstance(jobs, dict)
     job = jobs["run"]
     assert isinstance(job, dict)
+    assert job["runs-on"] == "ubuntu-24.04"
     assert job["strategy"]["matrix"]["python-version"] == ["3.14.2", "3.14"]
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (
@@ -166,6 +168,27 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     assert "--select=E9,F63,F7,F82" in str(
         _named_step("ci.yaml", "run", "Lint with flake8")["run"]
     )
+
+
+def test_homeassistant_test_dependencies_match_the_official_plugin() -> None:
+    """Ensure Core and the official test plugin share the same locked version."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dev_dependencies = project["tool"]["poetry"]["group"]["dev"]["dependencies"]
+    assert dev_dependencies["homeassistant"] == "==2026.11.0"
+    assert dev_dependencies["pytest-homeassistant"] == "==2026.11.0"
+    assert "pytest-homeassistant-custom-component" not in dev_dependencies
+    assert (
+        "pytest-homeassistant"
+        in project["tool"]["pytest"]["ini_options"]["required_plugins"]
+    )
+
+    lock_data = tomllib.loads((ROOT / "poetry.lock").read_text(encoding="utf-8"))
+    locked_versions = {
+        package["name"]: package["version"] for package in lock_data["package"]
+    }
+    assert locked_versions["homeassistant"] == "2026.11.0"
+    assert locked_versions["pytest-homeassistant"] == "2026.11.0"
+    assert "pytest-homeassistant-custom-component" not in locked_versions
 
 
 def test_flake8_parser_recognizes_diagnostics() -> None:

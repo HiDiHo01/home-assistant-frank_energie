@@ -1,6 +1,6 @@
 ---
 name: frank-energie-api-reliability
-description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limiting, invoice isolation, price cache freshness, partial GraphQL responses, delivery-site contracts, provider model fixtures, site-scoped Smart HVAC status and availability, and asynchronous cancellation in the Home Assistant integration.
+description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limits, cache freshness, partial GraphQL responses, site contracts, provider fixtures, Smart HVAC status and equipment, account connection requests, and cancellation in the Home Assistant integration.
 ---
 
 # Frank Energie API and coordinator reliability
@@ -54,12 +54,25 @@ not a hard-coded or environment-provided fallback. Verify unknown values
 are unavailable rather than silently treated as inactive, and that
 `CoordinatorEntity.available` follows the settings refresh state.
 
+### Smart HVAC equipment and connection requests
+
+Register the Smart Heating service and its related sensors only after the
+settings coordinator confirms `UserSmartHvac.isActivated is True` for the
+selected delivery site. Test that an eligible site with linked equipment
+adds the entities only when activation arrives on a later settings refresh.
+
+1. Confirm the typed read methods and selected fields in the published client version pinned in `manifest.json`. Reuse the settings coordinator's `Me.user_smart_hvac` response. The inventory and detail queries select the same device metadata in the current client, so use `smart_hvacs(site_reference)` for discovery and verify a specific need before issuing a detail request. [Smart heating data contract](../../../docs/smart_hvac_activation.md)
+2. Poll equipment independently. Fetch `smart_hvac_summary(device_id)` once per active inventory record per poll, one device at a time. Keep valid inventory and other summaries when a summary fails. Check the maintenance window and retry deadline before each provider call, including calls later in the same refresh. Cap valid provider retry hints at 24 hours, use the normal polling interval for invalid hints, and test both boundaries.
+3. Treat `smart_hvac_connect_requests()` as account data and place it on the User service. Preserve Frank's raw operational and steering status values. Assign units, runtime meanings, or current setting values only when the released read contract confirms them.
+4. Test that a confirmed empty inventory counts as zero, a null summary yields unknown values, and a failed read makes the affected data unavailable. Use opaque entity identities and verify that diagnostics and logs protect account and device IDs, EANs, external references, and raw request errors. [Smart heating regression tests](../../../tests/test_smart_hvac.py)
+
 ## Delivery-site contracts and provider fixtures
 
 - Verify the GraphQL selection and parsed model in the dependency version pinned in `manifest.json`. `UserSites.segments` describes the first returned site. Match the config entry's site reference in `UserSites.deliverySites` and read that `DeliverySite.segments`. Treat a missing match or unusable segments as unknown.
 - Mock the API boundary and parse sanitized payloads with the actual `User.from_dict()` and `UserSites.from_dict()` models. `MagicMock(spec=User)` allows assignments to attributes absent from the real model, which can make a regression test pass with an invented field such as `userSegments`. If a model double is necessary, apply `spec_set` to a real instance.
 - Reproduce the failure with those models before applying the fix. Test electricity-only, gas-only, and dual contracts with the selected site after another site that has different segments. Verify the existing entity ID, contract-dependent entity setup, and sensor recovery when the selected site reappears. [Contract regression tests](../../../tests/test_contract_support.py)
 - Check the device registry and include refresh buttons in contract tests. Their `device_info` can create a price device independently of sensor setup. Verify that moving a button to another price device preserves its registered entity ID.
+- For a dual contract, verify a distinct refresh button on each price device and use the Home Assistant button action to check that each requests a refresh from the shared price coordinator. Test switching to one segment and back to verify that the extra button is restored with the same entity ID.
 
 ## Regression tests
 

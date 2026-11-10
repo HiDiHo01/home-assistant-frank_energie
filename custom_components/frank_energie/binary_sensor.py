@@ -48,6 +48,7 @@ from .helpers import (
     known_site_contracts,
     service_device_info,
 )
+from .smart_hvac import smart_hvac_activation, smart_hvac_site_attributes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -220,47 +221,9 @@ def _user_feature_attributes(
     return attr_fn
 
 
-def _smart_hvac_state(data: FrankEnergieData) -> bool | None:
-    """Return only the strictly typed UserSmartHvac activation state."""
-    user = data.get(DATA_USER)
-    feature = getattr(user, "smartHvac", None)
-    if feature is None:
-        return None
-
-    activated = (
-        feature.get("isActivated")
-        if isinstance(feature, dict)
-        else getattr(feature, "isActivated", None)
-    )
-    return activated if isinstance(activated, bool) else None
-
-
 def _smart_hvac_available(data: FrankEnergieData) -> bool:
     """Return whether a known Smart HVAC activation value is available."""
-    return _smart_hvac_state(data) is not None
-
-
-def _smart_hvac_attributes(data: FrankEnergieData) -> dict[str, object]:
-    """Expose only non-identifying feature capability flags."""
-    user = data.get(DATA_USER)
-    feature = getattr(user, "smartHvac", None)
-    if feature is None:
-        return {}
-
-    if isinstance(feature, dict):
-        flags = {
-            "available_in_country": feature.get("isAvailableInCountry"),
-            "available_on_site": feature.get("isAvailableOnSite"),
-            "has_accepted_terms": feature.get("hasAcceptedTerms"),
-        }
-    else:
-        flags = {
-            "available_in_country": getattr(feature, "isAvailableInCountry", None),
-            "available_on_site": getattr(feature, "is_available_on_site", None),
-            "has_accepted_terms": getattr(feature, "has_accepted_terms", None),
-        }
-
-    return {key: value for key, value in flags.items() if isinstance(value, bool)}
+    return smart_hvac_activation(data) is not None
 
 
 def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
@@ -301,6 +264,18 @@ def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
         return None
 
     return current_price.total == min(totals)
+
+
+def _tomorrow_prices_available(data: FrankEnergieData | None) -> bool | None:
+    """Return whether electricity prices exist for tomorrow in Amsterdam."""
+    if data is None:
+        return None
+
+    electricity = data.get(DATA_ELECTRICITY)
+    if electricity is None:
+        return None
+
+    return bool(electricity.tomorrow)
 
 
 def _disabled_haptic_feedback(
@@ -643,13 +618,12 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     FrankEnergieBinarySensorDescription(
         key="smart_hvac",
         translation_key="smart_hvac",
-        icon="mdi:heat-pump",
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=_smart_hvac_state,
+        value_fn=smart_hvac_activation,
         available_fn=_smart_hvac_available,
-        attr_fn=_smart_hvac_attributes,
+        attr_fn=smart_hvac_site_attributes,
     ),
     FrankEnergieBinarySensorDescription(
         key="disabled_haptic_feedback",
@@ -705,6 +679,13 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         icon=ICON,
         service_name=SERVICE_NAME_PRICES,
         value_fn=_electricity_price_lowest_today,
+    ),
+    FrankEnergieBinarySensorDescription(
+        key="tomorrow_prices_available",
+        translation_key="tomorrow_prices_available",
+        icon=ICON,
+        service_name=SERVICE_NAME_PRICES,
+        value_fn=_tomorrow_prices_available,
     ),
 )
 

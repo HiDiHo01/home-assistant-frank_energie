@@ -35,6 +35,63 @@ If all meaningful changes are already present with equivalent behavior, cite the
 - Do not imply that Sourcery/CodeRabbit/Codex has approved a PR when a bot is rate-limited, pending, or failed.
 - If explicitly asked to fix comments, follow the target repository's issue tracking and security-disclosure policy. Never create a public tracking issue for a confidential vulnerability.
 
+## Retrieving SonarQube Cloud findings
+
+When a PR's SonarQube Cloud check reports open findings but does not expose
+their messages as GitHub annotations, use the manual
+[`Export SonarQube Issues`](../../../.github/workflows/sonar-issues-export.yml)
+workflow with that PR number and inspect the `sonar-open-issues.json` artifact.
+Verify the JSON includes all pages and filters for `OPEN,CONFIRMED` issues
+before addressing exact rule IDs and source lines. Do not treat a passing
+Sonar Quality Gate as proof that the issue count is zero. On the project's
+main branch, leaving the PR field empty exports all open issues.
+Do not log or post upstream tokens or unredacted private project data.
+
+## Rebase-only conflicts and safe history repair
+
+[PR #430](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/430)
+demonstrated that GitHub can report `mergeable: true`,
+`mergeable_state: clean`, no commits behind `main`, and
+`rebaseable: false` at the same time. The branch contained merge
+commits from `main`: an ordinary merge was possible, but
+**Rebase and merge** was blocked. Do not equate a rebase-only
+blocker with a normal merge conflict or claim the rebase button is
+available solely because `mergeable` is true.
+
+1. **Inspect before rewriting.** Refresh the PR's open/merged state,
+   base/head SHAs, merge base, ahead/behind counts, full commit graph
+   (including multi-parent merge commits), and complete PR diff. Follow
+   the obsolete-PR triage above. If the PR has already been merged,
+   do not rewrite its old head; document further lessons in a separate PR.
+2. **Choose a history strategy deliberately.** Prefer a genuine rebase
+   or conflict-resolved cherry-pick when individual commits must remain
+   reviewable. If the maintainer explicitly approves squashing a
+   merge-heavy PR, a one-parent commit based on current `main` may
+   replace the branch history. This is **not** a replay of the old
+   commits: identify the loss of individual commit identities.
+3. **Preserve and verify content.** Before a destructive rewrite,
+   create a backup branch at the exact old head. For an approved
+   single-commit rewrite, reuse the old head's *exact Git tree* with
+   the current base as its sole parent. Verify the original and
+   replacement tree SHAs, and compare the full original/new diffs
+   against `main`, including every changed file; reject unexpected
+   content or statistics changes. Do not discard backup history
+   without separate authorization.
+4. **Push with a lease, not blind force.** Confirm that the live PR
+   head and base still equal the inspected SHAs. Use a conditional
+   reference update with `expected_sha` and `force=true` only
+   when rewriting was expressly authorized. Stop and investigate
+   if the lease fails. Force-updating a branch to the **same SHA**
+   does not alter ancestry or resolve rebase conflicts.
+5. **Validate the new head.** GitHub may temporarily return
+   `mergeable: null` or `mergeable_state: unknown` while recalculating
+   after a force-push. Re-query until an authoritative result is
+   available; do not describe the UI merge method as usable based on
+   inference alone. Recheck reviews, resolved threads, branch rules,
+   required check runs, and the **new head's** CI matrix: a rewrite
+   can invalidate prior approvals and test results. Report unverified
+   checks honestly, and never merge without explicit approval.
+
 ## Merge-readiness decision
 
 Mark **ready** only if current-head checks, required reviews, unresolved substantive feedback, merge conflicts, and relevant behavioral correctness are verified. Mark **blocked** with the exact reasons; use **unverified** where data or checks cannot be obtained. Do not merge without explicit authorization.
