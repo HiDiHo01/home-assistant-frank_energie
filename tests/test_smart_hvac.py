@@ -429,6 +429,50 @@ async def test_hvac_inactive_reload_prunes_missing_equipment(
     assert er.async_get(hass).async_get(previous.entity_id) is None
 
 
+async def test_hvac_null_collections_differ_from_failed_reads(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Expose null responses as unknown and unsuccessful reads as unavailable."""
+    api.smart_hvacs.return_value = None
+    api.smart_hvac_connect_requests.return_value = None
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    count = _sensor(hass, entry, "smart_hvac_device_count")
+    assert _state(hass, count).state == STATE_UNKNOWN
+    assert coordinator.data.devices is None
+    assert coordinator.data.requests is None
+    assert coordinator.data.devices_fetched
+    assert coordinator.data.requests_fetched
+
+    api.smart_hvacs.side_effect = RequestException("private-inventory-error")
+    api.smart_hvac_connect_requests.side_effect = RequestException(
+        "private-requests-error"
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert _state(hass, count).state == STATE_UNAVAILABLE
+    assert not coordinator.data.devices_fetched
+    assert not coordinator.data.requests_fetched
+
+    api.smart_hvacs.side_effect = None
+    api.smart_hvac_connect_requests.side_effect = None
+    api.smart_hvacs.return_value = []
+    api.smart_hvac_connect_requests.return_value = []
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert _state(hass, count).state == "0"
+    assert coordinator.data.devices == {}
+    assert coordinator.data.requests == ()
+    assert coordinator.data.devices_fetched
+    assert coordinator.data.requests_fetched
+    assert (
+        _state(hass, _sensor(hass, entry, "smart_hvac_connection_requests")).state
+        == "0"
+    )
+
+
 async def test_hvac_updates_device_metadata_without_duplicates(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
