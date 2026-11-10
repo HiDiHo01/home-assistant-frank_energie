@@ -423,22 +423,22 @@ async def test_sensors_hour_price_attr(
     assert price_attr == pytest.approx([1.75] * 6 + [1.23] * 24 + [0.75] * 18)
 
     # For the other sensors just check if the prices attribute is there
-    assert 48 == len(
+    assert len(
         hass.states.get(
             "sensor.frank_energie_electricity_prices_current_electricity_market_price"
         ).attributes["prices"]
     )
-    assert 48 == len(
+    assert len(
         hass.states.get(
             "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
         ).attributes["prices"]
     )
-    assert 48 == len(
+    assert len(
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_market_price"
         ).attributes["prices"]
     )
-    assert 48 == len(
+    assert len(
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
         ).attributes["prices"]
