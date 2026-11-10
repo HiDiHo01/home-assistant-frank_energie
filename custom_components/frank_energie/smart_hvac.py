@@ -44,14 +44,17 @@ class SmartHvacRequestStatus(TypedDict):
 class SmartHvacData:
     """Store independent Smart Heating results for one config entry.
 
-    ``None`` indicates an unknown inventory or request collection. Empty
-    collections confirm zero records. Only successful summary reads have
-    a key in ``summaries``, including successful null responses.
+    ``None`` represents a null or unknown inventory/request collection.
+    The fetched flags distinguish a successful null response from a skipped
+    or failed read. Empty collections confirm zero records. Only successful
+    summary reads have a key in ``summaries``, including null responses.
     """
 
     devices: dict[str, SmartHvacDevice] | None = None
     summaries: dict[str, SmartHvacSummary | None] = field(default_factory=dict)
     requests: tuple[SmartHvacRequestStatus, ...] | None = None
+    devices_fetched: bool = False
+    requests_fetched: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +161,13 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
                 )
                 for request in {item.id: item for item in requests.value}.values()
             )
-        return SmartHvacData(devices, summaries, safe_requests)
+        return SmartHvacData(
+            devices=devices,
+            summaries=summaries,
+            requests=safe_requests,
+            devices_fetched=inventory.fetched,
+            requests_fetched=requests.fetched,
+        )
 
 
 def smart_hvac_activation(data: FrankEnergieData) -> bool | None:
