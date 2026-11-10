@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # @v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -97,9 +97,35 @@ jobs:
         run: |
           test -d .github/workflows
 
+      - name: Validate manifest and localization JSON
+        run: |
+          python3 - <<'PY'
+          """Reject malformed manifest or translation JSON before claiming prerequisites."""
+          import json
+          from pathlib import Path
+
+          root = Path("custom_components/frank_energie")
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          if not isinstance(manifest, dict) or manifest.get("domain") != "frank_energie":
+              raise SystemExit("Invalid Frank Energie integration manifest domain")
+          if manifest.get("config_flow") is not True:
+              raise SystemExit("Frank Energie manifest must enable config_flow")
+
+          translation_files = [
+              root / "strings.json",
+              *sorted((root / "translations").glob("*.json")),
+          ]
+          if len(translation_files) < 2:
+              raise SystemExit("Missing Frank Energie localization JSON files")
+          for path in translation_files:
+              if not isinstance(json.loads(path.read_text(encoding="utf-8")), dict):
+                  raise SystemExit(f"Localization file must contain an object: {path}")
+          print(f"Validated manifest and {len(translation_files)} localization JSON files")
+          PY
+
       - name: Summary
         run: |-
-          echo "Quality Scale validation completed successfully"
+          echo "Quality Scale prerequisites passed; this is not Platinum certification"
           echo "Documentation present"
           echo "Diagnostics present"
           echo "Translations present"

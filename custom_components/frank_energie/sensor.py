@@ -57,6 +57,7 @@ from .const import (
     BATTERY_STRATEGY_OPTIONS,
     DATA_BATTERIES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_ENODE_CHARGERS,
     DATA_ENODE_VEHICLES,
@@ -91,6 +92,7 @@ from .const import (
     SERVICE_NAME_USER,
     SMART_BATTERY_STATUSES,
     SERVICE_STATUSES,
+    SUPPORTED_RESOLUTIONS,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
@@ -1701,6 +1703,16 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
 )
 
 
+def _get_contract_price_resolution(data: FrankEnergieData) -> str | None:
+    """Return a supported resolution, or None for missing or unknown API values."""
+    state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
+    if state is None or not isinstance(state.active_option, str):
+        return None
+
+    resolution = state.active_option.upper()
+    return resolution.lower() if resolution in SUPPORTED_RESOLUTIONS else None
+
+
 def _get_price_resolution_attributes(data: dict) -> dict:
     state = data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
     if not state:
@@ -1725,8 +1737,22 @@ def _get_price_resolution_attributes(data: dict) -> dict:
 
 def _get_site_segments(data: FrankEnergieData) -> str | None:
     """Format the selected site's known contracts for its diagnostic sensor."""
-    contracts = known_site_contracts(data.get(DATA_USER))
+    contracts = known_site_contracts(data.get(DATA_DELIVERY_SITE))
     return ", ".join(sorted(contracts)) if contracts else None
+
+
+_LEGACY_GAS_SENSOR_KEYS: Final[dict[str, str]] = {
+    "gas_energy_tax": "gas_tax_only",
+    "gas_market_vat": "gas_tax_vat",
+}
+
+
+def _sensor_unique_id(
+    entry: ConfigEntry, description: FrankEnergieEntityDescription
+) -> str:
+    """Preserve the registered identity of renamed gas tax and VAT sensors."""
+    legacy_key = _LEGACY_GAS_SENSOR_KEYS.get(description.key, description.key)
+    return f"{entry.unique_id}.{legacy_key}"
 
 
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
@@ -1740,15 +1766,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         options=["pt15m", "pt60m"],
-        value_fn=lambda data: (
-            data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option.lower()
-            if data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE)
-            and data[DATA_CONTRACT_PRICE_RESOLUTION_STATE].active_option
-            else STATE_UNKNOWN
-        ),
-        available_fn=lambda data: (
-            data.get(DATA_CONTRACT_PRICE_RESOLUTION_STATE) is not None
-        ),
+        value_fn=_get_contract_price_resolution,
+        # A missing resolution is unknown after a successful coordinator update.
+        available_fn=lambda _: True,
         attr_fn=_get_price_resolution_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -1946,15 +1966,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         entity_registry_enabled_default=True,
     ),
     FrankEnergieEntityDescription(
-        key="gas_tax_vat",
-        translation_key="gas_tax_vat",
+        key="gas_market_vat",
+        translation_key="gas_market_vat",
         native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
-            data[DATA_GAS].current_hour.energy_tax_price
+            data[DATA_GAS].current_hour.market_price_tax
             if data[DATA_GAS] and data[DATA_GAS].current_hour
             else None
         ),
@@ -1976,15 +1996,15 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         entity_registry_enabled_default=True,
     ),
     FrankEnergieEntityDescription(
-        key="gas_tax_only",
-        translation_key="gas_tax_only",
+        key="gas_energy_tax",
+        translation_key="gas_energy_tax",
         native_unit_of_measurement=UNIT_GAS_NL,
         suggested_display_precision=3,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         service_name=SERVICE_NAME_GAS_PRICES,
         value_fn=lambda data: (
-            data[DATA_GAS].current_hour.market_price_tax
+            data[DATA_GAS].current_hour.energy_tax_price
             if data[DATA_GAS] and data[DATA_GAS].current_hour
             else None
         ),
@@ -4416,7 +4436,7 @@ class FrankEnergieSensor(
         else:
             self._attr_unit_of_measurement = None
 
-        self._attr_unique_id = f"{entry.unique_id}.{description.key}"
+        self._attr_unique_id = _sensor_unique_id(entry, description)
 
         user_data = (
             coordinator.data.get(DATA_USER) if coordinator.data is not None else None
@@ -4486,7 +4506,13 @@ class FrankEnergieSensor(
 
     @property
     def available(self) -> bool:
-        return super().available and self.native_value is not None
+        """Apply the sensor's availability rule after coordinator success."""
+        if not super().available:
+            return False
+        if self.entity_description.available_fn is not None:
+            data = self.coordinator.data
+            return data is not None and self.entity_description.available_fn(data)
+        return self.native_value is not None
 
 
 class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
@@ -5159,7 +5185,7 @@ async def async_setup_entry(
     if settings_coordinator.api.is_authenticated:
         user_data = settings_coordinator.data.get(DATA_USER)
     contracts = (
-        known_site_contracts(user_data)
+        known_site_contracts(settings_coordinator.data.get(DATA_DELIVERY_SITE))
         if settings_coordinator.api.is_authenticated
         else None
     )
@@ -5169,7 +5195,7 @@ async def async_setup_entry(
             config_entry,
             "sensor",
             {
-                f"{config_entry.unique_id}.{description.key}": (
+                _sensor_unique_id(config_entry, description): (
                     contracts is None
                     or _sensor_energy_contract(description) in contracts
                 )
@@ -5177,7 +5203,7 @@ async def async_setup_entry(
                 if _sensor_energy_contract(description) is not None
             },
             enabled_by_default={
-                f"{config_entry.unique_id}.{description.key}"
+                _sensor_unique_id(config_entry, description)
                 for description in SENSOR_TYPES
                 if _sensor_energy_contract(description) is not None
                 and description.entity_registry_enabled_default

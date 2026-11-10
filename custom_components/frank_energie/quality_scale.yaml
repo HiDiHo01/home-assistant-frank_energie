@@ -165,7 +165,7 @@ rules:
     comment: Released python-frank-energie 2026.9.20 performs HTTP requests through awaited aiohttp operations.
   inject-websession:
     status: done
-    comment: Runtime and all four config-flow client sites receive HA's aiohttp session; tests/test_auth_session_privacy.py verifies reuse and ownership.
+    comment: Runtime setup and all config-flow client construction paths receive HA's aiohttp session; tests/test_auth_session_privacy.py verifies reuse and ownership.
   strict-typing:
     status: todo
     comment: No strict checker is enforced, annotations remain incomplete, and the installed client distribution has no py.typed marker.

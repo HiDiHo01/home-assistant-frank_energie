@@ -23,7 +23,7 @@ from python_frank_energie.exceptions import (
     ConnectionException,
     RequestException,
 )
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.frank_energie import FrankEnergieComponent
 from custom_components.frank_energie import (
@@ -170,30 +170,41 @@ async def test_account_flow_reuses_session_without_logging_private_models(
     await hass.async_block_till_done()
 
 
-async def test_reauthentication_reuses_shared_session(
+@pytest.mark.parametrize(
+    ("source", "reason"),
+    [
+        (config_entries.SOURCE_REAUTH, "reauth_successful"),
+        (config_entries.SOURCE_RECONFIGURE, "reconfigure_successful"),
+    ],
+)
+async def test_credential_update_reuses_shared_session(
     hass: HomeAssistant,
     account_api: tuple[MagicMock, AsyncMock, AsyncMock],
     caplog: pytest.LogCaptureFixture,
+    source: str,
+    reason: str,
 ) -> None:
-    """A successful reauth replaces tokens without closing the shared session."""
+    """Credential updates verify site access without closing the shared session."""
     caplog.set_level(logging.DEBUG, logger="custom_components.frank_energie")
     entry = _entry(hass)
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={
-            "source": config_entries.SOURCE_REAUTH,
-            "entry_id": entry.entry_id,
-        },
-        data=dict(entry.data),
-    )
     with patch.object(hass.config_entries, "async_reload", return_value=True):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": source, "entry_id": entry.entry_id},
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "login"
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
         )
         await hass.async_block_till_done()
-    assert result["reason"] == "reauth_successful"
-    _assert_shared_session(account_api[0], hass)
+    assert result["reason"] == reason
+    factory, login, sites = account_api
+    login.assert_awaited_once_with(USERNAME, PASSWORD)
+    sites.assert_awaited_once()
+    assert factory.call_count == 2
+    _assert_shared_session(factory, hass)
     _assert_private_logs(caplog, entry.options[CONF_PASSWORD])
 
 

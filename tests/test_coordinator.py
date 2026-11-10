@@ -4,15 +4,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
     DATA_USER,
+    DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     TIMEZONE_AMSTERDAM,
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
@@ -28,15 +32,24 @@ from custom_components.frank_energie.coordinator import (
     FrankEnergieStatisticsCoordinator,
 )
 from custom_components.frank_energie import FrankEnergieComponent
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 from python_frank_energie import FrankEnergie
-from python_frank_energie.exceptions import FrankEnergieException, RequestException
+from python_frank_energie.exceptions import (
+    AuthException,
+    AuthRequiredException,
+    FrankEnergieException,
+    NetworkError,
+    RequestException,
+)
 from python_frank_energie.models import (
+    ContractPriceResolutionState,
+    DeliverySite,
     MonthSummary,
     Invoices,
     User,
     PriceData,
     MarketPrices,
+    UserSmartFeedInStatus,
 )
 from aiohttp import ClientError
 
@@ -643,16 +656,24 @@ class TestResolutionProperty:
             "expected_resolution",
         ),
         [
-            # Authenticated cases
+            # A valid API resolution wins even while a change is pending.
             (True, "PT60M", "PT15M", False, "PT60M"),
-            (True, "PT60M", "PT15M", True, "PT15M"),
+            (True, "PT60M", "PT15M", True, "PT60M"),
+            (True, "PT15M", "PT60M", True, "PT15M"),
+            (True, "pt60m", "PT15M", False, "PT60M"),
+            (True, "pT15m", "PT60M", True, "PT15M"),
             (True, "UNSUPPORTED", "PT60M", False, "PT60M"),
             (True, "UNSUPPORTED", "INVALID", False, "PT15M"),
             (True, None, "PT60M", False, "PT60M"),
             (True, "", "PT60M", False, "PT60M"),
-            # Unauthenticated cases
-            (False, "PT60M", "PT15M", False, "PT15M"),
+            (True, None, "INVALID", True, "PT15M"),
+            # Authentication does not change resolution precedence.
+            (False, "PT60M", "PT15M", False, "PT60M"),
+            (False, "PT60M", "PT15M", True, "PT60M"),
             (False, "PT15M", "INVALID", False, "PT15M"),
+            (False, "pt15m", "PT60M", False, "PT15M"),
+            (False, "pT60m", "PT15M", True, "PT60M"),
+            (False, "UNSUPPORTED", "PT60M", True, "PT60M"),
         ],
     )
     async def test_resolution_selection_and_fetch_resolution_parameter(
@@ -664,7 +685,7 @@ class TestResolutionProperty:
         pending_change: bool,
         expected_resolution: str,
     ) -> None:
-        """Verify resolution property selection and the resolution argument in public price queries."""
+        """Prefer valid API resolutions regardless of auth or pending changes."""
         from datetime import date
         from unittest.mock import PropertyMock
 
@@ -680,9 +701,9 @@ class TestResolutionProperty:
         coordinator._resolution_change_pending = pending_change
 
         if api_active_option is not None:
-            mock_state = MagicMock()
-            mock_state.activeOption = api_active_option
-            coordinator._api_resolution_state = mock_state
+            coordinator._api_resolution_state = ContractPriceResolutionState(
+                active_option=api_active_option
+            )
         else:
             coordinator._api_resolution_state = None
 
@@ -694,9 +715,39 @@ class TestResolutionProperty:
 
         await coordinator._fetch_public_prices_for_range(today, tomorrow, "NL")
 
-        coordinator.api.prices.assert_called_once_with(
+        coordinator.api.prices.assert_awaited_once_with(
             today, resolution=expected_resolution
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "api_active_option", [None, 60, ["PT60M"], {"PT60M": True}]
+    )
+    @pytest.mark.parametrize(
+        ("config_option", "expected_resolution"),
+        [("PT60M", "PT60M"), ("INVALID", "PT15M")],
+    )
+    async def test_non_string_api_resolution_uses_fallback(
+        self,
+        hass: HomeAssistant,
+        coordinator: FrankEnergieCoordinator,
+        api_active_option: object,
+        config_option: str,
+        expected_resolution: str,
+    ) -> None:
+        """Reject malformed API fields without losing configured or default values."""
+        entry = coordinator.config_entry
+        assert isinstance(entry, MockConfigEntry)
+        entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={"resolution": config_option}
+        )
+        await hass.async_block_till_done()
+        coordinator._api_resolution_state = MagicMock(
+            spec=ContractPriceResolutionState, activeOption=api_active_option
+        )
+
+        assert coordinator.resolution == expected_resolution
 
 
 class TestApiResolutionProperty:
@@ -2709,11 +2760,10 @@ def _price_coordinator_for_cache_test(
 ) -> FrankEnergiePriceCoordinator:
     """Keep the real price-fetch path while isolating settings and disk writes."""
     settings = FrankEnergieSettingsCoordinator(MagicMock(), entry, api)
-    settings.data = (
-        {DATA_USER: SimpleNamespace(userSegments=contracts)}
-        if contracts is not None
-        else {}
-    )
+    if contracts is not None:
+        settings.data[DATA_DELIVERY_SITE] = DeliverySite.from_dict(
+            {"reference": entry.data.get("site_reference"), "segments": contracts}
+        )
     prices = FrankEnergiePriceCoordinator(MagicMock(), entry, api, settings)
     prices._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
     prices._fetch_tomorrow_data = AsyncMock(return_value=None)
@@ -2876,3 +2926,298 @@ async def test_partial_today_response_without_cache_remains_retryable(
     assert not result[missing_commodity].all
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+
+@pytest.mark.asyncio
+async def test_api_resolution_change_invalidates_same_day_price_cache(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Refetch prices when the account resolution changes after today's cache."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    settings_coordinator.data = {}
+    price_coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    # The resolution endpoint requires a selected electricity connection.
+    price_coordinator._connection_id = "selected-electricity"
+
+    now_utc = datetime.now(UTC)
+    cached_prices = _make_market_prices_with_resolution(15, now_utc.isoformat())
+    refreshed_prices = _make_market_prices_with_resolution(60, now_utc.isoformat())
+    price_coordinator._static_prices_today = cached_prices
+    price_coordinator.last_fetch_today = now_utc
+    price_coordinator.cached_prices_tomorrow = cached_prices
+    price_coordinator.last_fetch_tomorrow = now_utc
+
+    resolution_state = MagicMock(spec=ContractPriceResolutionState)
+    resolution_state.activeOption = "PT60M"
+
+    async def fetch_resolution(_connection_id: str | None):
+        """Simulate the API updating the coordinator's active resolution."""
+        price_coordinator._api_resolution_state = resolution_state
+        return resolution_state
+
+    price_coordinator._fetch_contract_price_resolution_state = AsyncMock(
+        side_effect=fetch_resolution
+    )
+    price_coordinator._fetch_prices_with_fallback = AsyncMock(
+        return_value=refreshed_prices
+    )
+    price_coordinator._refresh_tomorrow_cache = AsyncMock(return_value=None)
+    price_coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    price_coordinator.store.async_save = AsyncMock()
+
+    await price_coordinator._async_update_data()
+
+    price_coordinator._fetch_prices_with_fallback.assert_awaited_once()
+    assert price_coordinator._static_prices_today is refreshed_prices
+    assert price_coordinator._static_prices_today.electricity.resolution_minutes == 60
+    assert price_coordinator.last_fetch_today is not None
+    assert price_coordinator.cached_prices_tomorrow is None
+    assert price_coordinator.last_fetch_tomorrow is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_uses_main_user_smart_hvac(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Attach site-level UserSmartHvac from Me to the existing user service data."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = None
+    feature = SimpleNamespace(isActivated=True, is_available_on_site=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        return_value=SimpleNamespace(user_smart_hvac=feature)
+    )
+    mock_frank_energie.smart_hvac_status = AsyncMock(
+        side_effect=AssertionError(
+            "The legacy SmartHvacStatus query must not be called"
+        )
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is feature
+    mock_frank_energie.user.assert_awaited_once_with(coordinator.site_reference)
+    mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
+    mock_frank_energie.smart_hvac_status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_preserves_false_hvac_activation(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock
+) -> None:
+    """Preserve explicit False activation independently of service availability."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    feature = SimpleNamespace(isActivated=False, is_available_on_site=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        return_value=SimpleNamespace(user_smart_hvac=feature)
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is feature
+    assert result.smartHvac.isActivated is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "me_data",
+    [SimpleNamespace(user_smart_hvac=None), SimpleNamespace()],
+)
+async def test_fetch_user_data_missing_smart_hvac_is_unknown(
+    coordinator: FrankEnergieCoordinator, mock_frank_energie: AsyncMock, me_data: object
+) -> None:
+    """Missing fields and old library models must not invent a False state."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = SimpleNamespace(isActivated=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(return_value=me_data)
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_isolates_smart_hvac_query_failures(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Keep user data when Smart HVAC fails without logging private upstream identifiers."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = None
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        side_effect=RequestException("synthetic-private-identifier")
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+    assert "synthetic-private-identifier" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_optional_hvac_auth_exception_preserves_other_features(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Isolate optional Me auth failure without dropping valid account data."""
+    caplog.set_level("DEBUG")
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    smart_charging = SimpleNamespace(isActivated=True)
+    smart_trading = SimpleNamespace(isActivated=False)
+    user_data.smartCharging = smart_charging
+    user_data.smartTrading = smart_trading
+    user_data.smartHvac = SimpleNamespace(isActivated=True)
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        side_effect=AuthException("synthetic-private-identifier")
+    )
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+    assert result.smartCharging is smart_charging
+    assert result.smartTrading is smart_trading
+    mock_frank_energie.user.assert_awaited_once_with(coordinator.site_reference)
+    mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
+    assert "synthetic-private-identifier" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_type", [NetworkError, TimeoutError])
+async def test_fetch_user_data_optional_hvac_transport_error_is_isolated(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+    failure_type: type[Exception],
+) -> None:
+    """A failed optional HVAC request must not invalidate the other user data."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    user_data.smartHvac = None
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(side_effect=failure_type("temporary failure"))
+
+    result = await coordinator._fetch_user_data()
+
+    assert result is user_data
+    assert result.smartHvac is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_data_propagates_auth_required(
+    coordinator: FrankEnergieCoordinator,
+    mock_frank_energie: AsyncMock,
+) -> None:
+    """Allow the coordinator to trigger a reauthentication flow when required."""
+    mock_frank_energie.is_authenticated = True
+    user_data = MagicMock(spec=User)
+    user_data.countryCode = "NL"
+    user_data.connections = []
+    mock_frank_energie.user = AsyncMock(return_value=user_data)
+    mock_frank_energie.me = AsyncMock(
+        side_effect=AuthRequiredException("synthetic-auth-rejected")
+    )
+
+    with pytest.raises(ConfigEntryAuthFailed, match="authentication is required"):
+        await coordinator._fetch_user_data()
+
+    mock_frank_energie.me.assert_awaited_once_with(coordinator.site_reference)
+
+
+@pytest.mark.asyncio
+async def test_pv_feed_in_distinguishes_null_from_failure_and_recovers(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Confirm a missing contract without treating API failures as inactivity."""
+    mock_frank_energie.is_authenticated = True
+    mock_frank_energie.smart_pv_systems = AsyncMock(return_value=None)
+    mock_frank_energie.user_smart_feed_in = AsyncMock(return_value=None)
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    pv_coordinator = FrankEnergiePVCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+
+    with patch.object(pv_coordinator, "_should_skip_api_calls", return_value=False):
+        no_contract = await pv_coordinator._async_update_data()
+        assert no_contract[DATA_USER_SMART_FEED_IN] is None
+        assert no_contract[DATA_USER_SMART_FEED_IN_FETCHED] is True
+
+        mock_frank_energie.user_smart_feed_in.side_effect = RequestException(
+            "Temporary API failure"
+        )
+        failed = await pv_coordinator._async_update_data()
+        assert failed[DATA_USER_SMART_FEED_IN] is None
+        assert failed[DATA_USER_SMART_FEED_IN_FETCHED] is False
+
+        mock_frank_energie.user_smart_feed_in.side_effect = None
+        for is_activated in (True, False):
+            status = UserSmartFeedInStatus(
+                has_accepted_terms=True,
+                is_activated=is_activated,
+                is_app_onboarding_available=True,
+                is_available_in_country=True,
+                user_created_at=datetime(2026, 11, 9, tzinfo=UTC),
+                user_id="synthetic-user",
+            )
+            mock_frank_energie.user_smart_feed_in.return_value = status
+            recovered = await pv_coordinator._async_update_data()
+            assert recovered[DATA_USER_SMART_FEED_IN] is status
+            assert recovered[DATA_USER_SMART_FEED_IN_FETCHED] is True
+
+
+@pytest.mark.asyncio
+async def test_pv_feed_in_skipped_without_authentication(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Do not interpret an unauthenticated skipped request as no contract."""
+    mock_frank_energie.is_authenticated = False
+    mock_frank_energie.smart_pv_systems = AsyncMock(return_value=None)
+    mock_frank_energie.user_smart_feed_in = AsyncMock()
+
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    pv_coordinator = FrankEnergiePVCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    with patch.object(pv_coordinator, "_should_skip_api_calls", return_value=False):
+        data = await pv_coordinator._async_update_data()
+
+    mock_frank_energie.user_smart_feed_in.assert_not_awaited()
+    assert data[DATA_USER_SMART_FEED_IN] is None
+    assert data[DATA_USER_SMART_FEED_IN_FETCHED] is False
