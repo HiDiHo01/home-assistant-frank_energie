@@ -229,11 +229,37 @@
       "battery_mode": {
         "name": "Smart battery mode",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
           "trading": "Trading",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Change request effective date"
+          },
+          "is_change_request_possible": {
+            "name": "Change possible",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "upcoming_change": {
+            "name": "Upcoming change",
+            "state": {
+              "congestion": "Congestion",
+              "imbalance_trading": "Imbalance trading",
+              "self_consumption": "Self-consumption",
+              "self_consumption_mix": "Self-consumption Plus",
+              "trading": "Trading"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Upcoming change effective date"
+          }
         }
       },
       "battery_strategy": {
@@ -245,6 +271,31 @@
           "imbalance_only": "Imbalance only",
           "standard": "Standard",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Change request effective date"
+          },
+          "is_change_request_possible": {
+            "name": "Change possible",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "upcoming_change": {
+            "name": "Upcoming change",
+            "state": {
+              "aggressive": "Aggressive",
+              "balanced": "Balanced",
+              "conservative": "Conservative",
+              "imbalance_only": "Imbalance only",
+              "standard": "Standard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Upcoming change effective date"
+          }
         }
       },
       "resolution": {
@@ -1004,7 +1055,8 @@
           "trading": "Trading",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
-          "unknown": "Unknown"
+          "unknown": "Unknown",
+          "congestion": "Congestion"
         }
       },
       "battery_imbalance_trading_strategy": {

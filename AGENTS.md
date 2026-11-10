@@ -86,7 +86,7 @@ Use modern Python syntax and target **Python 3.14+**, subject to the actual Pyth
 * Use `Any` only when an external API, framework contract, or dynamic data structure genuinely requires it.
 * Do not use `Any` to suppress unresolved typing problems.
 * Use `collections.abc` for callable, iterable, mapping, and asynchronous protocols where appropriate.
-* Use timezone-aware datetimes and `datetime.now(timezone.utc)` or Home Assistant's appropriate timezone utilities.
+* Use timezone-aware datetimes and prefer `datetime.now(UTC)` (import `UTC` from `datetime`) or Home Assistant's appropriate timezone utilities; this aligns with `CLAUDE.md`.
 * Never use `datetime.utcnow()`.
 * Keep dataclass fields without default values before fields with defaults.
 * Use `@dataclass` with the required whitespace after the decorator symbol.
@@ -331,6 +331,7 @@ Treat all external data as untrusted.
 * Avoid comparing naive and aware datetimes.
 * Use decimal arithmetic where financial precision requires it.
 * Preserve the distinction between zero, missing, unavailable, and invalid data.
+* Inspect the actual runtime models returned by client libraries. Dataclasses with dictionary-compatible `.get()` or `__getitem__()` are not built-in `dict` instances; do not gate model access solely on `isinstance(value, dict)` when the library returns typed objects.
 * Avoid silently coercing malformed values into plausible measurements.
 * Document and test any fallback behavior.
 
@@ -424,6 +425,8 @@ Use the testing framework and conventions already established in the repository,
 * Extend the existing CI workflow instead of adding a duplicate pytest workflow. Preserve both Python matrix entries, blocking critical Flake8 checks, and JUnit reports for failed test runs.
 * Run Flake8 with `--jobs=1 --extend-exclude=.venv` so local virtual environments are excluded and checks work in environments with restricted process creation.
 * Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
+* Test sensor value mapping with real parsed dependency models as well as relevant raw/nullable payloads; cover correct units, availability, stable entity IDs, zero versus missing values, and operational states that must not suppress a known measurement.
+* For pinned Python patch versions, verify that the GitHub Actions runner image has a corresponding distribution in the official `actions/python-versions` manifest. If `ubuntu-latest` changes and `setup-python` fails before tests, pin a supported runner image rather than dropping the minimum-version matrix job or treating it as a test failure.
 * Report the interpreter, Home Assistant, test-plugin versions, pass/skip/failure counts, and any checks that could not run. Do not describe isolated method checks as a full Home Assistant suite.
 
 ### Config-entry migration and reconfiguration regressions
