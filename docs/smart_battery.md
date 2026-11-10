@@ -55,6 +55,16 @@ immediately. The select shows a pending change and its effective date in the
 `upcoming_change` and `upcoming_change_effective_date` attributes, and whether a
 change is currently possible in `is_change_request_possible`.
 
+The battery-mode select also exposes the same settings attributes as its
+battery-mode sensor, including `battery_mode`, `imbalance_trading_strategy`,
+`self_consumption_trading_allowed`,
+`self_consumption_trading_threshold_price`, `created_at`, `updated_at` and
+`trading_algorithm`. These attributes are scoped to the same physical battery
+and retain the API's `null` and `unknown` values. A battery mode included in
+the select solely to display the current state is not necessarily available
+for changing: the API's selectable modes govern which changes can be sent.
+`unknown` is a status fallback, never a selectable battery mode.
+
 ## Trading Strategies
 
 The integration allows selecting battery trading strategies.
