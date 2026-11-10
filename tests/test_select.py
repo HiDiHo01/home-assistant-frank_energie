@@ -1,3 +1,4 @@
+import logging
 from dataclasses import asdict
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -702,6 +703,75 @@ async def test_nonselectable_current_mode_remains_visible_but_cannot_mutate(
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_select_option_does_not_disclose_sensitive_option(
+    mock_coordinator, mock_config_entry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Never log the submitted option, but keep it for the API mutation."""
+    synthetic_secret = "synthetic-secret-not-a-real-password"
+    adjustable = _adjustable()
+    adjustable.battery_mode.options.append(
+        SimpleNamespace(code=synthetic_secret, selectable=True)
+    )
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.SELF_CONSUMPTION_MIX)],
+        DATA_BATTERY_SETTINGS: {_BATTERY_ID: adjustable},
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="custom_components.frank_energie.select"):
+        await entity.async_select_option(synthetic_secret)
+
+    mock_coordinator.async_update_battery_settings.assert_awaited_once_with(
+        _BATTERY_ID, {"batteryMode": synthetic_secret.upper()}
+    )
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "custom_components.frank_energie.select"
+    ]
+    assert "Submitting a smart battery setting update" in messages
+    assert all(synthetic_secret not in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_select_option_errors_do_not_disclose_sensitive_input(
+    mock_coordinator, mock_config_entry
+) -> None:
+    """Reject unsupported or failed changes without reflecting the input."""
+    synthetic_secret = "synthetic-secret-not-a-real-password"
+    adjustable = _adjustable()
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.SELF_CONSUMPTION_MIX)],
+        DATA_BATTERY_SETTINGS: {_BATTERY_ID: adjustable},
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    with pytest.raises(HomeAssistantError, match="not selectable") as exc_info:
+        await entity.async_select_option(synthetic_secret)
+    assert synthetic_secret not in str(exc_info.value)
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
+
+    adjustable.battery_mode.options.append(
+        SimpleNamespace(code=synthetic_secret, selectable=True)
+    )
+    mock_coordinator.async_update_battery_settings.return_value = False
+
+    with pytest.raises(HomeAssistantError, match="rejected") as exc_info:
+        await entity.async_select_option(synthetic_secret)
+    assert synthetic_secret not in str(exc_info.value)
+
+
 async def test_unlisted_mode_is_display_only_on_older_library(
     mock_coordinator, mock_config_entry
 ) -> None:
