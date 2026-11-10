@@ -86,7 +86,7 @@ Use modern Python syntax and target **Python 3.14+**, subject to the actual Pyth
 * Use `Any` only when an external API, framework contract, or dynamic data structure genuinely requires it.
 * Do not use `Any` to suppress unresolved typing problems.
 * Use `collections.abc` for callable, iterable, mapping, and asynchronous protocols where appropriate.
-* Use timezone-aware datetimes and `datetime.now(timezone.utc)` or Home Assistant's appropriate timezone utilities.
+* Use timezone-aware datetimes and prefer `datetime.now(UTC)` (import `UTC` from `datetime`) or Home Assistant's appropriate timezone utilities; this aligns with `CLAUDE.md`.
 * Never use `datetime.utcnow()`.
 * Keep dataclass fields without default values before fields with defaults.
 * Use `@dataclass` with the required whitespace after the decorator symbol.
