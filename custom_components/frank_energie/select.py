@@ -378,7 +378,11 @@ class FrankEnergieBatteryBaseSelect(
         )
         # Return a trusted catalog string, not the untrusted option argument.
         return next(
-            (known for known in known_options if known == option and known != "unknown"),
+            (
+                known
+                for known in known_options
+                if known == option and known != "unknown"
+            ),
             "[redacted]",
         )
 
