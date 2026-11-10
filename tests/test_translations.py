@@ -77,6 +77,26 @@ def test_translation_keys_alignment() -> None:
         )
 
 
+def test_smart_hvac_steering_status_translations() -> None:
+    """Translate HVAC steering enum states in every supported language."""
+    expected_states = {
+        "strings.json": {"active": "Active", "inactive": "Inactive"},
+        "en.json": {"active": "Active", "inactive": "Inactive"},
+        "nl.json": {"active": "Actief", "inactive": "Inactief"},
+        "nl-BE.json": {"active": "Actief", "inactive": "Inactief"},
+        "fr.json": {"active": "Actif", "inactive": "Inactif"},
+        "fr-BE.json": {"active": "Actif", "inactive": "Inactif"},
+    }
+    for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation = json.loads(path.read_text(encoding="utf-8"))
+        states = translation["entity"]["sensor"]["smart_hvac_steering_status"][
+            "state"
+        ]
+        assert states == expected_states[path.name], (
+            f"{path.name} must translate HVAC active and inactive states"
+        )
+
+
 def test_reconfigure_success_abort_translation() -> None:
     """Require a localized success message for reconfiguration in every locale."""
     expected = "[%key:common::config_flow::abort::reconfigure_successful%]"
