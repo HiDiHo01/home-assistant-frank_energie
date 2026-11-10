@@ -168,6 +168,50 @@ def _sensor(hass: HomeAssistant, entry: MockConfigEntry, key: str) -> er.Registr
     )
 
 
+async def test_hvac_steering_status_enum_and_unknown_provider_values(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Localize known HVAC status keys without changing unknown upstream states."""
+    entry = _entry(hass)
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    api.smart_hvac_summary.return_value = SmartHvacSummary(
+        steering_status="INACTIVE"
+    )
+    await _setup(hass, entry, api)
+
+    steering_sensor = _sensor(hass, entry, "smart_hvac_steering_status")
+    unique_id = steering_sensor.unique_id
+    state = _state(hass, steering_sensor)
+    assert state.state == "inactive"
+    assert state.attributes["options"] == ["active", "inactive"]
+
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    assert coordinator.data.summaries["fixture-device"].steering_status == "INACTIVE"
+
+    api.smart_hvac_summary.return_value = SmartHvacSummary(
+        steering_status="NEW_PROVIDER_STATUS"
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    state = _state(hass, steering_sensor)
+    assert state.state == "NEW_PROVIDER_STATUS"
+    assert state.attributes["options"] == [
+        "active",
+        "inactive",
+        "NEW_PROVIDER_STATUS",
+    ]
+    assert _sensor(hass, entry, "smart_hvac_steering_status").unique_id == unique_id
+
+    api.smart_hvac_summary.return_value = SmartHvacSummary(
+        steering_status="ACTIVE"
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    state = _state(hass, steering_sensor)
+    assert state.state == "active"
+    assert state.attributes["options"] == ["active", "inactive"]
+
+
 async def test_hvac_site_device_and_account_diagnostics(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
@@ -216,7 +260,7 @@ async def test_hvac_site_device_and_account_diagnostics(
         "smart_hvac_equipment": "Fixture Model A",
         "smart_hvac_operational_status": "FUTURE_PROVIDER_STATUS",
         "smart_hvac_operational_status_timestamp": "2026-07-20T10:00:00+00:00",
-        "smart_hvac_steering_status": "ACTIVE",
+        "smart_hvac_steering_status": "active",
         "smart_hvac_first_session_date": "2026-07-18",
         "smart_hvac_last_session_date": "2026-07-19",
         "smart_hvac_total_result": "0.0",
@@ -753,7 +797,7 @@ async def test_hvac_rate_limited_requests_preserve_stale_summaries(
 
     coordinator = entry.runtime_data.smart_hvac_coordinator
     steering_sensor = _sensor(hass, entry, "smart_hvac_steering_status")
-    assert _state(hass, steering_sensor).state == "ACTIVE"
+    assert _state(hass, steering_sensor).state == "active"
 
     api.smart_hvac_summary.reset_mock()
     api.smart_hvac_connect_requests.side_effect = RateLimitException(
