@@ -371,7 +371,14 @@ async def test_hvac_deactivation_prunes_only_missing_equipment(
     api.smart_hvacs.return_value = [first, removed]
     entry = _entry(hass)
     await _setup(hass, entry, api)
-    original = _sensor(hass, entry, "smart_hvac_equipment")
+    original = next(
+        sensor
+        for sensor in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+        if sensor.translation_key == "smart_hvac_equipment"
+        and _state(hass, sensor).state == "Fixture Model A"
+    )
     assert len(_equipment_devices(hass, entry)) == 2
 
     api.me.return_value = _profile(available=True, activated=False)
@@ -398,7 +405,7 @@ async def test_hvac_deactivation_prunes_only_missing_equipment(
     assert {
         device.name for device in _equipment_devices(hass, entry)
     } == {"Fixture Model A", "Fixture Model C"}
-    assert _sensor(hass, entry, "smart_hvac_equipment").id == original.id
+    assert er.async_get(hass).async_get(original.entity_id).id == original.id
 
 
 async def test_hvac_inactive_reload_prunes_missing_equipment(
