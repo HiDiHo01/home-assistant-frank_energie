@@ -741,9 +741,7 @@ async def test_hvac_rate_limited_requests_preserve_stale_summaries(
     api.smart_hvac_summary.assert_awaited_once_with("fixture-device")
 
     api.smart_hvac_summary.side_effect = None
-    api.smart_hvac_summary.return_value = SmartHvacSummary(
-        steering_status="RECOVERED"
-    )
+    api.smart_hvac_summary.return_value = SmartHvacSummary(steering_status="RECOVERED")
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
