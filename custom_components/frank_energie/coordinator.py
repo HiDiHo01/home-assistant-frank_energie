@@ -2242,6 +2242,66 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return value.replace(tzinfo=ZoneInfo("UTC"))
         return value
 
+    @staticmethod
+    def _slide_price_window_totals(
+        incoming: float,
+        outgoing: float,
+        current_sum: float,
+        invalid_count: int,
+        exact_sum: Decimal | None,
+    ) -> tuple[float, int, Decimal | None]:
+        """Advance the float and optional decimal totals by one price slot."""
+        if math.isfinite(incoming):
+            current_sum += incoming
+            if exact_sum is not None:
+                exact_sum += Decimal(str(incoming))
+        else:
+            invalid_count += 1
+
+        if math.isfinite(outgoing):
+            current_sum -= outgoing
+            if exact_sum is not None:
+                exact_sum -= Decimal(str(outgoing))
+        else:
+            invalid_count -= 1
+
+        return current_sum, invalid_count, exact_sum
+
+    @staticmethod
+    def _decimal_price_window_total(
+        prices: list[Price],
+        start_index: int,
+        window: int,
+    ) -> Decimal:
+        """Sum a finite price window exactly as decimal price values."""
+        return sum(
+            (
+                Decimal(str(prices[index].total))
+                for index in range(start_index, start_index + window)
+            ),
+            Decimal(0),
+        )
+
+    @staticmethod
+    def _compare_close_price_windows(
+        prices: list[Price],
+        window: int,
+        candidate_index: int,
+        lowest_index: int,
+        candidate_exact: Decimal | None,
+        lowest_exact: Decimal | None,
+    ) -> tuple[bool, Decimal, Decimal]:
+        """Resolve close float totals without moving an exactly tied window."""
+        if candidate_exact is None:
+            candidate_exact = FrankEnergieCoordinator._decimal_price_window_total(
+                prices, candidate_index, window
+            )
+        if lowest_exact is None:
+            lowest_exact = FrankEnergieCoordinator._decimal_price_window_total(
+                prices, lowest_index, window
+            )
+        return candidate_exact < lowest_exact, candidate_exact, lowest_exact
+
     def _find_lowest_consecutive_hours(
         self,
         prices: list[Price],
@@ -2249,10 +2309,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> tuple[float, Price, Price] | None:
         """Find the earliest cheapest finite price window in linear time.
 
-        Maintain a sliding total without allocating window slices. When two
-        totals are close enough for float drift to change their ordering,
-        switch to an exact decimal total for comparisons. Skip windows with
-        non-finite prices, then resume once those prices leave the window.
+        Maintain a sliding total without allocating window slices. Resolve
+        nearly equal totals with decimal comparisons to avoid floating-point
+        drift. Skip non-finite price windows and resume when they become valid.
         """
         if window <= 0 or len(prices) < window:
             return None
@@ -2272,23 +2331,13 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         lowest_exact: Decimal | None = None
 
         for index in range(window, len(prices)):
-            incoming = prices[index].total
-            outgoing = prices[index - window].total
-
-            if math.isfinite(incoming):
-                current_sum += incoming
-                if exact_sum is not None:
-                    exact_sum += Decimal(str(incoming))
-            else:
-                invalid_count += 1
-
-            if math.isfinite(outgoing):
-                current_sum -= outgoing
-                if exact_sum is not None:
-                    exact_sum -= Decimal(str(outgoing))
-            else:
-                invalid_count -= 1
-
+            current_sum, invalid_count, exact_sum = self._slide_price_window_totals(
+                prices[index].total,
+                prices[index - window].total,
+                current_sum,
+                invalid_count,
+                exact_sum,
+            )
             if invalid_count:
                 continue
 
@@ -2297,30 +2346,17 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 lowest_sum = current_sum
                 lowest_index = start_index
                 lowest_exact = exact_sum
-            elif math.isclose(current_sum, lowest_sum, rel_tol=1e-12, abs_tol=1e-12):
-                # Exact comparisons preserve the first of equally priced
-                # blocks. Activate this accumulator only for close totals.
-                if exact_sum is None:
-                    exact_sum = sum(
-                        (
-                            Decimal(str(prices[position].total))
-                            for position in range(start_index, index + 1)
-                        ),
-                        Decimal(0),
-                    )
-                if lowest_exact is None:
-                    lowest_exact = sum(
-                        (
-                            Decimal(str(prices[position].total))
-                            for position in range(lowest_index, lowest_index + window)
-                        ),
-                        Decimal(0),
-                    )
-                if exact_sum < lowest_exact:
-                    lowest_sum = current_sum
-                    lowest_index = start_index
-                    lowest_exact = exact_sum
-            elif current_sum < lowest_sum:
+                continue
+
+            assert lowest_index is not None
+            if math.isclose(current_sum, lowest_sum, rel_tol=1e-12, abs_tol=1e-12):
+                better, exact_sum, lowest_exact = self._compare_close_price_windows(
+                    prices, window, start_index, lowest_index, exact_sum, lowest_exact
+                )
+            else:
+                better = current_sum < lowest_sum
+
+            if better:
                 lowest_sum = current_sum
                 lowest_index = start_index
                 lowest_exact = exact_sum
@@ -2328,7 +2364,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if lowest_index is None:
             return None
 
-        # Produce an accurate float for the API without cumulative drift.
         lowest_avg = (
             math.fsum(
                 prices[position].total
