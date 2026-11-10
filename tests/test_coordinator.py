@@ -1,7 +1,9 @@
+import logging
+import asyncio
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
@@ -9,6 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
+    DATA_BATTERY_SETTINGS,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -21,6 +24,8 @@ from custom_components.frank_energie.const import (
 )
 from custom_components.frank_energie.exceptions import NoSuitableSitesFoundError
 from custom_components.frank_energie.coordinator import (
+    BATTERY_SETTINGS_REFRESH_INTERVAL,
+    BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL,
     FrankEnergieCoordinator,
     PricesTodayCache,
     FrankEnergieSettingsCoordinator,
@@ -2926,6 +2931,509 @@ async def test_partial_today_response_without_cache_remains_retryable(
     assert not result[missing_commodity].all
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
+
+
+@pytest.mark.asyncio
+async def test_battery_coordinator_fetches_settings_per_battery(
+    mock_frank_energie, mock_config_entry
+) -> None:
+    """Per-battery settings are keyed by battery ID and skipped on library
+    releases without ``smart_battery_settings`` (the entities then keep their
+    static options)."""
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(
+        hass, mock_config_entry, mock_frank_energie
+    )
+    battery_coordinator = FrankEnergieBatteryCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+    mock_frank_energie.smart_battery_details.return_value = None
+    mock_frank_energie.smart_battery_sessions.return_value = None
+    library_has_settings = hasattr(FrankEnergie, "smart_battery_settings")
+    if library_has_settings:
+        mock_frank_energie.smart_battery_settings.side_effect = lambda battery_id: (
+            None if battery_id == "bat_2" else f"settings-{battery_id}"
+        )
+
+    batteries = SimpleNamespace(
+        batteries=[SimpleNamespace(id="bat_1"), SimpleNamespace(id="bat_2")]
+    )
+    *_, settings_by_battery = await battery_coordinator._get_battery_data(
+        batteries, date(2026, 11, 4), date(2026, 11, 6)
+    )
+
+    assert settings_by_battery == (
+        {"bat_1": "settings-bat_1"} if library_has_settings else {}
+    )
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_refresh_interval_and_carry_over(
+    mock_config_entry, freezer
+) -> None:
+    """Settings refetch at most every refresh interval or after invalidation,
+    and the last known settings carry over a skipped or failed fetch."""
+    api = AsyncMock()  # no spec: exercises the fetch logic on any library release
+    api.smart_battery_details.return_value = None
+    api.smart_battery_sessions.return_value = None
+    api.smart_battery_settings.side_effect = [
+        "settings-1",
+        RequestException("Too Many Requests"),
+        "settings-2",
+    ]
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(hass, mock_config_entry, api)
+    battery_coordinator = FrankEnergieBatteryCoordinator(
+        hass, mock_config_entry, api, settings
+    )
+    batteries = SimpleNamespace(batteries=[SimpleNamespace(id="bat_1")])
+
+    async def refresh() -> dict[str, object]:
+        _, _, by_battery = await battery_coordinator._get_battery_data(
+            batteries, date(2026, 11, 4), date(2026, 11, 6)
+        )
+        battery_coordinator.data = {DATA_BATTERY_SETTINGS: by_battery}
+        return by_battery
+
+    assert await refresh() == {"bat_1": "settings-1"}
+    # Within the refresh interval: no request, previous settings kept
+    assert await refresh() == {"bat_1": "settings-1"}
+    assert api.smart_battery_settings.await_count == 1
+
+    # After a change: refetched; a failure keeps the previous settings
+    battery_coordinator.invalidate_battery_settings("bat_1")
+    assert await refresh() == {"bat_1": "settings-1"}
+    # The failure preserves known settings without triggering every 5-minute poll.
+    assert await refresh() == {"bat_1": "settings-1"}
+    assert api.smart_battery_settings.await_count == 2
+    freezer.tick(BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL + timedelta(seconds=1))
+    assert await refresh() == {"bat_1": "settings-2"}
+    assert api.smart_battery_settings.await_count == 3
+
+    # Past the refresh interval: refetched without an invalidation
+    freezer.tick(BATTERY_SETTINGS_REFRESH_INTERVAL + timedelta(minutes=1))
+    api.smart_battery_settings.side_effect = ["settings-3"]
+    assert await refresh() == {"bat_1": "settings-3"}
+    assert api.smart_battery_settings.await_count == 4
+
+
+def _battery_coordinator_for(api, config_entry) -> FrankEnergieBatteryCoordinator:
+    """Battery coordinator whose details and sessions fetches return nothing."""
+    api.smart_battery_details.return_value = None
+    api.smart_battery_sessions.return_value = None
+    hass = MagicMock()
+    settings = FrankEnergieSettingsCoordinator(hass, config_entry, api)
+    return FrankEnergieBatteryCoordinator(hass, config_entry, api, settings)
+
+
+async def _settings_after_refresh(
+    coordinator: FrankEnergieBatteryCoordinator, *battery_ids: str
+) -> dict[str, object]:
+    batteries = SimpleNamespace(
+        batteries=[SimpleNamespace(id=battery_id) for battery_id in battery_ids]
+    )
+    *_, by_battery = await coordinator._get_battery_data(
+        batteries, date(2026, 11, 4), date(2026, 11, 6)
+    )
+    return by_battery
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_response_after_invalidation_is_discarded(
+    mock_config_entry,
+) -> None:
+    """A response for a request that overlapped an invalidation is discarded:
+    the known settings stay authoritative and the next refresh refetches."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    api.smart_battery_settings.side_effect = ["settings-0"]
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-0"
+    }
+
+    async def fetch(battery_id: str) -> str:
+        coordinator.invalidate_battery_settings(battery_id)  # change lands mid-request
+        return "pre-change"
+
+    api.smart_battery_settings.side_effect = fetch
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-0"
+    }
+
+    api.smart_battery_settings.side_effect = ["settings-2"]
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-2"
+    }
+    assert api.smart_battery_settings.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_older_battery_settings_response_never_overwrites_newer(
+    mock_config_entry,
+) -> None:
+    """When an older request completes after a newer one was recorded, the
+    newer settings stay authoritative."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    older_started = asyncio.Event()
+    older_may_finish = asyncio.Event()
+
+    async def fetch(battery_id: str) -> str:
+        if api.smart_battery_settings.await_count == 1:
+            older_started.set()
+            await older_may_finish.wait()
+            return "older"
+        return "newer"
+
+    api.smart_battery_settings.side_effect = fetch
+
+    older = asyncio.create_task(_settings_after_refresh(coordinator, "bat_1"))
+    await older_started.wait()
+    assert await _settings_after_refresh(coordinator, "bat_1") == {"bat_1": "newer"}
+
+    older_may_finish.set()
+    assert await older == {"bat_1": "newer"}
+    assert await _settings_after_refresh(coordinator, "bat_1") == {"bat_1": "newer"}
+    assert api.smart_battery_settings.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_user_error_propagates(mock_config_entry) -> None:
+    """``user-error:`` request failures are authentication failures and propagate."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = RequestException(
+        "user-error:auth-not-authorised"
+    )
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    with pytest.raises(RequestException, match="user-error:"):
+        await _settings_after_refresh(coordinator, "bat_1")
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_survive_a_briefly_missing_battery(
+    mock_config_entry,
+) -> None:
+    """A battery missing from one refresh gets its settings back on return
+    without a refetch, instead of falling back to static options."""
+    api = AsyncMock()
+    api.smart_battery_settings.return_value = "settings-1"
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert await _settings_after_refresh(coordinator) == {}
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert api.smart_battery_settings.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_failed_batch_records_nothing(mock_config_entry) -> None:
+    """When one battery's auth failure fails the update, the other battery's
+    settings are not marked fresh, so the next refresh fetches them again."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    calls: list[str] = []
+
+    async def fetch(battery_id: str) -> str:
+        calls.append(battery_id)
+        if battery_id == "bat_2" and calls.count("bat_2") == 1:
+            raise AuthException("Not authorized")
+        return f"settings-{battery_id}"
+
+    api.smart_battery_settings.side_effect = fetch
+
+    with pytest.raises(AuthException):
+        await _settings_after_refresh(coordinator, "bat_1", "bat_2")
+    assert await _settings_after_refresh(coordinator, "bat_1", "bat_2") == {
+        "bat_1": "settings-bat_1",
+        "bat_2": "settings-bat_2",
+    }
+    assert calls.count("bat_1") == 2
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_none_result_keeps_known_settings(
+    mock_config_entry, freezer
+) -> None:
+    """A None result keeps known settings and is retried at the refresh interval."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = ["settings-1", None, "settings-2"]
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+    assert api.smart_battery_settings.await_count == 2
+
+    freezer.tick(BATTERY_SETTINGS_REFRESH_INTERVAL + timedelta(seconds=1))
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-2"
+    }
+    assert api.smart_battery_settings.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_none_result_retries_at_refresh_interval(
+    mock_config_entry, freezer
+) -> None:
+    """A battery without settings is not queried more often than one with."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = [None, "recovered-settings"]
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    assert await _settings_after_refresh(coordinator, "bat_1") == {}
+    freezer.tick(BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL + timedelta(seconds=1))
+    assert await _settings_after_refresh(coordinator, "bat_1") == {}
+    assert api.smart_battery_settings.await_count == 1
+
+    freezer.tick(BATTERY_SETTINGS_REFRESH_INTERVAL)
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "recovered-settings"
+    }
+    assert api.smart_battery_settings.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_rate_limit_honors_retry_after(
+    mock_config_entry, freezer
+) -> None:
+    """Rate limits retain cached options and respect the longer server delay."""
+
+    class RateLimitedRequest(RequestException):
+        """Simulate a newer client rate limit without importing its new class."""
+
+        retry_after = 45 * 60
+
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = [
+        "known-settings",
+        RateLimitedRequest("limited"),
+        "recovered-settings",
+    ]
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "known-settings"
+    }
+
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "known-settings"
+    }
+    freezer.tick(BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL + timedelta(seconds=1))
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "known-settings"
+    }
+    assert api.smart_battery_settings.await_count == 2
+
+    freezer.tick(timedelta(minutes=31))
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "recovered-settings"
+    }
+    assert api.smart_battery_settings.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_invalidation_clears_retry_cooldown(
+    mock_config_entry,
+) -> None:
+    """Invalidation permits immediate retry after a successful mutation."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = [
+        RequestException("temporary failure"),
+        "settings-after-change",
+    ]
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    assert await _settings_after_refresh(coordinator, "bat_1") == {}
+    assert await _settings_after_refresh(coordinator, "bat_1") == {}
+    assert api.smart_battery_settings.await_count == 1
+
+    coordinator.invalidate_battery_settings("bat_1")
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-after-change"
+    }
+    assert api.smart_battery_settings.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_inflight_failure_does_not_restore_cooldown(
+    mock_config_entry,
+) -> None:
+    """A stale failed request cannot block a newer post-mutation refresh."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    async def fail_during_change(battery_id: str) -> None:
+        """Simulate a mutation while the older settings request is in flight."""
+        coordinator.invalidate_battery_settings(battery_id)
+        raise RequestException("stale failure")
+
+    api.smart_battery_settings.side_effect = fail_during_change
+    assert await _settings_after_refresh(coordinator, "bat_1") == {}
+    assert "bat_1" not in coordinator._battery_settings_retry_after
+
+    api.smart_battery_settings.side_effect = ["fresh-settings"]
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "fresh-settings"
+    }
+    assert api.smart_battery_settings.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_battery_update_publishes_settings(mock_config_entry) -> None:
+    """The battery coordinator's update result carries the per-battery settings."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = lambda battery_id: f"settings-{battery_id}"
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.settings_coordinator.data = {}
+    batteries = SimpleNamespace(
+        batteries=[SimpleNamespace(id="bat_1"), SimpleNamespace(id="bat_2")]
+    )
+
+    with (
+        patch.object(coordinator, "_should_skip_api_calls", return_value=False),
+        patch.object(coordinator, "_is_smart_trading_enabled", return_value=True),
+        patch.object(coordinator, "_fetch_smart_batteries", return_value=batteries),
+    ):
+        result = await coordinator._async_update_data()
+
+    assert result[DATA_BATTERY_SETTINGS] == {
+        "bat_1": "settings-bat_1",
+        "bat_2": "settings-bat_2",
+    }
+
+
+@pytest.mark.asyncio
+async def test_overlapping_battery_setting_changes_are_serialized(
+    mock_config_entry,
+) -> None:
+    """Two overlapping changes for one battery apply in request order: the
+    second starts only after the first finished, so the last requested value
+    wins, and each success invalidates the settings and requests a refresh."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator._battery_settings_fetched_at["bat_1"] = datetime.now(UTC)
+    order: list[str] = []
+    first_started = asyncio.Event()
+    first_may_finish = asyncio.Event()
+
+    async def update(battery_id: str, settings: dict[str, object]) -> bool:
+        mode = settings["batteryMode"]
+        order.append(f"start {mode}")
+        if mode == "TRADING":
+            first_started.set()
+            await first_may_finish.wait()
+        order.append(f"end {mode}")
+        return True
+
+    api.smart_battery_update_settings.side_effect = update
+
+    first = asyncio.create_task(
+        coordinator.async_update_battery_settings("bat_1", {"batteryMode": "TRADING"})
+    )
+    await first_started.wait()
+    second = asyncio.create_task(
+        coordinator.async_update_battery_settings(
+            "bat_1", {"batteryMode": "SELF_CONSUMPTION_MIX"}
+        )
+    )
+    await asyncio.sleep(0)
+    assert order == ["start TRADING"]  # the second change waits for the first
+
+    first_may_finish.set()
+    assert await asyncio.gather(first, second) == [True, True]
+
+    assert order == [
+        "start TRADING",
+        "end TRADING",
+        "start SELF_CONSUMPTION_MIX",
+        "end SELF_CONSUMPTION_MIX",
+    ]
+    assert "bat_1" not in coordinator._battery_settings_fetched_at
+    assert coordinator._battery_settings_generation["bat_1"] == 2
+    assert coordinator.async_request_refresh.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_battery_setting_change_keeps_settings(mock_config_entry) -> None:
+    """An unsuccessful change neither invalidates the settings nor refreshes."""
+    api = AsyncMock()
+    api.smart_battery_update_settings.return_value = False
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.async_request_refresh = AsyncMock()
+    fetched_at = datetime.now(UTC)
+    coordinator._battery_settings_fetched_at["bat_1"] = fetched_at
+
+    assert (
+        await coordinator.async_update_battery_settings(
+            "bat_1", {"batteryMode": "TRADING"}
+        )
+        is False
+    )
+    assert coordinator._battery_settings_fetched_at["bat_1"] == fetched_at
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_battery_settings_request_records_nothing(
+    mock_config_entry,
+) -> None:
+    """A refresh cancelled while a settings request is in flight records
+    nothing, so the next refresh fetches again."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    started = asyncio.Event()
+
+    async def hang(battery_id: str) -> str:
+        started.set()
+        await asyncio.Event().wait()
+        return "never"
+
+    api.smart_battery_settings.side_effect = hang
+    refresh = asyncio.create_task(_settings_after_refresh(coordinator, "bat_1"))
+    await started.wait()
+    refresh.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await refresh
+
+    assert "bat_1" not in coordinator._battery_settings
+    assert "bat_1" not in coordinator._battery_settings_fetched_at
+
+    api.smart_battery_settings.side_effect = ["settings-1"]
+    assert await _settings_after_refresh(coordinator, "bat_1") == {
+        "bat_1": "settings-1"
+    }
+
+
+@pytest.mark.asyncio
+async def test_battery_settings_failure_logs_only_the_error_type(
+    mock_config_entry, caplog
+) -> None:
+    """A failed settings fetch logs the error type, not upstream error text."""
+    api = AsyncMock()
+    api.smart_battery_settings.side_effect = RequestException(
+        "upstream detail: account 12345"
+    )
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+
+    with caplog.at_level(logging.DEBUG, logger="custom_components.frank_energie"):
+        assert await _settings_after_refresh(coordinator, "bat_1") == {}
+
+    assert "Failed to fetch settings for battery bat_1: RequestException" in caplog.text
+    assert "account 12345" not in caplog.text
 
 
 @pytest.mark.asyncio

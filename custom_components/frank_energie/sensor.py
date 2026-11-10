@@ -54,6 +54,7 @@ from .const import (
     ATTR_START_DATE,
     ATTR_TILL_TIME,
     ATTRIBUTION,
+    BATTERY_MODE_STATES,
     BATTERY_STRATEGY_OPTIONS,
     DATA_BATTERIES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
@@ -4836,13 +4837,7 @@ def _build_single_smart_battery_descriptions(
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery",
                     device_class=SensorDeviceClass.ENUM,
-                    options=[
-                        "imbalance_trading",
-                        "self_consumption",
-                        "self_consumption_mix",
-                        "trading",
-                        "unknown",
-                    ],
+                    options=BATTERY_MODE_STATES,
                     value_fn=lambda data, idx=i: _get_battery_setting_lower(
                         data, idx, "battery_mode"
                     ),

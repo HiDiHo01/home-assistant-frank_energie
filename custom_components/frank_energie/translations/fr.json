@@ -229,11 +229,37 @@
       "battery_mode": {
         "name": "Mode de batterie intelligente",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Trading d'équilibrage",
           "self_consumption": "Autoconsommation",
           "self_consumption_mix": "Autoconsommation Plus",
           "trading": "Trading",
           "unknown": "Inconnu"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Date d'effet de la demande de modification"
+          },
+          "is_change_request_possible": {
+            "name": "Modification possible",
+            "state": {
+              "false": "Non",
+              "true": "Oui"
+            }
+          },
+          "upcoming_change": {
+            "name": "Modification à venir",
+            "state": {
+              "congestion": "Congestion",
+              "imbalance_trading": "Trading d'équilibrage",
+              "self_consumption": "Autoconsommation",
+              "self_consumption_mix": "Autoconsommation Plus",
+              "trading": "Trading"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Date d'effet de la modification à venir"
+          }
         }
       },
       "battery_strategy": {
@@ -245,6 +271,31 @@
           "imbalance_only": "Équilibrage uniquement",
           "standard": "Standard",
           "unknown": "Inconnu"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Date d'effet de la demande de modification"
+          },
+          "is_change_request_possible": {
+            "name": "Modification possible",
+            "state": {
+              "false": "Non",
+              "true": "Oui"
+            }
+          },
+          "upcoming_change": {
+            "name": "Modification à venir",
+            "state": {
+              "aggressive": "Agressive",
+              "balanced": "Équilibrée",
+              "conservative": "Conservatrice",
+              "imbalance_only": "Équilibrage uniquement",
+              "standard": "Standard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Date d'effet de la modification à venir"
+          }
         }
       },
       "resolution": {
@@ -1000,6 +1051,7 @@
       "battery_mode": {
         "name": "Mode de batterie",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Trading d'équilibrage",
           "self_consumption": "Autoconsommation",
           "self_consumption_mix": "Autoconsommation Plus",

@@ -812,7 +812,8 @@
           "trading": "Handelen",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
-          "unknown": "Unknown"
+          "unknown": "Unknown",
+          "congestion": "Congestie"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -1044,11 +1045,37 @@
       "battery_mode": {
         "name": "Slimme batterijmodus",
         "state": {
+          "congestion": "Congestie",
           "imbalance_trading": "Onbalans handelen",
           "self_consumption": "Zelfconsumptie",
           "self_consumption_mix": "Zelfconsumptie Plus",
           "trading": "Handelen",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "congestion": "Congestie",
+              "imbalance_trading": "Onbalans handelen",
+              "self_consumption": "Zelfconsumptie",
+              "self_consumption_mix": "Zelfconsumptie Plus",
+              "trading": "Handelen"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
+          }
         }
       },
       "battery_strategy": {
@@ -1060,6 +1087,31 @@
           "imbalance_only": "Alleen onbalans",
           "standard": "Standaard",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "aggressive": "Agressief",
+              "balanced": "Gebalanceerd",
+              "conservative": "Conservatief",
+              "imbalance_only": "Alleen onbalans",
+              "standard": "Standaard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
+          }
         }
       },
       "enode_charging_mode": {
