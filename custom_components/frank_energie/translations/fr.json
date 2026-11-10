@@ -1055,6 +1055,27 @@
       "deadline": {
         "name": "Heure de départ"
       },
+      "charging_hour_monday": {
+        "name": "Heure de départ lundi"
+      },
+      "charging_hour_tuesday": {
+        "name": "Heure de départ mardi"
+      },
+      "charging_hour_wednesday": {
+        "name": "Heure de départ mercredi"
+      },
+      "charging_hour_thursday": {
+        "name": "Heure de départ jeudi"
+      },
+      "charging_hour_friday": {
+        "name": "Heure de départ vendredi"
+      },
+      "charging_hour_saturday": {
+        "name": "Heure de départ samedi"
+      },
+      "charging_hour_sunday": {
+        "name": "Heure de départ dimanche"
+      },
       "charge_settings_id": {
         "name": "ID des paramètres de charge"
       },
