@@ -63,9 +63,7 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
 def test_project_key_and_pull_request_validation(exporter: ModuleType) -> None:
     """Read the configured project and reject injection or invalid PR numbers."""
     assert exporter._PROJECT_CONFIG == ROOT / "sonar-project.properties"
-    assert exporter._project_key() == (
-        "HiDiHo01_home-assistant-frank_energie"
-    )
+    assert exporter._project_key() == ("HiDiHo01_home-assistant-frank_energie")
     assert exporter._pull_request_number("") is None
     assert exporter._pull_request_number(" 433 ") == "433"
     for value in ("0", "-1", "433&ps=500", "PR-433", "１２"):
