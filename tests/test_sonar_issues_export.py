@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import sys
+from secrets import token_hex
 from pathlib import Path
 from types import ModuleType
 from urllib.error import HTTPError
@@ -78,6 +79,7 @@ def test_fetch_page_builds_correct_query_and_optional_auth(
 ) -> None:
     """Use the precise SonarQube filters and keep tokens in request headers."""
     captured: dict[str, object] = {}
+    synthetic_token = token_hex(16)
 
     def fake_urlopen(request: Request, timeout: int) -> io.BytesIO:
         """Return a valid empty issue page while recording safe request metadata."""
@@ -87,7 +89,7 @@ def test_fetch_page_builds_correct_query_and_optional_auth(
         return io.BytesIO(b'{"total":0,"issues":[]}')
 
     monkeypatch.setattr(exporter, "urlopen", fake_urlopen)
-    assert exporter._fetch_page("my_project", pull_request, 1, "test-secret") == {
+    assert exporter._fetch_page("my_project", pull_request, 1, synthetic_token) == {
         "total": 0,
         "issues": [],
     }
@@ -102,9 +104,9 @@ def test_fetch_page_builds_correct_query_and_optional_auth(
     else:
         assert "pullRequest" not in params
         assert "sinceLeakPeriod" not in params
-    assert captured["authorization"] == "Bearer test-secret"
+    assert captured["authorization"] == f"Bearer {synthetic_token}"
     assert captured["timeout"] == 20
-    assert "test-secret" not in str(captured["url"])
+    assert synthetic_token not in str(captured["url"])
 
 
 def test_export_aggregates_all_pages_without_truncation(
@@ -176,9 +178,10 @@ def test_unauthorized_response_never_exposes_token(
         raise HTTPError(request.full_url, 403, "Forbidden", None, None)
 
     monkeypatch.setattr(exporter, "urlopen", fake_urlopen)
+    synthetic_token = token_hex(16)
     with pytest.raises(RuntimeError, match="HTTP 403") as error:
-        exporter._fetch_page("my_project", "433", 1, "fictitious-secret")
-    assert "fictitious-secret" not in str(error.value)
+        exporter._fetch_page("my_project", "433", 1, synthetic_token)
+    assert synthetic_token not in str(error.value)
 
 
 def test_cli_writes_valid_json_for_empty_project(
