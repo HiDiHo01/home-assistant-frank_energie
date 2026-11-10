@@ -4,6 +4,12 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.translation import async_get_translations
+
 INTEGRATION_DIR = Path(__file__).parent.parent / "custom_components" / "frank_energie"
 STRINGS_FILE = INTEGRATION_DIR / "strings.json"
 TRANSLATIONS_DIR = INTEGRATION_DIR / "translations"
@@ -110,6 +116,75 @@ def test_smart_hvac_total_savings_translations() -> None:
         sensor = translation["entity"]["sensor"]["smart_hvac_total_result"]
         assert sensor["name"] == expected_names[path.name], (
             f"{path.name} must localize the existing total-savings sensor key"
+        )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
+    ("language", "localized_days", "prefix"),
+    [
+        (
+            "en",
+            ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+            "Departure time ",
+        ),
+        (
+            "nl",
+            ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+            "Vertrektijd ",
+        ),
+        (
+            "nl-BE",
+            ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+            "Vertrektijd ",
+        ),
+        (
+            "fr",
+            ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"),
+            "Heure de départ ",
+        ),
+        (
+            "fr-BE",
+            ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"),
+            "Heure de départ ",
+        ),
+    ],
+)
+async def test_vehicle_weekday_departure_translations(
+    hass: HomeAssistant,
+    language: str,
+    localized_days: tuple[str, ...],
+    prefix: str,
+) -> None:
+    """Resolve all seven vehicle departure-time names through Home Assistant."""
+    from custom_components.frank_energie.const import DOMAIN
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        WEEKDAYS,
+    )
+
+    translations = await async_get_translations(hass, language, "entity", {DOMAIN})
+    weekday_descriptions = {
+        description.key: description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key.startswith("charging_hour_")
+    }
+    assert set(weekday_descriptions) == {
+        f"charging_hour_{day}" for day in WEEKDAYS
+    }
+
+    for weekday, localized_day in zip(WEEKDAYS, localized_days, strict=True):
+        key = f"charging_hour_{weekday}"
+        description = weekday_descriptions[key]
+        translation_path = f"component.{DOMAIN}.entity.sensor.{key}.name"
+
+        assert translations[translation_path] == f"{prefix}{localized_day}"
+        assert description.translation_key == key
+        assert description.entity_category is EntityCategory.DIAGNOSTIC
+        assert description.device_class is SensorDeviceClass.TIMESTAMP
+        assert description.unique_id_fn is not None
+        assert description.unique_id_fn({"id": "fixture-vehicle"}) == (
+            f"fixture-vehicle_{key}"
         )
 
 
@@ -336,9 +411,28 @@ def test_no_unused_or_missing_translation_keys():
         "pv_panel_group",
     }
 
+    # Resolve the generated vehicle keys from the actual sensor descriptions,
+    # rather than exempting unknown translations through a static whitelist.
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        WEEKDAYS,
+    )
+
+    dynamic_vehicle_keys = {
+        description.translation_key
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key.startswith("charging_hour_")
+    }
+    assert dynamic_vehicle_keys == {
+        f"charging_hour_{weekday}" for weekday in WEEKDAYS
+    }
+
     # Verify that all translation keys in strings.json are used in the codebase
     all_used_entity_keys = (
-        extractor.translation_keys | extractor.button_keys | dynamic_whitelist
+        extractor.translation_keys
+        | extractor.button_keys
+        | dynamic_whitelist
+        | dynamic_vehicle_keys
     )
     unused_entity_keys = strings_entity_keys - all_used_entity_keys
     assert not unused_entity_keys, (
@@ -351,7 +445,9 @@ def test_no_unused_or_missing_translation_keys():
     )
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
-    missing_entity_keys = extractor.translation_keys - strings_entity_keys
+    missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys) - (
+        strings_entity_keys
+    )
     assert not missing_entity_keys, (
         f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
     )
