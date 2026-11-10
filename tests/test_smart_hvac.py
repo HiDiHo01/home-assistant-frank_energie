@@ -361,6 +361,65 @@ async def test_hvac_inventory_changes_and_recovery(
     assert _state(hass, first_sensor).state == "Fixture Model A"
 
 
+async def test_hvac_deactivation_prunes_only_missing_equipment(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Remove stale devices while inactive, but discover new devices on reactivation."""
+    first = _equipment("existing-device", "Model A")
+    removed = _equipment("removed-device", "Model B")
+    newcomer = _equipment("new-device", "Model C")
+    api.smart_hvacs.return_value = [first, removed]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    original = _sensor(hass, entry, "smart_hvac_equipment")
+    assert len(_equipment_devices(hass, entry)) == 2
+
+    api.me.return_value = _profile(available=True, activated=False)
+    await entry.runtime_data.settings_coordinator.async_refresh()
+    api.smart_hvacs.return_value = [first, newcomer]
+    await entry.runtime_data.smart_hvac_coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(_equipment_devices(hass, entry)) == 1
+    assert _state(hass, original).state == "Fixture Model A"
+    assert {
+        device.name for device in _equipment_devices(hass, entry)
+    } == {"Fixture Model A"}
+    assert {
+        sensor.translation_key for sensor in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+        if sensor.translation_key == "smart_hvac_equipment"
+    } == {"smart_hvac_equipment"}
+
+    api.me.return_value = _profile(available=True, activated=True)
+    await entry.runtime_data.settings_coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert {
+        device.name for device in _equipment_devices(hass, entry)
+    } == {"Fixture Model A", "Fixture Model C"}
+    assert _sensor(hass, entry, "smart_hvac_equipment").id == original.id
+
+
+async def test_hvac_inactive_reload_prunes_missing_equipment(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Clean registrations after reload when activation is false and inventory is empty."""
+    api.smart_hvacs.return_value = [_equipment("existing-device", "Model A")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    previous = _sensor(hass, entry, "smart_hvac_equipment")
+    assert len(_equipment_devices(hass, entry)) == 1
+
+    api.me.return_value = _profile(available=True, activated=False)
+    api.smart_hvacs.return_value = []
+    with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert _equipment_devices(hass, entry) == []
+    assert er.async_get(hass).async_get(previous.entity_id) is None
+
+
 async def test_hvac_updates_device_metadata_without_duplicates(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
