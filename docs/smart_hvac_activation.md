@@ -128,8 +128,10 @@ A failed inventory refresh retains the physical devices and registrations.
 A successful inventory refresh removes devices and sensors for equipment that
 Frank has removed, even after service deactivation; new equipment is created
 only while the service is active. A successful null device summary produces
-unknown summary values. An unsuccessful summary makes only that equipment's
-summary unavailable.
+unknown summary values. If rate limiting skips a summary read, previously
+retrieved data remains cached but is marked stale, and its sensors remain
+unavailable until a successful read. A summary request that was attempted
+but failed discards the earlier value and remains unavailable.
 
 Local entities show the equipment's display name. Device and request IDs are
 used internally. Downloadable HVAC diagnostics contain counts and update
