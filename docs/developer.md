@@ -370,6 +370,11 @@ GitHub Actions workflow downloads open and confirmed SonarQube Cloud findings.
    It contains `sonar-open-issues.json` with the project key, optional PR,
    applied filters, UTC export time, total count, and all matching issues.
 
+Changes to the exporter workflow or script also run this read-only check on PRs,
+without exposing `SONAR_TOKEN`. PR-triggered artifacts are snapshots taken
+at execution time; run the manual export after Sonar's analysis has finished
+when you need the latest findings.
+
 The export uses `sonar-project.properties` for the project key and follows
 API pagination beyond the first 100 issues. It fails instead of publishing
 an incomplete, malformed or inconsistent result. No issues are modified and
