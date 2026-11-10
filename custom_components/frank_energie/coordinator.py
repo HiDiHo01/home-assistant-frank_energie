@@ -12,6 +12,7 @@ import math
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Final, TypedDict, cast
 from zoneinfo import ZoneInfo
@@ -2246,29 +2247,104 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         prices: list[Price],
         window: int,
     ) -> tuple[float, Price, Price] | None:
-        """Find lowest average price for consecutive hours."""
+        """Find the earliest cheapest finite price window in linear time.
 
-        if len(prices) < window:
+        Maintain a sliding total without allocating window slices. When two
+        totals are close enough for float drift to change their ordering,
+        switch to an exact decimal total for comparisons. Skip windows with
+        non-finite prices, then resume once those prices leave the window.
+        """
+        if window <= 0 or len(prices) < window:
             return None
 
-        lowest_avg: float | None = None
-        lowest_start: Price | None = None
-        lowest_end: Price | None = None
+        current_sum = 0.0
+        invalid_count = 0
+        for index in range(window):
+            value = prices[index].total
+            if math.isfinite(value):
+                current_sum += value
+            else:
+                invalid_count += 1
 
-        for index in range(len(prices) - window + 1):
-            window_prices = prices[index : index + window]
+        lowest_sum: float | None = current_sum if invalid_count == 0 else None
+        lowest_index: int | None = 0 if invalid_count == 0 else None
+        exact_sum: Decimal | None = None
+        lowest_exact: Decimal | None = None
 
-            avg_price = sum(price.total for price in window_prices) / window
+        for index in range(window, len(prices)):
+            incoming = prices[index].total
+            outgoing = prices[index - window].total
 
-            if lowest_avg is None or avg_price < lowest_avg:
-                lowest_avg = avg_price
-                lowest_start = window_prices[0]
-                lowest_end = window_prices[-1]
+            if math.isfinite(incoming):
+                current_sum += incoming
+                if exact_sum is not None:
+                    exact_sum += Decimal(str(incoming))
+            else:
+                invalid_count += 1
 
-        if lowest_avg is None or lowest_start is None or lowest_end is None:
+            if math.isfinite(outgoing):
+                current_sum -= outgoing
+                if exact_sum is not None:
+                    exact_sum -= Decimal(str(outgoing))
+            else:
+                invalid_count -= 1
+
+            if invalid_count:
+                continue
+
+            start_index = index - window + 1
+            if lowest_sum is None:
+                lowest_sum = current_sum
+                lowest_index = start_index
+                lowest_exact = exact_sum
+            elif math.isclose(
+                current_sum, lowest_sum, rel_tol=1e-12, abs_tol=1e-12
+            ):
+                # Exact comparisons preserve the first of equally priced
+                # blocks. Activate this accumulator only for close totals.
+                if exact_sum is None:
+                    exact_sum = sum(
+                        (
+                            Decimal(str(prices[position].total))
+                            for position in range(start_index, index + 1)
+                        ),
+                        Decimal(0),
+                    )
+                if lowest_exact is None:
+                    lowest_exact = sum(
+                        (
+                            Decimal(str(prices[position].total))
+                            for position in range(
+                                lowest_index, lowest_index + window
+                            )
+                        ),
+                        Decimal(0),
+                    )
+                if exact_sum < lowest_exact:
+                    lowest_sum = current_sum
+                    lowest_index = start_index
+                    lowest_exact = exact_sum
+            elif current_sum < lowest_sum:
+                lowest_sum = current_sum
+                lowest_index = start_index
+                lowest_exact = exact_sum
+
+        if lowest_index is None:
             return None
 
-        return lowest_avg, lowest_start, lowest_end
+        # Produce an accurate float for the API without cumulative drift.
+        lowest_avg = (
+            math.fsum(
+                prices[position].total
+                for position in range(lowest_index, lowest_index + window)
+            )
+            / window
+        )
+        return (
+            lowest_avg,
+            prices[lowest_index],
+            prices[lowest_index + window - 1],
+        )
 
     def _should_fire_lowest_price_event(self, today: date) -> bool:
         """Return True if the lowest-price event was not fired today."""
