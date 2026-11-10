@@ -700,6 +700,58 @@ async def test_hvac_rate_limit_preserves_other_reads(
     )
 
 
+async def test_hvac_rate_limited_requests_preserve_stale_summaries(
+    hass: HomeAssistant, api: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep skipped summaries cached, but never expose them as fresh readings."""
+    monkeypatch.setattr(smart_hvac, "monotonic", lambda: 0.0)
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    initial_summary = SmartHvacSummary(steering_status="ACTIVE")
+    api.smart_hvac_summary.return_value = initial_summary
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    steering_sensor = _sensor(hass, entry, "smart_hvac_steering_status")
+    assert _state(hass, steering_sensor).state == "ACTIVE"
+
+    api.smart_hvac_summary.reset_mock()
+    api.smart_hvac_connect_requests.side_effect = RateLimitException(
+        "SmartHvacConnectRequests", retry_after=1800
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.summaries == {"fixture-device": initial_summary}
+    assert coordinator.data.stale_summaries == frozenset({"fixture-device"})
+    assert _state(hass, steering_sensor).state == STATE_UNAVAILABLE
+    api.smart_hvac_summary.assert_not_awaited()
+
+    monkeypatch.setattr(smart_hvac, "monotonic", lambda: 1800.0)
+    api.smart_hvac_connect_requests.side_effect = None
+    api.smart_hvac_summary.side_effect = RequestException(
+        "private-fixture-summary-failure"
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.summaries == {}
+    assert not coordinator.data.stale_summaries
+    assert _state(hass, steering_sensor).state == STATE_UNAVAILABLE
+    api.smart_hvac_summary.assert_awaited_once_with("fixture-device")
+
+    api.smart_hvac_summary.side_effect = None
+    api.smart_hvac_summary.return_value = SmartHvacSummary(
+        steering_status="RECOVERED"
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.summaries["fixture-device"].steering_status == "RECOVERED"
+    assert not coordinator.data.stale_summaries
+    assert _state(hass, steering_sensor).state == "RECOVERED"
+
+
 async def test_hvac_maintenance_window(
     hass: HomeAssistant, api: AsyncMock, freezer: FrozenDateTimeFactory
 ) -> None:
