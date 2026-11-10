@@ -9,6 +9,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.selector import TextSelector, TextSelectorType
 
 from custom_components.frank_energie.const import (
     CONF_SITE,
@@ -40,6 +41,11 @@ async def test_show_login_form(hass: HomeAssistant) -> None:
     )
     assert result2["type"] == FlowResultType.FORM
     assert result2["step_id"] == "login"
+
+    # Verify password field uses TextSelector configured as password type
+    password_schema = result2["data_schema"].schema[CONF_PASSWORD]
+    assert isinstance(password_schema, TextSelector)
+    assert password_schema.config["type"] == TextSelectorType.PASSWORD
 
 
 async def test_invalid_authentication(hass: HomeAssistant, mock_auth_failure) -> None:
@@ -133,6 +139,11 @@ async def test_options_flow_with_site(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] is None
+
+    # Verify options flow password field uses TextSelector configured as password type
+    password_schema = result["data_schema"].schema[CONF_PASSWORD]
+    assert isinstance(password_schema, TextSelector)
+    assert password_schema.config["type"] == TextSelectorType.PASSWORD
 
 
 async def test_options_flow_without_site(hass: HomeAssistant, config_entry) -> None:
