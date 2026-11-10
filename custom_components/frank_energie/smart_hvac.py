@@ -78,8 +78,8 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
             always_update=False,
         )
         self.data = SmartHvacData()
+        self.site_reference = site_reference
         self._api = api
-        self._site_reference = site_reference
         self._retry_at = 0.0
 
     def _requests_paused(self) -> bool:
@@ -116,7 +116,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
             return self.data
 
         inventory = await self._async_read(
-            "inventory", self._api.smart_hvacs, self._site_reference
+            "inventory", self._api.smart_hvacs, self.site_reference
         )
         requests = await self._async_read(
             "connection requests", self._api.smart_hvac_connect_requests

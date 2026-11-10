@@ -349,7 +349,7 @@
         }
       },
       "smart_hvac_equipment": {
-        "name": "Appareil {device}",
+        "name": "Appareil",
         "state_attributes": {
           "brand": {
             "name": "Marque"
@@ -375,22 +375,22 @@
         }
       },
       "smart_hvac_operational_status": {
-        "name": "État opérationnel de {device}"
+        "name": "État opérationnel"
       },
       "smart_hvac_steering_status": {
-        "name": "État du pilotage de {device}"
+        "name": "État du pilotage"
       },
       "smart_hvac_operational_status_timestamp": {
-        "name": "Horodatage de l’état opérationnel de {device}"
+        "name": "Horodatage de l’état opérationnel"
       },
       "smart_hvac_first_session_date": {
-        "name": "Date de la première session de {device}"
+        "name": "Date de la première session"
       },
       "smart_hvac_last_session_date": {
-        "name": "Date de la dernière session de {device}"
+        "name": "Date de la dernière session"
       },
       "smart_hvac_total_result": {
-        "name": "Résultat total de {device}"
+        "name": "Résultat total"
       },
       "ean": {
         "name": "EAN (Energy Account Number)"

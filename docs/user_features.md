@@ -136,9 +136,10 @@ not activation. No device operating or steering status is exposed by this
 binary sensor.
 
 When Frank confirms activation for the delivery site, the **Smart heating**
-service device shows connected equipment, Frank's statuses, session dates,
-and the total result. The **User** service shows the account-level connection
-request count for activated sites. [Smart heating activation and equipment data](smart_hvac_activation.md)
+service shows the number of linked devices and the site's profile information.
+Each linked device, such as a heat pump, appears separately with its own
+statuses, session dates, and total result. The **User** service shows the
+account-level connection request count for activated sites. [Smart heating activation and equipment data](smart_hvac_activation.md)
 
 ## PV Systems
 

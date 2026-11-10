@@ -99,7 +99,14 @@ activation binary sensor and the connection request count appear on the
 | Equipment summary | Frank's operational and steering statuses, the operational status timestamp, first and last session dates, and the provider's total result |
 | Account connection requests | Count, brand, Frank's request status, and an indication that Frank reported an error |
 
-Each active equipment record gets its own sensors on the service device.
+Each linked `SmartHvacDevice` in the selected site's inventory appears as a
+separate Home Assistant device with its equipment and summary sensors. The
+integration uses Frank's display name, brand, and model when available. An
+opaque identifier derived from the selected site and Frank's device ID keeps
+the device stable across refreshes. Existing equipment sensors keep their
+entity IDs and unique IDs when they move from the service to the device. The
+service holds the device count and profile information.
+
 The total result uses the number returned by Frank. The confirmed read model
 defines no unit or statistics class for this value. Frank's status strings
 describe the provider's operational and steering states. The separate
@@ -114,11 +121,11 @@ and honors a longer provider retry delay. Site flags and profile time come
 from the settings coordinator's existing site response.
 
 A successful empty inventory produces a count of zero. A failed inventory
-refresh makes the equipment readings unavailable and retains their registry
-entries. A successful inventory refresh discovers new equipment and removes
-entities for equipment that Frank has removed. A successful null device
-summary produces unknown summary values. An unsuccessful summary makes only
-that equipment's summary unavailable.
+refresh makes the equipment readings unavailable and retains the physical
+devices and their sensor registrations. A successful inventory refresh adds
+new equipment and removes the devices and sensors for equipment that Frank
+has removed. A successful null device summary produces unknown summary
+values. An unsuccessful summary makes only that equipment's summary unavailable.
 
 Local entities show the equipment's display name. Device and request IDs are
 used internally. Downloadable HVAC diagnostics contain counts and update

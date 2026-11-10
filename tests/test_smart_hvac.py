@@ -4,6 +4,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
+from hashlib import sha256
 from unittest.mock import AsyncMock, call, patch
 
 import pytest
@@ -36,6 +37,7 @@ from custom_components.frank_energie.const import (
 from custom_components.frank_energie.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.frank_energie.helpers import service_device_info
 from custom_components.frank_energie.smart_hvac import FrankEnergieSmartHvacCoordinator
 
 from .test_contract_support import _api_for_contracts
@@ -131,6 +133,23 @@ def _service_entities(
     return er.async_entries_for_device(er.async_get(hass), device.id)
 
 
+def _equipment_devices(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> list[dr.DeviceEntry]:
+    """Find this site's equipment registrations, including their entry types."""
+    prefix = f"{entry.entry_id}_smart_hvac_device_"
+    return [
+        device
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(hass), entry.entry_id
+        )
+        if any(
+            domain == DOMAIN and identifier.startswith(prefix)
+            for domain, identifier in device.identifiers
+        )
+    ]
+
+
 def _state(hass: HomeAssistant, entity: er.RegistryEntry) -> State:
     """Read the state of a real Home Assistant registry entry."""
     state = hass.states.get(entity.entity_id)
@@ -139,10 +158,12 @@ def _state(hass: HomeAssistant, entity: er.RegistryEntry) -> State:
 
 
 def _sensor(hass: HomeAssistant, entry: MockConfigEntry, key: str) -> er.RegistryEntry:
-    """Find one sensor by its translation key under the Smart Heating service."""
+    """Find a sensor with a unique translation key in this config entry."""
     return next(
         sensor
-        for sensor in _service_entities(hass, entry)
+        for sensor in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
         if sensor.translation_key == key
     )
 
@@ -173,9 +194,21 @@ async def test_hvac_site_device_and_account_diagnostics(
     ]
     await _setup(hass, entry, api)
 
+    (device,) = _equipment_devices(hass, entry)
+    assert device.entry_type is None
+    assert device.name == "Fixture Model A"
+    assert device.manufacturer == "Fixture Heating"
+    assert device.model == "Model A"
+    assert "private-fixture-" not in repr(device.identifiers)
+    service_sensors = _service_entities(hass, entry)
+    assert {sensor.translation_key for sensor in service_sensors} == {
+        "smart_hvac_device_count",
+        "smart_hvac_profile_created_at",
+    }
+    device_sensors = er.async_entries_for_device(er.async_get(hass), device.id)
     states = {
         sensor.translation_key: _state(hass, sensor)
-        for sensor in _service_entities(hass, entry)
+        for sensor in (*service_sensors, *device_sensors)
     }
     assert {key: state.state for key, state in states.items()} == {
         "smart_hvac_device_count": "1",
@@ -243,10 +276,11 @@ async def test_hvac_inventory_changes_and_recovery(
     coordinator = entry.runtime_data.smart_hvac_coordinator
     count = _sensor(hass, entry, "smart_hvac_device_count")
     assert _state(hass, count).state == "0"
+    assert _equipment_devices(hass, entry) == []
 
     first = _equipment("private-fixture-first", "Model A")
     second = _equipment("private-fixture-second", "Model B")
-    api.smart_hvacs.return_value = [first, second]
+    api.smart_hvacs.return_value = [first, second, first]
     api.smart_hvac_summary.side_effect = [
         RequestException("private-fixture-first"),
         None,
@@ -254,16 +288,26 @@ async def test_hvac_inventory_changes_and_recovery(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert _state(hass, count).state == "2"
+    devices = _equipment_devices(hass, entry)
+    assert len(devices) == 2
+    assert {device.name for device in devices} == {"Fixture Model A", "Fixture Model B"}
+    assert all(device.entry_type is None for device in devices)
+    registry = er.async_get(hass)
+    equipment_sensors = [
+        sensor
+        for device in devices
+        for sensor in er.async_entries_for_device(registry, device.id)
+    ]
     summaries = [
         _state(hass, sensor).state
-        for sensor in _service_entities(hass, entry)
+        for sensor in equipment_sensors
         if sensor.translation_key == "smart_hvac_operational_status"
     ]
     assert sorted(summaries) == sorted([STATE_UNAVAILABLE, STATE_UNKNOWN])
     assert "private-fixture-first" not in caplog.text
     first_sensor = next(
         sensor
-        for sensor in _service_entities(hass, entry)
+        for sensor in equipment_sensors
         if sensor.translation_key == "smart_hvac_equipment"
         and _state(hass, sensor).state == "Fixture Model A"
     )
@@ -271,7 +315,13 @@ async def test_hvac_inventory_changes_and_recovery(
     api.smart_hvacs.side_effect = RequestException("private-fixture-inventory")
     await coordinator.async_refresh()
     assert _state(hass, count).state == STATE_UNAVAILABLE
-    assert len(_service_entities(hass, entry)) == 16
+    assert {device.id for device in _equipment_devices(hass, entry)} == {
+        device.id for device in devices
+    }
+    assert all(
+        registry.async_get(sensor.entity_id) == sensor for sensor in equipment_sensors
+    )
+    assert _state(hass, first_sensor).state == STATE_UNAVAILABLE
     assert entry.runtime_data.price_coordinator.last_update_success
     assert entry.runtime_data.settings_coordinator.last_update_success
     assert "private-fixture-inventory" not in caplog.text
@@ -286,7 +336,10 @@ async def test_hvac_inventory_changes_and_recovery(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert _state(hass, count).state == "1"
-    assert len(_service_entities(hass, entry)) == 9
+    (remaining_device,) = _equipment_devices(hass, entry)
+    assert remaining_device.name == "Fixture Model B"
+    assert remaining_device in devices
+    assert len(_service_entities(hass, entry)) == 2
     assert (
         _state(hass, _sensor(hass, entry, "smart_hvac_equipment")).state
         == "Fixture Model B"
@@ -308,6 +361,90 @@ async def test_hvac_inventory_changes_and_recovery(
     assert _state(hass, first_sensor).state == "Fixture Model A"
 
 
+async def test_hvac_updates_device_metadata_without_duplicates(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Update a physical device in place and reuse it on repeated refreshes."""
+    entry = _entry(hass)
+    api.smart_hvacs.return_value = [SmartHvacDevice(id="fixture-device")]
+    await _setup(hass, entry, api)
+    (original_device,) = _equipment_devices(hass, entry)
+    assert original_device.name == "HVAC"
+    assert original_device.manufacturer is None
+    assert original_device.model is None
+    original_sensor = _sensor(hass, entry, "smart_hvac_equipment")
+
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    (updated_device,) = _equipment_devices(hass, entry)
+    assert updated_device.id == original_device.id
+    assert updated_device.identifiers == original_device.identifiers
+    assert updated_device.name == "Fixture Model A"
+    assert updated_device.manufacturer == "Fixture Heating"
+    assert updated_device.model == "Model A"
+    assert _sensor(hass, entry, "smart_hvac_equipment") == original_sensor
+    assert _state(hass, original_sensor).state == "Fixture Model A"
+
+
+async def test_hvac_existing_sensors_move_to_equipment_device(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Reattach sensors from the earlier service grouping with their IDs intact."""
+    entry = _entry(hass)
+    entry_id = entry.entry_id
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    device_registry = dr.async_get(hass)
+    service_info = service_device_info(entry_id, SERVICE_NAME_SMART_HVAC)
+    service = device_registry.async_get_or_create(
+        config_entry_id=entry_id, **service_info
+    )
+    registry = er.async_get(hass)
+    fingerprint = sha256(f"{entry_id}:fixture-device".encode()).hexdigest()
+    device_keys = (
+        "smart_hvac_equipment",
+        "smart_hvac_operational_status",
+        "smart_hvac_steering_status",
+        "smart_hvac_operational_status_timestamp",
+        "smart_hvac_first_session_date",
+        "smart_hvac_last_session_date",
+        "smart_hvac_total_result",
+    )
+    service_keys = ("smart_hvac_device_count", "smart_hvac_profile_created_at")
+    unique_ids = {key: f"{entry_id}_{key}" for key in service_keys} | {
+        key: f"{entry_id}_smart_hvac_equipment_{fingerprint}_{key}"
+        for key in device_keys
+    }
+    previous_sensors = {
+        key: registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            unique_id,
+            config_entry=entry,
+            device_id=service.id,
+            suggested_object_id=f"previous_{key}",
+        )
+        for key, unique_id in unique_ids.items()
+    }
+
+    await _setup(hass, entry, api)
+
+    (device,) = _equipment_devices(hass, entry)
+    assert device.id != service.id
+    for key, previous in previous_sensors.items():
+        current = _sensor(hass, entry, key)
+        assert current.id == previous.id
+        assert current.entity_id == previous.entity_id
+        assert current.unique_id == previous.unique_id
+        assert current.device_id == (device.id if key in device_keys else service.id)
+    assert (
+        device_registry.async_get(service.id).entry_type == dr.DeviceEntryType.SERVICE
+    )
+
+
 async def test_hvac_waits_for_confirmed_site_activation(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
@@ -325,6 +462,7 @@ async def test_hvac_waits_for_confirmed_site_activation(
         )
         is None
     )
+    assert _equipment_devices(hass, entry) == []
     user_keys = {
         sensor.translation_key
         for sensor in _service_entities(hass, entry, SERVICE_NAME_USER)
@@ -336,6 +474,7 @@ async def test_hvac_waits_for_confirmed_site_activation(
     await entry.runtime_data.settings_coordinator.async_refresh()
     await hass.async_block_till_done()
 
+    assert len(_equipment_devices(hass, entry)) == 1
     assert _state(hass, _sensor(hass, entry, "smart_hvac_device_count")).state == "1"
     assert (
         _state(hass, _sensor(hass, entry, "smart_hvac_equipment")).state
@@ -369,7 +508,11 @@ async def test_hvac_entries_isolate_site_data_and_reload(
 
     primary_sensor = _sensor(hass, primary, "smart_hvac_equipment")
     other_sensor = _sensor(hass, other, "smart_hvac_equipment")
-    assert primary_sensor.device_id != other_sensor.device_id
+    (primary_device,) = _equipment_devices(hass, primary)
+    (other_device,) = _equipment_devices(hass, other)
+    assert primary_sensor.device_id == primary_device.id
+    assert other_sensor.device_id == other_device.id
+    assert primary_device.identifiers.isdisjoint(other_device.identifiers)
     assert primary_sensor.unique_id != other_sensor.unique_id
     assert _state(hass, primary_sensor).state == "Fixture Model A"
     assert _state(hass, other_sensor).state == "Fixture Model B"
@@ -383,6 +526,7 @@ async def test_hvac_entries_isolate_site_data_and_reload(
         _sensor(hass, primary, "smart_hvac_equipment").entity_id
         == primary_sensor.entity_id
     )
+    assert _equipment_devices(hass, primary)[0].id == primary_device.id
     assert (
         _sensor(hass, other, "smart_hvac_equipment").entity_id == other_sensor.entity_id
     )
@@ -395,6 +539,8 @@ async def test_hvac_entries_isolate_site_data_and_reload(
         assert await hass.config_entries.async_reload(primary.entry_id)
         await hass.async_block_till_done()
     assert er.async_get(hass).async_get(primary_sensor.entity_id) is None
+    assert _equipment_devices(hass, primary) == []
+    assert _equipment_devices(hass, other)[0].id == other_device.id
     assert _state(hass, _sensor(hass, primary, "smart_hvac_device_count")).state == "0"
     assert _state(hass, other_sensor).state == "Fixture Model B"
 

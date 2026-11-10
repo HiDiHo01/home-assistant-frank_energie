@@ -157,7 +157,7 @@
         }
       },
       "smart_hvac_equipment": {
-        "name": "Apparaat {device}",
+        "name": "Apparaat",
         "state_attributes": {
           "brand": {
             "name": "Merk"
@@ -183,22 +183,22 @@
         }
       },
       "smart_hvac_operational_status": {
-        "name": "Operationele status van {device}"
+        "name": "Operationele status"
       },
       "smart_hvac_steering_status": {
-        "name": "Sturingsstatus van {device}"
+        "name": "Sturingsstatus"
       },
       "smart_hvac_operational_status_timestamp": {
-        "name": "Tijdstip operationele status van {device}"
+        "name": "Tijdstip operationele status"
       },
       "smart_hvac_first_session_date": {
-        "name": "Datum eerste sessie van {device}"
+        "name": "Datum eerste sessie"
       },
       "smart_hvac_last_session_date": {
-        "name": "Datum laatste sessie van {device}"
+        "name": "Datum laatste sessie"
       },
       "smart_hvac_total_result": {
-        "name": "Totaalresultaat van {device}"
+        "name": "Totaalresultaat"
       },
       "current_electricity_price": {
         "name": "Huidige elektriciteitsprijs (All-in)",

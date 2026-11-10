@@ -349,7 +349,7 @@
         }
       },
       "smart_hvac_equipment": {
-        "name": "Equipment {device}",
+        "name": "Equipment",
         "state_attributes": {
           "brand": {
             "name": "Brand"
@@ -375,22 +375,22 @@
         }
       },
       "smart_hvac_operational_status": {
-        "name": "Operational status of {device}"
+        "name": "Operational status"
       },
       "smart_hvac_steering_status": {
-        "name": "Steering status of {device}"
+        "name": "Steering status"
       },
       "smart_hvac_operational_status_timestamp": {
-        "name": "Operational status timestamp for {device}"
+        "name": "Operational status timestamp"
       },
       "smart_hvac_first_session_date": {
-        "name": "First session date for {device}"
+        "name": "First session date"
       },
       "smart_hvac_last_session_date": {
-        "name": "Last session date for {device}"
+        "name": "Last session date"
       },
       "smart_hvac_total_result": {
-        "name": "Total result for {device}"
+        "name": "Total result"
       },
       "ean": {
         "name": "EAN (Energy Account Number)"
