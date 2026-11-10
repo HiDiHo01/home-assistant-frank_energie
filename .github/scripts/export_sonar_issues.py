@@ -13,15 +13,18 @@ from urllib.request import Request, urlopen
 _API_URL = "https://sonarcloud.io/api/issues/search"
 _PAGE_SIZE = 100
 _MAX_RESULTS = 10_000
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_PROJECT_CONFIG = _REPOSITORY_ROOT / "sonar-project.properties"
+_OUTPUT_PATH = _REPOSITORY_ROOT / "sonar-open-issues.json"
 
 
-def _project_key(properties_path: Path) -> str:
-    """Read the project key from the repository's SonarQube configuration."""
+def _project_key() -> str:
+    """Read the project key only from this repository's fixed configuration."""
     try:
-        properties = properties_path.read_text(encoding="utf-8")
+        properties = _PROJECT_CONFIG.read_text(encoding="utf-8")
     except OSError as error:
         raise ValueError(
-            f"Cannot read SonarQube project configuration: {properties_path}"
+            "Cannot read repository SonarQube project configuration"
         ) from error
 
     for line in properties.splitlines():
@@ -178,32 +181,19 @@ def main() -> int:
     """Validate inputs, fetch the full issue set and write one JSON artifact."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--project-config",
-        type=Path,
-        default=Path("sonar-project.properties"),
-        help="Path to sonar-project.properties",
-    )
-    parser.add_argument(
         "--pull-request",
         default="",
         help="Optional pull request number; omit for all open project findings",
     )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="Destination JSON file",
-    )
     args = parser.parse_args()
 
     try:
-        project_key = _project_key(args.project_config)
+        project_key = _project_key()
         pull_request = _pull_request_number(args.pull_request)
         result = _export_issues(
             project_key, pull_request, os.environ.get("SONAR_TOKEN", "").strip()
         )
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
+        _OUTPUT_PATH.write_text(
             json.dumps(result, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -211,7 +201,7 @@ def main() -> int:
         print(f"SonarQube issue export failed: {error}", file=sys.stderr)
         return 1
 
-    print(f"Exported {result['total']} SonarQube issues to {args.output}")
+    print(f"Exported {result['total']} SonarQube issues to {_OUTPUT_PATH.name}")
     return 0
 
 
