@@ -1130,7 +1130,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: _get_nested(data, "chargeState", "chargeLimit"),
+        value_fn=lambda data: (data.get("chargeState") or {}).get("chargeLimit"),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     EnodeVehicleEntityDescription(
@@ -5442,15 +5442,6 @@ async def async_setup_entry(
         raise
 
     _LOGGER.debug("All sensors added for entry: %s", config_entry.entry_id)
-
-
-def _get_nested(data: object, *keys: str) -> object | None:
-    """Safely get nested value from a dict."""
-    for key in keys:
-        if not isinstance(data, dict):
-            return None
-        data = data.get(key)
-    return data
 
 
 def _parse_iso_datetime(dt_value: datetime | str | None) -> datetime | None:
