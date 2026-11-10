@@ -279,7 +279,9 @@ def test_fetch_page_sanitizes_network_errors(
         raise URLError(f"Upstream diagnostic {synthetic_token}")
 
     monkeypatch.setattr(exporter, "urlopen", fake_urlopen)
-    with pytest.raises(RuntimeError, match="Cannot connect to SonarQube Cloud") as error:
+    with pytest.raises(
+        RuntimeError, match="Cannot connect to SonarQube Cloud"
+    ) as error:
         exporter._fetch_page("my_project", "433", 1, synthetic_token)
     assert synthetic_token not in str(error.value)
 
