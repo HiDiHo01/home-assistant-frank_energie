@@ -83,6 +83,12 @@ ruff format --check --diff custom_components tests
 
 For workflow or release-manifest changes, also run `poetry run pytest -q tests/test_workflow_*.py tests/test_release_manifest.py` with the Node.js version defined by CI. Use GitHub Actions `ci.yaml`, `ruff.yml`, `validate.yml`, and `quality_scale.yml` for the authoritative matrix and validation gates. Check HACS and hassfest when the relevant jobs run. For documentation-only changes, check skill metadata, paths, links, and the PR diff; do not claim that a documentation check proves runtime correctness.
 
+### Python setup failures in CI
+
+1. Read the failing Python setup step and identify the actual runner image, architecture, and requested patch. Check that combination against the official build manifest before changing the Python matrix or dependencies. [GitHub Actions Python build manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
+2. If a rolling runner label moved to an image without the minimum patch, choose a fixed image with builds for both matrix entries. Reproduce locally with the exact minimum interpreter and the existing Poetry lock.
+3. Run the workflow regression tests and verify that both Python jobs reach pytest and pass on the current PR head. Record interpreter setup failures separately from test failures.
+
 ## PR and completion rules
 
 - Follow the repository's existing issue and PR governance; do not create extra issues or branches without a justified need or authorization. Never force-push, merge, delete branches, or rewrite history without explicit permission.
