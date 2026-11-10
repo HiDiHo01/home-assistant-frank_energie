@@ -700,6 +700,46 @@ async def test_hvac_rate_limit_preserves_other_reads(
     )
 
 
+@pytest.mark.parametrize(
+    ("retry_after", "expected_delay"),
+    [
+        (None, 900),
+        (60, 900),
+        (1800, 1800),
+        (172800, 86400),
+        (float("nan"), 900),
+        (float("inf"), 900),
+        (-1, 900),
+    ],
+)
+async def test_hvac_retry_after_is_bounded(
+    hass: HomeAssistant,
+    api: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+    retry_after: float | None,
+    expected_delay: int,
+) -> None:
+    """Limit malformed and excessive retry hints without blocking recovery."""
+    clock = [0.0]
+    monkeypatch.setattr(smart_hvac, "monotonic", lambda: clock[0])
+    coordinator = FrankEnergieSmartHvacCoordinator(hass, _entry(hass), api, "test-site")
+    api.smart_hvacs.side_effect = RateLimitException(
+        "SmartHvacs", retry_after=retry_after
+    )
+
+    await coordinator.async_refresh()
+    assert coordinator._retry_at == expected_delay
+    clock[0] = expected_delay - 1
+    await coordinator.async_refresh()
+    api.smart_hvacs.assert_awaited_once()
+
+    clock[0] = float(expected_delay)
+    api.smart_hvacs.side_effect = None
+    await coordinator.async_refresh()
+    assert api.smart_hvacs.await_count == 2
+    assert coordinator.data.devices == {}
+
+
 async def test_hvac_rate_limited_requests_preserve_stale_summaries(
     hass: HomeAssistant, api: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
