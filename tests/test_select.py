@@ -712,6 +712,36 @@ def test_battery_strategy_select_falls_back_to_per_battery_mode(
 
 
 @pytest.mark.asyncio
+async def test_rejected_known_option_appears_in_safe_debug_log(
+    mock_coordinator, mock_config_entry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Identify a known unavailable option without sending an API mutation."""
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.SELF_CONSUMPTION_MIX)],
+        DATA_BATTERY_SETTINGS: {_BATTERY_ID: _adjustable()},
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.frank_energie.select"
+    ):
+        with pytest.raises(HomeAssistantError, match="not selectable"):
+            await entity.async_select_option("trading")
+
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
+    assert any(
+        record.getMessage().endswith("missing from selectable options: trading")
+        for record in caplog.records
+        if record.name == "custom_components.frank_energie.select"
+    )
+
+
+@pytest.mark.asyncio
 async def test_nonselectable_current_mode_remains_visible_but_cannot_mutate(
     mock_coordinator, mock_config_entry
 ) -> None:
