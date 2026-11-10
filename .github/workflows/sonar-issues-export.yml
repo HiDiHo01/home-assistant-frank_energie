@@ -19,6 +19,8 @@ permissions:
 jobs:
   export:
     name: Download open SonarQube findings as JSON
+    # Manual runs with credentials must execute trusted default-branch code.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -52,7 +54,7 @@ jobs:
       - name: Export open findings
         env:
           # PRs run untrusted branch code; never expose Sonar credentials to it.
-          SONAR_TOKEN: ${{ github.event_name == 'workflow_dispatch' && secrets.SONAR_TOKEN || '' }}
+          SONAR_TOKEN: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && secrets.SONAR_TOKEN || '' }}
           PULL_REQUEST: ${{ github.event.pull_request.number || inputs.pull_request || '' }}
         run: |
           python .github/scripts/export_sonar_issues.py \
