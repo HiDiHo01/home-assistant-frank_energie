@@ -117,7 +117,9 @@ The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
 every 15 minutes outside the API maintenance window. The inventory provides
 the same fields as the device detail query. Summaries are fetched one at a
 time. On rate limiting, the coordinator waits at least one polling interval
-and honors a longer provider retry delay. Site flags and profile time come
+and honors a longer valid provider retry delay, capped at 24 hours. Invalid
+or non-finite retry hints fall back to the polling interval. Site flags and
+profile time come
 from the settings coordinator's existing site response.
 
 A successful empty inventory produces a count of zero. A successful null
