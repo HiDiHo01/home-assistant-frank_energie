@@ -56,13 +56,14 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
     assert artifact["uses"] == (
         "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
     )
-    assert artifact["with"]["path"] == ("${{ runner.temp }}/sonar-open-issues.json")
+    assert artifact["with"]["path"] == "sonar-open-issues.json"
     assert artifact["with"]["if-no-files-found"] == "error"
 
 
 def test_project_key_and_pull_request_validation(exporter: ModuleType) -> None:
     """Read the configured project and reject injection or invalid PR numbers."""
-    assert exporter._project_key(ROOT / "sonar-project.properties") == (
+    assert exporter._PROJECT_CONFIG == ROOT / "sonar-project.properties"
+    assert exporter._project_key() == (
         "HiDiHo01_home-assistant-frank_energie"
     )
     assert exporter._pull_request_number("") is None
@@ -190,19 +191,14 @@ def test_cli_writes_valid_json_for_empty_project(
 ) -> None:
     """Publish a zero-issue artifact instead of failing a clean project."""
     output = tmp_path / "sonar-open-issues.json"
+    monkeypatch.setattr(exporter, "_OUTPUT_PATH", output)
     monkeypatch.setattr(
         exporter, "_fetch_page", lambda *_args: {"total": 0, "issues": []}
     )
     monkeypatch.setattr(
         sys,
         "argv",
-        [
-            "export_sonar_issues.py",
-            "--project-config",
-            str(ROOT / "sonar-project.properties"),
-            "--output",
-            str(output),
-        ],
+        ["export_sonar_issues.py"],
     )
     assert exporter.main() == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
