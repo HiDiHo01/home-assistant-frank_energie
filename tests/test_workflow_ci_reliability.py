@@ -152,12 +152,13 @@ def test_quality_workflow_performs_json_validation_without_tier_claims() -> None
 
 
 def test_ci_blocks_new_full_flake8_violations() -> None:
-    """Ensure the full linter has a gate and the Python matrix is retained."""
+    """Retain the lint gate and a runner that supports both Python builds."""
     workflow = _read_workflow("ci.yaml")
     jobs = workflow["jobs"]
     assert isinstance(jobs, dict)
     job = jobs["run"]
     assert isinstance(job, dict)
+    assert job["runs-on"] == "ubuntu-24.04"
     assert job["strategy"]["matrix"]["python-version"] == ["3.14.2", "3.14"]
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (

@@ -91,6 +91,9 @@
     "frank_energie_usage": {
       "name": "Frank Energie - Consommation"
     },
+    "frank_energie_smart_heating": {
+      "name": "Frank Energie - Chauffage intelligent"
+    },
     "frank_energie_user": {
       "name": "Frank Energie - Utilisateur"
     },
@@ -371,6 +374,75 @@
       }
     },
     "sensor": {
+      "smart_hvac_device_count": {
+        "name": "Appareils associés"
+      },
+      "smart_hvac_profile_created_at": {
+        "name": "Création du profil de chauffage intelligent",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Disponible dans le pays"
+          },
+          "available_on_site": {
+            "name": "Disponible sur le site de livraison"
+          },
+          "has_accepted_terms": {
+            "name": "Conditions acceptées"
+          }
+        }
+      },
+      "smart_hvac_connection_requests": {
+        "name": "Demandes d’association de chauffage intelligent (compte)",
+        "state_attributes": {
+          "requests": {
+            "name": "Détails des demandes d’association"
+          }
+        }
+      },
+      "smart_hvac_equipment": {
+        "name": "Appareil",
+        "state_attributes": {
+          "brand": {
+            "name": "Marque"
+          },
+          "model": {
+            "name": "Modèle"
+          },
+          "device_type": {
+            "name": "Type d’appareil"
+          },
+          "provider": {
+            "name": "Fournisseur"
+          },
+          "created_at": {
+            "name": "Date de création"
+          },
+          "updated_at": {
+            "name": "Date de mise à jour"
+          },
+          "needs_reauthentication": {
+            "name": "Réauthentification requise"
+          }
+        }
+      },
+      "smart_hvac_operational_status": {
+        "name": "État opérationnel"
+      },
+      "smart_hvac_steering_status": {
+        "name": "État du pilotage"
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "name": "Horodatage de l’état opérationnel"
+      },
+      "smart_hvac_first_session_date": {
+        "name": "Date de la première session"
+      },
+      "smart_hvac_last_session_date": {
+        "name": "Date de la dernière session"
+      },
+      "smart_hvac_total_result": {
+        "name": "Résultat total"
+      },
       "ean": {
         "name": "EAN (Energy Account Number)"
       },

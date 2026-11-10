@@ -62,7 +62,7 @@ Lessons verified while fixing [vehicle battery capacity issue #432](https://gith
 
 1. **Establish behavior:** Read nearby code and tests; reproduce the issue or establish a failing regression where feasible.
 2. **Assess impact:** Check config-entry setup/reauth/reconfigure/migration, affected entities, resource isolation, cached data, translation keys, and cross-contract behavior.
-3. **Implement:** Make focused changes with complete type hints and docstrings. Follow the repository's Python conventions, complexity thresholds, lazy logging formatting, and privacy-safe error handling.
+3. **Implement:** Make focused changes with complete type hints. Add or update docstrings in the surrounding style. Follow the repository's complexity thresholds, lazy logging formatting, and privacy-safe error handling. [Python standards](../../../AGENTS.md#4-python-standards)
 4. **Exercise edge cases:** Use deterministic mocks; test missing/null API fields, auth/timeout/rate-limit behavior, recovery, reload/unload, concurrency, negative prices, and timezone transitions when relevant.
 5. **Localize correctly.** When adding or changing translation keys, update `custom_components/frank_energie/strings.json` and **every** `translations/*.json` file. See the [localization guide](../../../LOCALIZATION.md) for supported locales. Preserve placeholders, enum keys, and shared translation references. Run `tests/test_translations.py`.
 6. **Review and report:** Check the final diff for backwards compatibility, unrelated edits, security leaks, unused code, and behavior changes. Summarize what changed, why, executed checks, results, and remaining limitations.
@@ -93,6 +93,12 @@ ruff format --check --diff custom_components tests
 ```
 
 For workflow or release-manifest changes, also run `poetry run pytest -q tests/test_workflow_*.py tests/test_release_manifest.py` with the Node.js version defined by CI. Use GitHub Actions `ci.yaml`, `ruff.yml`, `validate.yml`, and `quality_scale.yml` for the authoritative matrix and validation gates. Check HACS and hassfest when the relevant jobs run. For documentation-only changes, check skill metadata, paths, links, and the PR diff; do not claim that a documentation check proves runtime correctness.
+
+### Python setup failures in CI
+
+1. Read the failing Python setup step and identify the actual runner image, architecture, and requested patch. Check that combination against the official build manifest before changing the Python matrix or dependencies. [GitHub Actions Python build manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
+2. If a rolling runner label moved to an image without the minimum patch, choose a fixed image with builds for both matrix entries. Reproduce locally with the exact minimum interpreter and the existing Poetry lock.
+3. Run the workflow regression tests and verify that both Python jobs reach pytest and pass on the current PR head. Record interpreter setup failures separately from test failures.
 
 ## PR and completion rules
 

@@ -84,10 +84,63 @@ before claiming deployment compatibility. Do not use an unreleased Git branch
 as a production requirement or keep a PR draft solely for this now-resolved
 library publication gate.
 
-This integration does not yet expose Smart HVAC inventory, operational
-status, steering status, or actual heat-pump running state as a separate
-entity. See [issue #414](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/414)
-for the original semantics issue.
+## Smart heating service device
+
+The integration adds the **Frank Energie - Smart heating** service device,
+its sensors, and the account-wide connection request sensor when Frank confirms
+`UserSmartHvac.isActivated = true` for the selected delivery site. The
+activation binary sensor and the connection request count appear on the
+**User** service. The binary sensor shows the site's activation status.
+
+| Group | Data |
+| --- | --- |
+| Delivery site | Linked device count and the profile creation timestamp with country availability, site availability, and terms acceptance attributes |
+| Linked equipment | Display name, brand, model, equipment type, provider, creation and update timestamps, and reauthentication requirement |
+| Equipment summary | Frank's operational and steering statuses, the operational status timestamp, first and last session dates, and the provider's total result |
+| Account connection requests | Count, brand, Frank's request status, and an indication that Frank reported an error |
+
+Each linked `SmartHvacDevice` in the selected site's inventory appears as a
+separate Home Assistant device with its equipment and summary sensors. The
+integration uses Frank's display name, brand, and model when available. An
+opaque identifier derived from the selected site and Frank's device ID keeps
+the device stable across refreshes. Existing equipment sensors keep their
+entity IDs and unique IDs when they move from the service to the device. The
+service holds the device count and profile information.
+
+The total result uses the number returned by Frank. The confirmed read model
+defines no unit or statistics class for this value. Frank's status strings
+describe the provider's operational and steering states. The separate
+activation sensor continues to describe the service.
+
+The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
+`smart_hvac_connect_requests()`, and `smart_hvac_summary(device_id)`
+every 15 minutes outside the API maintenance window. The inventory provides
+the same fields as the device detail query. Summaries are fetched one at a
+time. On rate limiting, the coordinator waits at least one polling interval
+and honors a longer valid provider retry delay, capped at 24 hours. Invalid
+or non-finite retry hints fall back to the polling interval. Site flags and
+profile time come
+from the settings coordinator's existing site response.
+
+A successful empty inventory produces a count of zero. A successful null
+inventory or connection-request response produces an unknown count; a skipped
+or failed request makes the corresponding existing count sensor unavailable.
+The coordinator retains explicit read-success flags for both collections.
+A failed inventory refresh retains the physical devices and registrations.
+A successful inventory refresh removes devices and sensors for equipment that
+Frank has removed, even after service deactivation; new equipment is created
+only while the service is active. A successful null device summary produces
+unknown summary values. If rate limiting skips a summary read, previously
+retrieved data remains cached but is marked stale, and its sensors remain
+unavailable until a successful read. A summary request that was attempted
+but failed discards the earlier value and remains unavailable.
+
+Local entities show the equipment's display name. Device and request IDs are
+used internally. Downloadable HVAC diagnostics contain counts and update
+status. Logs and diagnostics redact personal identifiers and raw errors.
+The published client exposes settings changes through a write method with a
+Boolean result. Reading current modes and temperature bounds requires a
+verified read operation. [Python client Smart HVAC API](https://github.com/HiDiHo01/python-frank-energie/blob/v2026.11.9/docs/smart-hvac.md)
 
 ## Developer verification
 
@@ -101,6 +154,7 @@ Using the repository's Python 3.14 Poetry environment:
 
 ```sh
 poetry run python -m pytest tests/test_binary_sensor.py tests/test_coordinator.py tests/test_translations.py -q
+poetry run python -m pytest tests/test_smart_hvac.py tests/test_diagnostics.py -q
 poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
 ruff check custom_components tests
 ruff format --check --diff custom_components tests

@@ -112,6 +112,11 @@ PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
 PRICE_CACHE_STORE_VERSION: Final[int] = 1
 
 
+def api_maintenance_active(now_utc: datetime) -> bool:
+    """Return whether Frank Energie is in its daily UTC maintenance window."""
+    return now_utc.hour == 0
+
+
 def known_site_contracts(site: DeliverySite | None) -> set[str] | None:
     """Return the selected site's supported contracts when metadata is usable."""
     if site is None:

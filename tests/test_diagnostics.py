@@ -171,6 +171,7 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     runtime_data = SimpleNamespace(
         coordinator=coordinator,
         battery_session_coordinators=[],
+        smart_hvac_coordinator=None,
     )
 
     entry = MagicMock()
@@ -272,6 +273,7 @@ async def test_diagnostics_coordinator_metadata() -> None:
     runtime_data = SimpleNamespace(
         coordinator=coordinator,
         battery_session_coordinators=[object(), object()],
+        smart_hvac_coordinator=None,
     )
 
     entry = MagicMock()
