@@ -13,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, Platform
+from homeassistant.const import CURRENCY_EURO, EntityCategory, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -97,6 +97,9 @@ _DEVICE_SENSORS = (
     _DeviceSensorDescription(
         key="smart_hvac_total_result",
         translation_key="smart_hvac_total_result",
+        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement=CURRENCY_EURO,
+        suggested_display_precision=2,
         summary_value=lambda summary: summary.total_result,
     ),
 )

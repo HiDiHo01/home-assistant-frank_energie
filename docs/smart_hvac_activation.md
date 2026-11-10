@@ -107,10 +107,18 @@ the device stable across refreshes. Existing equipment sensors keep their
 entity IDs and unique IDs when they move from the service to the device. The
 service holds the device count and profile information.
 
-The total result uses the number returned by Frank. The confirmed read model
-defines no unit or statistics class for this value. Frank's status strings
-describe the provider's operational and steering states. The separate
-activation sensor continues to describe the service.
+The sensor displayed as **Total savings** (Dutch: **Totale besparingen**; French:
+**Économies totales**) keeps the stable `smart_hvac_total_result` translation
+key and uses the numeric value returned by Frank, with Home Assistant's
+`MONETARY` sensor class, an `EUR` native unit and a suggested display precision
+of two decimals. The sensor retains the unrounded numeric value, including
+negative and zero results, and does not define a statistics class.
+The integration maintainer has confirmed that the provider's
+`SmartHvacSummary.total_result` is denominated in **euros, not eurocents**.
+Therefore no cent-to-euro scaling is applied. The public Python client models
+this as a nullable float; the amount and its precision are passed through
+unchanged. Frank's status strings describe the provider's operational and
+steering states. The separate activation sensor continues to describe the service.
 
 The HVAC sensors use Home Assistant icon translations in `icons.json`.
 These are neutral defaults, not assertions about current device activity:
