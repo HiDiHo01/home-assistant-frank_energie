@@ -453,20 +453,18 @@ class FrankEnergieBatteryBaseSelect(
             if option == self.current_option:
                 return
             raise HomeAssistantError(
-                f"Smart battery {self._battery_id} {api_key} option {option} "
-                "is not selectable for this battery"
+                f"Smart battery setting {api_key} is not selectable for this battery"
             )
 
-        _LOGGER.debug(
-            "Setting smart battery %s %s to %s", self._battery_id, api_key, option
-        )
+        # The option comes from provider/user data and may contain secrets.
+        # Keep it for the validated API mutation, but never include it in logs.
+        _LOGGER.debug("Submitting a smart battery setting update")
         success = await self.coordinator.async_update_battery_settings(
             self._battery_id, {api_key: option.upper()}
         )
         if not success:
             raise HomeAssistantError(
-                f"Frank Energie did not accept setting smart battery "
-                f"{self._battery_id} {api_key} to {option}"
+                f"Frank Energie rejected the requested smart battery {api_key} change"
             )
 
 
