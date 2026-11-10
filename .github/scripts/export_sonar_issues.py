@@ -103,7 +103,8 @@ def _export_issues(
         current_issues = response.get("issues")
 
         if (
-            type(total) is not int
+            not isinstance(total, int)
+            or isinstance(total, bool)
             or total < 0
             or not isinstance(current_issues, list)
             or not all(isinstance(issue, dict) for issue in current_issues)
