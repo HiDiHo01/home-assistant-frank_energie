@@ -54,9 +54,7 @@ def test_workflow_is_manual_read_only_and_uploads_json() -> None:
     assert artifact["uses"] == (
         "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
     )
-    assert artifact["with"]["path"] == (
-        "${{ runner.temp }}/sonar-open-issues.json"
-    )
+    assert artifact["with"]["path"] == ("${{ runner.temp }}/sonar-open-issues.json")
     assert artifact["with"]["if-no-files-found"] == "error"
 
 
