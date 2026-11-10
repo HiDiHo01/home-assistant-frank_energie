@@ -143,10 +143,13 @@ icon identifies a financial result; the sensor's existing monetary metadata
 supplies the EUR unit and two-decimal display precision independently of its icon.
 
 The account-level `smart_hvac` binary sensor (**Smart heating** / **Slim
-verwarmen**) intentionally retains `mdi:heat-pump`, configured in
-`binary_sensor.py`. Its state reports **service activation**, not whether any
-physical heat pump is currently heating. The integration test confirms that
-this existing icon is preserved.
+verwarmen**) also has an icon translation in `icons.json`, under
+`entity.binary_sensor.smart_hvac.default`. It retains the existing
+`mdi:heat-pump` appearance without hardcoding an icon in `binary_sensor.py`
+or publishing the icon as a state attribute. Its state reports **service
+activation**, not whether a physical heat pump is currently heating. The
+integration test checks both the icon mapping and the unchanged RUNNING device
+class.
 
 The HVAC coordinator refreshes `smart_hvacs(site_reference)`,
 `smart_hvac_connect_requests()`, and `smart_hvac_summary(device_id)`
