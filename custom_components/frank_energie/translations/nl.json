@@ -202,7 +202,7 @@
         "name": "Datum laatste sessie"
       },
       "smart_hvac_total_result": {
-        "name": "Totaalresultaat"
+        "name": "Totale besparingen"
       },
       "current_electricity_price": {
         "name": "Huidige elektriciteitsprijs (All-in)",
