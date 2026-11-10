@@ -362,9 +362,8 @@ async def test_hvac_site_device_and_account_diagnostics(
         "smart_hvac_steering_status": "mdi:tune-variant",
         "smart_hvac_total_result": "mdi:currency-eur",
     }
-    assert {key: value["default"] for key, value in hvac_icons.items()} == (
-        expected_icons
-    )
+    icon_defaults = {key: value["default"] for key, value in hvac_icons.items()}
+    assert icon_defaults == expected_icons
     assert states.keys() <= hvac_icons.keys()
     assert "smart_hvac_connection_requests" in hvac_icons
     # Provider statuses do not prove active heating; keep neutral icon fallbacks.
