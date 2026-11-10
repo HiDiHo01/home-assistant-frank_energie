@@ -427,22 +427,22 @@ async def test_sensors_hour_price_attr(
         hass.states.get(
             "sensor.frank_energie_electricity_prices_current_electricity_market_price"
         ).attributes["prices"]
-    )
+    ) == 48
     assert len(
         hass.states.get(
             "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
         ).attributes["prices"]
-    )
+    ) == 48
     assert len(
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_market_price"
         ).attributes["prices"]
-    )
+    ) == 48
     assert len(
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
         ).attributes["prices"]
-    )
+    ) == 48
 
 
 _HAS_QUARTER_HOUR_LIB_API = hasattr(PriceData, "previous_quarter_hour")
