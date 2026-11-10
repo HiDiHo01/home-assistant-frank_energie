@@ -3730,6 +3730,7 @@ async def test_pv_feed_in_skipped_without_authentication(
     assert data[DATA_USER_SMART_FEED_IN] is None
     assert data[DATA_USER_SMART_FEED_IN_FETCHED] is False
 
+
 class TestFindLowestConsecutiveHours:
     """Regression tests for cheapest consecutive price-window selection."""
 
@@ -3828,9 +3829,7 @@ class TestFindLowestConsecutiveHours:
         invalid_price: float,
     ) -> None:
         """Ignore contaminated windows and resume at later finite prices."""
-        prices = self._make_prices(
-            [0.5, 0.5, invalid_price, 0.4, 0.3, 0.1, 0.2]
-        )
+        prices = self._make_prices([0.5, 0.5, invalid_price, 0.4, 0.3, 0.1, 0.2])
 
         result = coordinator._find_lowest_consecutive_hours(prices, 2)
 
@@ -3848,4 +3847,3 @@ class TestFindLowestConsecutiveHours:
         prices = self._make_prices([0.1, float("nan"), 0.1])
 
         assert coordinator._find_lowest_consecutive_hours(prices, 2) is None
-
