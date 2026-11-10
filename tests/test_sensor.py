@@ -1076,6 +1076,24 @@ def test_enode_vehicle_battery_capacity_from_parsed_model(
     )
     assert battery_level_description.value_fn(vehicle) == 94
 
+    charge_limit_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "charge_limit"
+    )
+    charge_limit_sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=charge_limit_description,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+    assert charge_limit_sensor.native_value == 100
+    assert charge_limit_sensor.available is True
+    assert charge_limit_sensor.unique_id == "frank_energie_veh_123_charge_limit"
+    assert sensor.device_info["identifiers"] == {("frank_energie", "veh_123")}
+    assert sensor.device_info["name"] == "Tesla Model 3"
+
 
 @pytest.mark.parametrize(
     ("charge_state", "expected_capacity"),
