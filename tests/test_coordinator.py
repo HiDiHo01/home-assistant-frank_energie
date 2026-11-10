@@ -3839,6 +3839,21 @@ class TestFindLowestConsecutiveHours:
         assert start is prices[5]
         assert end is prices[6]
 
+    def test_decimal_accumulator_recovers_after_nonfinite_price(
+        self,
+        coordinator: FrankEnergieCoordinator,
+    ) -> None:
+        """Keep the earliest tied block when a NaN interrupts decimal tracking."""
+        prices = self._make_prices([0.1, 0.2, 0.2, 0.1, float("nan"), 0.1, 0.2])
+
+        result = coordinator._find_lowest_consecutive_hours(prices, 2)
+
+        assert result is not None
+        average, start, end = result
+        assert average == pytest.approx(0.15)
+        assert start is prices[0]
+        assert end is prices[1]
+
     def test_returns_none_when_every_window_contains_nonfinite_price(
         self,
         coordinator: FrankEnergieCoordinator,
