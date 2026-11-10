@@ -3729,3 +3729,123 @@ async def test_pv_feed_in_skipped_without_authentication(
     mock_frank_energie.user_smart_feed_in.assert_not_awaited()
     assert data[DATA_USER_SMART_FEED_IN] is None
     assert data[DATA_USER_SMART_FEED_IN_FETCHED] is False
+
+class TestFindLowestConsecutiveHours:
+    """Regression tests for cheapest consecutive price-window selection."""
+
+    @staticmethod
+    def _make_prices(totals: list[float]) -> list[SimpleNamespace]:
+        """Create minimal price-like records with stable object identities."""
+        return [SimpleNamespace(total=total) for total in totals]
+
+    @pytest.mark.parametrize(
+        ("totals", "window"),
+        [
+            ([], 4),
+            ([1.0], 4),
+            ([1.0], 0),
+            ([1.0], -1),
+        ],
+    )
+    def test_rejects_invalid_window(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        totals: list[float],
+        window: int,
+    ) -> None:
+        """Reject empty, undersized, or non-positive price windows."""
+        assert (
+            coordinator._find_lowest_consecutive_hours(
+                self._make_prices(totals), window
+            )
+            is None
+        )
+
+    @pytest.mark.parametrize(
+        ("totals", "window", "expected_index", "expected_average"),
+        [
+            ([1.0, 2.0, 3.0], 3, 0, 2.0),
+            ([5.0, 1.5, 3.0], 1, 1, 1.5),
+            ([10.0, 10.0, 1.0, 2.0, 3.0, 10.0], 3, 2, 2.0),
+            ([5.0, 1.0, 2.0, 8.0, 9.0], 2, 1, 1.5),
+            ([2.0, 2.0, 2.0, 2.0], 2, 0, 2.0),
+            ([-0.1, -0.1, -0.3, 0.8], 2, 1, -0.2),
+            ([0.2, 0.2, 0.20000000000001, 0.19999999999998], 2, 2, 0.199999999999995),
+        ],
+    )
+    def test_selects_earliest_lowest_window(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        totals: list[float],
+        window: int,
+        expected_index: int,
+        expected_average: float,
+    ) -> None:
+        """Return the lowest average and the original boundary price objects."""
+        prices = self._make_prices(totals)
+
+        result = coordinator._find_lowest_consecutive_hours(prices, window)
+
+        assert result is not None
+        average, start, end = result
+        assert average == pytest.approx(expected_average)
+        assert start is prices[expected_index]
+        assert end is prices[expected_index + window - 1]
+
+    @pytest.mark.parametrize(
+        ("totals", "window", "expected_index", "expected_average"),
+        [
+            ([0.13262] * 4 + [0.5] * 4 + [0.13262] * 4, 4, 0, 0.13262),
+            ([0.3, 0.2, 0.3, 0.3, 0.1, 0.3, 0.2] + [0.5] * 17, 4, 1, 0.225),
+        ],
+    )
+    def test_decimal_ties_preserve_first_price_block(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        totals: list[float],
+        window: int,
+        expected_index: int,
+        expected_average: float,
+    ) -> None:
+        """Do not shift lowest-period events after floating-point drift."""
+        prices = self._make_prices(totals)
+
+        result = coordinator._find_lowest_consecutive_hours(prices, window)
+
+        assert result is not None
+        average, start, end = result
+        assert average == pytest.approx(expected_average)
+        assert start is prices[expected_index]
+        assert end is prices[expected_index + window - 1]
+
+    @pytest.mark.parametrize(
+        "invalid_price",
+        [float("nan"), float("inf"), float("-inf")],
+    )
+    def test_recovers_after_nonfinite_price(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        invalid_price: float,
+    ) -> None:
+        """Ignore contaminated windows and resume at later finite prices."""
+        prices = self._make_prices(
+            [0.5, 0.5, invalid_price, 0.4, 0.3, 0.1, 0.2]
+        )
+
+        result = coordinator._find_lowest_consecutive_hours(prices, 2)
+
+        assert result is not None
+        average, start, end = result
+        assert average == pytest.approx(0.15)
+        assert start is prices[5]
+        assert end is prices[6]
+
+    def test_returns_none_when_every_window_contains_nonfinite_price(
+        self,
+        coordinator: FrankEnergieCoordinator,
+    ) -> None:
+        """Do not report a cheapest interval if none has valid prices."""
+        prices = self._make_prices([0.1, float("nan"), 0.1])
+
+        assert coordinator._find_lowest_consecutive_hours(prices, 2) is None
+
