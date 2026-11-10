@@ -337,6 +337,36 @@ def test_battery_mode_select_static_options_include_current_mode(
     assert entity.extra_state_attributes["attribution"] == ATTRIBUTION
 
 
+def test_battery_mode_select_logs_missing_option_once(
+    mock_coordinator, mock_config_entry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Identify a missing known battery mode without repeating log messages."""
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.IMBALANCE_TRADING)]
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    with caplog.at_level(
+        logging.DEBUG, logger="custom_components.frank_energie.select"
+    ):
+        assert entity.options == ["self_consumption_mix", "trading", "imbalance_trading"]
+        assert entity.options == ["self_consumption_mix", "trading", "imbalance_trading"]
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "custom_components.frank_energie.select"
+        and "current option missing from selectable options" in record.getMessage()
+    ]
+    assert len(messages) == 1
+    assert messages[0].endswith("imbalance_trading")
+
+
 def test_battery_mode_select_uses_per_battery_options(
     mock_coordinator, mock_config_entry
 ):
@@ -614,7 +644,7 @@ async def test_failed_battery_change_is_reported(mock_coordinator, mock_config_e
         "battery_mode",
     )
 
-    with pytest.raises(HomeAssistantError, match="did not accept"):
+    with pytest.raises(HomeAssistantError, match="rejected"):
         await entity.async_select_option("trading")
 
 
@@ -632,7 +662,7 @@ async def test_failed_battery_change_fails_the_service_call(
     coordinator.async_update_battery_settings.return_value = False
     entity_id = _battery_entity_id(hass, "battery_mode")
 
-    with pytest.raises(HomeAssistantError, match="did not accept"):
+    with pytest.raises(HomeAssistantError, match="rejected"):
         await hass.services.async_call(
             SELECT_DOMAIN,
             "select_option",
@@ -703,7 +733,6 @@ async def test_nonselectable_current_mode_remains_visible_but_cannot_mutate(
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_select_option_does_not_disclose_sensitive_option(
     mock_coordinator, mock_config_entry, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -737,7 +766,8 @@ async def test_select_option_does_not_disclose_sensitive_option(
         for record in caplog.records
         if record.name == "custom_components.frank_energie.select"
     ]
-    assert "Submitting a smart battery setting update" in messages
+    assert any("Submitting a smart battery setting update" in message for message in messages)
+    assert any("option: [redacted]" in message for message in messages)
     assert all(synthetic_secret not in message for message in messages)
 
 
