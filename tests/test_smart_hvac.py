@@ -9,8 +9,9 @@ from unittest.mock import AsyncMock, call, patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import CURRENCY_EURO, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.icon import async_get_icons
@@ -39,6 +40,7 @@ from custom_components.frank_energie.diagnostics import (
 )
 from custom_components.frank_energie.helpers import service_device_info
 from custom_components.frank_energie.smart_hvac import FrankEnergieSmartHvacCoordinator
+from custom_components.frank_energie.smart_hvac_sensor import _DEVICE_SENSORS
 
 from .test_contract_support import _api_for_contracts
 
@@ -208,6 +210,58 @@ async def test_hvac_steering_status_enum_and_unknown_provider_values(
     assert state.attributes["options"] == ["active", "inactive"]
 
 
+
+@pytest.mark.parametrize(
+    ("total_result", "expected_state"),
+    [
+        (12.3456, "12.3456"),
+        (-8.25, "-8.25"),
+        (0.0, "0.0"),
+        (None, STATE_UNKNOWN),
+    ],
+)
+async def test_hvac_total_result_eur_display_metadata(
+    hass: HomeAssistant,
+    api: AsyncMock,
+    total_result: float | None,
+    expected_state: str,
+) -> None:
+    """Present HVAC results in EUR while retaining raw numeric precision."""
+    description = next(
+        description
+        for description in _DEVICE_SENSORS
+        if description.key == "smart_hvac_total_result"
+    )
+    assert description.device_class is SensorDeviceClass.MONETARY
+    assert description.native_unit_of_measurement == CURRENCY_EURO
+    assert description.suggested_display_precision == 2
+    assert description.state_class is None
+
+    summary = SmartHvacSummary.from_dict({"totalResult": total_result})
+    assert description.summary_value is not None
+    assert description.summary_value(summary) == total_result
+
+    entry = _entry(hass)
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    api.smart_hvac_summary.return_value = summary
+    await _setup(hass, entry, api)
+
+    result_sensor = _sensor(hass, entry, "smart_hvac_total_result")
+    initial_unique_id = result_sensor.unique_id
+    state = _state(hass, result_sensor)
+    assert state.state == expected_state
+    assert state.attributes["unit_of_measurement"] == CURRENCY_EURO
+    assert state.attributes["device_class"] == "monetary"
+    assert "state_class" not in state.attributes
+    assert entry.runtime_data.smart_hvac_coordinator.data.summaries[
+        "fixture-device"
+    ].total_result == total_result
+
+    await entry.runtime_data.smart_hvac_coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert _sensor(hass, entry, "smart_hvac_total_result").unique_id == initial_unique_id
+
+
 async def test_hvac_site_device_and_account_diagnostics(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
@@ -273,7 +327,8 @@ async def test_hvac_site_device_and_account_diagnostics(
     assert profile["available_on_site"] is True
     assert profile["available_in_country"] is True
     assert profile["has_accepted_terms"] is False
-    assert "unit_of_measurement" not in states["smart_hvac_total_result"].attributes
+    assert states["smart_hvac_total_result"].attributes["unit_of_measurement"] == CURRENCY_EURO
+    assert states["smart_hvac_total_result"].attributes["device_class"] == "monetary"
     assert "state_class" not in states["smart_hvac_total_result"].attributes
 
     account_states = {
