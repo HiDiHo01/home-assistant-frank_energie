@@ -381,7 +381,8 @@ are accepted, preventing arbitrary file reads or writes. The export follows
 API pagination beyond the first 100 issues. It fails instead of publishing
 an incomplete, malformed or inconsistent result. No issues are modified and
 no Sonar token is printed. Public projects may work anonymously; if the
-project needs authentication, add a repository Actions secret named
+project needs authentication, run the workflow from `main` and add a
+repository Actions secret named
 `SONAR_TOKEN` containing a SonarQube Cloud token with **Browse** access.
 Never put that token in a URL, workflow input, or committed file. A missing
 or insufficient token yields a failed run rather than a misleading empty export.
