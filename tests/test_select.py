@@ -354,8 +354,16 @@ def test_battery_mode_select_logs_missing_option_once(
     with caplog.at_level(
         logging.DEBUG, logger="custom_components.frank_energie.select"
     ):
-        assert entity.options == ["self_consumption_mix", "trading", "imbalance_trading"]
-        assert entity.options == ["self_consumption_mix", "trading", "imbalance_trading"]
+        assert entity.options == [
+            "self_consumption_mix",
+            "trading",
+            "imbalance_trading",
+        ]
+        assert entity.options == [
+            "self_consumption_mix",
+            "trading",
+            "imbalance_trading",
+        ]
 
     messages = [
         record.getMessage()
@@ -766,7 +774,9 @@ async def test_select_option_does_not_disclose_sensitive_option(
         for record in caplog.records
         if record.name == "custom_components.frank_energie.select"
     ]
-    assert any("Submitting a smart battery setting update" in message for message in messages)
+    assert any(
+        "Submitting a smart battery setting update" in message for message in messages
+    )
     assert any("option: [redacted]" in message for message in messages)
     assert all(synthetic_secret not in message for message in messages)
 
