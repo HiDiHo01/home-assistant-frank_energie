@@ -389,11 +389,12 @@ async def test_hvac_deactivation_prunes_only_missing_equipment(
 
     assert len(_equipment_devices(hass, entry)) == 1
     assert _state(hass, original).state == "Fixture Model A"
+    assert {device.name for device in _equipment_devices(hass, entry)} == {
+        "Fixture Model A"
+    }
     assert {
-        device.name for device in _equipment_devices(hass, entry)
-    } == {"Fixture Model A"}
-    assert {
-        sensor.translation_key for sensor in er.async_entries_for_config_entry(
+        sensor.translation_key
+        for sensor in er.async_entries_for_config_entry(
             er.async_get(hass), entry.entry_id
         )
         if sensor.translation_key == "smart_hvac_equipment"
@@ -402,9 +403,10 @@ async def test_hvac_deactivation_prunes_only_missing_equipment(
     api.me.return_value = _profile(available=True, activated=True)
     await entry.runtime_data.settings_coordinator.async_refresh()
     await hass.async_block_till_done()
-    assert {
-        device.name for device in _equipment_devices(hass, entry)
-    } == {"Fixture Model A", "Fixture Model C"}
+    assert {device.name for device in _equipment_devices(hass, entry)} == {
+        "Fixture Model A",
+        "Fixture Model C",
+    }
     assert er.async_get(hass).async_get(original.entity_id).id == original.id
 
 
