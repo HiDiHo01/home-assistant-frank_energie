@@ -8,12 +8,13 @@ The integration currently maintains these locales:
 
 - English: `custom_components/frank_energie/translations/en.json`
 - French: `custom_components/frank_energie/translations/fr.json`
+- French (Belgium): `custom_components/frank_energie/translations/fr-BE.json`
 - Dutch (Netherlands): `custom_components/frank_energie/translations/nl.json`
 - Dutch (Belgium): `custom_components/frank_energie/translations/nl-BE.json`
 
-The integration's `custom_components/frank_energie/strings.json` is the canonical translation-key structure. Keep every locale structurally aligned with it. Update all four locale files whenever translation keys or nesting change. The translation-alignment test dynamically loads every `translations/*.json` file and requires its key paths to match `strings.json`; do not update only a subset of locales.
+The integration uses `custom_components/frank_energie/strings.json` as its canonical translation-key structure. The translation-alignment test loads every `translations/*.json` file and requires its key paths to match `strings.json`.
 
-Use `fr.json` for French-language users; keep labels idiomatic in French while preserving technical identifiers, API enum values, placeholders, and Home Assistant shared translation references.
+Home Assistant loads `fr-BE.json` when it requests the `fr-BE` language tag. The frontend currently offers French as `fr`, which loads `fr.json`. The installation country and display language are separate settings. See the [Home Assistant frontend language list](https://github.com/home-assistant/frontend/blob/dev/src/translations/translationMetadata.json).
 
 ## What must be localized
 
@@ -32,7 +33,7 @@ Prefer Home Assistant's native translation mechanisms. Do not hard-code user-fac
 
 1. **Inspect the implementation.** Identify the relevant config-flow step, entity description, state attribute, option, or other user-facing behavior before editing translation files.
 2. **Update the canonical structure.** Add or change translation keys in `strings.json`.
-3. **Update every supported locale.** Apply the same key and nesting changes to all four files: `translations/en.json`, `translations/fr.json`, `translations/nl.json`, and `translations/nl-BE.json`. More generally, update every file matched by `translations/*.json`, including any locale added in the future. Translate values naturally for each locale; do not copy English text into another language merely to satisfy key parity.
+3. **Update every supported locale.** Apply the same key and nesting changes to every file matched by `translations/*.json`. Translate values naturally for each locale.
 4. **Keep the schema identical.** All nested keys and their paths must match `strings.json` exactly in every locale. Do not add locale-specific keys or leave unused/orphaned keys.
 5. **Check the code-to-translation mapping.** New entity descriptions must use the appropriate translation key. If code emits state attributes, ensure each user-visible attribute has a corresponding translation.
 6. **Validate the JSON and tests.** Run the focused translation tests and then the full test suite when practical (see below).
@@ -44,7 +45,7 @@ If a key is renamed or removed, update the implementation and all locale files i
 - Keep translation **keys** stable, lowercase, and machine-oriented. Keys are identifiers, not display text.
 - Translate **values**, not keys. Preserve the exact key spelling and nesting across all locales.
 - Use clear, concise language appropriate to Home Assistant forms and entity names.
-- Use consistent Frank Energie terminology across the integration. Use clear, idiomatic English in `en.json`, French in `fr.json`, Dutch in `nl.json`, and Belgian Dutch in `nl-BE.json`.
+- Use consistent Frank Energie terminology across the integration. In `fr-BE.json`, use terms familiar to Belgian energy customers, such as *code EAN*, *compteur communicant*, and *domiciliation*. Keep idiomatic French wording shared with `fr.json` where it fits both locales.
 - Preserve placeholders, interpolation tokens, and Home Assistant shared-translation references exactly. Do not translate or alter tokens such as `[%key:common::config_flow::abort::already_configured%]`.
 - Preserve technical identifiers and machine values, including API field names, enum values, entity IDs, and configuration keys. Translate only their displayed labels.
 - State translations must match the actual values produced by the entity. Keep enum translation keys consistent with the values and options defined in code; do not infer or invent states.
@@ -76,8 +77,8 @@ Do not remove or weaken these checks just to make a translation change pass. Fix
 
 Before submitting a localization change, confirm that:
 
-- [ ] `strings.json` and all four locale files (`en.json`, `fr.json`, `nl.json`, and `nl-BE.json`) contain matching key paths.
-- [ ] All four locales have complete, natural, and consistent values appropriate to each language/region.
+- [ ] `strings.json` and every file in `translations/` contain matching key paths.
+- [ ] Every locale has complete, natural, and consistent values appropriate to its language and region.
 - [ ] Shared Home Assistant translation references and placeholders are unchanged.
 - [ ] New or changed user-facing code is connected to the correct translation keys.
 - [ ] State labels and attribute translations match the values actually emitted by the integration.

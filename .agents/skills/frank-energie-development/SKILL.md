@@ -64,7 +64,7 @@ Lessons verified while fixing [vehicle battery capacity issue #432](https://gith
 2. **Assess impact:** Check config-entry setup/reauth/reconfigure/migration, affected entities, resource isolation, cached data, translation keys, and cross-contract behavior.
 3. **Implement:** Make focused changes with complete type hints. Add or update docstrings in the surrounding style. Follow the repository's complexity thresholds, lazy logging formatting, and privacy-safe error handling. [Python standards](../../../AGENTS.md#4-python-standards)
 4. **Exercise edge cases:** Use deterministic mocks; test missing/null API fields, auth/timeout/rate-limit behavior, recovery, reload/unload, concurrency, negative prices, and timezone transitions when relevant.
-5. **Localize correctly:** When adding or changing translation keys, update `custom_components/frank_energie/strings.json` and **every** `translations/*.json` file (currently `en.json`, `fr.json`, `nl.json`, `nl-BE.json`). Preserve placeholders, enum keys, and shared translation references; run `tests/test_translations.py`.
+5. **Localize correctly.** When adding or changing translation keys, update `custom_components/frank_energie/strings.json` and **every** `translations/*.json` file. See the [localization guide](../../../LOCALIZATION.md) for supported locales. Preserve placeholders, enum keys, and shared translation references. Run `tests/test_translations.py`.
 6. **Review and report:** Check the final diff for backwards compatibility, unrelated edits, security leaks, unused code, and behavior changes. Summarize what changed, why, executed checks, results, and remaining limitations.
 
 ## Validation commands

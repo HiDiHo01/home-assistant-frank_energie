@@ -60,7 +60,7 @@ preserve coordinator-based availability.
 | --- | --- |
 | `strings.json` / `en.json` | Smart heating |
 | `nl.json` / `nl-BE.json` | Slim verwarmen |
-| `fr.json` | Chauffage intelligent |
+| `fr.json` / `fr-BE.json` | Chauffage intelligent |
 
 The translated **name** must be the feature name: do not append *activated*,
 *active*, or *geactiveerd*. The Boolean state and the `RUNNING` device class

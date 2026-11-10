@@ -36,6 +36,18 @@ If all meaningful changes are already present with equivalent behavior, cite the
 - Do not imply that Sourcery/CodeRabbit/Codex has approved a PR when a bot is rate-limited, pending, or failed.
 - If explicitly asked to fix comments, follow the target repository's issue tracking and security-disclosure policy. Never create a public tracking issue for a confidential vulnerability.
 
+## Retrieving SonarQube Cloud findings
+
+When a PR's SonarQube Cloud check reports open findings but does not expose
+their messages as GitHub annotations, use the manual
+[`Export SonarQube Issues`](../../../.github/workflows/sonar-issues-export.yml)
+workflow with that PR number and inspect the `sonar-open-issues.json` artifact.
+Verify the JSON includes all pages and filters for `OPEN,CONFIRMED` issues
+before addressing exact rule IDs and source lines. Do not treat a passing
+Sonar Quality Gate as proof that the issue count is zero. On the project's
+main branch, leaving the PR field empty exports all open issues.
+Do not log or post upstream tokens or unredacted private project data.
+
 ## Merge-readiness decision
 
 Mark **ready** only if current-head checks, required reviews, unresolved substantive feedback, merge conflicts, and relevant behavioral correctness are verified. Mark **blocked** with the exact reasons; use **unverified** where data or checks cannot be obtained. Do not merge without explicit authorization.
