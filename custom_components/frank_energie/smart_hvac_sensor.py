@@ -268,6 +268,14 @@ def _site_has_active_smart_hvac(settings: FrankEnergieSettingsCoordinator) -> bo
     return settings.last_update_success and smart_hvac_activation(settings.data) is True
 
 
+def _site_confirmed_inactive(settings: FrankEnergieSettingsCoordinator) -> bool:
+    """Require a successful settings read confirming deactivation."""
+    return (
+        settings.last_update_success
+        and smart_hvac_activation(settings.data) is False
+    )
+
+
 @callback
 def _async_remove_missing_equipment(
     hass: HomeAssistant,
@@ -416,11 +424,7 @@ def async_setup_smart_hvac_sensors(
         nonlocal known_devices, requests_added, service_added
         devices = coordinator.data.devices if coordinator.last_update_success else None
         if not _site_has_active_smart_hvac(settings):
-            if (
-                settings.last_update_success
-                and smart_hvac_activation(settings.data) is False
-                and devices is not None
-            ):
+            if devices is not None and _site_confirmed_inactive(settings):
                 known_devices = _async_prune_inactive_equipment(
                     hass, entry_id, coordinator, devices, known_devices
                 )
