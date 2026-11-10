@@ -186,7 +186,11 @@
         "name": "Operationele status"
       },
       "smart_hvac_steering_status": {
-        "name": "Sturingsstatus"
+        "name": "Sturingsstatus",
+        "state": {
+          "active": "Actief",
+          "inactive": "Inactief"
+        }
       },
       "smart_hvac_operational_status_timestamp": {
         "name": "Tijdstip operationele status"
