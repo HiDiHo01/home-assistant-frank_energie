@@ -120,8 +120,10 @@ class _SmartHvacCountSensor(
 
     @property
     def available(self) -> bool:
-        """Require a successful coordinator update and a known collection."""
-        return super().available and self.native_value is not None
+        """Distinguish successful null values from skipped or failed reads."""
+        data = self.coordinator.data
+        fetched = data.requests_fetched if self._account_scope else data.devices_fetched
+        return super().available and fetched
 
     @property
     def native_value(self) -> int | None:
