@@ -56,13 +56,12 @@ jobs:
           PULL_REQUEST: ${{ github.event.pull_request.number || inputs.pull_request || '' }}
         run: |
           python .github/scripts/export_sonar_issues.py \
-            --pull-request "$PULL_REQUEST" \
-            --output "$RUNNER_TEMP/sonar-open-issues.json"
+            --pull-request "$PULL_REQUEST"
 
       - name: Upload JSON export
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # @v7.0.2
         with:
           name: sonar-open-issues
-          path: ${{ runner.temp }}/sonar-open-issues.json
+          path: sonar-open-issues.json
           if-no-files-found: error
           retention-days: 14
