@@ -445,7 +445,7 @@
         "name": "Date de la dernière session"
       },
       "smart_hvac_total_result": {
-        "name": "Résultat total"
+        "name": "Économies totales"
       },
       "ean": {
         "name": "EAN (Energy Account Number)"
