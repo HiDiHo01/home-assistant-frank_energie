@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 type _SummaryValue = str | float | date | datetime | None
 _EQUIPMENT_ID_PREFIX: Final = "smart_hvac_equipment"
 _DEVICE_ID_PREFIX: Final = "smart_hvac_device"
+_STEERING_STATES: Final = ("active", "inactive")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,6 +45,14 @@ class _DeviceSensorDescription(SensorEntityDescription):
     """Describe a sensor backed by equipment metadata or a device summary."""
 
     summary_value: Callable[[SmartHvacSummary], _SummaryValue] | None = None
+
+
+def _steering_state(summary: SmartHvacSummary) -> str | None:
+    """Map known HVAC steering statuses to translatable enum state keys."""
+    value = summary.steering_status
+    if isinstance(value, str) and value.casefold() in _STEERING_STATES:
+        return value.casefold()
+    return value
 
 
 _DEVICE_SENSORS = (
@@ -60,7 +69,9 @@ _DEVICE_SENSORS = (
     _DeviceSensorDescription(
         key="smart_hvac_steering_status",
         translation_key="smart_hvac_steering_status",
-        summary_value=lambda summary: summary.steering_status,
+        device_class=SensorDeviceClass.ENUM,
+        options=list(_STEERING_STATES),
+        summary_value=_steering_state,
     ),
     _DeviceSensorDescription(
         key="smart_hvac_operational_status_timestamp",
@@ -233,6 +244,17 @@ class _SmartHvacDeviceSensor(
                 and self._device_id not in data.stale_summaries
             )
         )
+
+    @property
+    def options(self) -> list[str] | None:
+        """Expose known states and preserve unrecognized provider enum values."""
+        supported = self.entity_description.options
+        if supported is None:
+            return None
+        value = self.native_value
+        if isinstance(value, str) and value not in supported:
+            return [*supported, value]
+        return supported
 
     @property
     def native_value(self) -> _SummaryValue:
