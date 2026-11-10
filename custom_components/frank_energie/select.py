@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from typing import Any
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
-from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -22,11 +22,13 @@ from python_frank_energie.models import EnodeCharger
 
 from .const import (
     API_CONF_URL,
+    ATTRIBUTION,
     BATTERY_MODE_OPTIONS,
     BATTERY_STRATEGY_OPTIONS,
     BATTERY_TRADING_MODES,
     ENODE_CHARGING_MODE_OPTIONS,
     COMPONENT_TITLE,
+    DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_DELIVERY_SITE,
     DATA_ENODE_CHARGERS,
@@ -434,6 +436,27 @@ class FrankEnergieBatteryBaseSelect(
             raise HomeAssistantError(
                 f"Smart battery {self._battery_id} {api_key} cannot be changed right now"
             )
+
+        selectable_options = (
+            {
+                state
+                for item in setting.options
+                if getattr(item, "selectable", True)
+                and (state := battery_state_value(getattr(item, "code", None)))
+            }
+            if setting is not None
+            else set(self.entity_description.options or [])
+        )
+        if option not in selectable_options:
+            # A non-selectable mode is retained in SelectEntity.options solely
+            # to display the API's current value, not to authorize a mutation.
+            if option == self.current_option:
+                return
+            raise HomeAssistantError(
+                f"Smart battery {self._battery_id} {api_key} option {option} "
+                "is not selectable for this battery"
+            )
+
         _LOGGER.debug(
             "Setting smart battery %s %s to %s", self._battery_id, api_key, option
         )
@@ -462,6 +485,29 @@ class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
         """Initialize the select entity."""
         super().__init__(coordinator, entry, battery_id, description)
         self._attr_unique_id = f"{DOMAIN}_{battery_id}_battery_mode"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        """Expose battery-mode sensor settings and optional API change metadata."""
+        batteries = self.coordinator.data.get(DATA_BATTERIES)
+        settings = next(
+            (
+                getattr(battery, "settings", None)
+                for battery in getattr(batteries, "batteries", ()) or ()
+                if getattr(battery, "id", None) == self._battery_id
+            ),
+            None,
+        )
+        if settings is None:
+            settings = self._get_settings()
+
+        # The battery-mode sensor also serializes SmartBatterySettings with
+        # asdict(). Preserve its field names and genuine null/unknown values.
+        attributes: dict[str, object] = asdict(settings) if is_dataclass(settings) else {}
+        attributes.update(super().extra_state_attributes or {})
+        if attributes:
+            attributes["attribution"] = ATTRIBUTION
+        return attributes or None
 
     async def async_select_option(self, option: str) -> None:
         """Update battery mode via mutation."""
