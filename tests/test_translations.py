@@ -31,19 +31,24 @@ def test_get_key_paths():
     assert get_key_paths(test_dict) == expected
 
 
-def test_translation_keys_alignment():
+def test_translation_keys_alignment() -> None:
     """Verify that strings.json and all translation files have the exact same keys."""
     json_files = list(TRANSLATIONS_DIR.glob("*.json"))
     json_files.append(STRINGS_FILE)
 
     file_names = {file_path.name for file_path in json_files}
-    required_files = {"strings.json", "en.json", "fr.json", "nl.json", "nl-BE.json"}
+    required_files = {
+        "strings.json",
+        "en.json",
+        "fr.json",
+        "fr-BE.json",
+        "nl.json",
+        "nl-BE.json",
+    }
 
     missing_files = required_files - file_names
     assert not missing_files, (
-        "Missing required translation files: "
-        f"{', '.join(sorted(missing_files))}. "
-        "Expected strings.json and all supported locale files (en.json, fr.json, nl.json, nl-BE.json) to be present."
+        f"Missing required translation files: {', '.join(sorted(missing_files))}"
     )
 
     translations = {}
