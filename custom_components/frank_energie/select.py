@@ -503,7 +503,9 @@ class FrankEnergieBatteryModeSelect(FrankEnergieBatteryBaseSelect):
 
         # The battery-mode sensor also serializes SmartBatterySettings with
         # asdict(). Preserve its field names and genuine null/unknown values.
-        attributes: dict[str, object] = asdict(settings) if is_dataclass(settings) else {}
+        attributes: dict[str, object] = (
+            asdict(settings) if is_dataclass(settings) else {}
+        )
         attributes.update(super().extra_state_attributes or {})
         if attributes:
             attributes["attribution"] = ATTRIBUTION
