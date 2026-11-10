@@ -63,6 +63,7 @@ TO_REDACT: set[str] = {
     "account_id",
     "accountId",
     "userId",
+    "userCreatedAt",
     "personId",
     "title",
     "contract_id",
@@ -220,5 +221,16 @@ async def async_get_config_entry_diagnostics(
             runtime_data.battery_session_coordinators,
         ),
     }
+    if (smart_hvac := runtime_data.smart_hvac_coordinator) is not None:
+        snapshot = smart_hvac.data
+        diagnostics["smart_hvac"] = {
+            "last_update_success": smart_hvac.last_update_success,
+            "device_count": len(snapshot.devices)
+            if snapshot.devices is not None
+            else None,
+            "connection_request_count": (
+                len(snapshot.requests) if snapshot.requests is not None else None
+            ),
+        }
 
     return async_redact_data(diagnostics, TO_REDACT)

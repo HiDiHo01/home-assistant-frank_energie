@@ -116,6 +116,9 @@
     "frank_energie_usage": {
       "name": "Frank Energie - Inzicht"
     },
+    "frank_energie_smart_heating": {
+      "name": "Frank Energie - Slim verwarmen"
+    },
     "frank_energie_user": {
       "name": "Frank Energie - Gebruiker"
     },
@@ -128,6 +131,75 @@
   },
   "entity": {
     "sensor": {
+      "smart_hvac_device_count": {
+        "name": "Gekoppelde toestellen"
+      },
+      "smart_hvac_profile_created_at": {
+        "name": "Profiel Slim verwarmen aangemaakt",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Beschikbaar in land"
+          },
+          "available_on_site": {
+            "name": "Beschikbaar op leveringslocatie"
+          },
+          "has_accepted_terms": {
+            "name": "Voorwaarden aanvaard"
+          }
+        }
+      },
+      "smart_hvac_connection_requests": {
+        "name": "Koppelverzoeken Slim verwarmen (account)",
+        "state_attributes": {
+          "requests": {
+            "name": "Details van koppelverzoeken"
+          }
+        }
+      },
+      "smart_hvac_equipment": {
+        "name": "Toestel {device}",
+        "state_attributes": {
+          "brand": {
+            "name": "Merk"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "device_type": {
+            "name": "Toesteltype"
+          },
+          "provider": {
+            "name": "Aanbieder"
+          },
+          "created_at": {
+            "name": "Aangemaakt op"
+          },
+          "updated_at": {
+            "name": "Bijgewerkt op"
+          },
+          "needs_reauthentication": {
+            "name": "Opnieuw aanmelden vereist"
+          }
+        }
+      },
+      "smart_hvac_operational_status": {
+        "name": "Operationele status van {device}"
+      },
+      "smart_hvac_steering_status": {
+        "name": "Sturingsstatus van {device}"
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "name": "Tijdstip operationele status van {device}"
+      },
+      "smart_hvac_first_session_date": {
+        "name": "Datum eerste sessie van {device}"
+      },
+      "smart_hvac_last_session_date": {
+        "name": "Datum laatste sessie van {device}"
+      },
+      "smart_hvac_total_result": {
+        "name": "Totaalresultaat van {device}"
+      },
       "current_electricity_price": {
         "name": "Huidige elektriciteitsprijs (All-in)",
         "state_attributes": {

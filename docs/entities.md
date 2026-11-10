@@ -151,7 +151,7 @@ Invoice entities may include:
 - Historical invoices
 - Annual summaries
 
-## Smart heating entity
+## Smart heating entities
 
 The authenticated User-service binary sensor **Smart heating** (NL/NL-BE:
 **Slim verwarmen**) retains the `smart_hvac` entity key. Its Boolean
@@ -169,8 +169,10 @@ presentation. The `available_on_site` attribute shows whether the
 provider makes this feature available for the configured delivery site:
 it is not the entity's Home Assistant availability or the activation state.
 
-See [Smart heating activation](smart_hvac_activation.md) for details and
-the dependency-release prerequisite.
+The **Smart heating** service device groups linked equipment, its operational
+and steering statuses, and session information by delivery site. Connection
+requests are shown on the **User** service because they apply to the account.
+See [Smart heating activation and equipment data](smart_hvac_activation.md).
 
 ## Smart Charging Entities
 

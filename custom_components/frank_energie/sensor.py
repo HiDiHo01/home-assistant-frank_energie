@@ -110,6 +110,7 @@ from .helpers import (
     resolve_gas_unit,
     service_device_info,
 )
+from .smart_hvac_sensor import async_setup_smart_hvac_sensors
 from .statistics import lowest_window
 
 _DataT = TypeVar("_DataT")
@@ -5445,6 +5446,7 @@ async def async_setup_entry(
         _LOGGER.exception("Failed to add entities for entry %s", config_entry.entry_id)
         raise
 
+    async_setup_smart_hvac_sensors(hass, config_entry, async_add_entities)
     _LOGGER.debug("All sensors added for entry: %s", config_entry.entry_id)
 
 

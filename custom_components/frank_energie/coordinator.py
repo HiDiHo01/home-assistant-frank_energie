@@ -107,7 +107,12 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
-from .helpers import decrypt_password, known_site_contracts, price_cache_store
+from .helpers import (
+    api_maintenance_active,
+    decrypt_password,
+    known_site_contracts,
+    price_cache_store,
+)
 from .mutation_queue import MutationQueue
 
 _LOGGER = logging.getLogger(__name__)
@@ -528,7 +533,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> bool:
         """Return True when API calls should be skipped."""
 
-        return now_utc.hour == 0 and 0 <= now_utc.minute < 60
+        return api_maintenance_active(now_utc)
 
     def _is_not_in_delivery_site(
         self, data_month_summary, data_invoices, user_sites
