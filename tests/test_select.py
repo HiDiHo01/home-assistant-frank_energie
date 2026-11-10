@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -20,12 +21,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     MockEntityPlatform,
 )
 
 from custom_components.frank_energie.const import (
+    ATTRIBUTION,
+    DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SETTINGS,
     DOMAIN,
@@ -329,7 +332,8 @@ def test_battery_mode_select_static_options_include_current_mode(
 
     assert entity.options == expected_options
     assert entity.current_option == (None if mode is SmartBatteryMode.UNKNOWN else mode)
-    assert entity.extra_state_attributes is None
+    assert entity.extra_state_attributes["battery_mode"] == mode
+    assert entity.extra_state_attributes["attribution"] == ATTRIBUTION
 
 
 def test_battery_mode_select_uses_per_battery_options(
@@ -354,10 +358,12 @@ def test_battery_mode_select_uses_per_battery_options(
     assert entity.options == ["imbalance_trading", "self_consumption_mix"]
     assert entity.current_option == "self_consumption_mix"
     assert entity.extra_state_attributes == {
+        **asdict(mock_coordinator.data[DATA_BATTERY_DETAILS][0].smart_battery.settings),
         "is_change_request_possible": True,
         "change_request_effective_date": "2026-11-05T23:00:00+00:00",
         "upcoming_change": "imbalance_trading",
         "upcoming_change_effective_date": "2026-11-05T23:00:00+00:00",
+        "attribution": ATTRIBUTION,
     }
 
 
@@ -487,6 +493,8 @@ async def test_imbalance_trading_battery_reaches_the_state_machine(
     assert mode is not None
     assert mode.state == "imbalance_trading"
     assert "imbalance_trading" in mode.attributes["options"]
+    assert mode.attributes["battery_mode"] == "imbalance_trading"
+    assert mode.attributes["imbalance_trading_strategy"] == "aggressive"
 
     strategy = hass.states.get(_battery_entity_id(hass, "battery_strategy"))
     assert strategy is not None
@@ -662,3 +670,134 @@ def test_battery_strategy_select_falls_back_to_per_battery_mode(
     )
 
     assert entity.available is expected
+
+
+@pytest.mark.asyncio
+async def test_nonselectable_current_mode_remains_visible_but_cannot_mutate(
+    mock_coordinator, mock_config_entry
+) -> None:
+    """Retain a non-selectable current mode for display, never for API writes."""
+    adjustable = _adjustable(updatable=True)
+    adjustable.battery_mode.current = SmartBatteryMode.TRADING
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.TRADING)],
+        DATA_BATTERY_SETTINGS: {_BATTERY_ID: adjustable},
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    assert entity.current_option == "trading"
+    assert entity.options == ["imbalance_trading", "self_consumption_mix", "trading"]
+
+    await entity.async_select_option("trading")
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
+
+    with pytest.raises(HomeAssistantError, match="not selectable"):
+        await entity.async_select_option("unknown")
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unlisted_mode_is_display_only_on_older_library(
+    mock_coordinator, mock_config_entry
+) -> None:
+    """A mode appended for display is not a permitted legacy mutation."""
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [_details(SmartBatteryMode.IMBALANCE_TRADING)],
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+
+    assert entity.current_option == "imbalance_trading"
+    assert "imbalance_trading" in entity.options
+    await entity.async_select_option("imbalance_trading")
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
+    with pytest.raises(HomeAssistantError, match="not selectable"):
+        await entity.async_select_option("invalid")
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
+
+
+async def test_battery_mode_select_attrs_match_sensor_for_each_battery(
+    hass: HomeAssistant,
+) -> None:
+    """Expose the sensor settings from each matching battery, not another device."""
+    first = _details(SmartBatteryMode.IMBALANCE_TRADING, battery_id="bat_a")
+    first.smart_battery.settings = SmartBatterySettings(
+        battery_mode=SmartBatteryMode.IMBALANCE_TRADING,
+        imbalance_trading_strategy=SmartBatteryImbalanceStrategy.AGGRESSIVE,
+        self_consumption_trading_allowed=True,
+        self_consumption_trading_threshold_price=0.2,
+    )
+    second = _details(
+        SmartBatteryMode.SELF_CONSUMPTION_MIX,
+        SmartBatteryImbalanceStrategy.BALANCED,
+        battery_id="bat_b",
+    )
+    second.smart_battery.settings = SmartBatterySettings(
+        battery_mode=SmartBatteryMode.SELF_CONSUMPTION_MIX,
+        imbalance_trading_strategy=SmartBatteryImbalanceStrategy.BALANCED,
+        self_consumption_trading_allowed=False,
+        self_consumption_trading_threshold_price=0.3,
+    )
+    await _add_battery_selects(
+        hass,
+        {
+            DATA_BATTERY_DETAILS: [first, second],
+            DATA_BATTERIES: SimpleNamespace(
+                batteries=[second.smart_battery, first.smart_battery]
+            ),
+        },
+        battery_ids=("bat_a", "bat_b"),
+    )
+
+    for details in (first, second):
+        battery_id = details.smart_battery.id
+        state = hass.states.get(_battery_entity_id(hass, "battery_mode", battery_id))
+        assert state is not None
+        for key, value in asdict(details.smart_battery.settings).items():
+            assert state.attributes[key] == value
+        assert state.attributes["attribution"] == ATTRIBUTION
+    first_state = hass.states.get(_battery_entity_id(hass, "battery_mode", "bat_a"))
+    second_state = hass.states.get(_battery_entity_id(hass, "battery_mode", "bat_b"))
+    assert first_state.attributes["battery_mode"] == "imbalance_trading"
+    assert first_state.attributes["self_consumption_trading_threshold_price"] == 0.2
+    assert second_state.attributes["battery_mode"] == "self_consumption_mix"
+    assert second_state.attributes["self_consumption_trading_threshold_price"] == 0.3
+
+
+def test_battery_mode_select_attributes_track_refresh_and_missing_settings(
+    mock_coordinator, mock_config_entry
+) -> None:
+    """Attribute values follow coordinator updates and vanish when absent."""
+    details = _details(SmartBatteryMode.IMBALANCE_TRADING)
+    battery = details.smart_battery
+    mock_coordinator.data = {
+        DATA_BATTERY_DETAILS: [details],
+        DATA_BATTERIES: SimpleNamespace(batteries=[battery]),
+    }
+    entity = _select(
+        FrankEnergieBatteryModeSelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_mode",
+    )
+    assert entity.extra_state_attributes["battery_mode"] == "imbalance_trading"
+
+    battery.settings = SmartBatterySettings(
+        battery_mode=SmartBatteryMode.SELF_CONSUMPTION,
+        imbalance_trading_strategy=SmartBatteryImbalanceStrategy.BALANCED,
+    )
+    assert entity.extra_state_attributes["battery_mode"] == "self_consumption"
+    assert entity.extra_state_attributes["imbalance_trading_strategy"] == "balanced"
+
+    battery.settings = None
+    details.smart_battery.settings = None
+    assert entity.extra_state_attributes is None
