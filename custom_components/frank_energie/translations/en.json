@@ -1055,6 +1055,27 @@
       "deadline": {
         "name": "Charging Deadline"
       },
+      "charging_hour_monday": {
+        "name": "Departure time Monday"
+      },
+      "charging_hour_tuesday": {
+        "name": "Departure time Tuesday"
+      },
+      "charging_hour_wednesday": {
+        "name": "Departure time Wednesday"
+      },
+      "charging_hour_thursday": {
+        "name": "Departure time Thursday"
+      },
+      "charging_hour_friday": {
+        "name": "Departure time Friday"
+      },
+      "charging_hour_saturday": {
+        "name": "Departure time Saturday"
+      },
+      "charging_hour_sunday": {
+        "name": "Departure time Sunday"
+      },
       "charge_settings_id": {
         "name": "Charge Settings ID"
       },
