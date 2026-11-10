@@ -28,6 +28,8 @@ poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
 
 The existing **Flake8 and pytest** workflow runs the full suite on Python 3.14.2 and the latest 3.14 patch. It also supports **Run workflow** once this workflow revision is on the default branch. Each matrix job uploads its own JUnit report, including when pytest fails. Critical Flake8 errors remain blocking. A separate full-Flake8 gate checks every diagnostic against the measured, reviewable `.github/flake8-baseline.json`: new or increased findings fail CI. The existing C901 and E501 debt must be reduced and removed from this baseline; the targeted E203 exclusion matches Ruff-compatible slice formatting. The full pytest suite still runs after a lint failure when dependency installation and environment verification succeed.
 
+The workflow uses Ubuntu 24.04 because GitHub publishes the pinned Python 3.14.2 build for that runner. [GitHub Actions Python builds](https://github.com/actions/python-versions)
+
 `poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant-custom-component` version together, regenerate the lockfile with the pinned Poetry version, and rerun both matrix entries. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
 
 ## Repository Structure
