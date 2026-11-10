@@ -344,12 +344,17 @@ async def test_hvac_site_device_and_account_diagnostics(
         if sensor.translation_key in {"smart_hvac", "smart_hvac_connection_requests"}
     }
     assert account_states["smart_hvac"].state == "on"
-    assert account_states["smart_hvac"].attributes["icon"] == "mdi:heat-pump"
+    assert account_states["smart_hvac"].attributes["device_class"] == "running"
+    assert "icon" not in account_states["smart_hvac"].attributes
     assert account_states["smart_hvac_connection_requests"].state == "1"
     assert account_states["smart_hvac_connection_requests"].attributes["requests"] == [
         {"brand": "Fixture Heating", "status": "PENDING", "has_reported_error": True}
     ]
-    hvac_icons = (await async_get_icons(hass, "entity", (DOMAIN,)))[DOMAIN]["sensor"]
+    hvac_icons = (await async_get_icons(hass, "entity", (DOMAIN,)))[DOMAIN]
+    assert hvac_icons["binary_sensor"] == {
+        "smart_hvac": {"default": "mdi:heat-pump"}
+    }
+    assert "state" not in hvac_icons["binary_sensor"]["smart_hvac"]
     expected_icons = {
         "smart_hvac_connection_requests": "mdi:link-variant",
         "smart_hvac_device_count": "mdi:counter",
@@ -362,13 +367,15 @@ async def test_hvac_site_device_and_account_diagnostics(
         "smart_hvac_steering_status": "mdi:tune-variant",
         "smart_hvac_total_result": "mdi:currency-eur",
     }
-    icon_defaults = {key: value["default"] for key, value in hvac_icons.items()}
+    icon_defaults = {
+        key: value["default"] for key, value in hvac_icons["sensor"].items()
+    }
     assert icon_defaults == expected_icons
-    assert states.keys() <= hvac_icons.keys()
-    assert "smart_hvac_connection_requests" in hvac_icons
+    assert states.keys() <= hvac_icons["sensor"].keys()
+    assert "smart_hvac_connection_requests" in hvac_icons["sensor"]
     # Provider statuses do not prove active heating; keep neutral icon fallbacks.
-    assert "state" not in hvac_icons["smart_hvac_operational_status"]
-    assert "state" not in hvac_icons["smart_hvac_steering_status"]
+    assert "state" not in hvac_icons["sensor"]["smart_hvac_operational_status"]
+    assert "state" not in hvac_icons["sensor"]["smart_hvac_steering_status"]
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
     assert diagnostics["smart_hvac"] == {
