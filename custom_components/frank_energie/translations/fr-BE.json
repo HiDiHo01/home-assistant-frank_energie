@@ -1196,7 +1196,11 @@
         "name": "État opérationnel"
       },
       "smart_hvac_steering_status": {
-        "name": "État du pilotage"
+        "name": "État du pilotage",
+        "state": {
+          "active": "Actif",
+          "inactive": "Inactif"
+        }
       },
       "smart_hvac_operational_status_timestamp": {
         "name": "Horodatage de l’état opérationnel"
