@@ -354,4 +354,3 @@ async def test_site_failure_keeps_credential_selectors(
     assert fallback_form["type"] == FlowResultType.FORM
     assert fallback_form["step_id"] == expected_step
     _assert_credential_selectors(fallback_form["data_schema"])
-
