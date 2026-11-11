@@ -681,31 +681,58 @@ Do not assume that pushing, publishing, releasing, or merging is authorized mere
 
 ### Repair rebase-only pull-request blockers safely
 
-Before repairing an unavailable **Rebase and merge** action, inspect the PR's
-`mergeable`, `mergeable_state`, `rebaseable`, base/head SHAs, ahead/behind
-counts, commit-parent graph, and complete diff. `mergeable: true` and
-`mergeable_state: clean` with zero commits behind `main` do **not** guarantee
-`rebaseable: true`: an existing merge commit may be the only blocker.
-First apply the obsolete-PR triage below.
+Before repairing **Rebase and merge**, inspect the PR's actual target
+branch (`base.ref` and `base.sha`), source head SHA, mergeability,
+`rebaseable`, commit parents, ahead/behind counts, and complete diff.
+`mergeable: true`, `mergeable_state: clean`, and no commits behind the
+target branch do not guarantee `rebaseable: true`. Apply obsolete-PR
+triage below before rewriting any history.
 
-- Do not force-push blindly or mistake a regular merge conflict for a
-  rebase-only blocker. Verify the affected merge method and ancestry.
-- Never rewrite or force-push without **explicit authorization**. Preserve
-  individual commits with a genuine rebase/cherry-pick when their history
-  matters; an authorized single-commit rewrite loses old commit identities.
-- Create and verify a backup branch at the **exact old head SHA** before
-  changing PR history. Recheck the live PR base/head before any push.
-- For an authorized single-commit rewrite onto current `main`, reuse the
-  old head's validated **exact Git tree** with the checked `main` SHA as
-  its sole parent. Compare old/new tree SHAs and complete diffs against
-  the same base, including files and tests. Stop on any content change.
-- Use `git push --force-with-lease` or an equivalent conditional GitHub ref
-  update (`expected_sha` with `force=true`), never unchecked `--force`.
-  Stop rather than overwrite a concurrently updated head or base.
-- Re-query GitHub after the rewrite. Verify `rebaseable: true`,
-  `behind_by: 0`, the new commit ancestry, and an unchanged full diff.
-  Rerun required CI and reviews on the **new head SHA**: green checks
-  and approvals for the old head do not establish merge readiness.
+- **Authorization and intent:** do not rewrite or force-push without
+  explicit approval. Prefer rebase/cherry-pick to retain meaningful
+  individual commits; an approved single-commit rewrite loses their
+  identities. Verify that rebase ancestry, not another merge gate,
+  is the actual blocker.
+- **Durable backup:** before modifying the source branch, create an
+  authorized backup ref at the exact inspected old head SHA on a durable
+  remote (or equivalently durable, access-controlled storage) and read
+  it back to confirm its SHA. A local-only backup that disappears with
+  a workspace is insufficient. Do not expose private data or create
+  unauthorized public refs; stop if a safe backup cannot be stored.
+- **Target-base ancestry:** use the PR's checked target-branch tip,
+  never assume `main`. Before reusing the old head's exact Git tree,
+  verify that the checked base SHA is an ancestor of the old head
+  (for example, `git merge-base --is-ancestor <base_sha> <old_head_sha>`).
+  If it is not, first incorporate the target branch through a
+  conflict-resolved rebase/cherry-pick; do not reparent an old tree
+  that omits newer base changes.
+- **Verify content:** only when base ancestry is confirmed and a
+  one-parent rewrite is authorized, use the inspected base SHA as the
+  new commit's sole parent and retain the old head's exact Git tree.
+  Check tree identity and compare complete original/replacement diffs
+  against the same checked target base, including tests and unrelated
+  files. After base reconciliation, instead verify every intended
+  content change and reject accidental deletions.
+- **Explicit expected-head lease:** refresh both live target-base and
+  PR-head SHAs immediately before publishing; abort and rebuild if
+  either differs from the inspected values. Pin Git's lease to the
+  **inspected live head** (not a remote-tracking ref):
+
+  `git push --force-with-lease=refs/heads/<branch>:<old_head_sha> origin <new_head_sha>:refs/heads/<branch>`
+
+  Alternatively use GitHub GraphQL `updateRefs` with
+  `RefUpdate.beforeOid=<old_head_sha>` and `force=true`. GitHub REST
+  `PATCH /git/refs` with `force=true` does **not** provide a
+  documented expected-old-SHA compare-and-swap. Only use a connector
+  wrapper's `expected_sha` when its atomic conditional semantics have
+  been verified. Never use unchecked `--force` or bare `--force-with-lease`.
+- **Recheck after publishing:** the head lease does not atomically
+  protect the separate target branch against advancing. Re-read
+  both refs immediately after the push, and stop/repair if the base
+  changed, the diff changed unexpectedly, or the new head differs.
+  Confirm `rebaseable: true`, one-parent ancestry and no base lag.
+  Rerun checks and re-evaluate required approvals on the **new** head;
+  previous-head green checks do not establish merge readiness.
   Never merge without separate authorization.
 
 See the [PR review skill](.agents/skills/frank-energie-pr-review/SKILL.md#rebase-only-conflicts-and-safe-history-repair)
