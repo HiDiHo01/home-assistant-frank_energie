@@ -30,6 +30,52 @@ skips, failed requests, or missing coordinator data remain unknown. Do not
 turn network failures into an inactive subscription status. Test null,
 active/inactive subscriptions, failure, and subsequent recovery.
 
+## Smart PV status, summary, and verified-inventory lessons (2026-11-11)
+
+A sanitized, read-only API observation returned one `SmartPvSystem` with
+`onboarding_status=ACTIVE`, `steering_status=INACTIVE`, and
+`deleted_at=None`; its `SmartPvSystemSummary` simultaneously reported
+`operational_status=ON`, `steering_status=INACTIVE`, a UTC-aware
+`operational_status_timestamp`, and separate numeric `total_bonus` and
+`total_result`. **These fields are not interchangeable:**
+
+- `onboarding_status` is the provider's onboarding state, not proof of
+  electrical generation or real-time connectivity. `operational_status=ON`
+  reports the provider's operating state, not measured PV production.
+  `steering_status=INACTIVE` does **not** mean disconnected, unavailable,
+  deactivated at the contract level, or safe to remove. `deleted_at=None`
+  means the inventory record carries no deletion timestamp; it does not
+  replace a fresh inventory check.
+- In the pinned client API, `smart_pv_systems()` takes **no site-reference
+  argument** and returns the equipment list under `SmartPvSystems.systems`.
+  For each returned system, `smart_pv_system_summary(system.id)` supplies
+  the operational/steering summary; the inventory record's `panel_groups`
+  belong to the same physical PV device, not separate removable devices.
+  `inverter_serial_numbers` can be empty. Preserve each method's separate
+  request, availability, and failure semantics.
+- Treat `total_bonus` and `total_result` as distinct numeric provider
+  fields. Do not infer a measurement period, payment, or production from a
+  single summary sample. Keep the provider values unrounded internally.
+  Convert timezone-aware UTC timestamps to Europe/Amsterdam only for
+  presentation, accounting for daylight saving time.
+- For **stale-device Repairs**, identify presence from a **complete, fresh,
+  validated system inventory**, never from steering, onboarding, operational
+  status, summary availability, or a panel group's status. Never log raw
+  `SmartPvSystem` representations: they may include EANs, external
+  references, device IDs, or inverter serial numbers. Use synthetic or
+  redacted values for examples and regression tests.
+- **Upstream release blocker:** `python-frank-energie==2026.11.9` has a
+  `SmartPvSystems.from_dict()` parser that can turn missing, null, or
+  malformed GraphQL PV inventories into `systems=[]`. This is tracked in
+  [library issue #243](https://github.com/HiDiHo01/python-frank-energie/issues/243)
+  and [integration follow-up #455](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/455).
+  Do not treat these fabricated empties as verified absences or merge the
+  affected [Repairs PR #454](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/454)
+  before the fixed published library release is adopted and tested.
+  Exercise malformed **raw GraphQL responses through the real pinned
+  parser**, then the coordinator and Repairs confirmation path; a mocked
+  `SmartPvSystems(systems=[])` alone cannot detect parser data loss.
+
 ## Smart HVAC status and optional-request isolation
 
 See [Smart heating activation](../../../docs/smart_hvac_activation.md).
