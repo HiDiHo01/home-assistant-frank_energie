@@ -220,6 +220,7 @@ async def async_remove_config_entry_device(
         and runtime_data.stale_device_absences.get(f"{kind}:{device_entry.id}", 0) >= 2
     )
 
+
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
 

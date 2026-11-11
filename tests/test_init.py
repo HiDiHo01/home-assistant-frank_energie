@@ -161,9 +161,15 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
     assert _find_device(device_registry, entry.entry_id, identifier) is None
 
 
-@pytest.mark.parametrize(("observations", "removable"), [(0, False), (1, False), (2, True)])
+@pytest.mark.parametrize(
+    ("observations", "removable"), [(0, False), (1, False), (2, True)]
+)
 async def test_device_removal_requires_two_valid_absences(
-    hass: HomeAssistant, hass_ws_client, frank_energie_setup, observations: int, removable: bool
+    hass: HomeAssistant,
+    hass_ws_client,
+    frank_energie_setup,
+    observations: int,
+    removable: bool,
 ) -> None:
     """Home Assistant must not delete hardware after only one missing fetch."""
     assert await async_setup_component(hass, "config", {})
@@ -175,8 +181,11 @@ async def test_device_removal_requires_two_valid_absences(
         identifiers={(DOMAIN, "removed-charger")},
     )
     er.async_get(hass).async_get_or_create(
-        "sensor", DOMAIN, f"{DOMAIN}_removed-charger_charger_brand",
-        config_entry=entry, device_id=device.id,
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_removed-charger_charger_brand",
+        config_entry=entry,
+        device_id=device.id,
     )
     coordinator = entry.runtime_data.charger_coordinator
     coordinator.last_update_success = True
@@ -189,8 +198,11 @@ async def test_device_removal_requires_two_valid_absences(
         )
     assert (await async_remove_config_entry_device(hass, entry, device)) is removable
     await client.send_json_auto_id(
-        {"type": "config/device_registry/remove_config_entry",
-         "config_entry_id": entry.entry_id, "device_id": device.id}
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": entry.entry_id,
+            "device_id": device.id,
+        }
     )
     result = await client.receive_json()
     assert result["success"] is removable
@@ -209,8 +221,11 @@ async def test_manual_device_removal_rejects_restored_or_partial_inventory(
         identifiers={(DOMAIN, "missing-charger")},
     )
     er.async_get(hass).async_get_or_create(
-        "sensor", DOMAIN, f"{DOMAIN}_missing-charger_charger_brand",
-        config_entry=entry, device_id=device.id,
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_missing-charger_charger_brand",
+        config_entry=entry,
+        device_id=device.id,
     )
     coordinator = entry.runtime_data.charger_coordinator
     coordinator.last_update_success = True
@@ -229,6 +244,7 @@ async def test_manual_device_removal_rejects_restored_or_partial_inventory(
         hass, entry, "charger", SimpleNamespace(chargers=[SimpleNamespace(id=None)])
     )
     assert not await async_remove_config_entry_device(hass, entry, device)
+
 
 async def test_setup_entry_auth_failure(
     hass: HomeAssistant,
