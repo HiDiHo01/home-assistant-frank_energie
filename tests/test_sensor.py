@@ -1150,9 +1150,7 @@ def test_enode_vehicle_deadline_is_available_when_unset_or_set(
         EnodeVehicleSensor,
     )
 
-    vehicle = _make_tesla_model_3(
-        last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
-    )
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
     calculated_deadline = datetime(2026, 11, 12, 6, 0, tzinfo=UTC)
     vehicle.charge_settings.deadline = deadline
     vehicle.charge_settings.calculated_deadline = calculated_deadline
@@ -1204,17 +1202,13 @@ def test_enode_vehicle_deadline_unavailable_without_current_vehicle_data(
         EnodeVehicleSensor,
     )
 
-    vehicle = _make_tesla_model_3(
-        last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
-    )
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
     coordinator = MagicMock()
     coordinator.last_update_success = last_update_success
     if inventory_state == "missing":
         coordinator.data = {}
     elif inventory_state == "empty":
-        coordinator.data = {
-            DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[])
-        }
+        coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[])}
     else:
         inventory_vehicle = _make_tesla_model_3(
             last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
@@ -1251,9 +1245,7 @@ def test_enode_vehicle_deadline_is_independent_for_multiple_vehicles(
     first_vehicle = _make_tesla_model_3(last_seen=last_seen)
     second_vehicle = _make_tesla_model_3(last_seen=last_seen)
     second_vehicle.id = "veh_456"
-    second_vehicle.charge_settings.deadline = datetime(
-        2026, 11, 12, 9, 0, tzinfo=UTC
-    )
+    second_vehicle.charge_settings.deadline = datetime(2026, 11, 12, 9, 0, tzinfo=UTC)
 
     coordinator = MagicMock()
     coordinator.data = {
@@ -1264,9 +1256,7 @@ def test_enode_vehicle_deadline_is_independent_for_multiple_vehicles(
     description = next(
         item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
     )
-    first_sensor = EnodeVehicleSensor(
-        hass, coordinator, description, first_vehicle, 0
-    )
+    first_sensor = EnodeVehicleSensor(hass, coordinator, description, first_vehicle, 0)
     second_sensor = EnodeVehicleSensor(
         hass, coordinator, description, second_vehicle, 1
     )
