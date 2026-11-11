@@ -58,6 +58,30 @@ Lessons verified while fixing [vehicle battery capacity issue #432](https://gith
 - **Distinguish CI infrastructure from application defects:** when a pinned Python patch cannot be installed on `ubuntu-latest`, inspect the official [actions/python-versions manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json) for the runner OS. For #432, Python 3.14.2 had an Ubuntu 24.04 build but no Ubuntu 26.04 build. Keep both the minimum-patch and latest-patch jobs, and choose a runner with verified binaries rather than dropping coverage; reverify compatibility for future image changes.
 - **Use actual formatter and current-head evidence:** run the repository-pinned Ruff formatter in check/diff mode, apply its exact diff, and inspect all CI jobs again after the last commit. A previous head's green checks do not validate the new head. Report suite counts and infrastructure failures separately.
 
+## Home Assistant entity-platform test callbacks: verified CI lesson
+
+A failure in [vehicle deadline PR #449](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/449) demonstrates that a plain `list.extend` is **not** a valid `AddEntitiesCallback` substitute. The real integration calls `async_add_entities(entities, update_before_add=True)`; forwarding that call directly to `list.extend` raises `TypeError: list.extend() takes no keyword arguments` in both Python 3.14 CI jobs.
+
+- When capturing entities in a mocked `async_setup_entry` test, use a named callback with the same positional and optional `update_before_add` parameters as Home Assistant's add-entities callback. The callback may append to a local list, but the list method itself must not be passed as the callback.
+- Keep callback type hints and a clear docstring; preserve the exact expected call contract rather than broad `*args`/`**kwargs` shims that can hide integration regressions.
+- For tests claiming a specific Home Assistant state such as `unknown`, add the entity through the actual test entity platform and assert `hass.states.get(entity_id).state`. Checking only `native_value is None` and `available is True` does not prove serialization or registry behavior.
+- Diagnose failures from each required Python job's `Test with pytest` step and the shortest relevant traceback. Correct the test harness only when it violates the real API signature; do not change production availability logic to work around a faulty test callback.
+- After any new test or documentation change, rerun the **current-head** pytest matrix and the pinned Ruff lint/format checks before reporting success.
+
+Example callback for a focused platform setup test:
+
+```python
+added_entities: list[SensorEntity] = []
+
+def _async_add_entities(
+    entities: list[SensorEntity], update_before_add: bool = False
+) -> None:
+    """Capture entities while accepting Home Assistant's update flag."""
+    added_entities.extend(entities)
+
+await async_setup_entry(hass, config_entry, _async_add_entities)
+```
+
 ## Make and verify changes
 
 1. **Establish behavior:** Read nearby code and tests; reproduce the issue or establish a failing regression where feasible.
