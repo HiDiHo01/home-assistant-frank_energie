@@ -190,17 +190,12 @@ async def async_remove_entry(
     await price_cache_store(hass, entry.entry_id).async_remove()
 
 
-async def async_remove_config_entry_device(
+def _is_device_removal_safe(
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
     device_entry: dr.DeviceEntry,
 ) -> bool:
-    """Permit manual removal only after two verified missing inventories.
-
-    Never interpret missing or failed API data as absence; recognize hardware
-    through entry-owned registry entities, including disabled entities.
-    The UI requests removal explicitly; this hook never deletes a device.
-    """
+    """Validate two independent absences using owned entity registry markers."""
     if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
         return False
 
@@ -219,6 +214,49 @@ async def async_remove_config_entry_device(
         and identifier not in coordinator.verified_inventory_ids
         and runtime_data.stale_device_absences.get(f"{kind}:{device_entry.id}", 0) >= 2
     )
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Require a fresh successful API inventory before manual device removal.
+
+    The two-absence guard also protects Repairs confirmation. A skipped
+    maintenance poll, failed API call, changed site or replaced device must
+    never authorize removal. This hook does not delete devices itself.
+    """
+    if not _is_device_removal_safe(hass, entry, device_entry):
+        return False
+
+    identified = async_identify_inventory_device(hass, entry, device_entry)
+    if identified is None or entry.runtime_data is None:
+        return False
+    kind, _ = identified
+    runtime_data = entry.runtime_data
+    coordinator: FrankEnergieCoordinator = getattr(
+        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+    )
+    previous_inventory = coordinator.verified_inventory_ids
+    previous_site_reference = coordinator.site_reference
+    try:
+        await coordinator.async_refresh()
+    except Exception:  # noqa: BLE001 - a failed refresh must deny removal
+        _LOGGER.warning("Unable to revalidate hardware inventory for removal")
+        return False
+
+    current_device = dr.async_get(hass).async_get(device_entry.id)
+    if (
+        current_device is None
+        or current_device.identifiers != device_entry.identifiers
+        or current_device.config_entry_id != device_entry.config_entry_id
+        or entry.runtime_data is not runtime_data
+        or coordinator.site_reference != previous_site_reference
+        or coordinator.verified_inventory_ids is previous_inventory
+    ):
+        return False
+    return _is_device_removal_safe(hass, entry, current_device)
 
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
