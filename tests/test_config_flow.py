@@ -248,7 +248,7 @@ async def test_options_flow_submit_blank_password(
 async def test_password_field_uses_password_text_selector(
     hass: HomeAssistant, config_entry_with_site
 ) -> None:
-    """Test that login and options flow schemas configure the password field with a password TextSelector."""
+    """Test that login and options flow schemas configure the credential fields with appropriate TextSelectors."""
     from homeassistant.helpers.selector import TextSelector, TextSelectorType
 
     # 1. Check login form schema
@@ -260,6 +260,11 @@ async def test_password_field_uses_password_text_selector(
         init_res["flow_id"],
         user_input={"authentication": True},
     )
+    username_validator = login_form["data_schema"].schema[CONF_USERNAME]
+    assert isinstance(username_validator, TextSelector)
+    assert username_validator.config["type"] == TextSelectorType.EMAIL
+    assert username_validator.config["autocomplete"] == "username"
+
     password_validator = login_form["data_schema"].schema[CONF_PASSWORD]
     assert isinstance(password_validator, TextSelector)
     assert password_validator.config["type"] == TextSelectorType.PASSWORD
@@ -269,6 +274,11 @@ async def test_password_field_uses_password_text_selector(
     options_form = await hass.config_entries.options.async_init(
         config_entry_with_site.entry_id
     )
+    options_username_validator = options_form["data_schema"].schema[CONF_USERNAME]
+    assert isinstance(options_username_validator, TextSelector)
+    assert options_username_validator.config["type"] == TextSelectorType.EMAIL
+    assert options_username_validator.config["autocomplete"] == "username"
+
     options_password_validator = options_form["data_schema"].schema[CONF_PASSWORD]
     assert isinstance(options_password_validator, TextSelector)
     assert options_password_validator.config["type"] == TextSelectorType.PASSWORD
