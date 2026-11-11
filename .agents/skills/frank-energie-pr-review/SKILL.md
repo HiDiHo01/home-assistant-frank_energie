@@ -59,38 +59,44 @@ blocker with a normal merge conflict or claim the rebase button is
 available solely because `mergeable` is true.
 
 1. **Inspect before rewriting.** Refresh the PR's open/merged state,
-   base/head SHAs, merge base, ahead/behind counts, full commit graph
-   (including multi-parent merge commits), and complete PR diff. Follow
-   the obsolete-PR triage above. If the PR has already been merged,
-   do not rewrite its old head; document further lessons in a separate PR.
-2. **Choose a history strategy deliberately.** Prefer a genuine rebase
-   or conflict-resolved cherry-pick when individual commits must remain
-   reviewable. If the maintainer explicitly approves squashing a
-   merge-heavy PR, a one-parent commit based on current `main` may
-   replace the branch history. This is **not** a replay of the old
-   commits: identify the loss of individual commit identities.
-3. **Preserve and verify content.** Before a destructive rewrite,
-   create a backup branch at the exact old head. For an approved
-   single-commit rewrite, reuse the old head's *exact Git tree* with
-   the current base as its sole parent. Verify the original and
-   replacement tree SHAs, and compare the full original/new diffs
-   against `main`, including every changed file; reject unexpected
-   content or statistics changes. Do not discard backup history
-   without separate authorization.
-4. **Push with a lease, not blind force.** Confirm that the live PR
-   head and base still equal the inspected SHAs. Use a conditional
-   reference update with `expected_sha` and `force=true` only
-   when rewriting was expressly authorized. Stop and investigate
-   if the lease fails. Force-updating a branch to the **same SHA**
-   does not alter ancestry or resolve rebase conflicts.
-5. **Validate the new head.** GitHub may temporarily return
-   `mergeable: null` or `mergeable_state: unknown` while recalculating
-   after a force-push. Re-query until an authoritative result is
-   available; do not describe the UI merge method as usable based on
-   inference alone. Recheck reviews, resolved threads, branch rules,
-   required check runs, and the **new head's** CI matrix: a rewrite
-   can invalidate prior approvals and test results. Report unverified
-   checks honestly, and never merge without explicit approval.
+   actual target `base.ref`/`base.sha`, head SHA, ahead/behind counts,
+   complete commit ancestry and diff. Apply obsolete-PR triage first.
+   A clean merge status does not prove GitHub's rebase method is usable.
+2. **Select a history strategy.** Prefer an actual rebase/cherry-pick
+   to preserve distinct commits. For a one-commit rewrite, require
+   explicit authorization and disclose the loss of old commit IDs.
+   Use the PR's target base, not an assumed `main`. Check that the
+   target-base SHA is an ancestor of the old PR head before reusing
+   its exact tree. Otherwise integrate the new base and resolve
+   conflicts before rebuilding; never reparent a tree omitting base
+   changes or mistake an equal tree SHA for a valid merge result.
+3. **Back up and verify content.** Preserve the previous head as an
+   explicitly authorized, **durable remote** backup ref and verify
+   that it resolves to the inspected SHA. Do not rely on a local-only
+   branch or publish sensitive history without authorization.
+   For a valid exact-tree rewrite, verify identical old/new Git
+   tree SHAs and full diffs against the same base, including every
+   file and test. When incorporating base changes, audit the
+   resulting delta to reject unintended deletions or omissions.
+4. **Pin the push lease to the old SHA.** Check that the PR head and
+   target-base tip still equal their inspected SHAs immediately
+   before publishing; abort and recompute if either changed.
+   Use `git push --force-with-lease=refs/heads/<branch>:<old_sha>`
+   (with an explicit destination ref) or GitHub GraphQL
+   `updateRefs` / `beforeOid=<old_sha>` with `force=true`.
+   A bare `--force-with-lease` depends on remote-tracking refs
+   (possibly updated by background fetches), and GitHub REST's
+   ref-update `force` flag has no documented expected-SHA CAS.
+   Treat connector `expected_sha` as safe only after verifying
+   its **actual** conditional-update implementation.
+5. **Validate both refs and new-head checks.** The PR-head lease
+   does not lock the target branch. Refresh the head and base after
+   pushing; if either changed unexpectedly, stop and repair, and
+   do not claim the PR is current. Confirm GitHub's `rebaseable`,
+   `mergeable`, `mergeable_state`, one-parent commit ancestry, full
+   diff and required reviews. Re-run the current head's CI; old
+   reviews/checks do not establish readiness. Never merge without
+   explicit separate authorization.
 
 ### Verified recovery: PR #408 (2026-11-11)
 
@@ -110,8 +116,9 @@ After the maintainer explicitly authorized a force-push:
    (`43b7b7d74184b500dc3726b0d0a69e6f128b6d7c`).
 3. Verified matching Git trees and complete PR file statistics:
    two changed files with 5 and 34 added lines.
-4. Force-updated the PR with `expected_sha` set to the original head.
-   GitHub then confirmed `rebaseable: true`, `mergeable: true`,
+4. Used the repository connector's conditional ref-update operation
+   with `expected_sha` set to the original head (not a raw REST API
+   field). GitHub then confirmed `rebaseable: true`, `mergeable: true`,
    `ahead_by: 1` and `behind_by: 0`; fresh CI checks were triggered.
 
 **Lesson:** a current, conflict-free PR can remain non-rebaseable
