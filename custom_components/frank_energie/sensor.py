@@ -621,14 +621,24 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if the sensor value is valid."""
-        if not super().available:
+        """Keep an unset one-time deadline available when its vehicle is present."""
+        if not super().available or self.coordinator.data is None:
             return False
         try:
-            if self.coordinator.data is not None:
-                value = self.native_value
-                if self.entity_description.available_fn is not None:
-                    return self.entity_description.available_fn(self.coordinator.data)
+            value = self.native_value
+            if self.entity_description.available_fn is not None:
+                return self.entity_description.available_fn(self.coordinator.data)
+            if self.entity_description.key == "deadline" and value is None:
+                vehicles_obj = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+                return bool(
+                    vehicles_obj
+                    and any(
+                        vehicle["id"] == self._vehicle_id
+                        and (settings := vehicle.get("chargeSettings")) is not None
+                        and settings.get("deadline") is None
+                        for vehicle in vehicles_obj.vehicles
+                    )
+                )
         except (KeyError, AttributeError, TypeError) as err:
             _LOGGER.debug(
                 "Availability check failed for %s: %s",
