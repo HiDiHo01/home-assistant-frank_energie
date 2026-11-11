@@ -825,6 +825,15 @@ async def test_hvac_disconnected_equipment_requires_two_reads_and_confirmation(
     assert dr.async_get(hass).async_get(device.id) is None
     assert er.async_get(hass).async_get(equipment_sensor.entity_id) is None
 
+    # Reconnecting after an explicit removal must recreate the physical device.
+    api.smart_hvacs.return_value = [_equipment("disconnected-pump", "Heat Pump")]
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    restored_devices = _equipment_devices(hass, entry)
+    assert len(restored_devices) == 1
+    assert restored_devices[0].identifiers == device.identifiers
+    assert (DOMAIN, issue_id) not in ir.async_get(hass).issues
+
 
 async def test_hvac_provider_failure_and_return_preserve_hardware(
     hass: HomeAssistant, api: AsyncMock

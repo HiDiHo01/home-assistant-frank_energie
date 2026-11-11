@@ -311,9 +311,6 @@ def _async_sync_equipment(
         for device_id, device in devices.items()
     }
     previous_devices = known_devices or {}
-    if current == previous_devices:
-        return previous_devices, []
-
     device_registry = dr.async_get(hass)
     sensors: list[_SmartHvacDeviceSensor] = []
     for fingerprint, device in sorted(current.items()):
@@ -321,7 +318,10 @@ def _async_sync_equipment(
             entry_id, coordinator.site_reference, device.id
         )
         previous_device = previous_devices.get(fingerprint)
-        if device == previous_device:
+        registered_device = device_registry.async_get_device_by_identifier(
+            (DOMAIN, identifier), config_entry_id=entry_id
+        )
+        if device == previous_device and registered_device is not None:
             continue
 
         device_registry.async_get_or_create(
@@ -334,7 +334,7 @@ def _async_sync_equipment(
                 entry_type=None,
             ),
         )
-        if previous_device is None:
+        if previous_device is None or registered_device is None:
             sensors.extend(
                 _SmartHvacDeviceSensor(
                     coordinator,
