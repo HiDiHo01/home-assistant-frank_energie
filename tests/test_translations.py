@@ -337,7 +337,9 @@ def test_no_unused_or_missing_translation_keys():
 
     class TranslationKeyExtractor(ast.NodeVisitor):
         def __init__(self):
+            """Track entity, issue, button and service translation keys separately."""
             self.translation_keys = set()
+            self.issue_keys = set()
             self.button_keys = set()
             self.service_names = set()
 
@@ -393,12 +395,19 @@ def test_no_unused_or_missing_translation_keys():
             self.generic_visit(node)
 
         def visit_Call(self, node):
+            """Extract Repairs issue keys without treating them as entity keys."""
             for keyword in node.keywords:
                 if keyword.arg == "translation_key":
                     if isinstance(keyword.value, ast.Constant) and isinstance(
                         keyword.value.value, str
                     ):
-                        self.translation_keys.add(keyword.value.value)
+                        if (
+                            isinstance(node.func, ast.Attribute)
+                            and node.func.attr == "async_create_issue"
+                        ):
+                            self.issue_keys.add(keyword.value.value)
+                        else:
+                            self.translation_keys.add(keyword.value.value)
                 elif keyword.arg == "key":
                     if isinstance(keyword.value, ast.Constant) and isinstance(
                         keyword.value.value, str
@@ -426,6 +435,7 @@ def test_no_unused_or_missing_translation_keys():
 
     # Extract device translation keys from strings.json
     strings_device_keys = set(strings_content.get("device", {}).keys())
+    strings_issue_keys = set(strings_content.get("issues", {}).keys())
 
     # Map service names to expected device keys
     codebase_device_keys = set()
@@ -472,6 +482,16 @@ def test_no_unused_or_missing_translation_keys():
     unused_device_keys = strings_device_keys - codebase_device_keys
     assert not unused_device_keys, (
         f"Unused device translation keys in strings.json: {sorted(unused_device_keys)}"
+    )
+
+    # Repairs issue translations are a distinct namespace from entity translations.
+    missing_issue_keys = extractor.issue_keys - strings_issue_keys
+    assert not missing_issue_keys, (
+        f"Repairs translation keys missing from strings.json: {sorted(missing_issue_keys)}"
+    )
+    unused_issue_keys = strings_issue_keys - extractor.issue_keys
+    assert not unused_issue_keys, (
+        f"Unused Repairs translation keys in strings.json: {sorted(unused_issue_keys)}"
     )
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
