@@ -630,14 +630,23 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
                 return self.entity_description.available_fn(self.coordinator.data)
             if self.entity_description.key == "deadline" and value is None:
                 vehicles_obj = self.coordinator.data.get(DATA_ENODE_VEHICLES)
-                return bool(
-                    vehicles_obj
-                    and any(
-                        vehicle["id"] == self._vehicle_id
-                        and (settings := vehicle.get("chargeSettings")) is not None
-                        and settings.get("deadline") is None
-                        for vehicle in vehicles_obj.vehicles
-                    )
+                if vehicles_obj is None:
+                    return False
+                vehicle = next(
+                    (
+                        item
+                        for item in vehicles_obj.vehicles
+                        if item["id"] == self._vehicle_id
+                    ),
+                    None,
+                )
+                if vehicle is None:
+                    return False
+                settings = vehicle.get("chargeSettings")
+                return (
+                    settings is not None
+                    and "deadline" in settings
+                    and settings.get("deadline") is None
                 )
         except (KeyError, AttributeError, TypeError) as err:
             _LOGGER.debug(
