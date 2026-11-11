@@ -1225,7 +1225,14 @@ async def test_authenticated_vehicle_deadline_exposes_unknown_in_home_assistant(
     config_entry.runtime_data = runtime_data
 
     added_entities: list[SensorEntity] = []
-    await async_setup_entry(hass, config_entry, added_entities.extend)
+
+    def _async_add_entities(
+        entities: list[SensorEntity], update_before_add: bool = False
+    ) -> None:
+        """Collect entities using Home Assistant's platform callback signature."""
+        added_entities.extend(entities)
+
+    await async_setup_entry(hass, config_entry, _async_add_entities)
     deadline_sensor = next(
         entity
         for entity in added_entities
