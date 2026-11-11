@@ -878,6 +878,7 @@ async def test_hvac_duplicate_inventory_never_counts_as_absence(
     )
     assert dr.async_get(hass).async_get(device.id) is not None
 
+
 async def test_hvac_anonymous_entry(
     hass: HomeAssistant,
     frank_energie_setup: Callable[[], Awaitable[MockConfigEntry]],

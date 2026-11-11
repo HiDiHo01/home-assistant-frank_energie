@@ -171,9 +171,11 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
 
         normalized = RegistryDeviceInventory(
             devices=[
-                {"id": smart_hvac_device_identifier(
-                    self.config_entry.entry_id, self.site_reference, device_id
-                )}
+                {
+                    "id": smart_hvac_device_identifier(
+                        self.config_entry.entry_id, self.site_reference, device_id
+                    )
+                }
                 for device_id in devices
             ]
         )
