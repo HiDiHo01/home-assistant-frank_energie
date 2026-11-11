@@ -26,6 +26,15 @@ Before attempting to rebase or resolve conflicts, apply the obsolete-PR rule in 
 
 If all meaningful changes are already present with equivalent behavior, cite the replacement commits and files and **recommend closing without merging**. Only post a comment and close the PR when explicitly authorized; never expose confidential security details. If anything material is missing or uncertain, keep the PR open, preserve its unique changes when resolving conflicts, and report checks actually run.
 
+## Consolidating related, superseded pull requests
+
+[PR #454](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/454) provides a verified example for replacing the stacked [#404](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/404) / [#405](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/405) / [#406](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/406) changes without overwriting newer `main` behavior:
+
+1. Compare the complete diffs, bases, current code paths, tests, comments and dependencies for **every** PR in the stack. Map unique fixes and original contributor credit; copying a full old coordinator or manifest can silently remove later functionality. Start the replacement on the checked current target branch and inspect its final merge-base diff for accidental reversions.
+2. For potentially destructive device-registry changes, review **both** entry-point paths: manual Home Assistant deletion and Repairs flow confirmation. Verify fail-closed inventories, repeated absence evidence, fresh revalidation, disabled entity ownership and site/entry identity isolation. Add real WebSocket lifecycle tests; inspect whether test helpers accidentally trigger two refreshes.
+3. Distinguish test problems from code defects by reading individual CI job logs: Ruff format, Flake8 `C901` baseline and pytest have independent gates. For translation keys, check the correct Home Assistant namespace (`issues` versus `entity`); do not suppress genuine complexity violations just to pass CI.
+4. After every new commit, reread PR head/base and rerun **current-head** checks and both Python jobs. Keep the original PRs open until the replacement has passed required checks, received human review and actually merged; only then consider closing originals as superseded, with links to the replacement. Never equate CI green with human approval.
+
 ## Validate findings
 
 - Confirm each potential issue against the actual code and relevant tests, not merely an automated comment or a Sonar annotation.
