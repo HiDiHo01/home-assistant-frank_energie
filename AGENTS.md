@@ -679,6 +679,38 @@ When working on GitHub repositories:
 
 Do not assume that pushing, publishing, releasing, or merging is authorized merely because code changes were requested.
 
+### Repair rebase-only pull-request blockers safely
+
+Before repairing an unavailable **Rebase and merge** action, inspect the PR's
+`mergeable`, `mergeable_state`, `rebaseable`, base/head SHAs, ahead/behind
+counts, commit-parent graph, and complete diff. `mergeable: true` and
+`mergeable_state: clean` with zero commits behind `main` do **not** guarantee
+`rebaseable: true`: an existing merge commit may be the only blocker.
+First apply the obsolete-PR triage below.
+
+- Do not force-push blindly or mistake a regular merge conflict for a
+  rebase-only blocker. Verify the affected merge method and ancestry.
+- Never rewrite or force-push without **explicit authorization**. Preserve
+  individual commits with a genuine rebase/cherry-pick when their history
+  matters; an authorized single-commit rewrite loses old commit identities.
+- Create and verify a backup branch at the **exact old head SHA** before
+  changing PR history. Recheck the live PR base/head before any push.
+- For an authorized single-commit rewrite onto current `main`, reuse the
+  old head's validated **exact Git tree** with the checked `main` SHA as
+  its sole parent. Compare old/new tree SHAs and complete diffs against
+  the same base, including files and tests. Stop on any content change.
+- Use `git push --force-with-lease` or an equivalent conditional GitHub ref
+  update (`expected_sha` with `force=true`), never unchecked `--force`.
+  Stop rather than overwrite a concurrently updated head or base.
+- Re-query GitHub after the rewrite. Verify `rebaseable: true`,
+  `behind_by: 0`, the new commit ancestry, and an unchanged full diff.
+  Rerun required CI and reviews on the **new head SHA**: green checks
+  and approvals for the old head do not establish merge readiness.
+  Never merge without separate authorization.
+
+See the [PR review skill](.agents/skills/frank-energie-pr-review/SKILL.md#rebase-only-conflicts-and-safe-history-repair)
+for the verified PR #408 example and operational checks.
+
 <!-- ai-review-rules:obsolete-pr-triage:start -->
 ### Check for obsolete pull requests before resolving conflicts
 

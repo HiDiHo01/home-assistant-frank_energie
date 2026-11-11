@@ -92,6 +92,34 @@ available solely because `mergeable` is true.
    can invalidate prior approvals and test results. Report unverified
    checks honestly, and never merge without explicit approval.
 
+### Verified recovery: PR #408 (2026-11-11)
+
+[PR #408](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/408)
+was current with `main` (`behind_by: 0`). GitHub reported
+`mergeable: true`, `mergeable_state: clean`, but `rebaseable: false`.
+The PR head `9fa1643` had two parents, because `main` had been merged
+into the PR. Prior CI was green but the **Rebase and merge** method
+remained unavailable.
+
+After the maintainer explicitly authorized a force-push:
+
+1. Created backup branch `backup-pr-408-before-rebase-9fa1643` at
+   the original head, then verified the backup.
+2. Created one-parent commit `cc98748` directly on `main` (`9b54e2b`)
+   with exactly the prior head's Git tree
+   (`43b7b7d74184b500dc3726b0d0a69e6f128b6d7c`).
+3. Verified matching Git trees and complete PR file statistics:
+   two changed files with 5 and 34 added lines.
+4. Force-updated the PR with `expected_sha` set to the original head.
+   GitHub then confirmed `rebaseable: true`, `mergeable: true`,
+   `ahead_by: 1` and `behind_by: 0`; fresh CI checks were triggered.
+
+**Lesson:** a current, conflict-free PR can remain non-rebaseable
+because of ancestry. Safeguard the original head, preserve and verify
+the complete tree/diff, use a lease, then verify GitHub's actual
+rebaseability and re-run current-head checks. A one-commit rewrite
+collapses history and is only appropriate when explicitly authorized.
+
 ## Merge-readiness decision
 
 Mark **ready** only if current-head checks, required reviews, unresolved substantive feedback, merge conflicts, and relevant behavioral correctness are verified. Mark **blocked** with the exact reasons; use **unverified** where data or checks cannot be obtained. Do not merge without explicit authorization.
