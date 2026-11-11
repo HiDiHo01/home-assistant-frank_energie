@@ -23,7 +23,9 @@ jobs:
     permissions:
       contents: read
     name: Run flake8/pytest (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Python 3.14.2 has a verified Ubuntu 24.04 build, but not Ubuntu 26.04.
+    # Pin the runner so both declared Python matrix entries remain installable.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -34,7 +36,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # @v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -75,7 +77,7 @@ jobs:
 
       - name: Install Poetry
         run: |
-          python -m pip install "poetry==2.5.1"
+          python -m pip install --only-binary :all: "poetry==2.5.1"
 
       - name: Validate lockfile
         run: poetry check --lock
@@ -100,10 +102,12 @@ jobs:
               raise SystemExit("Home Assistant tests require Python 3.14.2 or a newer 3.14 patch.")
 
           import_module("homeassistant.core")
-          import_module("pytest_homeassistant_custom_component")
+          import_module("pytest_homeassistant")
           print(f"Python: {sys.version.split()[0]}")
-          for package_name in ("homeassistant", "pytest", "pytest-homeassistant-custom-component"):
+          for package_name in ("homeassistant", "pytest", "pytest-homeassistant"):
               print(f"{package_name}: {version(package_name)}")
+          if version("homeassistant") != "2026.11.0" or version("pytest-homeassistant") != "2026.11.0":
+              raise SystemExit("Home Assistant and pytest-homeassistant must both be 2026.11.0")
           PY
 
       - name: Register flake8 problem matcher
@@ -112,10 +116,12 @@ jobs:
       - name: Lint with flake8
         run: |
           poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Keep the existing full-report pass informational until the pre-existing
-          # E501/E203/C901 findings are resolved in a dedicated code-cleanup PR.
-          # The critical-error pass above remains blocking.
-          poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --max-complexity=10 --max-line-length=120 --statistics || true
+
+      # The full check is blocking for new violations. Existing C901/E501
+      # technical debt is explicitly recorded in .github/flake8-baseline.json;
+      # E203 is excluded only to match Ruff-compatible slice formatting.
+      - name: Enforce no new Flake8 violations
+        run: poetry run python .github/helpers/check_flake8_baseline.py
 
       - name: Test with pytest
         id: pytest

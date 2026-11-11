@@ -3,7 +3,7 @@ Constants used in the Frank Energie integration.
 """
 
 # const.py
-# date 2026.9.20
+# date 2026.11.9
 
 import logging
 from dataclasses import dataclass
@@ -33,7 +33,9 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # --- Domain Information ---
 DOMAIN: Final[str] = "frank_energie"
-VERSION: Final[str] = "2026.9.20"
+VERSION: Final[str] = "2026.11.9"
+CONFIG_ENTRY_VERSION: Final[int] = 2
+CONFIG_ENTRY_MINOR_VERSION: Final[int] = 1
 ATTRIBUTION: Final[str] = "Data provided by Frank Energie"
 UNIQUE_ID: Final[str] = "frank_energie"
 TIMEZONE_AMSTERDAM: Final[str] = "Europe/Amsterdam"
@@ -157,9 +159,29 @@ SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "unknown",
 )
 
+# Selectable modes when the library cannot report a battery's own options.
 BATTERY_MODE_OPTIONS: Final[list[str]] = [
     "self_consumption_mix",
     "trading",
+]
+
+# The Frank Energie app treats each pair of modes alike: both trading modes show
+# the trading strategy, both self-consumption modes the threshold price.
+BATTERY_TRADING_MODES: Final[frozenset[str]] = frozenset(
+    {"imbalance_trading", "trading"}
+)
+BATTERY_SELF_CONSUMPTION_MODES: Final[frozenset[str]] = frozenset(
+    {"self_consumption", "self_consumption_mix"}
+)
+
+# Every battery mode the API can report (GraphQL ``SmartBatteryMode``).
+BATTERY_MODE_STATES: Final[list[str]] = [
+    "congestion",
+    "imbalance_trading",
+    "self_consumption",
+    "self_consumption_mix",
+    "trading",
+    "unknown",
 ]
 
 BATTERY_STRATEGY_OPTIONS: Final[list[str]] = [
@@ -201,11 +223,13 @@ DATA_DELIVERY_SITE: Final[str] = "delivery_site"
 DATA_BATTERIES: Final[str] = "smart_batteries"
 DATA_BATTERY_DETAILS: Final[str] = "smart_battery_details"
 DATA_BATTERY_SESSIONS: Final[str] = "smart_battery_sessions"
+DATA_BATTERY_SETTINGS: Final[str] = "smart_battery_settings"
 DATA_ENODE_CHARGERS: Final[str] = "enode_chargers"
 DATA_ENODE_VEHICLES: Final[str] = "enode_vehicles"
 DATA_PV_SYSTEMS: Final[str] = "smart_pv_systems"
 DATA_PV_SUMMARY: Final[str] = "smart_pv_summary"
 DATA_USER_SMART_FEED_IN: Final[str] = "user_smart_feed_in"
+DATA_USER_SMART_FEED_IN_FETCHED: Final[str] = "user_smart_feed_in_fetched"
 DATA_TOKEN_EXPIRES_AT: Final[str] = "auth_token_expires_at"
 DATA_REFRESH_TOKEN_EXPIRES_AT: Final[str] = "refresh_token_expires_at"
 
@@ -236,6 +260,7 @@ SERVICE_NAME_ELEC_PRICES: Final[str] = "Electricityprices"
 SERVICE_NAME_COSTS: Final[str] = "Costs"
 SERVICE_NAME_USAGE: Final[str] = "Usage"
 SERVICE_NAME_USER: Final[str] = "User"
+SERVICE_NAME_SMART_HVAC: Final[str] = "Smart Heating"
 SERVICE_NAME_SETTINGS: Final[str] = "Settings"
 SERVICE_NAME_ACTIVE_DELIVERY_SITE: Final[str] = "Active_Delivery_Site"
 SERVICE_NAME_ELEC_CONN: Final[str] = "Electricity connection"

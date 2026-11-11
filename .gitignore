@@ -7,6 +7,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 pytest-results.xml
+/sonar-open-issues.json
 .coverage
 coverage.xml
 htmlcov/

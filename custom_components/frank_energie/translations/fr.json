@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured%]",
       "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
@@ -11,7 +12,8 @@
       "no_delivery_sites": "Aucun site de livraison trouvé pour ce compte.",
       "no_suitable_sites": "Aucun site de livraison approprié trouvé. Vérifiez que votre compte dispose de contrats de livraison actifs.",
       "site_retrieval_failed": "Erreur lors de la récupération des sites de livraison. Veuillez réessayer plus tard.",
-      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails."
+      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
+      "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -89,6 +91,9 @@
     "frank_energie_usage": {
       "name": "Frank Energie - Consommation"
     },
+    "frank_energie_smart_heating": {
+      "name": "Frank Energie - Chauffage intelligent"
+    },
     "frank_energie_user": {
       "name": "Frank Energie - Utilisateur"
     },
@@ -101,6 +106,9 @@
   },
   "entity": {
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Prix de l’électricité de demain disponibles"
+      },
       "battery_self_consumption_trading_allowed": {
         "name": "Trading en autoconsommation autorisé"
       },
@@ -117,7 +125,7 @@
         "name": "Injection Intelligente"
       },
       "smart_hvac": {
-        "name": "Chauffage Intelligent"
+        "name": "Chauffage intelligent"
       },
       "smart_push_notification_price_alerts": {
         "name": "Alertes de prix par notification push"
@@ -224,11 +232,37 @@
       "battery_mode": {
         "name": "Mode de batterie intelligente",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Trading d'équilibrage",
           "self_consumption": "Autoconsommation",
           "self_consumption_mix": "Autoconsommation Plus",
           "trading": "Trading",
           "unknown": "Inconnu"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Date d'effet de la demande de modification"
+          },
+          "is_change_request_possible": {
+            "name": "Modification possible",
+            "state": {
+              "false": "Non",
+              "true": "Oui"
+            }
+          },
+          "upcoming_change": {
+            "name": "Modification à venir",
+            "state": {
+              "congestion": "Congestion",
+              "imbalance_trading": "Trading d'équilibrage",
+              "self_consumption": "Autoconsommation",
+              "self_consumption_mix": "Autoconsommation Plus",
+              "trading": "Trading"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Date d'effet de la modification à venir"
+          }
         }
       },
       "battery_strategy": {
@@ -240,6 +274,31 @@
           "imbalance_only": "Équilibrage uniquement",
           "standard": "Standard",
           "unknown": "Inconnu"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Date d'effet de la demande de modification"
+          },
+          "is_change_request_possible": {
+            "name": "Modification possible",
+            "state": {
+              "false": "Non",
+              "true": "Oui"
+            }
+          },
+          "upcoming_change": {
+            "name": "Modification à venir",
+            "state": {
+              "aggressive": "Agressive",
+              "balanced": "Équilibrée",
+              "conservative": "Conservatrice",
+              "imbalance_only": "Équilibrage uniquement",
+              "standard": "Standard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Date d'effet de la modification à venir"
+          }
         }
       },
       "resolution": {
@@ -315,6 +374,79 @@
       }
     },
     "sensor": {
+      "smart_hvac_device_count": {
+        "name": "Appareils associés"
+      },
+      "smart_hvac_profile_created_at": {
+        "name": "Création du profil de chauffage intelligent",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Disponible dans le pays"
+          },
+          "available_on_site": {
+            "name": "Disponible sur le site de livraison"
+          },
+          "has_accepted_terms": {
+            "name": "Conditions acceptées"
+          }
+        }
+      },
+      "smart_hvac_connection_requests": {
+        "name": "Demandes d’association de chauffage intelligent (compte)",
+        "state_attributes": {
+          "requests": {
+            "name": "Détails des demandes d’association"
+          }
+        }
+      },
+      "smart_hvac_equipment": {
+        "name": "Appareil",
+        "state_attributes": {
+          "brand": {
+            "name": "Marque"
+          },
+          "model": {
+            "name": "Modèle"
+          },
+          "device_type": {
+            "name": "Type d’appareil"
+          },
+          "provider": {
+            "name": "Fournisseur"
+          },
+          "created_at": {
+            "name": "Date de création"
+          },
+          "updated_at": {
+            "name": "Date de mise à jour"
+          },
+          "needs_reauthentication": {
+            "name": "Réauthentification requise"
+          }
+        }
+      },
+      "smart_hvac_operational_status": {
+        "name": "État opérationnel"
+      },
+      "smart_hvac_steering_status": {
+        "name": "État du pilotage",
+        "state": {
+          "active": "Actif",
+          "inactive": "Inactif"
+        }
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "name": "Horodatage de l’état opérationnel"
+      },
+      "smart_hvac_first_session_date": {
+        "name": "Date de la première session"
+      },
+      "smart_hvac_last_session_date": {
+        "name": "Date de la dernière session"
+      },
+      "smart_hvac_total_result": {
+        "name": "Économies totales"
+      },
       "ean": {
         "name": "EAN (Energy Account Number)"
       },
@@ -669,11 +801,11 @@
       "gas_tax_markup": {
         "name": "Prix actuel du gaz, taxes et majoration comprises"
       },
-      "gas_tax_only": {
-        "name": "Taxe actuelle sur le gaz uniquement"
+      "gas_energy_tax": {
+        "name": "Taxe énergétique actuelle sur le gaz (TVA incluse)"
       },
-      "gas_tax_vat": {
-        "name": "Prix actuel de la TVA sur le gaz"
+      "gas_market_vat": {
+        "name": "TVA actuelle sur le prix du marché du gaz"
       },
       "gas_today_avg_all_in": {
         "name": "Prix moyen du gaz aujourd'hui (Tout compris)"
@@ -923,6 +1055,27 @@
       "deadline": {
         "name": "Heure de départ"
       },
+      "charging_hour_monday": {
+        "name": "Heure de départ lundi"
+      },
+      "charging_hour_tuesday": {
+        "name": "Heure de départ mardi"
+      },
+      "charging_hour_wednesday": {
+        "name": "Heure de départ mercredi"
+      },
+      "charging_hour_thursday": {
+        "name": "Heure de départ jeudi"
+      },
+      "charging_hour_friday": {
+        "name": "Heure de départ vendredi"
+      },
+      "charging_hour_saturday": {
+        "name": "Heure de départ samedi"
+      },
+      "charging_hour_sunday": {
+        "name": "Heure de départ dimanche"
+      },
       "charge_settings_id": {
         "name": "ID des paramètres de charge"
       },
@@ -995,6 +1148,7 @@
       "battery_mode": {
         "name": "Mode de batterie",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Trading d'équilibrage",
           "self_consumption": "Autoconsommation",
           "self_consumption_mix": "Autoconsommation Plus",
@@ -1099,6 +1253,12 @@
         },
         "title": "Se connecter à Frank Energie"
       }
+    },
+    "error": {
+      "connection_error": "Erreur de connexion à l'API Frank Energie.",
+      "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
+      "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
+      "wrong_account": "Ce compte n’a pas accès au site de livraison configuré. Connectez-vous avec le compte associé à cette configuration."
     }
   },
   "title": "Frank Energie"

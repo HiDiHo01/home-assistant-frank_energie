@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant import config_entries
@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.util import dt
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     async_fire_time_changed,
     MockConfigEntry,
 )
@@ -179,20 +179,103 @@ async def test_sensors(
         ).state
         == "0.0225"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_vat_price").state
-        == "0.1845"
+    gas_registry = entity_registry.async_get(hass)
+    gas_vat_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_vat"
     )
+    gas_energy_tax_entity_id = gas_registry.async_get_entity_id(
+        "sensor", const.DOMAIN, f"{frank_energie_config_entry.unique_id}.gas_tax_only"
+    )
+    assert gas_vat_entity_id is not None
+    assert gas_energy_tax_entity_id is not None
+    assert hass.states.get(gas_vat_entity_id).state == "0.0615"
     assert (
         hass.states.get(
             "sensor.frank_energie_gas_prices_current_gas_sourcing_price"
         ).state
         == "0.123"
     )
-    assert (
-        hass.states.get("sensor.frank_energie_gas_prices_current_gas_tax_only").state
-        == "0.0615"
+    assert hass.states.get(gas_energy_tax_entity_id).state == "0.1845"
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "price_component", "expected_value"),
+    [
+        ("elec_tax_only", "energy_tax_price", 0.7268),
+        ("elec_tax_vat", "market_price_tax", 0.1895),
+        ("gas_energy_tax", "energy_tax_price", 0.7268),
+        ("gas_market_vat", "market_price_tax", 0.1895),
+    ],
+)
+def test_current_tax_sensor_price_component_mapping(
+    sensor_key: str, price_component: str, expected_value: float
+) -> None:
+    """Map energy tax and market-price VAT consistently for both fuels."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    current_hour = SimpleNamespace(
+        energy_tax_price=0.7268,
+        market_price_tax=0.1895,
     )
+    data = {
+        const.DATA_ELECTRICITY: SimpleNamespace(current_hour=current_hour),
+        const.DATA_GAS: SimpleNamespace(current_hour=current_hour),
+    }
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert getattr(current_hour, price_component) == expected_value
+    assert description.value_fn(data) == pytest.approx(expected_value)
+
+
+@pytest.mark.parametrize("sensor_key", ["gas_energy_tax", "gas_market_vat"])
+@pytest.mark.parametrize("has_gas_prices", [False, True])
+def test_gas_tax_sensor_missing_current_hour_is_unknown(
+    sensor_key: str, has_gas_prices: bool
+) -> None:
+    """Return None when gas prices or the current gas period are absent."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    gas_prices = SimpleNamespace(current_hour=None) if has_gas_prices else None
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert description.value_fn({const.DATA_GAS: gas_prices}) is None
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "historical_key"),
+    [
+        ("gas_energy_tax", "gas_tax_only"),
+        ("gas_market_vat", "gas_tax_vat"),
+    ],
+)
+def test_gas_sensor_keys_keep_registry_unique_ids(
+    sensor_key: str, historical_key: str
+) -> None:
+    """Preserve existing entity registry identities after renaming sensor keys."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.sensor import (
+        FrankEnergieSensor,
+        SENSOR_TYPES,
+        _sensor_unique_id,
+    )
+
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    entry = MagicMock()
+    entry.entry_id = "existing_entry"
+    entry.unique_id = "site_id"
+    coordinator = MagicMock()
+    coordinator.data = {}
+
+    sensor = FrankEnergieSensor(coordinator, description, entry)
+
+    assert description.translation_key == sensor_key
+    assert sensor.unique_id == f"site_id.{historical_key}"
+    assert _sensor_unique_id(entry, description) == sensor.unique_id
 
 
 async def test_sensors_get_data_of_current_hour(
@@ -201,6 +284,7 @@ async def test_sensors_get_data_of_current_hour(
     frank_energie_config_entry: MockConfigEntry,
     hass: HomeAssistant,
 ):
+    """Verify that current-hour price sensors follow an exact local-time change."""
     import zoneinfo
 
     await hass.config.async_set_time_zone("Europe/Amsterdam")
@@ -208,13 +292,12 @@ async def test_sensors_get_data_of_current_hour(
     now = datetime.now(tz).replace(hour=5, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Return the same two-day data on every request: concurrent refreshes may
+    # complete in any order, so a sequential today/tomorrow cycle is unreliable.
     aioclient_responses.add(
-        start_of_day, [0.3] * 12 + [0.15] * 12, [1.75] * 6 + [1.23] * 18
-    )
-    aioclient_responses.add(
-        start_of_day + timedelta(days=1),
-        [0.25] * 12 + [0.1] * 12,
-        [1.23] * 6 + [1.11] * 18,
+        start_of_day,
+        [0.3] * 12 + [0.15] * 12 + [0.25] * 12 + [0.1] * 12,
+        [1.75] * 6 + [1.23] * 18 + [1.23] * 6 + [1.11] * 18,
     )
     aioclient_responses.cyclic()
 
@@ -238,7 +321,9 @@ async def test_sensors_get_data_of_current_hour(
     # Change time to 12:15
     now = datetime.now(tz).replace(hour=12, minute=15, second=0, microsecond=0)
     freezer.move_to(now)
-    await trigger_update(hass, 7 * 3600)
+    # The clock has already advanced; firing seven hours later can expire prices.
+    async_fire_time_changed(hass, now.astimezone(UTC) + timedelta(seconds=1))
+    await hass.async_block_till_done()
 
     assert (
         hass.states.get(
@@ -338,25 +423,37 @@ async def test_sensors_hour_price_attr(
     assert price_attr == pytest.approx([1.75] * 6 + [1.23] * 24 + [0.75] * 18)
 
     # For the other sensors just check if the prices attribute is there
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_electricity_prices_current_electricity_market_price"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_electricity_prices_current_electricity_market_price"
+            ).attributes["prices"]
+        )
+        == 48
     )
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_electricity_prices_current_electricity_price_including_tax"
+            ).attributes["prices"]
+        )
+        == 48
     )
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_gas_prices_current_gas_market_price"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_gas_prices_current_gas_market_price"
+            ).attributes["prices"]
+        )
+        == 48
     )
-    assert 48 == len(
-        hass.states.get(
-            "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
-        ).attributes["prices"]
+    assert (
+        len(
+            hass.states.get(
+                "sensor.frank_energie_gas_prices_current_gas_price_including_tax"
+            ).attributes["prices"]
+        )
+        == 48
     )
 
 
@@ -694,7 +791,7 @@ async def _parent_and_child_devices_after_add(
     """
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
     from homeassistant.helpers import device_registry as dr
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 
@@ -937,6 +1034,379 @@ def _make_tesla_model_3(last_seen: datetime) -> object:
     )
 
 
+@pytest.mark.parametrize("battery_capacity", [86.5, 0.0, None])
+def test_enode_vehicle_battery_capacity_from_parsed_model(
+    hass: HomeAssistant,
+    battery_capacity: float | None,
+) -> None:
+    """Expose the reported capacity for a parsed vehicle even when unplugged."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.const import UnitOfEnergy
+    from python_frank_energie.models import EnodeVehicle, EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(last_seen=datetime.now(UTC))
+    assert isinstance(vehicle, EnodeVehicle)
+    vehicle.charge_state.battery_capacity = battery_capacity
+    vehicle.charge_state.battery_level = 94
+    vehicle.charge_state.is_plugged_in = False
+
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
+    coordinator.last_update_success = True
+
+    capacity_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "battery_capacity"
+    )
+    sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=capacity_description,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+
+    assert sensor.native_value == battery_capacity
+    assert sensor.available is (battery_capacity is not None)
+    assert sensor.unique_id == "frank_energie_veh_123_battery_capacity"
+    assert (
+        capacity_description.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
+    )
+
+    battery_level_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "battery_level"
+    )
+    assert battery_level_description.value_fn(vehicle) == 94
+
+    charge_limit_description = next(
+        description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key == "charge_limit"
+    )
+    charge_limit_sensor = EnodeVehicleSensor(
+        hass=hass,
+        coordinator=coordinator,
+        description=charge_limit_description,
+        vehicle_data=vehicle,
+        vehicle_index=0,
+    )
+    assert charge_limit_sensor.native_value == 100
+    assert charge_limit_sensor.available is True
+    assert charge_limit_sensor.unique_id == "frank_energie_veh_123_charge_limit"
+    assert sensor.device_info["identifiers"] == {("frank_energie", "veh_123")}
+    assert sensor.device_info["name"] == "Tesla Model 3"
+
+
+@pytest.mark.parametrize(
+    ("charge_state", "expected_capacity"),
+    [
+        ({"batteryCapacity": 86.5}, 86.5),
+        ({"batteryCapacity": None}, None),
+        ({}, None),
+        (None, None),
+    ],
+)
+def test_enode_vehicle_battery_capacity_handles_nullable_raw_data(
+    charge_state: dict[str, float | None] | None,
+    expected_capacity: float | None,
+) -> None:
+    """Preserve dictionary compatibility and handle missing API charge values."""
+    from custom_components.frank_energie.sensor import ENODE_VEHICLE_SENSOR_TYPES
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "battery_capacity"
+    )
+
+    assert description.value_fn({"chargeState": charge_state}) == expected_capacity
+    assert description.value_fn({}) is None
+
+
+@pytest.mark.parametrize(
+    "deadline",
+    [None, datetime(2026, 11, 12, 8, 0, tzinfo=UTC)],
+)
+def test_enode_vehicle_deadline_is_available_when_unset_or_set(
+    hass: HomeAssistant,
+    deadline: datetime | None,
+) -> None:
+    """Keep a valid vehicle available when its optional deadline is unset."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
+    calculated_deadline = datetime(2026, 11, 12, 6, 0, tzinfo=UTC)
+    vehicle.charge_settings.deadline = deadline
+    vehicle.charge_settings.calculated_deadline = calculated_deadline
+
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
+    coordinator.last_update_success = True
+
+    descriptions = {
+        description.key: description for description in ENODE_VEHICLE_SENSOR_TYPES
+    }
+    deadline_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["deadline"], vehicle, 0
+    )
+    calculated_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["calculated_deadline"], vehicle, 0
+    )
+
+    assert deadline_sensor.native_value == deadline
+    assert deadline_sensor.available is True
+    assert deadline_sensor.unique_id == "frank_energie_veh_123_deadline"
+    assert calculated_sensor.native_value == calculated_deadline
+    assert calculated_sensor.available is True
+    assert calculated_sensor.unique_id == "frank_energie_veh_123_calculated_deadline"
+
+
+@pytest.mark.asyncio
+async def test_authenticated_vehicle_deadline_exposes_unknown_in_home_assistant(
+    hass: HomeAssistant,
+) -> None:
+    """Register authenticated vehicle sensors and verify their Home Assistant states."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+    from homeassistant.const import STATE_UNKNOWN
+    from pytest_homeassistant.common import MockEntityPlatform
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES, DOMAIN
+    from custom_components.frank_energie.sensor import (
+        EnodeVehicleSensor,
+        async_setup_entry,
+    )
+
+    config_entry = MockConfigEntry(domain=DOMAIN, unique_id="deadline_state_test")
+    config_entry.add_to_hass(hass)
+
+    runtime_data = MagicMock()
+    coordinator_names = (
+        "settings_coordinator",
+        "price_coordinator",
+        "battery_coordinator",
+        "charger_coordinator",
+        "pv_coordinator",
+        "statistics_coordinator",
+    )
+    for coordinator_name in coordinator_names:
+        coordinator = MagicMock()
+        coordinator.data = {}
+        coordinator.api.is_authenticated = False
+        setattr(runtime_data, coordinator_name, coordinator)
+
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
+    calculated_deadline = datetime(2026, 11, 12, 6, 0, tzinfo=UTC)
+    vehicle.charge_settings.calculated_deadline = calculated_deadline
+    vehicle_coordinator = MagicMock()
+    vehicle_coordinator.config_entry = config_entry
+    vehicle_coordinator.api.is_authenticated = True
+    vehicle_coordinator.last_update_success = True
+    vehicle_coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
+    runtime_data.vehicle_coordinator = vehicle_coordinator
+    config_entry.runtime_data = runtime_data
+
+    added_entities: list[SensorEntity] = []
+
+    def _async_add_entities(
+        entities: list[SensorEntity], update_before_add: bool = False
+    ) -> None:
+        """Collect entities using Home Assistant's platform callback signature."""
+        added_entities.extend(entities)
+
+    await async_setup_entry(hass, config_entry, _async_add_entities)
+    deadline_sensor = next(
+        entity
+        for entity in added_entities
+        if isinstance(entity, EnodeVehicleSensor)
+        and entity.entity_description.key == "deadline"
+    )
+    calculated_sensor = next(
+        entity
+        for entity in added_entities
+        if isinstance(entity, EnodeVehicleSensor)
+        and entity.entity_description.key == "calculated_deadline"
+    )
+
+    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
+    platform.config_entry = config_entry
+    await platform.async_add_entities([deadline_sensor, calculated_sensor])
+    await hass.async_block_till_done()
+
+    registry = entity_registry.async_get(hass)
+    deadline_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, deadline_sensor.unique_id
+    )
+    calculated_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, calculated_sensor.unique_id
+    )
+    assert deadline_entity_id is not None
+    assert calculated_entity_id is not None
+
+    deadline_state = hass.states.get(deadline_entity_id)
+    calculated_state = hass.states.get(calculated_entity_id)
+    assert deadline_state is not None
+    assert deadline_state.state == STATE_UNKNOWN
+    assert calculated_state is not None
+    assert datetime.fromisoformat(calculated_state.state) == calculated_deadline
+
+
+@pytest.mark.parametrize(
+    ("inventory_state", "last_update_success"),
+    [
+        ("missing", True),
+        ("empty", True),
+        ("different_vehicle", True),
+        ("present", False),
+    ],
+)
+def test_enode_vehicle_deadline_unavailable_without_current_vehicle_data(
+    hass: HomeAssistant,
+    inventory_state: str,
+    last_update_success: bool,
+) -> None:
+    """Do not mask missing inventory or failed coordinator updates."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
+    coordinator = MagicMock()
+    coordinator.last_update_success = last_update_success
+    if inventory_state == "missing":
+        coordinator.data = {}
+    elif inventory_state == "empty":
+        coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[])}
+    else:
+        inventory_vehicle = _make_tesla_model_3(
+            last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+        )
+        if inventory_state == "different_vehicle":
+            inventory_vehicle.id = "different_vehicle"
+        coordinator.data = {
+            DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[inventory_vehicle])
+        }
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
+    )
+    sensor = EnodeVehicleSensor(hass, coordinator, description, vehicle, 0)
+
+    assert sensor.available is False
+
+
+def test_enode_vehicle_deadline_is_independent_for_multiple_vehicles(
+    hass: HomeAssistant,
+) -> None:
+    """Do not use another vehicle's explicit departure deadline."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    last_seen = datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+    first_vehicle = _make_tesla_model_3(last_seen=last_seen)
+    second_vehicle = _make_tesla_model_3(last_seen=last_seen)
+    second_vehicle.id = "veh_456"
+    second_vehicle.charge_settings.deadline = datetime(2026, 11, 12, 9, 0, tzinfo=UTC)
+
+    coordinator = MagicMock()
+    coordinator.data = {
+        DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[first_vehicle, second_vehicle])
+    }
+    coordinator.last_update_success = True
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
+    )
+    first_sensor = EnodeVehicleSensor(hass, coordinator, description, first_vehicle, 0)
+    second_sensor = EnodeVehicleSensor(
+        hass, coordinator, description, second_vehicle, 1
+    )
+
+    assert first_sensor.native_value is None
+    assert first_sensor.available is True
+    assert second_sensor.native_value == second_vehicle.charge_settings.deadline
+    assert second_sensor.available is True
+    assert first_sensor.unique_id == "frank_energie_veh_123_deadline"
+    assert second_sensor.unique_id == "frank_energie_veh_456_deadline"
+
+
+@pytest.mark.parametrize("valid_record_first", [False, True])
+@pytest.mark.parametrize(
+    "incomplete_record",
+    [
+        pytest.param({"id": "veh_123"}, id="missing-charge-settings"),
+        pytest.param(
+            {"id": "veh_123", "chargeSettings": {}}, id="empty-charge-settings"
+        ),
+    ],
+)
+def test_enode_vehicle_deadline_uses_first_matching_record(
+    hass: HomeAssistant,
+    valid_record_first: bool,
+    incomplete_record: dict[str, object],
+) -> None:
+    """Use the same first vehicle record for value and availability checks."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
+    records = (
+        [vehicle, incomplete_record]
+        if valid_record_first
+        else [incomplete_record, vehicle]
+    )
+    inventory = MagicMock()
+    inventory.vehicles = records
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: inventory}
+    coordinator.last_update_success = True
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
+    )
+    sensor = EnodeVehicleSensor(hass, coordinator, description, vehicle, 0)
+
+    assert sensor.native_value is None
+    assert sensor.available is valid_record_first
+    assert sensor.unique_id == "frank_energie_veh_123_deadline"
+
+
 def test_enode_vehicle_available_does_not_crash_without_available_fn(
     hass: HomeAssistant,
 ) -> None:
@@ -1166,7 +1636,7 @@ async def _register_sensor_and_get_state(
     the real SensorEntity validation (including ENUM ``options`` validation)
     rather than a hand-rolled stand-in for it."""
     from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+    from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.const import DOMAIN
 
@@ -1364,3 +1834,23 @@ async def test_battery_strategy_sensor_passes_ha_enum_validation(
     validation accepts."""
     state = await _battery_strategy_sensor_state(hass, strategy)
     assert state == strategy.value.lower()
+
+
+def test_parse_contract_product_name() -> None:
+    """Test parsing of Frank Energie contract product code components."""
+    from custom_components.frank_energie.sensor import _parse_contract_product_name
+
+    code = "b2c-e-dyn-qh-2024-jan-unknownpart"
+    result = _parse_contract_product_name(code)
+    assert result == {
+        "b2c": "Particulier klantcontract (Business-to-Consumer)",
+        "e": "Elektriciteit",
+        "dyn": "Dynamisch energiecontract",
+        "qh": "Kwartier-gebaseerde prijsvorming (Quarter-Hourly)",
+        "2024": "Contractjaar 2024",
+        "jan": "Startmaand: januari",
+        "unknownpart": "Onbekend onderdeel",
+    }
+
+    # Verify uppercase month handling
+    assert _parse_contract_product_name("DEC") == {"DEC": "Startmaand: december"}

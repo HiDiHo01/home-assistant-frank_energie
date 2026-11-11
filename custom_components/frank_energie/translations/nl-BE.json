@@ -4,6 +4,7 @@
     "abort": {
       "already_configured": "Account is al toegevoegd",
       "reauth_successful": "Opnieuw inloggen gelukt",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
@@ -12,7 +13,8 @@
       "no_delivery_sites": "Geen leveringslocaties gevonden voor dit account.",
       "no_suitable_sites": "Geen geschikte leveringslocaties gevonden. Controleer of je account actieve leveringscontracten heeft.",
       "site_retrieval_failed": "Fout bij het ophalen van leveringslocaties. Probeer het later opnieuw.",
-      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie."
+      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
+      "wrong_account": "Dit account heeft geen toegang tot het ingestelde leveringsadres. Meld je aan met het account dat bij deze configuratie hoort."
     },
     "flow_title": "Frank Energie",
     "step": {
@@ -84,6 +86,12 @@
           "interval_pv": "Ophaalinterval - PV (5-60 minuten, standaard: 5)"
         }
       }
+    },
+    "error": {
+      "connection_error": "Verbindingsfout met Frank Energie API.",
+      "invalid_auth": "Inloggegevens niet geaccepteerd. Controleer de gegevens en probeer het opnieuw.",
+      "unknown_error": "Onbekende fout opgetreden. Raadpleeg de logboeken voor meer informatie.",
+      "wrong_account": "Dit account heeft geen toegang tot het ingestelde leveringsadres. Meld je aan met het account dat bij deze configuratie hoort."
     }
   },
   "device": {
@@ -108,6 +116,9 @@
     "frank_energie_usage": {
       "name": "Frank Energie - Inzicht"
     },
+    "frank_energie_smart_heating": {
+      "name": "Frank Energie - Slim verwarmen"
+    },
     "frank_energie_user": {
       "name": "Frank Energie - Gebruiker"
     },
@@ -120,6 +131,79 @@
   },
   "entity": {
     "sensor": {
+      "smart_hvac_device_count": {
+        "name": "Gekoppelde toestellen"
+      },
+      "smart_hvac_profile_created_at": {
+        "name": "Profiel Slim verwarmen aangemaakt",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Beschikbaar in land"
+          },
+          "available_on_site": {
+            "name": "Beschikbaar op leveringslocatie"
+          },
+          "has_accepted_terms": {
+            "name": "Voorwaarden aanvaard"
+          }
+        }
+      },
+      "smart_hvac_connection_requests": {
+        "name": "Koppelverzoeken Slim verwarmen (account)",
+        "state_attributes": {
+          "requests": {
+            "name": "Details van koppelverzoeken"
+          }
+        }
+      },
+      "smart_hvac_equipment": {
+        "name": "Toestel",
+        "state_attributes": {
+          "brand": {
+            "name": "Merk"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "device_type": {
+            "name": "Toesteltype"
+          },
+          "provider": {
+            "name": "Aanbieder"
+          },
+          "created_at": {
+            "name": "Aangemaakt op"
+          },
+          "updated_at": {
+            "name": "Bijgewerkt op"
+          },
+          "needs_reauthentication": {
+            "name": "Opnieuw aanmelden vereist"
+          }
+        }
+      },
+      "smart_hvac_operational_status": {
+        "name": "Operationele status"
+      },
+      "smart_hvac_steering_status": {
+        "name": "Sturingsstatus",
+        "state": {
+          "active": "Actief",
+          "inactive": "Inactief"
+        }
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "name": "Tijdstip operationele status"
+      },
+      "smart_hvac_first_session_date": {
+        "name": "Datum eerste sessie"
+      },
+      "smart_hvac_last_session_date": {
+        "name": "Datum laatste sessie"
+      },
+      "smart_hvac_total_result": {
+        "name": "Totale besparingen"
+      },
       "current_electricity_price": {
         "name": "Huidige elektriciteitsprijs (All-in)",
         "state_attributes": {
@@ -266,14 +350,14 @@
       "gas_market": {
         "name": "Huidige gas marktprijs"
       },
-      "gas_tax_vat": {
-        "name": "Huidige gas energiebelasting prijs"
+      "gas_market_vat": {
+        "name": "Huidige gas BTW over marktprijs"
       },
       "gas_sourcing": {
         "name": "Huidige gas inkoopvergoeding prijs"
       },
-      "gas_tax_only": {
-        "name": "Huidige gas BTW prijs"
+      "gas_energy_tax": {
+        "name": "Huidige gas energiebelasting incl. BTW"
       },
       "gas_today_avg_all_in": {
         "name": "Gemiddelde gasprijs vandaag (All-in)"
@@ -728,6 +812,27 @@
       "deadline": {
         "name": "Vertrektijd"
       },
+      "charging_hour_monday": {
+        "name": "Vertrektijd maandag"
+      },
+      "charging_hour_tuesday": {
+        "name": "Vertrektijd dinsdag"
+      },
+      "charging_hour_wednesday": {
+        "name": "Vertrektijd woensdag"
+      },
+      "charging_hour_thursday": {
+        "name": "Vertrektijd donderdag"
+      },
+      "charging_hour_friday": {
+        "name": "Vertrektijd vrijdag"
+      },
+      "charging_hour_saturday": {
+        "name": "Vertrektijd zaterdag"
+      },
+      "charging_hour_sunday": {
+        "name": "Vertrektijd zondag"
+      },
       "charge_settings_id": {
         "name": "Laadinstellingen ID"
       },
@@ -804,7 +909,8 @@
           "trading": "Handelen",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
-          "unknown": "Unknown"
+          "unknown": "Unknown",
+          "congestion": "Congestie"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -888,6 +994,9 @@
       }
     },
     "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Elektriciteitsprijzen morgen beschikbaar"
+      },
       "smartcharging_isactivated": {
         "name": "Slim laden",
         "state_attributes": {
@@ -947,7 +1056,7 @@
         }
       },
       "smart_hvac": {
-        "name": "Slimme HVAC"
+        "name": "Slim verwarmen"
       },
       "disabled_haptic_feedback": {
         "name": "Haptische feedback uitgeschakeld"
@@ -1033,11 +1142,37 @@
       "battery_mode": {
         "name": "Slimme batterijmodus",
         "state": {
+          "congestion": "Congestie",
           "imbalance_trading": "Onbalans handelen",
           "self_consumption": "Zelfconsumptie",
           "self_consumption_mix": "Zelfconsumptie Plus",
           "trading": "Handelen",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "congestion": "Congestie",
+              "imbalance_trading": "Onbalans handelen",
+              "self_consumption": "Zelfconsumptie",
+              "self_consumption_mix": "Zelfconsumptie Plus",
+              "trading": "Handelen"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
+          }
         }
       },
       "battery_strategy": {
@@ -1049,6 +1184,31 @@
           "imbalance_only": "Alleen onbalans",
           "standard": "Standaard",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "aggressive": "Agressief",
+              "balanced": "Gebalanceerd",
+              "conservative": "Conservatief",
+              "imbalance_only": "Alleen onbalans",
+              "standard": "Standaard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
+          }
         }
       },
       "enode_charging_mode": {
