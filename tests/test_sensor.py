@@ -1269,7 +1269,6 @@ def test_enode_vehicle_deadline_is_independent_for_multiple_vehicles(
     assert second_sensor.unique_id == "frank_energie_veh_456_deadline"
 
 
-
 @pytest.mark.parametrize("valid_record_first", [False, True])
 @pytest.mark.parametrize(
     "incomplete_record",
@@ -1294,9 +1293,7 @@ def test_enode_vehicle_deadline_uses_first_matching_record(
         EnodeVehicleSensor,
     )
 
-    vehicle = _make_tesla_model_3(
-        last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
-    )
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
     records = (
         [vehicle, incomplete_record]
         if valid_record_first
