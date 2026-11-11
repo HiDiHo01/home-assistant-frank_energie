@@ -220,9 +220,10 @@ class StaleDeviceRepairFlow(RepairsFlow):
         if candidate[1] in inventory:
             return self.async_abort(reason="device_restored")
 
-        from . import async_remove_config_entry_device
+        from . import _is_device_removal_safe
 
-        if not await async_remove_config_entry_device(self.hass, entry, current_device):
+        # The Repairs flow already requested and verified a fresh inventory.
+        if not _is_device_removal_safe(self.hass, entry, current_device):
             return self.async_abort(reason="cannot_verify")
 
         registry.async_remove_device(device_id)

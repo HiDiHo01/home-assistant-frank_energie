@@ -20,6 +20,7 @@ from python_frank_energie.frank_energie import FrankEnergieQuery
 
 from custom_components.frank_energie import (
     FrankEnergieEntryData,
+    _is_device_removal_safe,
     async_remove_config_entry_device,
 )
 from custom_components.frank_energie.const import (
@@ -523,7 +524,7 @@ async def test_battery_classification_uses_stable_entity_marker(
         hass, entry, "battery", empty
     )
     assert _repair_exists(hass, _issue_id("battery", entry.entry_id, device.id))
-    assert await async_remove_config_entry_device(hass, entry, updated_device)
+    assert _is_device_removal_safe(hass, entry, updated_device)
 
 
 async def test_battery_identified_by_disabled_sensor_without_controls(
@@ -551,7 +552,7 @@ async def test_battery_identified_by_disabled_sensor_without_controls(
     )
 
     assert _repair_exists(hass, _issue_id("battery", entry.entry_id, device.id))
-    assert await async_remove_config_entry_device(hass, entry, device)
+    assert _is_device_removal_safe(hass, entry, device)
 
 
 async def test_unrelated_device_does_not_scan_entity_registry(

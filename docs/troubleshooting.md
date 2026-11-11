@@ -174,8 +174,9 @@ An ignored Repair remains ignored until its lifecycle changes; an
 unrecognized or restored device must not be deleted.
 
 The same double-absence rule also applies to Home Assistant's manual
-device-removal action. Wait for two successful updates before retrying
-when removal is rejected. Removing the integration config entry is a
+device-removal action. The Delete action requests another successful, live
+inventory check and refuses removal if the refresh fails or is skipped.
+Wait for two successful updates before retrying when removal is rejected. Removing the integration config entry is a
 separate operation and is unaffected.
 
 **Minimum Home Assistant version for these Repairs is 2026.11.0.**

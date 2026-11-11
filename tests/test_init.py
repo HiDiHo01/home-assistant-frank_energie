@@ -170,8 +170,9 @@ async def test_device_removal_requires_two_valid_absences(
     frank_energie_setup,
     observations: int,
     removable: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Home Assistant must not delete hardware after only one missing fetch."""
+    """Home Assistant must not delete hardware without fresh double evidence."""
     assert await async_setup_component(hass, "config", {})
     client = await hass_ws_client(hass)
     entry = await frank_energie_setup()
@@ -190,6 +191,13 @@ async def test_device_removal_requires_two_valid_absences(
     coordinator = entry.runtime_data.charger_coordinator
     coordinator.last_update_success = True
     coordinator.data[DATA_ENODE_CHARGERS] = SimpleNamespace(chargers=[])
+
+    async def _refresh_inventory() -> None:
+        """Provide a new verified inventory for the manual confirmation."""
+        coordinator.verified_inventory_ids = set()
+
+    refresh = AsyncMock(side_effect=_refresh_inventory)
+    monkeypatch.setattr(coordinator, "async_refresh", refresh)
     from custom_components.frank_energie.repairs import async_process_device_inventory
 
     for _ in range(observations):
@@ -207,6 +215,7 @@ async def test_device_removal_requires_two_valid_absences(
     result = await client.receive_json()
     assert result["success"] is removable
     assert (registry.async_get(device.id) is None) is removable
+    assert refresh.await_count == int(removable)
 
 
 async def test_manual_device_removal_rejects_restored_or_partial_inventory(
@@ -234,7 +243,17 @@ async def test_manual_device_removal_rejects_restored_or_partial_inventory(
         coordinator.verified_inventory_ids = async_process_device_inventory(
             hass, entry, "charger", missing
         )
-    assert await async_remove_config_entry_device(hass, entry, device)
+    # A skipped/unchanged coordinator refresh cannot authorize removal.
+    with patch.object(coordinator, "async_refresh", new_callable=AsyncMock) as refresh:
+        assert not await async_remove_config_entry_device(hass, entry, device)
+        refresh.assert_awaited_once()
+
+    async def _refresh_inventory() -> None:
+        """Simulate a newly completed API inventory for confirmation."""
+        coordinator.verified_inventory_ids = set()
+
+    with patch.object(coordinator, "async_refresh", side_effect=_refresh_inventory):
+        assert await async_remove_config_entry_device(hass, entry, device)
     restored = SimpleNamespace(chargers=[SimpleNamespace(id="missing-charger")])
     coordinator.verified_inventory_ids = async_process_device_inventory(
         hass, entry, "charger", restored
