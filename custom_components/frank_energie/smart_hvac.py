@@ -26,7 +26,9 @@ from python_frank_energie.models import SmartHvacDevice, SmartHvacSummary
 
 from .const import DATA_USER
 from .coordinator import FrankEnergieData
+from .device_inventory import RegistryDeviceInventory, smart_hvac_device_identifier
 from .helpers import api_maintenance_active
+from .repairs import async_process_device_inventory
 
 _LOGGER = logging.getLogger(__name__)
 _UPDATE_INTERVAL: Final = timedelta(minutes=15)
@@ -92,6 +94,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         )
         self.data = SmartHvacData()
         self.site_reference = site_reference
+        self.verified_inventory_ids: set[str] | None = None
         self._api = api
         self._retry_at = 0.0
 
@@ -137,12 +140,58 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
             _LOGGER.debug("Smart Heating data unavailable for %s", operation)
         return _ReadResult()
 
+    def _process_verified_device_inventory(
+        self,
+        inventory: _ReadResult[list[SmartHvacDevice]],
+        devices: dict[str, SmartHvacDevice] | None,
+    ) -> None:
+        """Count only complete, fresh, active-site inventories for Repairs."""
+        if (
+            not inventory.fetched
+            or not isinstance(inventory.value, list)
+            or devices is None
+            or not all(
+                isinstance(device, SmartHvacDevice)
+                and isinstance(device.id, str)
+                and bool(device.id.strip())
+                for device in inventory.value
+            )
+            or len({device.id for device in inventory.value}) != len(inventory.value)
+        ):
+            return
+
+        runtime_data = getattr(self.config_entry, "runtime_data", None)
+        settings = getattr(runtime_data, "settings_coordinator", None)
+        if (
+            settings is None
+            or not settings.last_update_success
+            or smart_hvac_activation(settings.data) is not True
+        ):
+            return
+
+        normalized = RegistryDeviceInventory(
+            devices=[
+                {"id": smart_hvac_device_identifier(
+                    self.config_entry.entry_id, self.site_reference, device_id
+                )}
+                for device_id in devices
+            ]
+        )
+        try:
+            self.verified_inventory_ids = async_process_device_inventory(
+                self.hass, self.config_entry, "hvac", normalized
+            )
+        except Exception:  # noqa: BLE001 - Repairs cannot break HVAC polling
+            self.verified_inventory_ids = None
+            _LOGGER.warning("Unable to validate Smart Heating devices for Repairs")
+
     async def _async_update_data(self) -> SmartHvacData:
         """Refresh inventory and account requests, then read summaries in sequence.
 
         Keep the previous snapshot when maintenance or backoff pauses the
         refresh before any reads start.
         """
+        self.verified_inventory_ids = None
         if not self._api.is_authenticated:
             return SmartHvacData()
         if self._requests_paused():
@@ -182,6 +231,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
                 )
                 for request in {item.id: item for item in requests.value}.values()
             )
+        self._process_verified_device_inventory(inventory, devices)
         return SmartHvacData(
             devices=devices,
             summaries=summaries,

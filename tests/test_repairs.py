@@ -17,6 +17,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 from python_frank_energie import FrankEnergie
 from python_frank_energie.frank_energie import FrankEnergieQuery
+from python_frank_energie.models import SmartPvSystems
 
 from custom_components.frank_energie import (
     FrankEnergieEntryData,
@@ -34,6 +35,7 @@ from custom_components.frank_energie.const import (
 from custom_components.frank_energie.coordinator import (
     FrankEnergieBatteryCoordinator,
     FrankEnergieChargerCoordinator,
+    FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
 )
 from custom_components.frank_energie.device_inventory import INVENTORY_SPECS
@@ -49,6 +51,7 @@ _KINDS = [
     ("charger", "chargers", "charger_brand"),
     ("vehicle", "vehicles", "vehicle_name"),
     ("battery", "batteries", "battery_mode"),
+    ("pv", "systems", "operational_status"),
 ]
 _INVENTORIES = [
     ("charger", DATA_ENODE_CHARGERS, "enodeChargers", "charger_brand"),
@@ -61,6 +64,7 @@ type HardwareCoordinator = (
     FrankEnergieBatteryCoordinator
     | FrankEnergieChargerCoordinator
     | FrankEnergieVehicleCoordinator
+    | FrankEnergiePVCoordinator
 )
 
 
@@ -554,6 +558,68 @@ async def test_battery_identified_by_disabled_sensor_without_controls(
     assert _repair_exists(hass, _issue_id("battery", entry.entry_id, device.id))
     assert _is_device_removal_safe(hass, entry, device)
 
+
+async def test_pv_inventory_rechecks_registered_disconnected_hardware(
+    hass: HomeAssistant,
+    frank_energie_setup: SetupEntry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PV empty-inventory caching must not prevent two verified absences."""
+    entry = await frank_energie_setup()
+    device, _ = _register_device(hass, entry, "pv", "operational_status")
+    issue_id = _issue_id("pv", entry.entry_id, device.id)
+    coordinator = entry.runtime_data.pv_coordinator
+    api = _enable_inventory_api(coordinator, monkeypatch)
+    fetch = AsyncMock(return_value=SmartPvSystems(systems=[]))
+    monkeypatch.setattr(api, "smart_pv_systems", fetch)
+    monkeypatch.setattr(api, "user_smart_feed_in", AsyncMock(return_value=None))
+
+    await coordinator.async_refresh()
+    assert fetch.await_count == 1
+    assert not _repair_exists(hass, issue_id)
+
+    await coordinator.async_refresh()
+    assert fetch.await_count == 2
+    assert _repair_exists(hass, issue_id)
+    assert dr.async_get(hass).async_get(device.id) is not None
+
+    fetch.side_effect = TimeoutError
+    await coordinator.async_refresh()
+    assert coordinator.verified_inventory_ids is None
+    assert _repair_exists(hass, issue_id)
+
+    fetch.side_effect = None
+    fetch.return_value = SmartPvSystems(
+        systems=[SimpleNamespace(id="stale-pv", panel_groups=[])]
+    )
+    monkeypatch.setattr(coordinator, "_fetch_smart_pv_summary", AsyncMock(return_value=None))
+    await coordinator.async_refresh()
+    assert not _repair_exists(hass, issue_id)
+
+
+async def test_pv_panel_group_only_device_can_be_identified(
+    hass: HomeAssistant, frank_energie_setup: SetupEntry
+) -> None:
+    """Allow a disabled PV panel-group entity to establish hardware identity."""
+    entry = await frank_energie_setup()
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, "pv-with-panel")}
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_pv-with-panel_panel_group_group-1",
+        config_entry=entry,
+        device_id=device.id,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+    missing = _inventory("systems", [])
+    async_process_device_inventory(hass, entry, "pv", missing)
+    entry.runtime_data.pv_coordinator.verified_inventory_ids = (
+        async_process_device_inventory(hass, entry, "pv", missing)
+    )
+    assert _repair_exists(hass, _issue_id("pv", entry.entry_id, device.id))
+    assert _is_device_removal_safe(hass, entry, device)
 
 async def test_unrelated_device_does_not_scan_entity_registry(
     hass: HomeAssistant, frank_energie_setup

@@ -158,8 +158,9 @@ that account settings have loaded. Retry after a temporary API failure.
 
 ## Removing Disconnected Hardware Safely
 
-When a charger, vehicle or SmartBattery disappears from the Frank Energie
-account, the integration requires **two distinct valid inventory refreshes**
+When a physical charger, vehicle, SmartBattery, Smart PV system, or Smart
+Heating (HVAC) device disappears from Frank Energie's verified equipment
+inventory, the integration requires **two distinct valid inventory refreshes**
 that both confirm its absence before it offers a repair under
 **Settings → System → Repairs** or permits manual device removal.
 
@@ -169,18 +170,24 @@ before removing the device and its entities from Home Assistant.
 Removal can affect existing automations and dashboards.
 
 Missing or malformed inventories, API outages, disabled smart features and
-maintenance-window skips must never be treated as proof of absence.
+maintenance-window skips must never be treated as proof of absence. A PV
+system that was previously registered is still checked after an empty
+inventory, even when new users without PV hardware use the usual API
+backoff. Smart Heating devices remain registered and unavailable when
+missing; the integration no longer removes them automatically during
+inventory changes or after Smart Heating deactivation.
 An ignored Repair remains ignored until its lifecycle changes; an
 unrecognized or restored device must not be deleted.
 
 The same double-absence rule also applies to Home Assistant's manual
 device-removal action. The Delete action requests another successful, live
 inventory check and refuses removal if the refresh fails or is skipped.
-Wait for two successful updates before retrying when removal is rejected. Removing the integration config entry is a
-separate operation and is unaffected.
+Wait for two successful updates before retrying when removal is rejected.
+Removing the integration config entry is a separate operation and is unaffected.
 
 **Minimum Home Assistant version for these Repairs is 2026.11.0.**
 Install a compatible Core version before updating the integration.
+
 ## Smart Battery Entities Unavailable
 
 Possible causes:

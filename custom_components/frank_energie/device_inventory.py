@@ -2,6 +2,8 @@
 
 import re
 from dataclasses import dataclass
+from hashlib import sha256
+from json import dumps
 from typing import Final
 
 from homeassistant.config_entries import ConfigEntry
@@ -41,8 +43,69 @@ INVENTORY_SPECS: Final[dict[str, InventorySpec]] = {
         "vehicles",
         (("sensor", "vehicle_name"),),
     ),
+    "pv": InventorySpec(
+        "pv_coordinator",
+        "systems",
+        (("sensor", "operational_status"), ("sensor", "steering_status")),
+    ),
+    "hvac": InventorySpec(
+        "smart_hvac_coordinator",
+        "devices",
+        (),
+    ),
 }
 
+
+@dataclass(frozen=True, slots=True)
+class RegistryDeviceInventory:
+    """Represent verified opaque device IDs for a normalized API inventory."""
+
+    devices: list[dict[str, str]]
+
+
+def smart_hvac_device_identifier(
+    entry_id: str, site_reference: str, device_id: str
+) -> str:
+    """Return the existing site-scoped, opaque Smart Heating registry ID."""
+    site_device = dumps((site_reference, device_id))
+    digest = sha256(site_device.encode()).hexdigest()
+    return f"{entry_id}_smart_hvac_device_{digest}"
+
+
+def _has_hvac_marker(
+    hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry, identifier: str
+) -> bool:
+    """Recognize actual heating equipment from its scoped registry identity."""
+    prefix = f"{entry.entry_id}_smart_hvac_device_"
+    if re.fullmatch(rf"{re.escape(prefix)}[0-9a-f]{{64}}", identifier) is None:
+        return False
+    sensor_prefix = f"{entry.entry_id}_smart_hvac_equipment_"
+    return any(
+        entity.config_entry_id == entry.entry_id
+        and entity.platform == DOMAIN
+        and entity.domain == "sensor"
+        and entity.unique_id.startswith(sensor_prefix)
+        and entity.unique_id.endswith("_smart_hvac_equipment")
+        for entity in er.async_entries_for_device(
+            er.async_get(hass), device.id, include_disabled_entities=True
+        )
+    )
+
+
+def _has_pv_panel_group_marker(
+    hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry, identifier: str
+) -> bool:
+    """Recognize PV hardware whose only remaining entity is a panel group."""
+    prefix = f"{DOMAIN}_{identifier}_panel_group_"
+    return any(
+        entity.config_entry_id == entry.entry_id
+        and entity.platform == DOMAIN
+        and entity.domain == "sensor"
+        and entity.unique_id.startswith(prefix)
+        for entity in er.async_entries_for_device(
+            er.async_get(hass), device.id, include_disabled_entities=True
+        )
+    )
 
 def _has_battery_sensor(
     hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry, identifier: str
@@ -77,6 +140,9 @@ def _has_inventory_marker(
     kind: str,
 ) -> bool:
     """Look up exact registry markers by platform and unique ID."""
+    if kind == "hvac":
+        return _has_hvac_marker(hass, entry, device, identifier)
+
     registry = er.async_get(hass)
     for platform, marker in INVENTORY_SPECS[kind].markers:
         entity_id = registry.async_get_entity_id(
@@ -89,7 +155,11 @@ def _has_inventory_marker(
             and entity.device_id == device.id
         ):
             return True
-    return kind == "battery" and _has_battery_sensor(hass, entry, device, identifier)
+    if kind == "battery":
+        return _has_battery_sensor(hass, entry, device, identifier)
+    if kind == "pv":
+        return _has_pv_panel_group_marker(hass, entry, device, identifier)
+    return False
 
 
 @callback
