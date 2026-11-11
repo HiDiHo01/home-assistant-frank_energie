@@ -1,6 +1,7 @@
 """Test the Frank Energie integration setup and teardown logic."""
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 import zoneinfo
@@ -8,10 +9,16 @@ import zoneinfo
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
-from custom_components.frank_energie import FrankEnergieComponent
+from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
+from custom_components.frank_energie import (
+    FrankEnergieComponent,
+    async_remove_config_entry_device,
+)
 from custom_components.frank_energie.const import (
     DOMAIN,
     CONF_COORDINATOR,
+    DATA_ENODE_CHARGERS,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
 )
@@ -153,6 +160,75 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
     assert spy.called
     assert _find_device(device_registry, entry.entry_id, identifier) is None
 
+
+@pytest.mark.parametrize(("observations", "removable"), [(0, False), (1, False), (2, True)])
+async def test_device_removal_requires_two_valid_absences(
+    hass: HomeAssistant, hass_ws_client, frank_energie_setup, observations: int, removable: bool
+) -> None:
+    """Home Assistant must not delete hardware after only one missing fetch."""
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    entry = await frank_energie_setup()
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "removed-charger")},
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor", DOMAIN, f"{DOMAIN}_removed-charger_charger_brand",
+        config_entry=entry, device_id=device.id,
+    )
+    coordinator = entry.runtime_data.charger_coordinator
+    coordinator.last_update_success = True
+    coordinator.data[DATA_ENODE_CHARGERS] = SimpleNamespace(chargers=[])
+    from custom_components.frank_energie.repairs import async_process_device_inventory
+
+    for _ in range(observations):
+        coordinator.verified_inventory_ids = async_process_device_inventory(
+            hass, entry, "charger", coordinator.data[DATA_ENODE_CHARGERS]
+        )
+    assert (await async_remove_config_entry_device(hass, entry, device)) is removable
+    await client.send_json_auto_id(
+        {"type": "config/device_registry/remove_config_entry",
+         "config_entry_id": entry.entry_id, "device_id": device.id}
+    )
+    result = await client.receive_json()
+    assert result["success"] is removable
+    assert (registry.async_get(device.id) is None) is removable
+
+
+async def test_manual_device_removal_rejects_restored_or_partial_inventory(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """A restored, missing, or malformed inventory invalidates removal evidence."""
+    from custom_components.frank_energie.repairs import async_process_device_inventory
+
+    entry = await frank_energie_setup()
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "missing-charger")},
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor", DOMAIN, f"{DOMAIN}_missing-charger_charger_brand",
+        config_entry=entry, device_id=device.id,
+    )
+    coordinator = entry.runtime_data.charger_coordinator
+    coordinator.last_update_success = True
+    missing = SimpleNamespace(chargers=[])
+    for _ in range(2):
+        coordinator.verified_inventory_ids = async_process_device_inventory(
+            hass, entry, "charger", missing
+        )
+    assert await async_remove_config_entry_device(hass, entry, device)
+    restored = SimpleNamespace(chargers=[SimpleNamespace(id="missing-charger")])
+    coordinator.verified_inventory_ids = async_process_device_inventory(
+        hass, entry, "charger", restored
+    )
+    assert not await async_remove_config_entry_device(hass, entry, device)
+    coordinator.verified_inventory_ids = async_process_device_inventory(
+        hass, entry, "charger", SimpleNamespace(chargers=[SimpleNamespace(id=None)])
+    )
+    assert not await async_remove_config_entry_device(hass, entry, device)
 
 async def test_setup_entry_auth_failure(
     hass: HomeAssistant,
