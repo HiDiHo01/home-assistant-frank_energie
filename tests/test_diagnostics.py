@@ -193,9 +193,26 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
             "street": "Main Street",
             "houseNumber": "10",
             "houseNumberAddition": "A",
+            "addressFormatted": "Main Street 10 A, 1234 AB Amsterdam",
+            "address_formatted": "Main Street 10 A, 1234 AB Amsterdam",
             "postalCode": "1234 AB",
+            "postal_code": "1234 AB",
             "zipCode": "1234 AB",
             "city": "Amsterdam",
+            "deliveryAddress": "Main Street 10 A",
+            "delivery_address": "Main Street 10 A",
+            "connectionAddress": "Main Street 10 A",
+            "connection_address": "Main Street 10 A",
+            "user_sites": [
+                {
+                    "addressFormatted": "Side Street 2, 5678 CD",
+                    "address_formatted": "Side Street 2, 5678 CD",
+                    "postal_code": "5678 CD",
+                    "delivery_address": "Side Street 2",
+                    "connection_address": "Side Street 2",
+                    "active": True,
+                },
+            ],
             "latitude": 52.3676,
             "longitude": 4.9041,
             "vin": "1HGCR2F83HA000000",
@@ -233,9 +250,26 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["data"]["street"] == "**REDACTED**"
     assert diagnostics["data"]["houseNumber"] == "**REDACTED**"
     assert diagnostics["data"]["houseNumberAddition"] == "**REDACTED**"
+    assert diagnostics["data"]["addressFormatted"] == "**REDACTED**"
+    assert diagnostics["data"]["address_formatted"] == "**REDACTED**"
     assert diagnostics["data"]["postalCode"] == "**REDACTED**"
+    assert diagnostics["data"]["postal_code"] == "**REDACTED**"
     assert diagnostics["data"]["zipCode"] == "**REDACTED**"
     assert diagnostics["data"]["city"] == "**REDACTED**"
+    assert diagnostics["data"]["deliveryAddress"] == "**REDACTED**"
+    assert diagnostics["data"]["delivery_address"] == "**REDACTED**"
+    assert diagnostics["data"]["connectionAddress"] == "**REDACTED**"
+    assert diagnostics["data"]["connection_address"] == "**REDACTED**"
+    assert diagnostics["data"]["user_sites"] == [
+        {
+            "addressFormatted": "**REDACTED**",
+            "address_formatted": "**REDACTED**",
+            "postal_code": "**REDACTED**",
+            "delivery_address": "**REDACTED**",
+            "connection_address": "**REDACTED**",
+            "active": True,
+        },
+    ]
     assert diagnostics["data"]["latitude"] == "**REDACTED**"
     assert diagnostics["data"]["longitude"] == "**REDACTED**"
     assert diagnostics["data"]["vin"] == "**REDACTED**"
