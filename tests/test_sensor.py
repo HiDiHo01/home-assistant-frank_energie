@@ -1177,6 +1177,93 @@ def test_enode_vehicle_deadline_is_available_when_unset_or_set(
     assert calculated_sensor.unique_id == "frank_energie_veh_123_calculated_deadline"
 
 
+
+@pytest.mark.asyncio
+async def test_authenticated_vehicle_deadline_exposes_unknown_in_home_assistant(
+    hass: HomeAssistant,
+) -> None:
+    """Register authenticated vehicle sensors and verify their Home Assistant states."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+    from homeassistant.const import STATE_UNKNOWN
+    from pytest_homeassistant.common import MockEntityPlatform
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES, DOMAIN
+    from custom_components.frank_energie.sensor import (
+        EnodeVehicleSensor,
+        async_setup_entry,
+    )
+
+    config_entry = MockConfigEntry(domain=DOMAIN, unique_id="deadline_state_test")
+    config_entry.add_to_hass(hass)
+
+    runtime_data = MagicMock()
+    coordinator_names = (
+        "settings_coordinator",
+        "price_coordinator",
+        "battery_coordinator",
+        "charger_coordinator",
+        "pv_coordinator",
+        "statistics_coordinator",
+    )
+    for coordinator_name in coordinator_names:
+        coordinator = MagicMock()
+        coordinator.data = {}
+        coordinator.api.is_authenticated = False
+        setattr(runtime_data, coordinator_name, coordinator)
+
+    vehicle = _make_tesla_model_3(last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC))
+    calculated_deadline = datetime(2026, 11, 12, 6, 0, tzinfo=UTC)
+    vehicle.charge_settings.calculated_deadline = calculated_deadline
+    vehicle_coordinator = MagicMock()
+    vehicle_coordinator.config_entry = config_entry
+    vehicle_coordinator.api.is_authenticated = True
+    vehicle_coordinator.last_update_success = True
+    vehicle_coordinator.data = {
+        DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])
+    }
+    runtime_data.vehicle_coordinator = vehicle_coordinator
+    config_entry.runtime_data = runtime_data
+
+    added_entities: list[SensorEntity] = []
+    await async_setup_entry(hass, config_entry, added_entities.extend)
+    deadline_sensor = next(
+        entity
+        for entity in added_entities
+        if isinstance(entity, EnodeVehicleSensor)
+        and entity.entity_description.key == "deadline"
+    )
+    calculated_sensor = next(
+        entity
+        for entity in added_entities
+        if isinstance(entity, EnodeVehicleSensor)
+        and entity.entity_description.key == "calculated_deadline"
+    )
+
+    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
+    platform.config_entry = config_entry
+    await platform.async_add_entities([deadline_sensor, calculated_sensor])
+    await hass.async_block_till_done()
+
+    registry = entity_registry.async_get(hass)
+    deadline_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, deadline_sensor.unique_id
+    )
+    calculated_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, calculated_sensor.unique_id
+    )
+    assert deadline_entity_id is not None
+    assert calculated_entity_id is not None
+
+    deadline_state = hass.states.get(deadline_entity_id)
+    calculated_state = hass.states.get(calculated_entity_id)
+    assert deadline_state is not None
+    assert deadline_state.state == STATE_UNKNOWN
+    assert calculated_state is not None
+    assert datetime.fromisoformat(calculated_state.state) == calculated_deadline
+
 @pytest.mark.parametrize(
     ("inventory_state", "last_update_success"),
     [
