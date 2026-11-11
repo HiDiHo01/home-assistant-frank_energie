@@ -1269,6 +1269,55 @@ def test_enode_vehicle_deadline_is_independent_for_multiple_vehicles(
     assert second_sensor.unique_id == "frank_energie_veh_456_deadline"
 
 
+
+@pytest.mark.parametrize("valid_record_first", [False, True])
+@pytest.mark.parametrize(
+    "incomplete_record",
+    [
+        pytest.param({"id": "veh_123"}, id="missing-charge-settings"),
+        pytest.param(
+            {"id": "veh_123", "chargeSettings": {}}, id="empty-charge-settings"
+        ),
+    ],
+)
+def test_enode_vehicle_deadline_uses_first_matching_record(
+    hass: HomeAssistant,
+    valid_record_first: bool,
+    incomplete_record: dict[str, object],
+) -> None:
+    """Use the same first vehicle record for value and availability checks."""
+    from unittest.mock import MagicMock
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(
+        last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+    )
+    records = (
+        [vehicle, incomplete_record]
+        if valid_record_first
+        else [incomplete_record, vehicle]
+    )
+    inventory = MagicMock()
+    inventory.vehicles = records
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: inventory}
+    coordinator.last_update_success = True
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
+    )
+    sensor = EnodeVehicleSensor(hass, coordinator, description, vehicle, 0)
+
+    assert sensor.native_value is None
+    assert sensor.available is valid_record_first
+    assert sensor.unique_id == "frank_energie_veh_123_deadline"
+
+
 def test_enode_vehicle_available_does_not_crash_without_available_fn(
     hass: HomeAssistant,
 ) -> None:
