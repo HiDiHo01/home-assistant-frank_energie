@@ -107,6 +107,7 @@ def _has_pv_panel_group_marker(
         )
     )
 
+
 def _has_battery_sensor(
     hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry, identifier: str
 ) -> bool:

@@ -592,7 +592,9 @@ async def test_pv_inventory_rechecks_registered_disconnected_hardware(
     fetch.return_value = SmartPvSystems(
         systems=[SimpleNamespace(id="stale-pv", panel_groups=[])]
     )
-    monkeypatch.setattr(coordinator, "_fetch_smart_pv_summary", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        coordinator, "_fetch_smart_pv_summary", AsyncMock(return_value=None)
+    )
     await coordinator.async_refresh()
     assert not _repair_exists(hass, issue_id)
 
@@ -620,6 +622,7 @@ async def test_pv_panel_group_only_device_can_be_identified(
     )
     assert _repair_exists(hass, _issue_id("pv", entry.entry_id, device.id))
     assert _is_device_removal_safe(hass, entry, device)
+
 
 async def test_unrelated_device_does_not_scan_entity_registry(
     hass: HomeAssistant, frank_energie_setup
