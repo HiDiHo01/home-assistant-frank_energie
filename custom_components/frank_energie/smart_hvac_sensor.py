@@ -4,7 +4,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from hashlib import sha256
-from json import dumps
 from typing import TYPE_CHECKING, Final
 
 from homeassistant.components.sensor import (
@@ -13,9 +12,9 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_EURO, EntityCategory, Platform
+from homeassistant.const import CURRENCY_EURO, EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -23,6 +22,7 @@ from python_frank_energie.models import SmartHvacDevice, SmartHvacSummary
 
 from .const import DATA_USER, DOMAIN, SERVICE_NAME_SMART_HVAC, SERVICE_NAME_USER
 from .coordinator import FrankEnergieSettingsCoordinator
+from .device_inventory import smart_hvac_device_identifier
 from .helpers import service_device_info
 from .smart_hvac import (
     FrankEnergieSmartHvacCoordinator,
@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 
 type _SummaryValue = str | float | date | datetime | None
 _EQUIPMENT_ID_PREFIX: Final = "smart_hvac_equipment"
-_DEVICE_ID_PREFIX: Final = "smart_hvac_device"
 _STEERING_STATES: Final = ("active", "inactive")
 
 
@@ -293,45 +292,6 @@ def _site_has_active_smart_hvac(settings: FrankEnergieSettingsCoordinator) -> bo
     return settings.last_update_success and smart_hvac_activation(settings.data) is True
 
 
-def _site_confirmed_inactive(settings: FrankEnergieSettingsCoordinator) -> bool:
-    """Require a successful settings read confirming deactivation."""
-    return (
-        settings.last_update_success and smart_hvac_activation(settings.data) is False
-    )
-
-
-@callback
-def _async_remove_missing_equipment(
-    hass: HomeAssistant,
-    entry_id: str,
-    active_fingerprints: set[str],
-    active_identifiers: set[str],
-) -> None:
-    """Remove registry entries for equipment missing from a confirmed inventory."""
-    registry = er.async_get(hass)
-    prefix = f"{entry_id}_{_EQUIPMENT_ID_PREFIX}_"
-    for entity in er.async_entries_for_config_entry(registry, entry_id):
-        if (
-            entity.domain == Platform.SENSOR
-            and entity.platform == DOMAIN
-            and entity.unique_id.startswith(prefix)
-            and entity.unique_id.removeprefix(prefix).partition("_")[0]
-            not in active_fingerprints
-        ):
-            registry.async_remove(entity.entity_id)
-
-    device_registry = dr.async_get(hass)
-    device_prefix = f"{entry_id}_{_DEVICE_ID_PREFIX}_"
-    for registered in dr.async_entries_for_config_entry(device_registry, entry_id):
-        if any(
-            domain == DOMAIN
-            and identifier.startswith(device_prefix)
-            and identifier not in active_identifiers
-            for domain, identifier in registered.identifiers
-        ):
-            device_registry.async_remove_device(registered.id)
-
-
 @callback
 def _async_sync_equipment(
     hass: HomeAssistant,
@@ -340,27 +300,26 @@ def _async_sync_equipment(
     devices: dict[str, SmartHvacDevice],
     known_devices: dict[str, SmartHvacDevice] | None,
 ) -> tuple[dict[str, SmartHvacDevice], list[_SmartHvacDeviceSensor]]:
-    """Reconcile the device registry with a confirmed site inventory.
+    """Register discovered HVAC hardware without deleting absent equipment.
 
-    Update metadata in place and remove equipment missing from the inventory.
-    Return the new snapshot and sensors for newly discovered devices.
+    Keep previously registered identities so a temporarily disconnected
+    device is not re-added under a duplicate entity on reconnection.
+    Only the user-confirmed Repairs flow may remove a missing device.
     """
     current = {
         sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
         for device_id, device in devices.items()
     }
-    if current == known_devices:
-        return current, []
+    previous_devices = known_devices or {}
+    if current == previous_devices:
+        return previous_devices, []
 
     device_registry = dr.async_get(hass)
-    previous_devices = known_devices or {}
-    active_identifiers: set[str] = set()
     sensors: list[_SmartHvacDeviceSensor] = []
     for fingerprint, device in sorted(current.items()):
-        site_device = dumps((coordinator.site_reference, device.id))
-        device_key = sha256(site_device.encode()).hexdigest()
-        identifier = f"{entry_id}_{_DEVICE_ID_PREFIX}_{device_key}"
-        active_identifiers.add(identifier)
+        identifier = smart_hvac_device_identifier(
+            entry_id, coordinator.site_reference, device.id
+        )
         previous_device = previous_devices.get(fingerprint)
         if device == previous_device:
             continue
@@ -388,36 +347,7 @@ def _async_sync_equipment(
                 for description in _DEVICE_SENSORS
             )
 
-    _async_remove_missing_equipment(hass, entry_id, set(current), active_identifiers)
-    return current, sensors
-
-
-@callback
-def _async_prune_inactive_equipment(
-    hass: HomeAssistant,
-    entry_id: str,
-    coordinator: FrankEnergieSmartHvacCoordinator,
-    devices: dict[str, SmartHvacDevice],
-    known_devices: dict[str, SmartHvacDevice] | None,
-) -> dict[str, SmartHvacDevice] | None:
-    """Remove absent equipment without discovering new devices for an inactive site."""
-    current = {
-        sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
-        for device_id, device in devices.items()
-    }
-    identifiers = {
-        f"{entry_id}_{_DEVICE_ID_PREFIX}_"
-        f"{sha256(dumps((coordinator.site_reference, device.id)).encode()).hexdigest()}"
-        for device in devices.values()
-    }
-    _async_remove_missing_equipment(hass, entry_id, set(current), identifiers)
-    if known_devices is None:
-        return None
-    return {
-        fingerprint: device
-        for fingerprint, device in current.items()
-        if fingerprint in known_devices
-    }
+    return {**previous_devices, **current}, sensors
 
 
 @callback
@@ -448,10 +378,7 @@ def async_setup_smart_hvac_sensors(
         nonlocal known_devices, requests_added, service_added
         devices = coordinator.data.devices if coordinator.last_update_success else None
         if not _site_has_active_smart_hvac(settings):
-            if devices is not None and _site_confirmed_inactive(settings):
-                known_devices = _async_prune_inactive_equipment(
-                    hass, entry_id, coordinator, devices, known_devices
-                )
+            # Deactivation or an unreadable inventory must not delete hardware.
             return
 
         sensors: list[SensorEntity] = []

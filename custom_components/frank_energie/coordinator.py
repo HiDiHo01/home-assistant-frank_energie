@@ -27,6 +27,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -111,6 +112,7 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
+from .device_inventory import async_identify_inventory_device
 from .helpers import (
     api_maintenance_active,
     decrypt_password,
@@ -1425,7 +1427,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Skipping smart PV systems fetch because the client is not authenticated"
             )
             return None
-        if self._has_pv_systems is False:
+        if self._has_pv_systems is False and not any(
+            async_identify_inventory_device(
+                self.hass, self.config_entry, device, expected_kind="pv"
+            )
+            for device in dr.async_entries_for_config_entry(
+                dr.async_get(self.hass), self.config_entry.entry_id
+            )
+        ):
             return None
         try:
             result = await self.api.smart_pv_systems()
@@ -3757,7 +3766,8 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         )
 
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch PV data."""
+        """Fetch PV data and validate freshly retrieved physical system IDs."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             if self.last_update_success:
@@ -3808,6 +3818,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_PV_SYSTEMS] = data_pv_systems
+            self._process_device_inventory("pv", data_pv_systems)
             result[DATA_PV_SUMMARY] = data_pv_summary
             result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
             result[DATA_USER_SMART_FEED_IN_FETCHED] = feed_in_fetched

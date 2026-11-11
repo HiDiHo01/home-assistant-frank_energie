@@ -9,12 +9,16 @@ from unittest.mock import AsyncMock, call, patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.repairs import repairs_flow_manager
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import CURRENCY_EURO, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.icon import async_get_icons
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry
 from python_frank_energie.exceptions import (
     AuthRequiredException,
@@ -39,6 +43,7 @@ from custom_components.frank_energie.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.frank_energie.helpers import service_device_info
+from custom_components.frank_energie.repairs import _issue_id
 from custom_components.frank_energie.smart_hvac import FrankEnergieSmartHvacCoordinator
 from custom_components.frank_energie.smart_hvac_sensor import _DEVICE_SENSORS
 
@@ -393,7 +398,7 @@ async def test_hvac_site_device_and_account_diagnostics(
 async def test_hvac_inventory_changes_and_recovery(
     hass: HomeAssistant, api: AsyncMock, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Discover devices after setup and remove them only on valid inventory."""
+    """Keep disconnected equipment until the user confirms a safe Repair."""
     entry = _entry(hass)
     caplog.set_level(logging.DEBUG, logger=smart_hvac.__name__)
     await _setup(hass, entry, api)
@@ -460,24 +465,26 @@ async def test_hvac_inventory_changes_and_recovery(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert _state(hass, count).state == "1"
-    (remaining_device,) = _equipment_devices(hass, entry)
-    assert remaining_device.name == "Fixture Model B"
-    assert remaining_device in devices
+    remaining_devices = _equipment_devices(hass, entry)
+    assert {device.id for device in remaining_devices} == {
+        device.id for device in devices
+    }
+    assert any(device.name == "Fixture Model B" for device in remaining_devices)
     assert len(_service_entities(hass, entry)) == 2
-    assert (
-        _state(hass, _sensor(hass, entry, "smart_hvac_equipment")).state
-        == "Fixture Model B"
+    second_sensor = next(
+        sensor
+        for sensor in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if sensor.translation_key == "smart_hvac_equipment"
+        and _state(hass, sensor).state == "Fixture Model B"
     )
-    assert (
-        _state(hass, _sensor(hass, entry, "smart_hvac_operational_status")).state
-        == "ACTIVE"
-    )
+    assert second_sensor.device_id in {device.id for device in remaining_devices}
+    assert _state(hass, first_sensor).state == STATE_UNAVAILABLE
     assert api.smart_hvac_summary.await_args_list == [
         call("private-fixture-first"),
         call("private-fixture-second"),
         call("private-fixture-second"),
     ]
-    assert hass.states.get(first_sensor.entity_id) is None
+    assert registry.async_get(first_sensor.entity_id) is not None
 
     api.smart_hvacs.return_value = [first, second]
     await coordinator.async_refresh()
@@ -485,10 +492,10 @@ async def test_hvac_inventory_changes_and_recovery(
     assert _state(hass, first_sensor).state == "Fixture Model A"
 
 
-async def test_hvac_deactivation_prunes_only_missing_equipment(
+async def test_hvac_deactivation_preserves_disconnected_equipment(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
-    """Remove stale devices while inactive, but discover new devices on reactivation."""
+    """Never delete known physical equipment because activation was disabled."""
     first = _equipment("existing-device", "Model A")
     removed = _equipment("removed-device", "Model B")
     newcomer = _equipment("new-device", "Model C")
@@ -511,10 +518,11 @@ async def test_hvac_deactivation_prunes_only_missing_equipment(
     await entry.runtime_data.smart_hvac_coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    assert len(_equipment_devices(hass, entry)) == 1
+    assert len(_equipment_devices(hass, entry)) == 2
     assert _state(hass, original).state == "Fixture Model A"
     assert {device.name for device in _equipment_devices(hass, entry)} == {
-        "Fixture Model A"
+        "Fixture Model A",
+        "Fixture Model B",
     }
     assert {
         sensor.translation_key
@@ -529,15 +537,16 @@ async def test_hvac_deactivation_prunes_only_missing_equipment(
     await hass.async_block_till_done()
     assert {device.name for device in _equipment_devices(hass, entry)} == {
         "Fixture Model A",
+        "Fixture Model B",
         "Fixture Model C",
     }
     assert er.async_get(hass).async_get(original.entity_id).id == original.id
 
 
-async def test_hvac_inactive_reload_prunes_missing_equipment(
+async def test_hvac_inactive_reload_preserves_missing_equipment(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
-    """Clean registrations after reload when activation is false and inventory is empty."""
+    """Preserve disabled-site equipment registrations across integration reloads."""
     api.smart_hvacs.return_value = [_equipment("existing-device", "Model A")]
     entry = _entry(hass)
     await _setup(hass, entry, api)
@@ -549,8 +558,8 @@ async def test_hvac_inactive_reload_prunes_missing_equipment(
     with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
-    assert _equipment_devices(hass, entry) == []
-    assert er.async_get(hass).async_get(previous.entity_id) is None
+    assert len(_equipment_devices(hass, entry)) == 1
+    assert er.async_get(hass).async_get(previous.entity_id) is not None
 
 
 async def test_hvac_null_collections_differ_from_failed_reads(
@@ -774,12 +783,100 @@ async def test_hvac_entries_isolate_site_data_and_reload(
     with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
         assert await hass.config_entries.async_reload(primary.entry_id)
         await hass.async_block_till_done()
-    assert er.async_get(hass).async_get(primary_sensor.entity_id) is None
-    assert _equipment_devices(hass, primary) == []
+    assert er.async_get(hass).async_get(primary_sensor.entity_id) is not None
+    assert _equipment_devices(hass, primary)[0].id == primary_device.id
     assert _equipment_devices(hass, other)[0].id == other_device.id
     assert _state(hass, _sensor(hass, primary, "smart_hvac_device_count")).state == "0"
     assert _state(hass, other_sensor).state == "Fixture Model B"
 
+
+async def test_hvac_disconnected_equipment_requires_two_reads_and_confirmation(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Retain HVAC hardware until two fresh absences and explicit confirmation."""
+    assert await async_setup_component(hass, "repairs", {})
+    api.smart_hvacs.return_value = [_equipment("disconnected-pump", "Heat Pump")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    (device,) = _equipment_devices(hass, entry)
+    equipment_sensor = _sensor(hass, entry, "smart_hvac_equipment")
+    issue_id = _issue_id("hvac", entry.entry_id, device.id)
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    assert coordinator.verified_inventory_ids is not None
+
+    api.smart_hvacs.return_value = []
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert (DOMAIN, issue_id) not in ir.async_get(hass).issues
+    assert dr.async_get(hass).async_get(device.id) is not None
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert (DOMAIN, issue_id) in ir.async_get(hass).issues
+    assert _state(hass, equipment_sensor).state == STATE_UNAVAILABLE
+    assert er.async_get(hass).async_get(equipment_sensor.entity_id) is not None
+
+    manager = repairs_flow_manager(hass)
+    assert manager is not None
+    flow = await manager.async_init(DOMAIN, context={"issue_id": issue_id})
+    assert flow["type"] is FlowResultType.FORM
+    result = await manager.async_configure(flow["flow_id"], user_input={})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert dr.async_get(hass).async_get(device.id) is None
+    assert er.async_get(hass).async_get(equipment_sensor.entity_id) is None
+
+
+async def test_hvac_provider_failure_and_return_preserve_hardware(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Failed HVAC inventory reads cannot authorize deletion or erase Repairs."""
+    api.smart_hvacs.return_value = [_equipment("temporarily-offline", "Heat Pump")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    (device,) = _equipment_devices(hass, entry)
+    sensor = _sensor(hass, entry, "smart_hvac_equipment")
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    issue_id = _issue_id("hvac", entry.entry_id, device.id)
+
+    api.smart_hvacs.return_value = []
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert (DOMAIN, issue_id) in ir.async_get(hass).issues
+
+    api.smart_hvacs.side_effect = RequestException("synthetic-private-inventory")
+    await coordinator.async_refresh()
+    assert coordinator.verified_inventory_ids is None
+    assert (DOMAIN, issue_id) in ir.async_get(hass).issues
+    assert dr.async_get(hass).async_get(device.id) is not None
+
+    api.smart_hvacs.side_effect = None
+    api.smart_hvacs.return_value = [_equipment("temporarily-offline", "Heat Pump")]
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert (DOMAIN, issue_id) not in ir.async_get(hass).issues
+    assert _equipment_devices(hass, entry)[0].id == device.id
+    assert er.async_get(hass).async_get(sensor.entity_id) is not None
+    assert _state(hass, sensor).state == "Fixture Heat Pump"
+
+
+async def test_hvac_duplicate_inventory_never_counts_as_absence(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Duplicate provider IDs must not silently become a valid empty snapshot."""
+    api.smart_hvacs.return_value = [_equipment("pump", "A")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    (device,) = _equipment_devices(hass, entry)
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    repeated = _equipment("other", "B")
+    api.smart_hvacs.return_value = [repeated, repeated]
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert coordinator.verified_inventory_ids is None
+    assert (DOMAIN, _issue_id("hvac", entry.entry_id, device.id)) not in (
+        ir.async_get(hass).issues
+    )
+    assert dr.async_get(hass).async_get(device.id) is not None
 
 async def test_hvac_anonymous_entry(
     hass: HomeAssistant,
