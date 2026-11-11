@@ -206,7 +206,11 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_USERNAME): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.EMAIL, autocomplete="username"
+                    )
+                ),
                 vol.Required(CONF_PASSWORD): TextSelector(
                     TextSelectorConfig(
                         type=TextSelectorType.PASSWORD, autocomplete="current-password"
@@ -413,7 +417,11 @@ class ConfigFlow(config_entries.ConfigFlow):
         """Return schema used when site retrieval fails."""
         return vol.Schema(
             {
-                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_USERNAME): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.EMAIL, autocomplete="username"
+                    )
+                ),
                 vol.Required(CONF_PASSWORD): TextSelector(
                     TextSelectorConfig(
                         type=TextSelectorType.PASSWORD, autocomplete="current-password"
@@ -635,12 +643,17 @@ class ConfigFlow(config_entries.ConfigFlow):
             return "Onbekend adres"
 
     def _login_schema(self, user_input: Optional[dict[str, Any]] = None) -> vol.Schema:
+        """Build the login form with semantic email and password inputs."""
         return vol.Schema(
             {
                 vol.Required(
                     CONF_USERNAME,
                     default=user_input.get(CONF_USERNAME, "") if user_input else "",
-                ): str,
+                ): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.EMAIL, autocomplete="username"
+                    )
+                ),
                 vol.Required(CONF_PASSWORD): TextSelector(
                     TextSelectorConfig(
                         type=TextSelectorType.PASSWORD, autocomplete="current-password"
@@ -666,7 +679,11 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_USERNAME, default=username or ""): str,
+                vol.Required(CONF_USERNAME, default=username or ""): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.EMAIL, autocomplete="username"
+                    )
+                ),
                 vol.Required(CONF_PASSWORD): TextSelector(
                     TextSelectorConfig(
                         type=TextSelectorType.PASSWORD, autocomplete="current-password"
@@ -1059,7 +1076,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 errors = {"base": "unknown_error"}
 
         schema_dict = {
-            vol.Required(CONF_USERNAME, default=current_username): str,
+            vol.Required(CONF_USERNAME, default=current_username): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.EMAIL, autocomplete="username")
+            ),
             # Leave password blank to avoid exposing it in the UI
             vol.Optional(CONF_PASSWORD, default=""): TextSelector(
                 TextSelectorConfig(
