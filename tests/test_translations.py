@@ -477,7 +477,6 @@ def test_no_unused_or_missing_translation_keys():
         f"Unused device translation keys in strings.json: {sorted(unused_device_keys)}"
     )
 
-
     # Verify that all explicit translation keys defined in Python are translated in strings.json
     missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys) - (
         strings_entity_keys | strings_issue_keys
@@ -514,6 +513,7 @@ def test_repairs_issue_translation_keys() -> None:
         assert declared_keys == defined_keys, (
             f"{locale_file.name}: Repairs issue keys do not match their source"
         )
+
 
 def test_all_translation_keys_are_lowercase():
     """Verify that all translation keys (dictionary keys) in strings.json are entirely lowercase."""
