@@ -1131,6 +1131,154 @@ def test_enode_vehicle_battery_capacity_handles_nullable_raw_data(
     assert description.value_fn({}) is None
 
 
+@pytest.mark.parametrize(
+    "deadline",
+    [None, datetime(2026, 11, 12, 8, 0, tzinfo=UTC)],
+)
+def test_enode_vehicle_deadline_is_available_when_unset_or_set(
+    hass: HomeAssistant,
+    deadline: datetime | None,
+) -> None:
+    """Keep a valid vehicle available when its optional deadline is unset."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(
+        last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+    )
+    calculated_deadline = datetime(2026, 11, 12, 6, 0, tzinfo=UTC)
+    vehicle.charge_settings.deadline = deadline
+    vehicle.charge_settings.calculated_deadline = calculated_deadline
+
+    coordinator = MagicMock()
+    coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
+    coordinator.last_update_success = True
+
+    descriptions = {
+        description.key: description for description in ENODE_VEHICLE_SENSOR_TYPES
+    }
+    deadline_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["deadline"], vehicle, 0
+    )
+    calculated_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["calculated_deadline"], vehicle, 0
+    )
+
+    assert deadline_sensor.native_value == deadline
+    assert deadline_sensor.available is True
+    assert deadline_sensor.unique_id == "frank_energie_veh_123_deadline"
+    assert calculated_sensor.native_value == calculated_deadline
+    assert calculated_sensor.available is True
+    assert calculated_sensor.unique_id == "frank_energie_veh_123_calculated_deadline"
+
+
+@pytest.mark.parametrize(
+    ("inventory_state", "last_update_success"),
+    [
+        ("missing", True),
+        ("empty", True),
+        ("different_vehicle", True),
+        ("present", False),
+    ],
+)
+def test_enode_vehicle_deadline_unavailable_without_current_vehicle_data(
+    hass: HomeAssistant,
+    inventory_state: str,
+    last_update_success: bool,
+) -> None:
+    """Do not mask missing inventory or failed coordinator updates."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    vehicle = _make_tesla_model_3(
+        last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+    )
+    coordinator = MagicMock()
+    coordinator.last_update_success = last_update_success
+    if inventory_state == "missing":
+        coordinator.data = {}
+    elif inventory_state == "empty":
+        coordinator.data = {
+            DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[])
+        }
+    else:
+        inventory_vehicle = _make_tesla_model_3(
+            last_seen=datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+        )
+        if inventory_state == "different_vehicle":
+            inventory_vehicle.id = "different_vehicle"
+        coordinator.data = {
+            DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[inventory_vehicle])
+        }
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
+    )
+    sensor = EnodeVehicleSensor(hass, coordinator, description, vehicle, 0)
+
+    assert sensor.available is False
+
+
+def test_enode_vehicle_deadline_is_independent_for_multiple_vehicles(
+    hass: HomeAssistant,
+) -> None:
+    """Do not use another vehicle's explicit departure deadline."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import EnodeVehicles
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    last_seen = datetime(2026, 11, 11, 8, 0, tzinfo=UTC)
+    first_vehicle = _make_tesla_model_3(last_seen=last_seen)
+    second_vehicle = _make_tesla_model_3(last_seen=last_seen)
+    second_vehicle.id = "veh_456"
+    second_vehicle.charge_settings.deadline = datetime(
+        2026, 11, 12, 9, 0, tzinfo=UTC
+    )
+
+    coordinator = MagicMock()
+    coordinator.data = {
+        DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[first_vehicle, second_vehicle])
+    }
+    coordinator.last_update_success = True
+
+    description = next(
+        item for item in ENODE_VEHICLE_SENSOR_TYPES if item.key == "deadline"
+    )
+    first_sensor = EnodeVehicleSensor(
+        hass, coordinator, description, first_vehicle, 0
+    )
+    second_sensor = EnodeVehicleSensor(
+        hass, coordinator, description, second_vehicle, 1
+    )
+
+    assert first_sensor.native_value is None
+    assert first_sensor.available is True
+    assert second_sensor.native_value == second_vehicle.charge_settings.deadline
+    assert second_sensor.available is True
+    assert first_sensor.unique_id == "frank_energie_veh_123_deadline"
+    assert second_sensor.unique_id == "frank_energie_veh_456_deadline"
+
+
 def test_enode_vehicle_available_does_not_crash_without_available_fn(
     hass: HomeAssistant,
 ) -> None:
