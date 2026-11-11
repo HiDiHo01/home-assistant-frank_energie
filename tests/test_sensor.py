@@ -1177,7 +1177,6 @@ def test_enode_vehicle_deadline_is_available_when_unset_or_set(
     assert calculated_sensor.unique_id == "frank_energie_veh_123_calculated_deadline"
 
 
-
 @pytest.mark.asyncio
 async def test_authenticated_vehicle_deadline_exposes_unknown_in_home_assistant(
     hass: HomeAssistant,
@@ -1221,9 +1220,7 @@ async def test_authenticated_vehicle_deadline_exposes_unknown_in_home_assistant(
     vehicle_coordinator.config_entry = config_entry
     vehicle_coordinator.api.is_authenticated = True
     vehicle_coordinator.last_update_success = True
-    vehicle_coordinator.data = {
-        DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])
-    }
+    vehicle_coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
     runtime_data.vehicle_coordinator = vehicle_coordinator
     config_entry.runtime_data = runtime_data
 
@@ -1263,6 +1260,7 @@ async def test_authenticated_vehicle_deadline_exposes_unknown_in_home_assistant(
     assert deadline_state.state == STATE_UNKNOWN
     assert calculated_state is not None
     assert datetime.fromisoformat(calculated_state.state) == calculated_deadline
+
 
 @pytest.mark.parametrize(
     ("inventory_state", "last_update_success"),
