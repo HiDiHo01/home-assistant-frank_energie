@@ -156,6 +156,30 @@ If Home Assistant reports that the electricity connection is unavailable,
 confirm that the selected Frank Energie site has an electricity contract and
 that account settings have loaded. Retry after a temporary API failure.
 
+## Removing Disconnected Hardware Safely
+
+When a charger, vehicle or SmartBattery disappears from the Frank Energie
+account, the integration requires **two distinct valid inventory refreshes**
+that both confirm its absence before it offers a repair under
+**Settings → System → Repairs** or permits manual device removal.
+
+**No device is deleted automatically.** Confirming a Repair triggers a new
+API inventory check and verifies the config entry and device identity again
+before removing the device and its entities from Home Assistant.
+Removal can affect existing automations and dashboards.
+
+Missing or malformed inventories, API outages, disabled smart features and
+maintenance-window skips must never be treated as proof of absence.
+An ignored Repair remains ignored until its lifecycle changes; an
+unrecognized or restored device must not be deleted.
+
+The same double-absence rule also applies to Home Assistant's manual
+device-removal action. Wait for two successful updates before retrying
+when removal is rejected. Removing the integration config entry is a
+separate operation and is unaffected.
+
+**Minimum Home Assistant version for these Repairs is 2026.11.0.**
+Install a compatible Core version before updating the integration.
 ## Smart Battery Entities Unavailable
 
 Possible causes:

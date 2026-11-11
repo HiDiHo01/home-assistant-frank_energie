@@ -1261,5 +1261,22 @@
       "wrong_account": "Ce compte n’a pas accès à l’adresse de fourniture configurée. Connectez-vous avec le compte associé à cette configuration."
     }
   },
-  "title": "Frank Energie"
+  "title": "Frank Energie",
+  "issues": {
+    "stale_device": {
+      "title": "Appareil Frank Energie déconnecté : {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Supprimer l'appareil déconnecté ?",
+            "description": "Frank Energie ne répertorie plus **{device}** dans deux inventaires complets. Sa suppression de Home Assistant enlève également ses entités et peut affecter les automatisations. Sélectionnez **Valider** pour vérifier à nouveau l'inventaire puis supprimer l'appareil uniquement s'il est toujours absent."
+          }
+        },
+        "abort": {
+          "cannot_verify": "L'inventaire actuel de Frank Energie n'a pas pu être vérifié. Aucun appareil n'a été supprimé. Réessayez après une mise à jour réussie.",
+          "device_restored": "L'appareil est à nouveau présent ou sa suppression n'est pas sûre. Aucun appareil n'a été supprimé."
+        }
+      }
+    }
+  }
 }

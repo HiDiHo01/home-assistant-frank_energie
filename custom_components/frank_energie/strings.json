@@ -1261,5 +1261,22 @@
       "wrong_account": "The signed-in account cannot access the configured delivery site. Sign in with the account associated with this entry."
     }
   },
-  "title": "Frank Energie"
+  "title": "Frank Energie",
+  "issues": {
+    "stale_device": {
+      "title": "Disconnected Frank Energie device: {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Remove disconnected device?",
+            "description": "Frank Energie no longer lists **{device}** in two complete inventory responses. Removing the device from Home Assistant also removes its entities and can affect automations. Select **Submit** to verify the live account again and remove this device only if it is still absent."
+          }
+        },
+        "abort": {
+          "cannot_verify": "The current Frank Energie inventory could not be verified. No device was removed. Try again after the next successful update.",
+          "device_restored": "The device is present again or is no longer safe to remove. No device was removed."
+        }
+      }
+    }
+  }
 }

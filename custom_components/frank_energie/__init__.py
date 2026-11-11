@@ -10,7 +10,7 @@ from datetime import datetime, time
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -44,6 +44,7 @@ from .coordinator import (
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
+from .device_inventory import INVENTORY_SPECS, async_identify_inventory_device
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
 from .smart_hvac import FrankEnergieSmartHvacCoordinator
@@ -71,6 +72,7 @@ class FrankEnergieEntryData:
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
     smart_hvac_coordinator: FrankEnergieSmartHvacCoordinator | None = None
+    stale_device_absences: dict[str, int] = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -187,6 +189,36 @@ async def async_remove_entry(
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
     await price_cache_store(hass, entry.entry_id).async_remove()
 
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Permit manual removal only after two verified missing inventories.
+
+    Never interpret missing or failed API data as absence; recognize hardware
+    through entry-owned registry entities, including disabled entities.
+    The UI requests removal explicitly; this hook never deletes a device.
+    """
+    if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
+        return False
+
+    identified = async_identify_inventory_device(hass, entry, device_entry)
+    if identified is None:
+        return False
+
+    kind, identifier = identified
+    runtime_data = entry.runtime_data
+    coordinator: FrankEnergieCoordinator = getattr(
+        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+    )
+    return (
+        coordinator.last_update_success
+        and coordinator.verified_inventory_ids is not None
+        and identifier not in coordinator.verified_inventory_ids
+        and runtime_data.stale_device_absences.get(f"{kind}:{device_entry.id}", 0) >= 2
+    )
 
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
