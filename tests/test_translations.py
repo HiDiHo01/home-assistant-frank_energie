@@ -337,9 +337,8 @@ def test_no_unused_or_missing_translation_keys():
 
     class TranslationKeyExtractor(ast.NodeVisitor):
         def __init__(self):
-            """Track entity, issue, button and service translation keys separately."""
+            """Track entity, button and service translation keys."""
             self.translation_keys = set()
-            self.issue_keys = set()
             self.button_keys = set()
             self.service_names = set()
 
@@ -395,19 +394,13 @@ def test_no_unused_or_missing_translation_keys():
             self.generic_visit(node)
 
         def visit_Call(self, node):
-            """Extract Repairs issue keys without treating them as entity keys."""
+            """Extract entity and button translation keys from calls."""
             for keyword in node.keywords:
                 if keyword.arg == "translation_key":
                     if isinstance(keyword.value, ast.Constant) and isinstance(
                         keyword.value.value, str
                     ):
-                        if (
-                            isinstance(node.func, ast.Attribute)
-                            and node.func.attr == "async_create_issue"
-                        ):
-                            self.issue_keys.add(keyword.value.value)
-                        else:
-                            self.translation_keys.add(keyword.value.value)
+                        self.translation_keys.add(keyword.value.value)
                 elif keyword.arg == "key":
                     if isinstance(keyword.value, ast.Constant) and isinstance(
                         keyword.value.value, str
@@ -484,24 +477,43 @@ def test_no_unused_or_missing_translation_keys():
         f"Unused device translation keys in strings.json: {sorted(unused_device_keys)}"
     )
 
-    # Repairs issue translations are a distinct namespace from entity translations.
-    missing_issue_keys = extractor.issue_keys - strings_issue_keys
-    assert not missing_issue_keys, (
-        f"Repairs translation keys missing from strings.json: {sorted(missing_issue_keys)}"
-    )
-    unused_issue_keys = strings_issue_keys - extractor.issue_keys
-    assert not unused_issue_keys, (
-        f"Unused Repairs translation keys in strings.json: {sorted(unused_issue_keys)}"
-    )
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
     missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys) - (
-        strings_entity_keys
+        strings_entity_keys | strings_issue_keys
     )
     assert not missing_entity_keys, (
         f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
     )
 
+
+def test_repairs_issue_translation_keys() -> None:
+    """Validate Repairs issue keys independently of entity and device keys."""
+    repairs_file = INTEGRATION_DIR / "repairs.py"
+    module = ast.parse(repairs_file.read_text(encoding="utf-8"))
+    defined_keys: set[str] = set()
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "async_create_issue":
+            continue
+        for keyword in node.keywords:
+            if (
+                keyword.arg == "translation_key"
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ):
+                defined_keys.add(keyword.value.value)
+
+    assert defined_keys, "No Repairs issue translations were extracted"
+    for locale_file in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation_data = json.loads(locale_file.read_text(encoding="utf-8"))
+        declared_keys = set(translation_data.get("issues", {}))
+        assert declared_keys == defined_keys, (
+            f"{locale_file.name}: Repairs issue keys do not match their source"
+        )
 
 def test_all_translation_keys_are_lowercase():
     """Verify that all translation keys (dictionary keys) in strings.json are entirely lowercase."""

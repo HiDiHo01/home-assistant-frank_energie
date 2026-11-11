@@ -204,7 +204,7 @@ async def test_device_removal_requires_two_valid_absences(
         coordinator.verified_inventory_ids = async_process_device_inventory(
             hass, entry, "charger", coordinator.data[DATA_ENODE_CHARGERS]
         )
-    assert (await async_remove_config_entry_device(hass, entry, device)) is removable
+    # Exercise the actual Home Assistant websocket path exactly once.
     await client.send_json_auto_id(
         {
             "type": "config/device_registry/remove_config_entry",
