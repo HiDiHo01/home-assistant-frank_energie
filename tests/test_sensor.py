@@ -1558,3 +1558,23 @@ async def test_battery_strategy_sensor_passes_ha_enum_validation(
     validation accepts."""
     state = await _battery_strategy_sensor_state(hass, strategy)
     assert state == strategy.value.lower()
+
+
+def test_parse_contract_product_name() -> None:
+    """Test parsing of Frank Energie contract product code components."""
+    from custom_components.frank_energie.sensor import _parse_contract_product_name
+
+    code = "b2c-e-dyn-qh-2024-jan-unknownpart"
+    result = _parse_contract_product_name(code)
+    assert result == {
+        "b2c": "Particulier klantcontract (Business-to-Consumer)",
+        "e": "Elektriciteit",
+        "dyn": "Dynamisch energiecontract",
+        "qh": "Kwartier-gebaseerde prijsvorming (Quarter-Hourly)",
+        "2024": "Contractjaar 2024",
+        "jan": "Startmaand: januari",
+        "unknownpart": "Onbekend onderdeel",
+    }
+
+    # Verify uppercase month handling
+    assert _parse_contract_product_name("DEC") == {"DEC": "Startmaand: december"}
