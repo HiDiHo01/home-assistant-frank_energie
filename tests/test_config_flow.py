@@ -1,6 +1,9 @@
 """Tests for Frank Energie config flow."""
 
+from unittest.mock import MagicMock
+
 import pytest
+import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import (
@@ -9,6 +12,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.selector import TextSelector, TextSelectorType
+from pytest_homeassistant.common import MockConfigEntry
+from python_frank_energie.exceptions import AuthException
 
 from custom_components.frank_energie.const import (
     CONF_SITE,
@@ -23,6 +29,24 @@ USER_INPUT = {
     CONF_USERNAME: "user@example.com",
     CONF_PASSWORD: "secure_password",
 }
+
+
+def _assert_credential_selectors(schema: vol.Schema) -> None:
+    """Verify that Home Assistant renders semantic email and password inputs."""
+    fields = {
+        getattr(marker, "schema", marker): validator
+        for marker, validator in schema.schema.items()
+    }
+
+    username = fields[CONF_USERNAME]
+    assert isinstance(username, TextSelector)
+    assert username.config["type"] == TextSelectorType.EMAIL
+    assert username.config["autocomplete"] == "username"
+
+    password = fields[CONF_PASSWORD]
+    assert isinstance(password, TextSelector)
+    assert password.config["type"] == TextSelectorType.PASSWORD
+    assert password.config["autocomplete"] == "current-password"
 
 
 async def test_show_login_form(hass: HomeAssistant) -> None:
@@ -40,6 +64,7 @@ async def test_show_login_form(hass: HomeAssistant) -> None:
     )
     assert result2["type"] == FlowResultType.FORM
     assert result2["step_id"] == "login"
+    _assert_credential_selectors(result2["data_schema"])
 
 
 async def test_invalid_authentication(hass: HomeAssistant, mock_auth_failure) -> None:
@@ -113,6 +138,7 @@ async def test_reauth_flow_success(
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "login"
+    _assert_credential_selectors(result["data_schema"])
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -133,6 +159,7 @@ async def test_options_flow_with_site(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] is None
+    _assert_credential_selectors(result["data_schema"])
 
 
 async def test_options_flow_without_site(hass: HomeAssistant, config_entry) -> None:
@@ -273,3 +300,57 @@ async def test_password_field_uses_password_text_selector(
     assert isinstance(options_password_validator, TextSelector)
     assert options_password_validator.config["type"] == TextSelectorType.PASSWORD
     assert options_password_validator.config["autocomplete"] == "current-password"
+
+
+async def test_reconfigure_uses_email_username_selector(
+    hass: HomeAssistant, config_entry_with_site: MockConfigEntry
+) -> None:
+    """Keep current account and password semantics on reconfigure."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": config_entry_with_site.entry_id,
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "login"
+    _assert_credential_selectors(result["data_schema"])
+
+
+@pytest.mark.parametrize(
+    ("site_failure", "expected_step"),
+    [
+        ("auth_failure", "login"),
+        ("no_delivery_sites", "site"),
+    ],
+)
+async def test_site_failure_keeps_credential_selectors(
+    hass: HomeAssistant,
+    mock_auth_success: MagicMock,
+    site_failure: str,
+    expected_step: str,
+) -> None:
+    """Use semantic credentials in both site lookup fallback forms."""
+    api = mock_auth_success.return_value.__aenter__.return_value
+    if site_failure == "auth_failure":
+        api.UserSites.side_effect = AuthException("synthetic authentication failure")
+    else:
+        api.UserSites.return_value.deliverySites = []
+
+    initial = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    login_form = await hass.config_entries.flow.async_configure(
+        initial["flow_id"], user_input={"authentication": True}
+    )
+    assert login_form["step_id"] == "login"
+
+    fallback_form = await hass.config_entries.flow.async_configure(
+        initial["flow_id"], user_input=USER_INPUT
+    )
+
+    assert fallback_form["type"] == FlowResultType.FORM
+    assert fallback_form["step_id"] == expected_step
+    _assert_credential_selectors(fallback_form["data_schema"])

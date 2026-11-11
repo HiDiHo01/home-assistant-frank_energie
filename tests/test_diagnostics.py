@@ -208,6 +208,11 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
             "contractReference": "CR-9999",
             "batterySerialNumber": "BAT-777",
             "deviceSerialNumber": "DEV-888",
+            "productName": "Dynamic Energy",
+            "contractProductName": "Dynamic Energy",
+            "customer_number": "CUST-12345",
+            "customerNumber": "CUST-67890",
+            "mandateId": "MANDATE-999",
         }
     )
 
@@ -243,6 +248,11 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["data"]["contractReference"] == "**REDACTED**"
     assert diagnostics["data"]["batterySerialNumber"] == "**REDACTED**"
     assert diagnostics["data"]["deviceSerialNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["productName"] == "**REDACTED**"
+    assert diagnostics["data"]["contractProductName"] == "**REDACTED**"
+    assert diagnostics["data"]["customer_number"] == "**REDACTED**"
+    assert diagnostics["data"]["customerNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["mandateId"] == "**REDACTED**"
 
     assert diagnostics["data"]["safe"] == "value"
 
