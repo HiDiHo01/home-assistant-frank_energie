@@ -359,8 +359,11 @@ def test_ci_executes_workflow_regressions_with_node() -> None:
     assert environment_step["id"] == "environment"
     assert steps.index(environment_step) < steps.index(pytest_step)
     assert steps.index(lint_step) < steps.index(pytest_step)
+    assert node_step["if"] == "${{ !matrix.experimental }}"
+    assert dependencies["if"] == "${{ !matrix.experimental }}"
+    assert environment_step["if"] == "${{ !matrix.experimental }}"
     assert pytest_step["if"] == (
-        "${{ !cancelled() && steps.environment.outcome == 'success' }}"
+        "${{ !cancelled() && !matrix.experimental && steps.environment.outcome == 'success' }}"
     )
     assert pytest_step.get("continue-on-error", False) is False
     assert str(pytest_step["run"]).strip() == (
