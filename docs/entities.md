@@ -59,6 +59,28 @@ Depending on the market configuration, electricity prices may be available as:
 - Hourly prices (24 prices per day)
 - Quarter-hourly prices (96 prices per day)
 
+### Tomorrow Price Availability
+
+The **Tomorrow electricity prices available** binary sensor (key
+`tomorrow_prices_available`) is enabled by default for public setups and authenticated sites with an
+electricity contract. It belongs to the existing **Prices** service device.
+It is not created for authenticated gas-only sites.
+
+- `on`: at least one electricity price period for tomorrow is present.
+- `off`: electricity data is present, but contains no periods for tomorrow yet.
+- `unknown`: electricity data is missing.
+- `unavailable`: the price coordinator's last update failed.
+
+Tomorrow follows the Europe/Amsterdam calendar, including daylight-saving changes.
+Zero and negative prices count as available. Gas prices alone do not turn this
+electricity indicator on. A partial publication can turn it on; it does not
+guarantee a complete day of prices.
+
+The sensor follows the existing price coordinator and cached prices without extra
+API requests or a separate publication-hour cutoff. It resets at local midnight
+unless prices for the new tomorrow are already present. Use an `off` to `on` state
+trigger for notifications when tomorrow's electricity prices arrive.
+
 ### Gas Prices
 
 Gas price entities provide:
@@ -81,6 +103,24 @@ Contract entities may include:
 - Contract type
 - Delivery address
 - Site information
+
+The **Segments** sensor (NL/NL-BE **Segmenten**) shows the energy types for the
+configured delivery site. Its state is `ELECTRICITY`, `GAS`, or
+`ELECTRICITY, GAS`. It is unavailable when the API has no usable segments for
+that site.
+
+For signed-in entries, the configured delivery site determines where the
+**Refresh Prices** buttons appear.
+
+| Site segments | Devices with a refresh button |
+|---|---|
+| `ELECTRICITY` | Electricity Prices |
+| `GAS` | Gas Prices |
+| `ELECTRICITY` and `GAS` | Electricity Prices and Gas Prices |
+
+For a combined contract, either button requests a refresh from the same price
+coordinator. The original button keeps its registered entity ID when the
+integration moves it or adds the second button.
 
 ### Consumption Entities
 
@@ -110,6 +150,30 @@ Invoice entities may include:
 - Billing periods
 - Historical invoices
 - Annual summaries
+
+## Smart heating entities
+
+The authenticated User-service binary sensor **Smart heating** (NL/NL-BE:
+**Slim verwarmen**) retains the `smart_hvac` entity key. Its Boolean
+`isActivated` value reflects **service activation**, not whether a
+heat pump is currently heating.
+
+| Provider result | Binary sensor | Meaning |
+| --- | --- | --- |
+| `isActivated = true` | `on` | Service activated |
+| `isActivated = false` | `off` | Service not activated |
+| Missing or invalid activation value | `unavailable` | Unknown activation |
+
+The `RUNNING` device class is used only for localized active/inactive
+presentation. The `available_on_site` attribute shows whether the
+provider makes this feature available for the configured delivery site:
+it is not the entity's Home Assistant availability or the activation state.
+
+For activated delivery sites, the **Smart heating** service shows the linked
+device count and the site's profile information. Each linked heating device
+shows its own equipment details, operational and steering statuses, and session
+information. The **User** service shows the account-level connection requests.
+See [Smart heating activation and equipment data](smart_hvac_activation.md).
 
 ## Smart Charging Entities
 

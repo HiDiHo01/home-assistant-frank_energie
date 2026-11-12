@@ -33,6 +33,16 @@ Repository instructions must be respected. Resolve conflicting instructions by f
 
 Never assume an API exists merely because it appeared in an older Home Assistant release, another integration, an example, or a previous AI-generated response.
 
+### Agent Skill maintenance
+
+Keep the reusable workflows under `.agents/skills/*/SKILL.md` accurate and aligned with the current repository.
+
+* When a new, verified, reusable development or review practice is learned, or when an existing skill, upstream API, project workflow, policy, or CI requirement changes, **review the affected skills and update their instructions when the change is relevant**. Create a new skill only when its purpose is genuinely distinct from existing skills.
+* Check the original source and current repository behavior before adopting lessons from another repository. Adapt practices to this integration; never blindly copy external instructions or override `AGENTS.md`, `AI_POLICY.md`, or other applicable repository policy.
+* Keep skill activation metadata (`name` and `description`), internal references, example commands, supported versions, and validation steps consistent with the actual implementation and tooling. Avoid duplicating detailed governance rules already maintained here.
+* Treat skill maintenance as part of an **authorized change**. A review-only, analysis-only, or no-changes task does not authorize editing skill files; identify and report outdated skills instead. Do not open an unrelated PR or modify other repositories without authorization.
+* After updating skills, validate YAML frontmatter, paths, Markdown links, and task instructions; inspect the diff, run applicable checks, and report the exact results or unavailable checks. Include relevant skill updates in the same PR when they belong to the requested change.
+
 ## 3. Current documentation and API verification
 
 Use the official developer documentation as the primary reference:
@@ -63,7 +73,7 @@ Use modern Python syntax and target **Python 3.14+**, subject to the actual Pyth
 ### Required conventions
 
 * Use type annotations for all functions, methods, parameters, and return values.
-* Write descriptive docstrings for modules, classes, functions, and methods.
+* Add or update clear docstrings for every new or modified Python module, class, method, and function. Follow the surrounding code's conventions and lead with the purpose. Explain inputs, return values, side effects, or errors when callers need that context.
 * Use `snake_case` for variables and functions.
 * Use `PascalCase` for classes.
 * Prefix internal implementation methods with `_`.
@@ -76,7 +86,7 @@ Use modern Python syntax and target **Python 3.14+**, subject to the actual Pyth
 * Use `Any` only when an external API, framework contract, or dynamic data structure genuinely requires it.
 * Do not use `Any` to suppress unresolved typing problems.
 * Use `collections.abc` for callable, iterable, mapping, and asynchronous protocols where appropriate.
-* Use timezone-aware datetimes and `datetime.now(timezone.utc)` or Home Assistant's appropriate timezone utilities.
+* Use timezone-aware datetimes and prefer `datetime.now(UTC)` (import `UTC` from `datetime`) or Home Assistant's appropriate timezone utilities; this aligns with `CLAUDE.md`.
 * Never use `datetime.utcnow()`.
 * Keep dataclass fields without default values before fields with defaults.
 * Use `@dataclass` with the required whitespace after the decorator symbol.
@@ -226,6 +236,7 @@ Use `DataUpdateCoordinator` when entities share a common data source or polling 
 * Use an appropriate `update_interval` based on the provider's capabilities, rate limits, and data freshness.
 * Avoid unnecessary API requests.
 * Prevent concurrent duplicate refreshes.
+* In refreshes that make multiple requests, check the maintenance window and provider backoff before each call. Bound per-device requests and preserve successful results from independent resources.
 * Use coordinator success and failure handling correctly.
 * Raise `UpdateFailed` for failures that prevent a successful coordinator refresh.
 * Use `ConfigEntryAuthFailed` when authentication must trigger reauthentication.
@@ -282,6 +293,8 @@ Do not misuse entity platforms to avoid implementing the correct behavior.
 
 * Subscribe to events in the correct lifecycle methods.
 * Register cleanup callbacks for subscriptions and listeners.
+* Give inventory-backed entities stable, config-entry-scoped unique IDs. Use separate namespaces for equipment and for site or account aggregates. Use opaque keys when provider identifiers are sensitive.
+* Reconcile equipment registry entries only after a successful, authoritative inventory read. Preserve entries during failed refreshes, add newly discovered equipment while the entry is loaded, and test that a returning device can register again.
 * Close device connections and client resources when the entry unloads.
 * Implement `async_will_remove_from_hass` only when entity-specific cleanup is necessary.
 * Use supported callbacks to trigger state updates.
@@ -321,6 +334,7 @@ Treat all external data as untrusted.
 * Avoid comparing naive and aware datetimes.
 * Use decimal arithmetic where financial precision requires it.
 * Preserve the distinction between zero, missing, unavailable, and invalid data.
+* Inspect the actual runtime models returned by client libraries. Dataclasses with dictionary-compatible `.get()` or `__getitem__()` are not built-in `dict` instances; do not gate model access solely on `isinstance(value, dict)` when the library returns typed objects.
 * Avoid silently coercing malformed values into plausible measurements.
 * Document and test any fallback behavior.
 
@@ -400,6 +414,35 @@ Never change established entity unique IDs or translation keys unnecessarily. Pr
 Every behavior change must include appropriate automated tests.
 
 Use the testing framework and conventions already established in the repository, normally `pytest` and Home Assistant's test helpers.
+
+### Reproducible Home Assistant test environment
+
+* Use the committed dev container or Python 3.14.10 for supported Home Assistant testing. `.python-version` selects Python 3.14.10 for local development; CI separately probes the upstream price client and integration syntax on Python 3.15.2 without claiming Home Assistant support.
+* If Python 3.14.10 is absent, provision it with an available interpreter manager (for example, `uv python install 3.14.10`) or use the committed dev container before declaring the required suite unavailable.
+* Use Poetry 2.5.1. Select Python 3.14.10 (`poetry env use python3.14`, verifying the exact patch) and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`. Python 3.15.2 is a separate non-blocking client-only smoke test using binary wheels; Home Assistant and its full dev dependencies are not installed in that job.
+* Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
+* Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
+* Keep the official `pytest-homeassistant` plugin required in pytest configuration and pin it to the same release as Home Assistant Core (currently `2026.11.0`). Do not co-install the deprecated `pytest-homeassistant-custom-component` package; their fixtures overlap. Use real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
+* Keep asyncio auto mode and function-scoped fixture loops consistent with the Home Assistant test plugin.
+* Update Home Assistant and its matching test-plugin lock entries together. Keep test dependencies isolated from production Home Assistant installations.
+* Extend the existing CI workflow instead of adding a duplicate pytest workflow. Keep required Python 3.14.10 lint/pytest checks and JUnit reports blocking. Keep Python 3.15.2 as an explicitly non-blocking experimental matrix entry: audit unavailable Home Assistant wheels, install only the manifest-pinned upstream price client with binary wheels, and execute offline model/import/syntax smoke tests. Do not run Home Assistant pytest without its actual compatible dependencies or treat limited smoke coverage as full compatibility.
+* Verify that the CI runner's OS and architecture offer builds for the exact minimum Python patch and the latest supported patch. Pin a supported runner image when a rolling label moves to an OS that lacks the minimum build. [Published GitHub Actions Python builds](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
+* Run Flake8 with `--jobs=1 --extend-exclude=.venv` so local virtual environments are excluded and checks work in environments with restricted process creation.
+* Mock external provider calls and use sanitized fixtures. Do not use production accounts, tokens, or customer data for tests.
+* Test sensor value mapping with real parsed dependency models as well as relevant raw/nullable payloads; cover correct units, availability, stable entity IDs, zero versus missing values, and operational states that must not suppress a known measurement.
+* For pinned Python patch versions, verify that the GitHub Actions runner image has a corresponding distribution in the official `actions/python-versions` manifest. If `ubuntu-latest` changes and `setup-python` fails before tests, pin a supported runner image rather than dropping the minimum-version matrix job or treating it as a test failure.
+* Report the interpreter, Home Assistant, test-plugin versions, pass/skip/failure counts, and any checks that could not run. Do not describe isolated method checks as a full Home Assistant suite.
+
+### Config-entry migration and reconfiguration regressions
+
+* Keep the config-entry schema version and minor version centralized in `const.py`; use them for the config flow and the integration-level `async_migrate_entry` hook.
+* Exercise migration through Home Assistant's real config-entry setup/reload APIs. Mock provider/platform setup at the integration boundary, without mocking the migration callback or config-entry manager.
+* Cover legacy, current, older minor and future versions; preserve credentials, site identity, unrelated options and other entries. Never downgrade a newer minor schema or accept an incompatible future major schema.
+* Exercise reconfiguration through the real flow manager with `SOURCE_RECONFIGURE`. Cover saved-username defaults, invalid input, provider failures, retries, cancellation, encrypted credential updates and target-entry isolation.
+* Verify that reconfigure and reauthentication complete with their distinct Home Assistant reasons and schedule one reload. Use the native update/reload helper so Home Assistant provides the appropriate shared translation.
+* Verify the existing delivery-site reference against the new account's complete site inventory before persisting credentials through reauth, reconfigure or options. Include inactive/multiple sites, mismatched accounts with unchanged email, missing inventories, provider failures and successful retries. Preserve entry, entity and device identities on rejected changes. Legacy entries without a site retain their existing account username; do not silently bind them to another account.
+* Home Assistant awaits `async_migrate_entry` even when migration only uses the synchronous config-entry update callback. Preserve that async contract; document a necessary analyzer exception on the hook's declaration instead of adding a fake await or suppressing the rule across the file.
+* Run `poetry run python -m pytest tests/test_migration.py tests/test_reconfigure.py tests/test_config_flow.py tests/test_translations.py`, followed by the full suite and the configured lint/format checks.
 
 ### Required test coverage
 
@@ -604,7 +647,7 @@ For every code modification:
 
 * Highlight the important changes in the final report.
 * Keep changes focused and reviewable.
-* Add docstrings to new modules, classes, functions, and methods.
+* Verify that docstrings follow the [Python standards](#4-python-standards) and describe the current behavior.
 * Ensure all imports are used.
 * Verify return types and asynchronous behavior.
 * Validate inputs at the appropriate boundary.
@@ -635,6 +678,80 @@ When working on GitHub repositories:
 * Include relevant test results and any checks that could not be executed.
 
 Do not assume that pushing, publishing, releasing, or merging is authorized merely because code changes were requested.
+
+### Repair rebase-only pull-request blockers safely
+
+Before repairing **Rebase and merge**, inspect the PR's actual target
+branch (`base.ref` and `base.sha`), source head SHA, mergeability,
+`rebaseable`, commit parents, ahead/behind counts, and complete diff.
+`mergeable: true`, `mergeable_state: clean`, and no commits behind the
+target branch do not guarantee `rebaseable: true`. Apply obsolete-PR
+triage below before rewriting any history.
+
+- **Authorization and intent:** do not rewrite or force-push without
+  explicit approval. Prefer rebase/cherry-pick to retain meaningful
+  individual commits; an approved single-commit rewrite loses their
+  identities. Verify that rebase ancestry, not another merge gate,
+  is the actual blocker.
+- **Durable backup:** before modifying the source branch, create an
+  authorized backup ref at the exact inspected old head SHA on a durable
+  remote (or equivalently durable, access-controlled storage) and read
+  it back to confirm its SHA. A local-only backup that disappears with
+  a workspace is insufficient. Do not expose private data or create
+  unauthorized public refs; stop if a safe backup cannot be stored.
+- **Target-base ancestry:** use the PR's checked target-branch tip,
+  never assume `main`. Before reusing the old head's exact Git tree,
+  verify that the checked base SHA is an ancestor of the old head
+  (for example, `git merge-base --is-ancestor <base_sha> <old_head_sha>`).
+  If it is not, first incorporate the target branch through a
+  conflict-resolved rebase/cherry-pick; do not reparent an old tree
+  that omits newer base changes.
+- **Verify content:** only when base ancestry is confirmed and a
+  one-parent rewrite is authorized, use the inspected base SHA as the
+  new commit's sole parent and retain the old head's exact Git tree.
+  Check tree identity and compare complete original/replacement diffs
+  against the same checked target base, including tests and unrelated
+  files. After base reconciliation, instead verify every intended
+  content change and reject accidental deletions.
+- **Explicit expected-head lease:** refresh both live target-base and
+  PR-head SHAs immediately before publishing; abort and rebuild if
+  either differs from the inspected values. Pin Git's lease to the
+  **inspected live head** (not a remote-tracking ref):
+
+  `git push --force-with-lease=refs/heads/<branch>:<old_head_sha> origin <new_head_sha>:refs/heads/<branch>`
+
+  Alternatively use GitHub GraphQL `updateRefs` with
+  `RefUpdate.beforeOid=<old_head_sha>` and `force=true`. GitHub REST
+  `PATCH /git/refs` with `force=true` does **not** provide a
+  documented expected-old-SHA compare-and-swap. Only use a connector
+  wrapper's `expected_sha` when its atomic conditional semantics have
+  been verified. Never use unchecked `--force` or bare `--force-with-lease`.
+- **Recheck after publishing:** the head lease does not atomically
+  protect the separate target branch against advancing. Re-read
+  both refs immediately after the push, and stop/repair if the base
+  changed, the diff changed unexpectedly, or the new head differs.
+  Confirm `rebaseable: true`, one-parent ancestry and no base lag.
+  Rerun checks and re-evaluate required approvals on the **new** head;
+  previous-head green checks do not establish merge readiness.
+  Never merge without separate authorization.
+
+See the [PR review skill](.agents/skills/frank-energie-pr-review/SKILL.md#rebase-only-conflicts-and-safe-history-repair)
+for the verified PR #408 example and operational checks.
+
+<!-- ai-review-rules:obsolete-pr-triage:start -->
+### Check for obsolete pull requests before resolving conflicts
+
+- Before resolving merge/rebase conflicts, rebasing, or rewriting a pull request, compare its complete changes against the **current** target branch. Inspect the PR diff, relevant code, tests, documentation, review feedback, and commit history.
+- Verify whether **all** meaningful functionality, bug fixes, regression coverage, and documentation changes are already present on the target branch with equivalent behavior. Similar code, a matching PR title, or a conflict flag alone is not sufficient evidence.
+- Classify the PR using evidence, not automation guesses:
+  - **Obsolete:** all meaningful changes are present with equivalent behavior and tests; recommend closing without merging.
+  - **Partially superseded:** some changes are present; retain and validate only unique changes before resolving conflicts.
+  - **Still relevant:** unique changes are missing; preserve them and resolve conflicts with relevant checks.
+  - **Unverified:** the evidence is insufficient or inaccessible; keep the PR open and report the missing proof.
+- When a PR is **obsolete**, do not resolve unnecessary conflicts or merge duplicate changes. If explicitly authorized to comment and close, cite replacement commits, relevant files, and existing tests in a concise explanation, then close **without merging**. In review-only tasks, report the recommendation without changing the PR. Never disclose confidential vulnerability details publicly.
+- For partially superseded or still relevant PRs, preserve the missing changes, perform relevant validation, and report the actual results. Never close a PR automatically based only on a matching title, similar patch, or GitHub mergeability flag.
+- Document the disposition and checks not run. Never claim that an obsolete PR was merged or that unexecuted tests passed.
+<!-- ai-review-rules:obsolete-pr-triage:end -->
 
 ## 22. Required workflow for every task
 
@@ -679,7 +796,8 @@ Review this repository as a senior Python engineer specializing in Home Assistan
 
 ## Python quality
 
-* Require complete and accurate type hints and docstrings for functions and methods.
+* Require complete and accurate type hints for functions and methods.
+* Check the docstrings of new and modified modules, classes, methods, and functions for accuracy and consistency with the surrounding code.
 * Prefer modern Python syntax, snake_case names, and built-in generic types.
 * Avoid unnecessary imports, mutable defaults, broad exception handling, and redundant abstractions.
 * Use lazy `%` formatting in logging calls.

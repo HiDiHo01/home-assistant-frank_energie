@@ -171,6 +171,7 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     runtime_data = SimpleNamespace(
         coordinator=coordinator,
         battery_session_coordinators=[],
+        smart_hvac_coordinator=None,
     )
 
     entry = MagicMock()
@@ -181,9 +182,56 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
         "username": "user@example.com",
         "password": "secret",
         "access_token": "token",
+        "accessToken": "token_camel",
+        "auth_token": "token_auth",
         "site_reference": "site",
     }
     entry.runtime_data = runtime_data
+
+    coordinator.data.update(
+        {
+            "street": "Main Street",
+            "houseNumber": "10",
+            "houseNumberAddition": "A",
+            "addressFormatted": "Main Street 10 A, 1234 AB Amsterdam",
+            "address_formatted": "Main Street 10 A, 1234 AB Amsterdam",
+            "postalCode": "1234 AB",
+            "postal_code": "1234 AB",
+            "zipCode": "1234 AB",
+            "city": "Amsterdam",
+            "deliveryAddress": "Main Street 10 A",
+            "delivery_address": "Main Street 10 A",
+            "connectionAddress": "Main Street 10 A",
+            "connection_address": "Main Street 10 A",
+            "user_sites": [
+                {
+                    "addressFormatted": "Side Street 2, 5678 CD",
+                    "address_formatted": "Side Street 2, 5678 CD",
+                    "postal_code": "5678 CD",
+                    "delivery_address": "Side Street 2",
+                    "connection_address": "Side Street 2",
+                    "active": True,
+                },
+            ],
+            "latitude": 52.3676,
+            "longitude": 4.9041,
+            "vin": "1HGCR2F83HA000000",
+            "inverter_serial_numbers": ["INV-123456"],
+            "jwt": "eyJhbGciOi...",
+            "secret": "top-secret",
+            "otp": "123456",
+            "macAddress": "00:11:22:33:44:55",
+            "ip": "192.168.1.100",
+            "contractReference": "CR-9999",
+            "batterySerialNumber": "BAT-777",
+            "deviceSerialNumber": "DEV-888",
+            "productName": "Dynamic Energy",
+            "contractProductName": "Dynamic Energy",
+            "customer_number": "CUST-12345",
+            "customerNumber": "CUST-67890",
+            "mandateId": "MANDATE-999",
+        }
+    )
 
     diagnostics = await async_get_config_entry_diagnostics(
         MagicMock(),
@@ -193,10 +241,52 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["entry"]["data"]["username"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["password"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["access_token"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["accessToken"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["auth_token"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["site_reference"] == "**REDACTED**"
 
     assert diagnostics["data"]["email"] == "**REDACTED**"
     assert diagnostics["data"]["ean"] == "**REDACTED**"
+    assert diagnostics["data"]["street"] == "**REDACTED**"
+    assert diagnostics["data"]["houseNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["houseNumberAddition"] == "**REDACTED**"
+    assert diagnostics["data"]["addressFormatted"] == "**REDACTED**"
+    assert diagnostics["data"]["address_formatted"] == "**REDACTED**"
+    assert diagnostics["data"]["postalCode"] == "**REDACTED**"
+    assert diagnostics["data"]["postal_code"] == "**REDACTED**"
+    assert diagnostics["data"]["zipCode"] == "**REDACTED**"
+    assert diagnostics["data"]["city"] == "**REDACTED**"
+    assert diagnostics["data"]["deliveryAddress"] == "**REDACTED**"
+    assert diagnostics["data"]["delivery_address"] == "**REDACTED**"
+    assert diagnostics["data"]["connectionAddress"] == "**REDACTED**"
+    assert diagnostics["data"]["connection_address"] == "**REDACTED**"
+    assert diagnostics["data"]["user_sites"] == [
+        {
+            "addressFormatted": "**REDACTED**",
+            "address_formatted": "**REDACTED**",
+            "postal_code": "**REDACTED**",
+            "delivery_address": "**REDACTED**",
+            "connection_address": "**REDACTED**",
+            "active": True,
+        },
+    ]
+    assert diagnostics["data"]["latitude"] == "**REDACTED**"
+    assert diagnostics["data"]["longitude"] == "**REDACTED**"
+    assert diagnostics["data"]["vin"] == "**REDACTED**"
+    assert diagnostics["data"]["inverter_serial_numbers"] == "**REDACTED**"
+    assert diagnostics["data"]["jwt"] == "**REDACTED**"
+    assert diagnostics["data"]["secret"] == "**REDACTED**"
+    assert diagnostics["data"]["otp"] == "**REDACTED**"
+    assert diagnostics["data"]["macAddress"] == "**REDACTED**"
+    assert diagnostics["data"]["ip"] == "**REDACTED**"
+    assert diagnostics["data"]["contractReference"] == "**REDACTED**"
+    assert diagnostics["data"]["batterySerialNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["deviceSerialNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["productName"] == "**REDACTED**"
+    assert diagnostics["data"]["contractProductName"] == "**REDACTED**"
+    assert diagnostics["data"]["customer_number"] == "**REDACTED**"
+    assert diagnostics["data"]["customerNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["mandateId"] == "**REDACTED**"
 
     assert diagnostics["data"]["safe"] == "value"
 
@@ -227,6 +317,7 @@ async def test_diagnostics_coordinator_metadata() -> None:
     runtime_data = SimpleNamespace(
         coordinator=coordinator,
         battery_session_coordinators=[object(), object()],
+        smart_hvac_coordinator=None,
     )
 
     entry = MagicMock()

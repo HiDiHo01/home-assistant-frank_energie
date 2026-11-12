@@ -4,3 +4,6 @@ https://buymeacoffee.com/royarx
 ^https://www\.paypal\.me/royarx$
 # Runner egress policy blocks the Belgian provider domain; verified via public browser.
 ^https://www\.frankenergie\.be/nl/export-factuurdata$
+# GitHub's releases HTML sometimes returns 502 in the hosted CI runner.
+# The Link Check workflow instead verifies this exact repository's release API.
+^https://github\.com/HiDiHo01/home-assistant-frank_energie/releases/?$

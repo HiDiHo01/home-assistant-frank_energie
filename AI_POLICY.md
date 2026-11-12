@@ -38,7 +38,7 @@ AI-generated code should:
 - use modern Python with complete type hints
 - use asynchronous APIs where appropriate
 - use timezone-aware datetimes
-- include meaningful docstrings for public modules, classes, and functions
+- document new and modified modules, classes, methods, and functions according to the [Python standards](AGENTS.md#4-python-standards)
 - use lazy `%` logging formatting
 - provide descriptive validation and error messages
 - avoid dead code, duplicate logic, and unnecessary dependencies
