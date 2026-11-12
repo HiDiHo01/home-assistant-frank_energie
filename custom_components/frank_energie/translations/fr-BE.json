@@ -9,6 +9,7 @@
     "error": {
       "connection_error": "Erreur de connexion à l'API Frank Energie.",
       "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
+      "rate_limited": "Frank Energie reçoit trop de requêtes. Veuillez patienter et réessayer plus tard.",
       "no_delivery_sites": "Aucune adresse de fourniture n’a été trouvée pour ce compte.",
       "no_suitable_sites": "Aucune adresse de fourniture compatible n’a été trouvée. Vérifiez que votre compte est associé à un contrat de fourniture actif.",
       "site_retrieval_failed": "Impossible de récupérer les adresses de fourniture. Réessayez plus tard.",
@@ -1260,6 +1261,7 @@
     "error": {
       "connection_error": "Erreur de connexion à l'API Frank Energie.",
       "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
+      "rate_limited": "Frank Energie reçoit trop de requêtes. Veuillez patienter et réessayer plus tard.",
       "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
       "wrong_account": "Ce compte n’a pas accès à l’adresse de fourniture configurée. Connectez-vous avec le compte associé à cette configuration."
     }
