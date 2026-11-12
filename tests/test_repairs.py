@@ -15,7 +15,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
-from python_frank_energie import FrankEnergie
+from python_frank_energie import FrankEnergie, SmartFeedInNotEnabledException
+from python_frank_energie.exceptions import RequestException
 from python_frank_energie.frank_energie import FrankEnergieQuery
 from python_frank_energie.models import SmartPvSystems
 
@@ -93,6 +94,26 @@ def _register_device(
         device_id=device.id,
     )
     return device, entity
+
+
+def _raw_pv_system(identifier: str) -> dict[str, object]:
+    """Create a complete synthetic PV record for the published client parser."""
+    return {
+        "id": identifier,
+        "brand": "TestBrand",
+        "connectionEAN": "000000000000000000",
+        "createdAt": "2026-11-01T10:00:00Z",
+        "deletedAt": None,
+        "displayName": "Test PV",
+        "externalReference": "synthetic-reference",
+        "inverterSerialNumbers": [],
+        "model": "TestInverter",
+        "onboardingStatus": "COMPLETED",
+        "provider": "TestProvider",
+        "steeringStatus": "ACTIVE",
+        "updatedAt": "2026-11-01T10:00:00Z",
+        "SmartPvSystemPanelGroups": [],
+    }
 
 
 def _inventory(collection_key: str, identifiers: list[object]) -> SimpleNamespace:
@@ -674,6 +695,212 @@ async def test_battery_identified_by_disabled_sensor_without_controls(
 
     assert _repair_exists(hass, _issue_id("battery", entry.entry_id, device.id))
     assert _is_device_removal_safe(hass, entry, device)
+
+
+@pytest.mark.parametrize(
+    ("raw_response", "exception_type"),
+    [
+        pytest.param(
+            {
+                "data": None,
+                "errors": [
+                    {
+                        "message": "user-error:smart-feed-in-not-enabled",
+                        "path": ["smartPvSystems"],
+                    }
+                ],
+            },
+            SmartFeedInNotEnabledException,
+            id="smart-feed-in-disabled",
+        ),
+        pytest.param({}, RequestException, id="missing-data"),
+        pytest.param(
+            {"data": {"smartPvSystems": None}},
+            RequestException,
+            id="null-inventory",
+        ),
+        pytest.param(
+            {"data": {"smartPvSystems": [None]}},
+            RequestException,
+            id="malformed-member",
+        ),
+        pytest.param(
+            {"data": {"smartPvSystems": [{"id": "partial"}]}},
+            RequestException,
+            id="partial-member",
+        ),
+        pytest.param(
+            {"data": {"smartPvSystems": [_raw_pv_system("a"), _raw_pv_system("a")]}},
+            RequestException,
+            id="duplicate-id",
+        ),
+    ],
+)
+async def test_pv_invalid_raw_response_preserves_absence_evidence(
+    hass: HomeAssistant,
+    frank_energie_setup: SetupEntry,
+    monkeypatch: pytest.MonkeyPatch,
+    raw_response: dict[str, object],
+    exception_type: type[RequestException],
+) -> None:
+    """Reject raw provider failures without treating them as another absence."""
+    entry = await frank_energie_setup()
+    device, entity = _register_device(hass, entry, "pv", "operational_status")
+    entity_registry = er.async_get(hass)
+    saved_entity = entity_registry.async_update_entity(
+        entity.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+    )
+    panel = entity_registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_stale-pv_panel_group_group-1",
+        config_entry=entry,
+        device_id=device.id,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+    issue_id = _issue_id("pv", entry.entry_id, device.id)
+    coordinator = entry.runtime_data.pv_coordinator
+    api = _enable_inventory_api(coordinator, monkeypatch)
+    monkeypatch.setattr(api, "user_smart_feed_in", AsyncMock(return_value=None))
+    query = AsyncMock(return_value={"data": {"smartPvSystems": []}})
+    monkeypatch.setattr(api, "_query", query)
+
+    await coordinator.async_refresh()
+    absence_key = f"pv:{device.id}"
+    assert entry.runtime_data.stale_device_absences[absence_key] == 1
+    assert not _repair_exists(hass, issue_id)
+    saved_device = dr.async_get(hass).async_get(device.id)
+    assert saved_device is not None
+
+    query.return_value = raw_response
+    with pytest.raises(exception_type):
+        await api.smart_pv_systems()
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert query.await_count == 4
+    assert coordinator.verified_inventory_ids is None
+    assert entry.runtime_data.stale_device_absences[absence_key] == 1
+    assert not _repair_exists(hass, issue_id)
+    assert not await async_remove_config_entry_device(hass, entry, saved_device)
+    assert dr.async_get(hass).async_get(device.id) == saved_device
+    assert entity_registry.async_get(entity.entity_id) == saved_entity
+    assert entity_registry.async_get(panel.entity_id) == panel
+
+
+async def test_pv_disabled_feed_in_blocks_repair_and_recovers(
+    hass: HomeAssistant,
+    frank_energie_setup: SetupEntry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep a stale PV device until fresh confirmed presence clears its Repair."""
+    assert await async_setup_component(hass, "repairs", {})
+    entry = await frank_energie_setup()
+    device, entity = _register_device(hass, entry, "pv", "operational_status")
+    entity_registry = er.async_get(hass)
+    saved_entity = entity_registry.async_update_entity(
+        entity.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+    )
+    issue_id = _issue_id("pv", entry.entry_id, device.id)
+    absence_key = f"pv:{device.id}"
+    coordinator = entry.runtime_data.pv_coordinator
+    api = _enable_inventory_api(coordinator, monkeypatch)
+    monkeypatch.setattr(api, "user_smart_feed_in", AsyncMock(return_value=None))
+    query = AsyncMock(return_value={"data": {"smartPvSystems": []}})
+    monkeypatch.setattr(api, "_query", query)
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert _repair_exists(hass, issue_id)
+    assert entry.runtime_data.stale_device_absences[absence_key] == 2
+    saved_device = dr.async_get(hass).async_get(device.id)
+    assert saved_device is not None
+
+    query.return_value = {
+        "data": None,
+        "errors": [
+            {
+                "message": "user-error:smart-feed-in-not-enabled",
+                "path": ["smartPvSystems"],
+            }
+        ],
+    }
+    await coordinator.async_refresh()
+    assert coordinator.verified_inventory_ids is None
+    assert _repair_exists(hass, issue_id)
+    assert entry.runtime_data.stale_device_absences[absence_key] == 2
+    assert not await async_remove_config_entry_device(hass, entry, saved_device)
+
+    manager = repairs_flow_manager(hass)
+    assert manager is not None
+    start = await manager.async_init(DOMAIN, context={"issue_id": issue_id})
+    assert start["type"] is FlowResultType.FORM
+    result = await manager.async_configure(start["flow_id"], user_input={})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "cannot_verify"
+    assert query.await_count == 4
+    assert _repair_exists(hass, issue_id)
+    assert dr.async_get(hass).async_get(device.id) == saved_device
+
+    query.return_value = {"data": {"smartPvSystems": [_raw_pv_system("stale-pv")]}}
+    monkeypatch.setattr(
+        coordinator, "_fetch_smart_pv_summary", AsyncMock(return_value=None)
+    )
+    await coordinator.async_refresh()
+
+    assert query.await_count == 5
+    assert coordinator.verified_inventory_ids == {"stale-pv"}
+    assert not _repair_exists(hass, issue_id)
+    assert absence_key not in entry.runtime_data.stale_device_absences
+    assert dr.async_get(hass).async_get(device.id) == saved_device
+    assert entity_registry.async_get(entity.entity_id) == saved_entity
+    assert (
+        sum(
+            (DOMAIN, "stale-pv") in registered.identifiers
+            for registered in dr.async_entries_for_config_entry(
+                dr.async_get(hass), entry.entry_id
+            )
+        )
+        == 1
+    )
+
+
+async def test_pv_disabled_feed_in_without_device_creates_no_repair(
+    hass: HomeAssistant,
+    frank_energie_setup: SetupEntry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not interpret a disabled feature as evidence of missing hardware."""
+    entry = await frank_energie_setup()
+    coordinator = entry.runtime_data.pv_coordinator
+    api = _enable_inventory_api(coordinator, monkeypatch)
+    coordinator._has_pv_systems = None
+    monkeypatch.setattr(api, "user_smart_feed_in", AsyncMock(return_value=None))
+    query = AsyncMock(
+        return_value={
+            "data": None,
+            "errors": [
+                {
+                    "message": "user-error:smart-feed-in-not-enabled",
+                    "path": ["smartPvSystems"],
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(api, "_query", query)
+
+    await coordinator.async_refresh()
+
+    assert query.await_count == 1
+    assert coordinator.verified_inventory_ids is None
+    assert coordinator._has_pv_systems is None
+    assert not any(
+        key.startswith("pv:") for key in entry.runtime_data.stale_device_absences
+    )
+    assert not any(
+        issue_domain == DOMAIN and issue_id.startswith("stale_pv_")
+        for issue_domain, issue_id in ir.async_get(hass).issues
+    )
 
 
 async def test_pv_inventory_rechecks_registered_disconnected_hardware(
