@@ -96,7 +96,6 @@ def _register_device(
     return device, entity
 
 
-
 def _raw_pv_system(identifier: str) -> dict[str, object]:
     """Create a complete synthetic PV record for the published client parser."""
     return {
@@ -893,8 +892,7 @@ async def test_pv_disabled_feed_in_without_device_creates_no_repair(
     assert coordinator.verified_inventory_ids is None
     assert coordinator._has_pv_systems is None
     assert not any(
-        key.startswith("pv:")
-        for key in entry.runtime_data.stale_device_absences
+        key.startswith("pv:") for key in entry.runtime_data.stale_device_absences
     )
     assert not any(
         issue_domain == DOMAIN and issue_id.startswith("stale_pv_")
