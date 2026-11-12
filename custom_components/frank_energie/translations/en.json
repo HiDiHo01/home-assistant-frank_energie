@@ -7,6 +7,7 @@
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
+      "rate_limited": "Frank Energie is receiving too many requests. Please wait and try again later.",
       "connection_error": "Connection error with Frank Energie API.",
       "invalid_auth": "Credentials rejected, please check your username and password.",
       "no_delivery_sites": "No delivery sites found for this account.",
@@ -1258,6 +1259,7 @@
       }
     },
     "error": {
+      "rate_limited": "Frank Energie is receiving too many requests. Please wait and try again later.",
       "connection_error": "Connection error with Frank Energie API.",
       "invalid_auth": "Credentials rejected, please check your username and password.",
       "unknown_error": "Unknown error occurred. Please consult logs for details.",
