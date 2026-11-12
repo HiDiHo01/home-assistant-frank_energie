@@ -1129,7 +1129,10 @@ def _build_enode_charger_binary_sensors(
             continue
         for description in ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS:
             _migrate_legacy_enode_sensor(
-                hass, config_entry, f"{DOMAIN}_{charger.id}_{description.key}", description
+                hass,
+                config_entry,
+                f"{DOMAIN}_{charger.id}_{description.key}",
+                description,
             )
             entities.append(
                 EnodeChargerBinarySensor(
@@ -1158,7 +1161,10 @@ def _build_enode_vehicle_binary_sensors(
             continue
         for description in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS:
             _migrate_legacy_enode_sensor(
-                hass, config_entry, f"{DOMAIN}_{vehicle_id}_{description.key}", description
+                hass,
+                config_entry,
+                f"{DOMAIN}_{vehicle_id}_{description.key}",
+                description,
             )
             entities.append(
                 EnodeVehicleBinarySensor(vehicle_coordinator, description, vehicle)
@@ -1222,9 +1228,7 @@ async def async_setup_entry(
         )
     )
     entities.extend(
-        _build_enode_vehicle_binary_sensors(
-            hass, config_entry, vehicle_coordinator
-        )
+        _build_enode_vehicle_binary_sensors(hass, config_entry, vehicle_coordinator)
     )
 
     _LOGGER.debug(
