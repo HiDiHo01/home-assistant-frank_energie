@@ -38,6 +38,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -1556,16 +1557,6 @@ def _get_period_total_result(data: object | None) -> float | None:
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     tuple[FrankEnergieEntityDescription, ...]
 ] = (
-    FrankEnergieEntityDescription(
-        key="device_id",
-        icon="mdi:battery",
-        native_unit_of_measurement=None,
-        state_class=None,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: getattr(data, "device_id", None) if data else None,
-        entity_registry_enabled_default=False,
-    ),
     FrankEnergieEntityDescription(
         key="period_start_date",
         icon="mdi:calendar-start",
@@ -5069,6 +5060,32 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
     return descriptions
 
 
+@callback
+def _async_remove_legacy_battery_device_id_entities(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    battery_ids: set[str],
+) -> None:
+    """Remove deprecated battery-session device ID sensors from this entry only."""
+    registry = er.async_get(hass)
+
+    for battery_id in battery_ids:
+        if not battery_id:
+            continue
+
+        unique_id = f"{battery_id}_device_id"
+        entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id is None:
+            continue
+
+        registry_entry = registry.async_get(entity_id)
+        if (
+            registry_entry is not None
+            and registry_entry.config_entry_id == config_entry.entry_id
+        ):
+            registry.async_remove(entity_id)
+
+
 def _service_parent_device_id(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -5181,6 +5198,9 @@ async def async_setup_entry(
     entities: list = []
 
     if batteries and batteries.batteries:
+        _async_remove_legacy_battery_device_id_entities(
+            hass, config_entry, {battery.id for battery in batteries.batteries}
+        )
         api = settings_coordinator.api  # type: ignore[attr-defined]
 
         # Set up session coordinators per battery
