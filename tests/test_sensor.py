@@ -1982,6 +1982,128 @@ def test_smart_battery_id_is_diagnostic_and_disabled_by_default() -> None:
     assert descriptions["battery_brand"].entity_category is None
 
 
+@pytest.mark.parametrize(
+    ("capacity", "charge_level", "status", "expected"),
+    [
+        (10.0, 50.0, "status_idle", 5.0),
+        (9.3, 72.6, "status_charging", 6.789),
+        (10.0, 0.0, "status_idle", 0.0),
+        (10.0, 100.0, "status_idle", 10.0),
+        (None, 50.0, "status_idle", None),
+        (10.0, None, "status_idle", None),
+        (10.0, 50.0, "status_unreliable_data", None),
+        (10.0, 50.0, "STATUS_UNRELIABLE_DATA", None),
+        (10.0, -1.0, "status_idle", None),
+        (10.0, 101.0, "status_idle", None),
+        (-2.0, 50.0, "status_idle", None),
+        (float("nan"), 50.0, "status_idle", None),
+        (10.0, float("nan"), "status_idle", None),
+        (float("inf"), 50.0, "status_idle", None),
+        (True, 50.0, "status_idle", None),
+    ],
+)
+def test_smart_battery_current_capacity_sensor(
+    capacity: float | bool | None,
+    charge_level: float | None,
+    status: str,
+    expected: float | None,
+) -> None:
+    """Use the reported battery capacity and the displayed percentage in kWh."""
+    from types import SimpleNamespace
+
+    from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+    from homeassistant.const import UnitOfEnergy
+
+    from custom_components.frank_energie.const import DATA_BATTERIES
+    from custom_components.frank_energie.sensor import (
+        _build_single_smart_battery_descriptions,
+    )
+
+    battery = SimpleNamespace(
+        id="battery_1",
+        brand="Test",
+        capacity=capacity,
+        external_reference=None,
+        max_charge_power=5.0,
+        max_discharge_power=5.0,
+        provider="Test",
+        created_at=None,
+        updated_at=None,
+        settings=None,
+        summary=SimpleNamespace(
+            last_known_state_of_charge=charge_level,
+            last_known_status=status,
+        ),
+    )
+    descriptions = {
+        description.translation_key: description
+        for description in _build_single_smart_battery_descriptions(battery, 0)
+    }
+    current = descriptions["battery_current_capacity"]
+
+    assert current.key == "smart_battery_0_current_capacity"
+    assert current.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
+    assert current.device_class is SensorDeviceClass.ENERGY
+    assert current.state_class is SensorStateClass.MEASUREMENT
+    assert current.entity_category is None
+    assert current.icon == "mdi:battery"
+    assert current.entity_registry_enabled_default is True
+    data = {DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
+    actual = current.value_fn(data)
+    if expected is None:
+        assert actual is None
+    else:
+        assert actual == pytest.approx(expected)
+
+
+def test_smart_battery_current_capacity_uses_its_own_battery() -> None:
+    """Calculate each device from its own charge level and total capacity."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.const import DATA_BATTERIES
+    from custom_components.frank_energie.sensor import (
+        _build_single_smart_battery_descriptions,
+    )
+
+    def make_battery(
+        battery_id: str, capacity: float, charge_level: float
+    ) -> SimpleNamespace:
+        """Create a distinct Smart Battery record for index-isolation checks."""
+        return SimpleNamespace(
+            id=battery_id,
+            brand="Test",
+            capacity=capacity,
+            external_reference=None,
+            max_charge_power=5.0,
+            max_discharge_power=5.0,
+            provider="Test",
+            created_at=None,
+            updated_at=None,
+            settings=None,
+            summary=SimpleNamespace(
+                last_known_state_of_charge=charge_level,
+                last_known_status="status_idle",
+            ),
+        )
+
+    batteries = [
+        make_battery("battery_first", 10.0, 20.0),
+        make_battery("battery_second", 8.0, 75.0),
+    ]
+    data = {DATA_BATTERIES: SimpleNamespace(batteries=batteries)}
+
+    for index, expected in enumerate((2.0, 6.0)):
+        description = next(
+            item
+            for item in _build_single_smart_battery_descriptions(
+                batteries[index], index
+            )
+            if item.translation_key == "battery_current_capacity"
+        )
+        assert description.key == f"smart_battery_{index}_current_capacity"
+        assert description.value_fn(data) == pytest.approx(expected)
+
+
 def _battery_strategy_sensor_description() -> object:
     """Return the smart_battery_0 imbalance_trading_strategy entity description
     built by ``_build_single_smart_battery_descriptions``."""
