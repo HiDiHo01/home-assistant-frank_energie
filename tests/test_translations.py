@@ -331,91 +331,72 @@ def test_select_attributes_translation_keys():
     )
 
 
-def test_no_unused_or_missing_translation_keys():
-    """Verify that all translation keys defined in strings.json are used in the codebase, and vice versa."""
-    import ast
+class _TranslationKeyExtractor(ast.NodeVisitor):
+    """Collect entity and service translation keys from integration Python code."""
 
-    class TranslationKeyExtractor(ast.NodeVisitor):
-        def __init__(self):
-            """Track entity, button and service translation keys."""
-            self.translation_keys = set()
-            self.button_keys = set()
-            self.service_names = set()
+    def __init__(self) -> None:
+        """Initialize disjoint sets of declared translation and service keys."""
+        self.translation_keys: set[str] = set()
+        self.button_keys: set[str] = set()
+        self.service_names: set[str] = set()
 
-        def visit_Assign(self, node):
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Name)
-                    and target.id == "_attr_translation_key"
-                ):
-                    if isinstance(node.value, ast.Constant) and isinstance(
-                        node.value.value, str
-                    ):
-                        self.translation_keys.add(node.value.value)
-                elif (
-                    isinstance(target, ast.Attribute)
-                    and target.attr == "_attr_translation_key"
-                ):
-                    if isinstance(node.value, ast.Constant) and isinstance(
-                        node.value.value, str
-                    ):
-                        self.translation_keys.add(node.value.value)
+    def _record_assignment(self, target: ast.expr, value: ast.expr | None) -> None:
+        """Track translation keys and service constants from string assignments."""
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            return
+        if (
+            isinstance(target, ast.Name) and target.id == "_attr_translation_key"
+        ) or (
+            isinstance(target, ast.Attribute) and target.attr == "_attr_translation_key"
+        ):
+            self.translation_keys.add(value.value)
+        if isinstance(target, ast.Name) and target.id.startswith("SERVICE_NAME_"):
+            self.service_names.add(value.value)
 
-                if isinstance(target, ast.Name) and target.id.startswith(
-                    "SERVICE_NAME_"
-                ):
-                    if isinstance(node.value, ast.Constant) and isinstance(
-                        node.value.value, str
-                    ):
-                        self.service_names.add(node.value.value)
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Record unannotated assignments and visit their nested expressions."""
+        for target in node.targets:
+            self._record_assignment(target, node.value)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """Record annotated assignments and visit their nested expressions."""
+        self._record_assignment(node.target, node.value)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Keep Repairs issue keys separate from entity and button keys."""
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "async_create_issue":
             self.generic_visit(node)
+            return
+        for keyword in node.keywords:
+            if not isinstance(keyword.value, ast.Constant) or not isinstance(keyword.value.value, str):
+                continue
+            if keyword.arg == "translation_key":
+                self.translation_keys.add(keyword.value.value)
+            elif keyword.arg == "key":
+                self.button_keys.add(keyword.value.value)
+        self.generic_visit(node)
 
-        def visit_AnnAssign(self, node):
-            target = node.target
-            if isinstance(target, ast.Name) and target.id == "_attr_translation_key":
-                if isinstance(node.value, ast.Constant) and isinstance(
-                    node.value.value, str
-                ):
-                    self.translation_keys.add(node.value.value)
-            elif (
-                isinstance(target, ast.Attribute)
-                and target.attr == "_attr_translation_key"
-            ):
-                if isinstance(node.value, ast.Constant) and isinstance(
-                    node.value.value, str
-                ):
-                    self.translation_keys.add(node.value.value)
 
-            if isinstance(target, ast.Name) and target.id.startswith("SERVICE_NAME_"):
-                if isinstance(node.value, ast.Constant) and isinstance(
-                    node.value.value, str
-                ):
-                    self.service_names.add(node.value.value)
-            self.generic_visit(node)
+def test_translation_key_extractor_separates_repairs_and_entities() -> None:
+    """A Repairs key must never satisfy an entity translation requirement."""
+    source = """
+async_create_issue(translation_key="stale_device")
+SensorEntityDescription(translation_key="current_price", key="current_price")
+"""
+    extractor = _TranslationKeyExtractor()
+    extractor.visit(ast.parse(source))
 
-        def visit_Call(self, node):
-            """Extract entity keys, excluding the separate Repairs issue namespace."""
-            if (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr == "async_create_issue"
-            ):
-                self.generic_visit(node)
-                return
-            for keyword in node.keywords:
-                if keyword.arg == "translation_key":
-                    if isinstance(keyword.value, ast.Constant) and isinstance(
-                        keyword.value.value, str
-                    ):
-                        self.translation_keys.add(keyword.value.value)
-                elif keyword.arg == "key":
-                    if isinstance(keyword.value, ast.Constant) and isinstance(
-                        keyword.value.value, str
-                    ):
-                        # Match button/select entity keys which serve as translation_key
-                        self.button_keys.add(keyword.value.value)
-            self.generic_visit(node)
+    assert extractor.translation_keys == {"current_price"}
+    assert extractor.button_keys == {"current_price"}
+    assert "stale_device" not in extractor.translation_keys
 
-    extractor = TranslationKeyExtractor()
+
+def test_no_unused_or_missing_translation_keys() -> None:
+    """Verify that every declared entity and service translation key is used."""
+
+    extractor = _TranslationKeyExtractor()
     for py_file in INTEGRATION_DIR.glob("**/*.py"):
         with open(py_file, "r", encoding="utf-8") as f:
             tree = ast.parse(f.read(), filename=py_file.name)
