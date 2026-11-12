@@ -490,7 +490,8 @@ async def test_persisted_identity_survives_missing_entity(
     issue_id = _issue_id(kind, entry.entry_id, device.id)
     assert _repair_exists(hass, issue_id)
     assert async_identify_inventory_device(hass, entry, updated) == (
-        kind, f"stale-{kind}"
+        kind,
+        f"stale-{kind}",
     )
     assert registry.async_get(device.id) is not None
 
@@ -524,7 +525,8 @@ async def test_present_provider_id_recovers_unmarked_device(
         entry.entry_id, kind, "present-device"
     )
     assert async_identify_inventory_device(hass, entry, updated) == (
-        kind, "present-device"
+        kind,
+        "present-device",
     )
 
     empty = _inventory(collection_key, [])
@@ -543,9 +545,10 @@ async def test_typed_identity_rejects_mismatched_or_conflicting_kind(
     device = registry.async_get_or_create(
         config_entry_id=entry.entry_id, identifiers=original
     )
-    assert async_identify_inventory_device(
-        hass, entry, device, expected_kind="charger"
-    ) is None
+    assert (
+        async_identify_inventory_device(hass, entry, device, expected_kind="charger")
+        is None
+    )
     empty = _inventory("chargers", [])
     async_process_device_inventory(hass, entry, "charger", empty)
     async_process_device_inventory(hass, entry, "charger", empty)

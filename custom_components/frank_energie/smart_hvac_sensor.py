@@ -334,9 +334,7 @@ def _async_sync_equipment(
         device_registry.async_get_or_create(
             config_entry_id=entry_id,
             **DeviceInfo(
-                identifiers=inventory_device_identifiers(
-                    entry_id, "hvac", identifier
-                ),
+                identifiers=inventory_device_identifiers(entry_id, "hvac", identifier),
                 name=device.display_name or device.model or device.brand or "HVAC",
                 manufacturer=device.brand,
                 model=device.model,
