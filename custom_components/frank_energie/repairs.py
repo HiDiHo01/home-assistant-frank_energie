@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
 
     from . import FrankEnergieEntryData
-    from .coordinator import FrankEnergieCoordinator
 
 
 _REQUIRED_ABSENT_FETCHES = 2
@@ -184,9 +183,11 @@ class StaleDeviceRepairFlow(RepairsFlow):
             return self.async_abort(reason="cannot_verify")
 
         runtime_data = entry.runtime_data
-        coordinator: "FrankEnergieCoordinator" = getattr(
-            runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+        coordinator = getattr(
+            runtime_data, INVENTORY_SPECS[kind].coordinator_attribute, None
         )
+        if coordinator is None:
+            return self.async_abort(reason="cannot_verify")
         previous_inventory = coordinator.verified_inventory_ids
         site_reference = coordinator.site_reference
         await coordinator.async_refresh()

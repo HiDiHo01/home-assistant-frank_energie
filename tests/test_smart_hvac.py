@@ -835,6 +835,45 @@ async def test_hvac_disconnected_equipment_requires_two_reads_and_confirmation(
     assert (DOMAIN, issue_id) not in ir.async_get(hass).issues
 
 
+async def test_hvac_missing_coordinator_denies_manual_and_repairs_removal(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Keep registered HVAC hardware when its optional coordinator is absent."""
+    from custom_components.frank_energie import (
+        _is_device_removal_safe,
+        async_remove_config_entry_device,
+    )
+
+    assert await async_setup_component(hass, "repairs", {})
+    api.smart_hvacs.return_value = [_equipment("retained-pump", "Heat Pump")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    (device,) = _equipment_devices(hass, entry)
+
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    assert coordinator is not None
+    api.smart_hvacs.return_value = []
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    issue_id = _issue_id("hvac", entry.entry_id, device.id)
+    assert (DOMAIN, issue_id) in ir.async_get(hass).issues
+
+    # The device and Repairs issue may outlive optional HVAC polling.
+    entry.runtime_data.smart_hvac_coordinator = None
+    assert not _is_device_removal_safe(hass, entry, device)
+    assert not await async_remove_config_entry_device(hass, entry, device)
+
+    manager = repairs_flow_manager(hass)
+    assert manager is not None
+    flow = await manager.async_init(DOMAIN, context={"issue_id": issue_id})
+    assert flow["type"] is FlowResultType.FORM
+    result = await manager.async_configure(flow["flow_id"], user_input={})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "cannot_verify"
+    assert dr.async_get(hass).async_get(device.id) is not None
+    assert (DOMAIN, issue_id) in ir.async_get(hass).issues
+
+
 async def test_hvac_provider_failure_and_return_preserve_hardware(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
