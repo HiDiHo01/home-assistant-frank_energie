@@ -25,6 +25,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
@@ -119,6 +120,7 @@ from .helpers import (
     known_site_contracts,
     price_cache_store,
 )
+from .rate_limit import get_rate_limit_state, rate_limit_update_failed
 from .mutation_queue import MutationQueue
 from .repairs import async_process_device_inventory
 
@@ -1422,7 +1424,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
             return None
         try:
-            vehicles = await self.api.enode_vehicles()
+            vehicles = await self.async_api_call("enode_vehicles", self.api.enode_vehicles)
             _LOGGER.debug("Fetched Enode vehicles")
             return vehicles
         except Exception as err:
@@ -1465,7 +1467,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         ):
             return None
         try:
-            result = await self.api.smart_pv_systems()
+            result = await self.async_api_call(
+                "smart_pv_systems", self.api.smart_pv_systems
+            )
             self._has_pv_systems = bool(result and result.systems)
             return result
         except Exception as err:
@@ -2375,10 +2379,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("API not authenticated, skipping call to %s", operation)
             return None
         try:
-            result = await method(*args)
+            result = await self.async_api_call(operation, method, *args)
             _LOGGER.debug("Fetched data from %s", operation)
             return result
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, RateLimitException):
             raise
         except Exception as err:
             helpers.log_api_exception(
