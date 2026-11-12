@@ -38,7 +38,11 @@ from custom_components.frank_energie.coordinator import (
     FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
 )
-from custom_components.frank_energie.device_inventory import INVENTORY_SPECS
+from custom_components.frank_energie.device_inventory import (
+    INVENTORY_SPECS,
+    async_identify_inventory_device,
+    inventory_device_identifiers,
+)
 from custom_components.frank_energie.helpers import register_service_device
 from custom_components.frank_energie.repairs import (
     _issue_id,
@@ -460,23 +464,127 @@ async def test_entry_scoped_issue_preserves_ignored_state(
     assert dismissed_issue.dismissed_version is not None
 
 
-async def test_unidentifiable_device_clears_unfixable_repair(
+@pytest.mark.parametrize(("kind", "collection_key", "marker"), _KINDS)
+async def test_persisted_identity_survives_missing_entity(
+    hass: HomeAssistant,
+    frank_energie_setup,
+    kind: str,
+    collection_key: str,
+    marker: str,
+) -> None:
+    """Retain a stale Repair when the last entity-registry marker disappears."""
+    entry = await frank_energie_setup()
+    device, entity = _register_device(hass, entry, kind, marker)
+    registry = dr.async_get(hass)
+    empty = _inventory(collection_key, [])
+
+    async_process_device_inventory(hass, entry, kind, empty)
+    updated = registry.async_get(device.id)
+    assert updated is not None
+    assert updated.identifiers == inventory_device_identifiers(
+        entry.entry_id, kind, f"stale-{kind}"
+    )
+    er.async_get(hass).async_remove(entity.entity_id)
+
+    async_process_device_inventory(hass, entry, kind, empty)
+    issue_id = _issue_id(kind, entry.entry_id, device.id)
+    assert _repair_exists(hass, issue_id)
+    assert async_identify_inventory_device(hass, entry, updated) == (
+        kind, f"stale-{kind}"
+    )
+    assert registry.async_get(device.id) is not None
+
+
+@pytest.mark.parametrize(("kind", "collection_key", "_marker"), _KINDS)
+async def test_present_provider_id_recovers_unmarked_device(
+    hass: HomeAssistant,
+    frank_energie_setup,
+    kind: str,
+    collection_key: str,
+    _marker: str,
+) -> None:
+    """A complete live inventory establishes kind even without registered sensors."""
+    entry = await frank_energie_setup()
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "present-device")},
+    )
+    assert async_identify_inventory_device(hass, entry, device) is None
+
+    async_process_device_inventory(
+        hass,
+        entry,
+        kind,
+        _inventory(collection_key, [SimpleNamespace(id="present-device")]),
+    )
+    updated = registry.async_get(device.id)
+    assert updated is not None
+    assert updated.identifiers == inventory_device_identifiers(
+        entry.entry_id, kind, "present-device"
+    )
+    assert async_identify_inventory_device(hass, entry, updated) == (
+        kind, "present-device"
+    )
+
+    empty = _inventory(collection_key, [])
+    async_process_device_inventory(hass, entry, kind, empty)
+    async_process_device_inventory(hass, entry, kind, empty)
+    assert _repair_exists(hass, _issue_id(kind, entry.entry_id, device.id))
+
+
+async def test_typed_identity_rejects_mismatched_or_conflicting_kind(
     hass: HomeAssistant, frank_energie_setup
 ) -> None:
-    """Drop the issue, but not the device, when its type can no longer be proved."""
+    """Reject conflicting categories and never infer type from a changed API ID."""
     entry = await frank_energie_setup()
-    device, entity = _register_device(hass, entry, "charger", "charger_brand")
+    registry = dr.async_get(hass)
+    original = inventory_device_identifiers(entry.entry_id, "vehicle", "shared-id")
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers=original
+    )
+    assert async_identify_inventory_device(
+        hass, entry, device, expected_kind="charger"
+    ) is None
     empty = _inventory("chargers", [])
     async_process_device_inventory(hass, entry, "charger", empty)
     async_process_device_inventory(hass, entry, "charger", empty)
-    issue_id = _issue_id("charger", entry.entry_id, device.id)
-    assert _repair_exists(hass, issue_id)
+    assert not _repair_exists(hass, _issue_id("charger", entry.entry_id, device.id))
 
-    er.async_get(hass).async_remove(entity.entity_id)
-    async_process_device_inventory(hass, entry, "charger", empty)
+    conflict = registry.async_update_device(
+        device.id,
+        new_identifiers=original
+        | inventory_device_identifiers(entry.entry_id, "charger", "shared-id"),
+    )
+    assert conflict is not None
+    assert async_identify_inventory_device(hass, entry, conflict) is None
 
-    assert not _repair_exists(hass, issue_id)
-    assert dr.async_get(hass).async_get(device.id) is not None
+    original_marker = next(value for value in original if value[1] != "shared-id")
+    tampered = registry.async_update_device(
+        device.id,
+        new_identifiers={(DOMAIN, "changed-id"), original_marker},
+    )
+    assert tampered is not None
+    assert async_identify_inventory_device(hass, entry, tampered) is None
+
+
+async def test_unknown_device_without_provider_confirmation_is_protected(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """Never guess the kind of an unmarked device absent from the provider."""
+    entry = await frank_energie_setup()
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "unverified-device")},
+    )
+    for _ in range(3):
+        async_process_device_inventory(
+            hass, entry, "charger", _inventory("chargers", [])
+        )
+    assert async_identify_inventory_device(hass, entry, device) is None
+    assert not _repair_exists(hass, _issue_id("charger", entry.entry_id, device.id))
+    assert registry.async_get(device.id) is not None
 
 
 async def test_device_removal_rejects_duplicate_inventory_ids(

@@ -874,6 +874,38 @@ async def test_hvac_missing_coordinator_denies_manual_and_repairs_removal(
     assert (DOMAIN, issue_id) in ir.async_get(hass).issues
 
 
+async def test_hvac_registry_identity_survives_deleted_equipment_entities(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Keep equipment classification and Repairs when its last sensor is removed."""
+    from custom_components.frank_energie.device_inventory import (
+        async_identify_inventory_device,
+        smart_hvac_device_identifier,
+    )
+
+    api.smart_hvacs.return_value = [_equipment("registered-pump", "Heat Pump")]
+    entry = _entry(hass)
+    await _setup(hass, entry, api)
+    (device,) = _equipment_devices(hass, entry)
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    identifier = smart_hvac_device_identifier(
+        entry.entry_id, coordinator.site_reference, "registered-pump"
+    )
+    entity_registry = er.async_get(hass)
+    for entity in er.async_entries_for_device(entity_registry, device.id):
+        entity_registry.async_remove(entity.entity_id)
+    assert async_identify_inventory_device(hass, entry, device) == (
+        "hvac", identifier
+    )
+
+    api.smart_hvacs.return_value = []
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    issue_id = _issue_id("hvac", entry.entry_id, device.id)
+    assert (DOMAIN, issue_id) in ir.async_get(hass).issues
+    assert dr.async_get(hass).async_get(device.id) is not None
+
+
 async def test_hvac_provider_failure_and_return_preserve_hardware(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
