@@ -4,9 +4,9 @@
 
 import asyncio
 import logging
-import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, time
+from collections.abc import Coroutine
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
@@ -17,7 +17,6 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
@@ -121,46 +120,8 @@ async def async_setup_entry(
 ) -> bool:
     """Set up the Frank Energie component from a config entry."""
     _LOGGER.debug("Setting up Frank Energie component for entry: %s", entry.entry_id)
-    _LOGGER.debug("Setting up Frank Energie entry: %s", entry)
-    _LOGGER.debug(
-        "Setting up Frank Energie entry data: %s",
-        {
-            key: "**REDACTED**" if key in (CONF_ACCESS_TOKEN, CONF_TOKEN) else value
-            for key, value in entry.data.items()
-        },
-    )
-    _LOGGER.debug("Setting up Frank Energie entry domain: %s", entry.domain)
-    _LOGGER.debug("Setting up Frank Energie entry unique_id: %s", entry.unique_id)
-    _LOGGER.debug("Setting up Frank Energie entry options: %s", entry.options)
     component = FrankEnergieComponent(hass, entry)
     return await component.setup()
-
-
-async def async_setup_platform(
-    hass: HomeAssistant,
-    config: dict[str, Any],
-    async_add_entities,
-) -> bool:
-    """Set up the Frank Energie sensor platform.
-    Deprecated for new development because Home Assistant encourages the use of
-    config entries and UI-driven setup.
-    """
-    warnings.warn(
-        "async_setup_platform is deprecated; use config entries instead.",
-        DeprecationWarning,
-    )
-    _LOGGER.debug("Setting up Frank Energie sensor platform")
-    timezone = hass.config.time_zone  # Get the configured time zone
-    _LOGGER.debug("Configured Time Zone: %s", timezone)
-    # Pass the timezone to a platform
-    hass.data[DOMAIN] = {
-        "timezone": timezone,
-    }
-    coordinator = hass.data[DOMAIN][CONF_COORDINATOR]
-    api = coordinator.api
-    sensor = FrankEnergieDiagnosticSensor(api)
-    async_add_entities([sensor])
-    return True
 
 
 async def async_unload_entry(
@@ -475,7 +436,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 refreshes.append(
                     smart_hvac_coordinator.async_config_entry_first_refresh()
                 )
-            await asyncio.gather(*refreshes)
+            await self._async_refresh_coordinators(refreshes)
 
             # Forward entry setups to platforms
             _LOGGER.debug("Forwarding entry setups to platforms")
@@ -486,10 +447,30 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             _LOGGER.debug("Scheduling aligned updates for price coordinator")
             await self._schedule_aligned_updates(price_coordinator)
             return True
-        except Exception:
-            if DOMAIN in self.hass.data:
-                self.hass.data[DOMAIN].pop(self.entry.entry_id, None)
-            self.entry.runtime_data = None
+        except BaseException:
+            # Failed or cancelled setup must not publish a partial runtime.
+            # Home Assistant processes async_on_unload callbacks on failure.
+            self.hass.data.setdefault(DOMAIN, {}).pop(self.entry.entry_id, None)
+            if hasattr(self.entry, "runtime_data"):
+                del self.entry.runtime_data
+            raise
+
+    async def _async_refresh_coordinators(
+        self, refreshes: list[Coroutine[Any, Any, None]]
+    ) -> None:
+        """Cancel and await every initial refresh on failure or cancellation."""
+        tasks = [
+            self.hass.async_create_task(refresh, f"{DOMAIN} initial refresh")
+            for refresh in refreshes
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        except BaseException:
+            # gather() propagates first errors without cancelling other tasks.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             raise
 
     def _update_unique_id(self) -> None:
@@ -632,8 +613,16 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
                 self.entry, _DEPENDENT_PLATFORMS
             )
             _LOGGER.debug("Successfully forwarded entry setups to platforms")
-        except Exception as e:
-            _LOGGER.error("Error forwarding entry setups to platforms: %s", str(e))
+        except BaseException:
+            # The sensor platform may have loaded before a dependent one fails.
+            # Restore the platform lifecycle without masking the original error.
+            try:
+                if not await self.hass.config_entries.async_unload_platforms(
+                    self.entry, PLATFORMS
+                ):
+                    _LOGGER.error("Partial platform setup rollback was refused")
+            except Exception:
+                _LOGGER.error("Failed to roll back partial platform setup")
             raise
 
     async def _save_coordinator_to_hass_data(
@@ -671,43 +660,3 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             self.entry.entry_id, None
         )  # Ensure no KeyError if entry_id does not exist
 
-
-class FrankEnergieDiagnosticSensor(Entity):
-    """Class representing the Frank Energie diagnostic sensor."""
-
-    def __init__(self, frank_energie: FrankEnergie) -> None:
-        """Initialize the sensor."""
-        self._frank_energie = frank_energie
-        self._state: str | None = None
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        # return "Frank Energie Diagnostic Sensor"
-        return "frank_energie_diagnostic_sensor"
-
-    @property
-    def state(self) -> str | None:
-        """Return the sensor state."""
-        return self._state
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return optional state attributes."""
-        return {}
-
-    async def async_update(self) -> None:
-        """Fetch latest state from the Frank Energie API."""
-        _LOGGER.debug("Updating FrankEnergieDiagnosticSensor")
-        # Implement the logic to update the sensor state
-        # You can use the FrankEnergie API client instance (self._frank_energie)
-        # to fetch diagnostic data and update the sensor state accordingly
-        try:
-            self._state = await self._frank_energie.get_diagnostic_data()
-        except Exception as err:
-            # Handle specific exceptions and raise more descriptive ones if necessary
-            _LOGGER.exception("Failed to update diagnostic sensor: %s", str(err))
-            self._state = "error"
-            raise ValueError(
-                f"Failed to update FrankEnergieDiagnosticSensor: {str(err)}"
-            ) from err
