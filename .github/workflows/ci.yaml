@@ -23,16 +23,15 @@ jobs:
     permissions:
       contents: read
     name: Run flake8/pytest (Python ${{ matrix.python-version }})
-    # Python 3.14.2 has a verified Ubuntu 24.04 build, but not Ubuntu 26.04.
-    # Pin the runner so both declared Python matrix entries remain installable.
+    # Both Python 3.14.10 and 3.15.2 have verified Ubuntu 24.04 x64 builds.
+    # Keep the runner pinned to the verified platform for both versions.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # 3.14.2 is the minimum Python version pyproject.toml declares
-        # support for; 3.14 tracks the latest 3.14.x patch release.
-        python-version: ["3.14.2", "3.14"]
+        # Exercise the exact maintenance and current stable releases.
+        python-version: ["3.14.10", "3.15.2"]
 
     steps:
       - name: Harden Runner
@@ -98,8 +97,8 @@ jobs:
           from importlib import import_module
           from importlib.metadata import version
 
-          if sys.version_info[:2] != (3, 14) or sys.version_info < (3, 14, 2):
-              raise SystemExit("Home Assistant tests require Python 3.14.2 or a newer 3.14 patch.")
+          if sys.version_info[:3] not in {(3, 14, 10), (3, 15, 2)}:
+              raise SystemExit("Home Assistant CI requires Python 3.14.10 or 3.15.2.")
 
           import_module("homeassistant.core")
           import_module("pytest_homeassistant")
