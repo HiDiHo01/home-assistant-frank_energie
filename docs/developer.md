@@ -4,19 +4,19 @@ This document provides information for contributors and developers working on th
 
 ## Home Assistant test environment
 
-Open the repository in GitHub Codespaces or use **Dev Containers: Reopen in Container** in VS Code. The committed container provides Python 3.14, Poetry 2.5.1, and the locked runtime and development dependencies in `.venv`. VS Code uses that interpreter and discovers the `tests` directory with pytest.
+Open the repository in GitHub Codespaces or use **Dev Containers: Reopen in Container** in VS Code. The committed container provides Python 3.14, Poetry 2.5.1, and the locked runtime and development dependencies in `.venv`. The pinned CI matrix separately verifies Python 3.14.10 and 3.15.2. VS Code uses that interpreter and discovers the `tests` directory with pytest.
 
-For a host installation, use Python 3.14.2 or a newer 3.14 patch and run:
+For a host installation, use Python 3.14.10 or Python 3.15.2 and run:
 
 ```sh
 uv tool install "poetry==2.5.1"
-poetry env use python3.14
+poetry env use python3.14  # Python 3.14.10; use python3.15 for Python 3.15.2
 poetry sync --with dev --no-root
 poetry check --lock
 poetry run python -m pip check
 ```
 
-If Python 3.14 is missing, install it with your interpreter manager or use the dev container before running these commands. Keep this environment separate from a production Home Assistant installation.
+If the selected patch release is missing, install it with your interpreter manager or use the dev container for Python 3.14 development before running these commands. Verify the version with `poetry run python --version`. Keep this environment separate from a production Home Assistant installation.
 
 Run the complete suite against the real Home Assistant test framework:
 
@@ -26,11 +26,11 @@ poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
 
 `pytest-homeassistant` is the official, required pytest plugin. Pin it to the same version as Home Assistant Core (currently `2026.11.0`) and do not install it alongside the superseded `pytest-homeassistant-custom-component`. Its Home Assistant fixtures exercise setup, config flows, entities, coordinator behavior, and cleanup. The suite mocks provider calls and requires no production credentials. Isolated checks with substitute Home Assistant objects are useful for diagnosis, but do not count as a complete Home Assistant test run.
 
-The existing **Flake8 and pytest** workflow runs the full suite on Python 3.14.2 and the latest 3.14 patch. It also supports **Run workflow** once this workflow revision is on the default branch. Each matrix job uploads its own JUnit report, including when pytest fails. Critical Flake8 errors remain blocking. A separate full-Flake8 gate checks every diagnostic against the measured, reviewable `.github/flake8-baseline.json`: new or increased findings fail CI. The existing C901 and E501 debt must be reduced and removed from this baseline; the targeted E203 exclusion matches Ruff-compatible slice formatting. The full pytest suite still runs after a lint failure when dependency installation and environment verification succeed.
+The existing **Flake8 and pytest** workflow runs the full suite on Python 3.14.10 and Python 3.15.2. It also supports **Run workflow** once this workflow revision is on the default branch. Each matrix job uploads its own JUnit report, including when pytest fails. Critical Flake8 errors remain blocking. A separate full-Flake8 gate checks every diagnostic against the measured, reviewable `.github/flake8-baseline.json`: new or increased findings fail CI. The existing C901 and E501 debt must be reduced and removed from this baseline; the targeted E203 exclusion matches Ruff-compatible slice formatting. The full pytest suite still runs after a lint failure when dependency installation and environment verification succeed.
 
-The workflow uses Ubuntu 24.04 because GitHub publishes the pinned Python 3.14.2 build for that runner. [GitHub Actions Python builds](https://github.com/actions/python-versions)
+The workflow uses Ubuntu 24.04 because GitHub publishes both pinned Python releases for the Linux x64 runner. [GitHub Actions Python builds](https://github.com/actions/python-versions)
 
-`poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant-custom-component` version together, regenerate the lockfile with the pinned Poetry version, and rerun both matrix entries. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
+`poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant` version together, regenerate the lockfile with the pinned Poetry version, and rerun both matrix entries. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
 
 ## Repository Structure
 
