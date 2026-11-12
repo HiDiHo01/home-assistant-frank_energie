@@ -854,12 +854,15 @@ async def test_pv_disabled_feed_in_blocks_repair_and_recovers(
     assert absence_key not in entry.runtime_data.stale_device_absences
     assert dr.async_get(hass).async_get(device.id) == saved_device
     assert entity_registry.async_get(entity.entity_id) == saved_entity
-    assert sum(
-        (DOMAIN, "stale-pv") in registered.identifiers
-        for registered in dr.async_entries_for_config_entry(
-            dr.async_get(hass), entry.entry_id
+    assert (
+        sum(
+            (DOMAIN, "stale-pv") in registered.identifiers
+            for registered in dr.async_entries_for_config_entry(
+                dr.async_get(hass), entry.entry_id
+            )
         )
-    ) == 1
+        == 1
+    )
 
 
 async def test_pv_disabled_feed_in_without_device_creates_no_repair(
