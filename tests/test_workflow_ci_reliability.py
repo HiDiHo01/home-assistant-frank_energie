@@ -160,7 +160,9 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     assert isinstance(job, dict)
     assert job["runs-on"] == "ubuntu-24.04"
     assert job["strategy"]["matrix"]["python-version"] == ["3.14.10", "3.15.2"]
-    environment_step = _named_step("ci.yaml", "run", "Verify Home Assistant test environment")
+    environment_step = _named_step(
+        "ci.yaml", "run", "Verify Home Assistant test environment"
+    )
     assert "(3, 14, 10)" in str(environment_step["run"])
     assert "(3, 15, 2)" in str(environment_step["run"])
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
