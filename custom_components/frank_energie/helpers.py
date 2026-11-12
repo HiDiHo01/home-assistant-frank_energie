@@ -7,7 +7,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Final
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import TYPE_CHECKING, Final, Protocol
 
 from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant, callback
@@ -19,6 +21,8 @@ from homeassistant.helpers.storage import Store
 from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
+    DATA_BATTERY_DETAILS,
+    DATA_BATTERY_SETTINGS,
     DOMAIN,
     SERVICE_NAME_PRICES,
     UNIT_GAS_BE,
@@ -34,12 +38,83 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+class AdjustableBatterySetting(Protocol):
+    """One block of python-frank-energie's ``SmartBatteryAdjustableSettings``.
+
+    Typed structurally so the integration also runs on library releases that
+    predate the model.
+    """
+
+    current: object
+    updatable: bool
+    options: Sequence[object]
+    pending: object
+    pending_value_effective_from: datetime | None
+    update_delayed_till: datetime | None
+
+
+def battery_state_value(value: object) -> str | None:
+    """Return an API enum value as a lowercase state, or None when absent or unknown.
+
+    Library enums are ``StrEnum``s; anything that is not a string is not a state.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    state = value.lower()
+    return None if state == "unknown" else state
+
+
+def battery_details_settings(
+    data: Mapping[str, object] | None, battery_id: str
+) -> object | None:
+    """Return a battery's current settings from the battery details query."""
+    details = (data or {}).get(DATA_BATTERY_DETAILS)
+    for battery in details if isinstance(details, list) else []:
+        smart_battery = getattr(battery, "smart_battery", None)
+        if smart_battery is not None and smart_battery.id == battery_id:
+            return smart_battery.settings
+    return None
+
+
+def battery_mode_state(
+    data: Mapping[str, object] | None, battery_id: str
+) -> str | None:
+    """Return a battery's current mode as a state.
+
+    Prefers the details query, which refreshes every poll, and falls back to
+    the last known per-battery settings when the details report no known mode.
+    """
+    mode = battery_state_value(
+        getattr(battery_details_settings(data, battery_id), "battery_mode", None)
+    )
+    if mode is None and (
+        setting := battery_adjustable_setting(data, battery_id, "battery_mode")
+    ):
+        mode = battery_state_value(setting.current)
+    return mode
+
+
+def battery_adjustable_setting(
+    data: Mapping[str, object] | None, battery_id: str, name: str
+) -> AdjustableBatterySetting | None:
+    """Return one setting block of a battery's ``smartBatterySettings``, if known."""
+    by_battery = (data or {}).get(DATA_BATTERY_SETTINGS)
+    if not isinstance(by_battery, dict):
+        return None
+    return getattr(by_battery.get(battery_id), name, None)
+
+
 PER_UNIT_TO_UNIT: Final[dict[str, str]] = {
     "M3": UNIT_GAS_NL,
     "KWH": UNIT_GAS_BE,
 }
 
 PRICE_CACHE_STORE_VERSION: Final[int] = 1
+
+
+def api_maintenance_active(now_utc: datetime) -> bool:
+    """Return whether Frank Energie is in its daily UTC maintenance window."""
+    return now_utc.hour == 0
 
 
 def known_site_contracts(site: DeliverySite | None) -> set[str] | None:
@@ -87,18 +162,6 @@ def price_cache_store(hass: HomeAssistant, entry_id: str) -> Store:
     otherwise leave the removal path silently cleaning up nothing.
     """
     return Store(hass, PRICE_CACHE_STORE_VERSION, f"{DOMAIN}_prices_{entry_id}")
-
-
-def log_api_exception(
-    logger: logging.Logger, message: str, error: Exception, *args: object
-) -> None:
-    """Log useful frames without a provider's private message or exception chain."""
-    sanitized_error = RuntimeError(f"{type(error).__name__}: provider details omitted")
-    logger.exception(
-        message,
-        *args,
-        exc_info=(RuntimeError, sanitized_error, error.__traceback__),
-    )
 
 
 def resolve_gas_unit(per_unit: str | None) -> str:

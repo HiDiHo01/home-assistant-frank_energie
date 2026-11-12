@@ -45,6 +45,19 @@ Responsibilities:
 
 The integration does not support YAML configuration.
 
+### Setup lifecycle
+
+Config-entry setup refreshes settings first, then fetches prices, statistics,
+battery, charger, PV, vehicle and (when enabled) Smart HVAC data concurrently.
+If initial setup fails or is cancelled, all outstanding refresh tasks are
+cancelled and awaited before propagating the original error. A failure while
+forwarding platforms triggers rollback of already forwarded platforms.
+
+After failed setup, `entry.runtime_data` and the per-entry coordinator alias
+are cleared. Home Assistant owns successful unload cleanup and registered
+callbacks; a refused unload retains its active runtime. Importing this
+integration does not alter the host Windows event-loop policy.
+
 ### Coordinator
 
 The coordinator is the central component of the integration.

@@ -1,6 +1,6 @@
 ---
 name: frank-energie-api-reliability
-description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limiting, invoice isolation, price cache freshness, partial GraphQL responses, delivery-site contracts, provider model fixtures, site-scoped Smart HVAC status and availability, and asynchronous cancellation in the Home Assistant integration.
+description: Diagnose and test Frank Energie API errors, coordinator refresh failures, rate limits, cache freshness, partial GraphQL responses, site contracts, provider fixtures, Smart HVAC status and equipment, account connection requests, and cancellation in the Home Assistant integration.
 ---
 
 # Frank Energie API and coordinator reliability
@@ -30,6 +30,55 @@ skips, failed requests, or missing coordinator data remain unknown. Do not
 turn network failures into an inactive subscription status. Test null,
 active/inactive subscriptions, failure, and subsequent recovery.
 
+## Smart PV status, summary, and verified-inventory lessons (2026-11-11)
+
+A sanitized, read-only API observation returned one `SmartPvSystem` with
+`onboarding_status=ACTIVE`, `steering_status=INACTIVE`, and
+`deleted_at=None`; its `SmartPvSystemSummary` simultaneously reported
+`operational_status=ON`, `steering_status=INACTIVE`, a UTC-aware
+`operational_status_timestamp`, and separate numeric `total_bonus` and
+`total_result`. **These fields are not interchangeable:**
+
+- `onboarding_status` is the provider's onboarding state, not proof of
+  electrical generation or real-time connectivity. `operational_status=ON`
+  reports the provider's operating state, not measured PV production.
+  `steering_status=INACTIVE` does **not** mean disconnected, unavailable,
+  deactivated at the contract level, or safe to remove. `deleted_at=None`
+  means the inventory record carries no deletion timestamp; it does not
+  replace a fresh inventory check.
+- In the pinned client API, `smart_pv_systems()` takes **no site-reference
+  argument** and returns the equipment list under `SmartPvSystems.systems`.
+  For each returned system, `smart_pv_system_summary(system.id)` supplies
+  the operational/steering summary; the inventory record's `panel_groups`
+  belong to the same physical PV device, not separate removable devices.
+  `inverter_serial_numbers` can be empty. Preserve each method's separate
+  request, availability, and failure semantics.
+- Treat `total_bonus` and `total_result` as distinct numeric provider
+  fields. Do not infer a measurement period, payment, or production from a
+  single summary sample. Keep the provider values unrounded internally.
+  Convert timezone-aware UTC timestamps to Europe/Amsterdam only for
+  presentation, accounting for daylight saving time.
+- For **stale-device Repairs**, identify presence from a **complete, fresh,
+  validated system inventory**, never from steering, onboarding, operational
+  status, summary availability, or a panel group's status. Never log raw
+  `SmartPvSystem` representations: they may include EANs, external
+  references, device IDs, or inverter serial numbers. Use synthetic or
+  redacted values for examples and regression tests.
+- **Published Smart PV inventory contract:** `python-frank-energie==2026.11.12`
+  includes the fix for [library issue #243](https://github.com/HiDiHo01/python-frank-energie/issues/243)
+  ([PR #245](https://github.com/HiDiHo01/python-frank-energie/pull/245)).
+  The merged [Repairs PR #454](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/454)
+  depends on the fix. A successful explicit `smartPvSystems: []` is
+  verified absence; missing, null, malformed, duplicate or feature-disabled
+  responses must fail closed, and `SmartFeedInNotEnabledException` must not
+  advance absent-device evidence. For [integration issue #455](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/455),
+  exercise **raw GraphQL responses through the real pinned client's public
+  `smart_pv_systems()` parser**, then coordinator refresh, Repairs
+  confirmation, manual removal and recovery. A mocked
+  `SmartPvSystems(systems=[])` alone cannot detect parser data loss.
+  Preserve registered and disabled panel-group entities when the service
+  is disabled.
+
 ## Smart HVAC status and optional-request isolation
 
 See [Smart heating activation](../../../docs/smart_hvac_activation.md).
@@ -53,6 +102,18 @@ and originates from the established `UserSites` discovery/selection flow,
 not a hard-coded or environment-provided fallback. Verify unknown values
 are unavailable rather than silently treated as inactive, and that
 `CoordinatorEntity.available` follows the settings refresh state.
+
+### Smart HVAC equipment and connection requests
+
+Register the Smart Heating service and its related sensors only after the
+settings coordinator confirms `UserSmartHvac.isActivated is True` for the
+selected delivery site. Test that an eligible site with linked equipment
+adds the entities only when activation arrives on a later settings refresh.
+
+1. Confirm the typed read methods and selected fields in the published client version pinned in `manifest.json`. Reuse the settings coordinator's `Me.user_smart_hvac` response. The inventory and detail queries select the same device metadata in the current client, so use `smart_hvacs(site_reference)` for discovery and verify a specific need before issuing a detail request. [Smart heating data contract](../../../docs/smart_hvac_activation.md)
+2. Poll equipment independently. Fetch `smart_hvac_summary(device_id)` once per active inventory record per poll, one device at a time. Keep valid inventory and other summaries when a summary fails. Check the maintenance window and retry deadline before each provider call, including calls later in the same refresh. Cap valid provider retry hints at 24 hours, use the normal polling interval for invalid hints, and test both boundaries.
+3. Treat `smart_hvac_connect_requests()` as account data and place it on the User service. Preserve Frank's raw operational and steering status values. Assign units, runtime meanings, or current setting values only when the released read contract confirms them.
+4. Test that a confirmed empty inventory counts as zero, a null summary yields unknown values, and a failed read makes the affected data unavailable. Use opaque entity identities and verify that diagnostics and logs protect account and device IDs, EANs, external references, and raw request errors. [Smart heating regression tests](../../../tests/test_smart_hvac.py)
 
 ## Delivery-site contracts and provider fixtures
 

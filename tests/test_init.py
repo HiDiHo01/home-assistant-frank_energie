@@ -1,6 +1,7 @@
 """Test the Frank Energie integration setup and teardown logic."""
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 import zoneinfo
@@ -8,14 +9,24 @@ import zoneinfo
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
-from custom_components.frank_energie import FrankEnergieComponent
+from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
+from custom_components.frank_energie import (
+    FrankEnergieComponent,
+    async_remove_config_entry_device,
+)
 from custom_components.frank_energie.const import (
     DOMAIN,
     CONF_COORDINATOR,
+    DATA_ENODE_CHARGERS,
     SERVICE_NAME_BATTERY_SESSIONS,
+    SERVICE_NAME_BATTERIES,
     TIMEZONE_AMSTERDAM,
 )
-from custom_components.frank_energie.helpers import encrypt_password
+from custom_components.frank_energie.helpers import (
+    encrypt_password,
+    register_service_device,
+)
 from custom_components.frank_energie.helpers import (
     _get_fernet_key as real_get_fernet_key,
 )
@@ -152,6 +163,222 @@ async def test_setup_entry_removes_obsolete_battery_sessions_device(
     assert result is True
     assert spy.called
     assert _find_device(device_registry, entry.entry_id, identifier) is None
+
+
+@pytest.mark.parametrize(
+    ("observations", "removable"), [(0, False), (1, False), (2, True)]
+)
+async def test_device_removal_requires_two_valid_absences(
+    hass: HomeAssistant,
+    hass_ws_client,
+    frank_energie_setup,
+    observations: int,
+    removable: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Home Assistant must not delete hardware without fresh double evidence."""
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    entry = await frank_energie_setup()
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "removed-charger")},
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_removed-charger_charger_brand",
+        config_entry=entry,
+        device_id=device.id,
+    )
+    coordinator = entry.runtime_data.charger_coordinator
+    coordinator.last_update_success = True
+    coordinator.data[DATA_ENODE_CHARGERS] = SimpleNamespace(chargers=[])
+
+    async def _refresh_inventory() -> None:
+        """Provide a new verified inventory for the manual confirmation."""
+        coordinator.verified_inventory_ids = set()
+
+    refresh = AsyncMock(side_effect=_refresh_inventory)
+    monkeypatch.setattr(coordinator, "async_refresh", refresh)
+    from custom_components.frank_energie.repairs import async_process_device_inventory
+
+    for _ in range(observations):
+        coordinator.verified_inventory_ids = async_process_device_inventory(
+            hass, entry, "charger", coordinator.data[DATA_ENODE_CHARGERS]
+        )
+    # Exercise the actual Home Assistant websocket path exactly once.
+    await client.send_json_auto_id(
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": entry.entry_id,
+            "device_id": device.id,
+        }
+    )
+    result = await client.receive_json()
+    assert result["success"] is removable
+    assert (registry.async_get(device.id) is None) is removable
+    assert refresh.await_count == int(removable)
+
+
+@pytest.mark.parametrize(
+    ("blocker", "removable"),
+    [
+        ("empty", True),
+        ("enabled_entity", False),
+        ("disabled_entity", False),
+        ("via_device", False),
+        ("child_device", False),
+    ],
+)
+async def test_service_device_removal_checks_all_registry_dependencies(
+    hass: HomeAssistant,
+    hass_ws_client,
+    frank_energie_setup,
+    blocker: str,
+    removable: bool,
+) -> None:
+    """Delete an empty service via WebSocket, but retain any used parent."""
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_ws_client(hass)
+    entry = await frank_energie_setup()
+    device_registry = dr.async_get(hass)
+    service_id = register_service_device(hass, entry, SERVICE_NAME_BATTERIES)
+    service_device = device_registry.async_get(service_id)
+    assert service_device is not None
+    assert service_device.entry_type is dr.DeviceEntryType.SERVICE
+
+    if blocker in {"enabled_entity", "disabled_entity"}:
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"service_dependency_{blocker}",
+            config_entry=entry,
+            device_id=service_id,
+            disabled_by=(
+                er.RegistryEntryDisabler.USER if blocker == "disabled_entity" else None
+            ),
+        )
+    elif blocker == "via_device":
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "dependent-physical-device")},
+            via_device_id=service_id,
+        )
+    elif blocker == "child_device":
+        device_registry.async_get_or_create_child(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "dependent-child-device")},
+            parent_device_id=service_id,
+        )
+
+    await client.send_json_auto_id(
+        {"type": "config/device_registry/remove", "device_id": service_id}
+    )
+    result = await client.receive_json()
+
+    assert result["success"] is removable
+    assert (device_registry.async_get(service_id) is None) is removable
+
+    if removable:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert device_registry.async_get(service_id) is None
+
+
+@pytest.mark.parametrize(
+    "invalid_case", ["wrong_entry", "unscoped", "extra_id", "hardware"]
+)
+async def test_service_device_removal_rejects_unverified_identity(
+    hass: HomeAssistant,
+    frank_energie_setup,
+    invalid_case: str,
+) -> None:
+    """Reject ambiguous service identity and preserve physical-device guards."""
+    entry = await frank_energie_setup()
+    registry = dr.async_get(hass)
+    service_id = register_service_device(hass, entry, SERVICE_NAME_BATTERIES)
+    service_device = registry.async_get(service_id)
+    assert service_device is not None
+
+    if invalid_case == "wrong_entry":
+        wrong_entry = MockConfigEntry(domain=DOMAIN, data={})
+        wrong_entry.add_to_hass(hass)
+        assert not await async_remove_config_entry_device(
+            hass, wrong_entry, service_device
+        )
+    elif invalid_case == "unscoped":
+        foreign_device = registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "not-entry-scoped")},
+            entry_type=dr.DeviceEntryType.SERVICE,
+            name="Unscoped service",
+        )
+        assert not await async_remove_config_entry_device(hass, entry, foreign_device)
+    elif invalid_case == "extra_id":
+        updated = registry.async_update_device(
+            service_id,
+            new_identifiers=service_device.identifiers
+            | {(DOMAIN, "ambiguous-extra-identifier")},
+        )
+        assert updated is not None
+        assert not await async_remove_config_entry_device(hass, entry, updated)
+    else:
+        hardware = registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "hardware-without-verified-inventory")},
+        )
+        assert not await async_remove_config_entry_device(hass, entry, hardware)
+
+    assert registry.async_get(service_id) is not None
+
+
+async def test_manual_device_removal_rejects_restored_or_partial_inventory(
+    hass: HomeAssistant, frank_energie_setup
+) -> None:
+    """A restored, missing, or malformed inventory invalidates removal evidence."""
+    from custom_components.frank_energie.repairs import async_process_device_inventory
+
+    entry = await frank_energie_setup()
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "missing-charger")},
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{DOMAIN}_missing-charger_charger_brand",
+        config_entry=entry,
+        device_id=device.id,
+    )
+    coordinator = entry.runtime_data.charger_coordinator
+    coordinator.last_update_success = True
+    missing = SimpleNamespace(chargers=[])
+    for _ in range(2):
+        coordinator.verified_inventory_ids = async_process_device_inventory(
+            hass, entry, "charger", missing
+        )
+    # A skipped/unchanged coordinator refresh cannot authorize removal.
+    with patch.object(coordinator, "async_refresh", new_callable=AsyncMock) as refresh:
+        assert not await async_remove_config_entry_device(hass, entry, device)
+        refresh.assert_awaited_once()
+
+    async def _refresh_inventory() -> None:
+        """Simulate a newly completed API inventory for confirmation."""
+        coordinator.verified_inventory_ids = set()
+
+    with patch.object(coordinator, "async_refresh", side_effect=_refresh_inventory):
+        assert await async_remove_config_entry_device(hass, entry, device)
+    restored = SimpleNamespace(chargers=[SimpleNamespace(id="missing-charger")])
+    coordinator.verified_inventory_ids = async_process_device_inventory(
+        hass, entry, "charger", restored
+    )
+    assert not await async_remove_config_entry_device(hass, entry, device)
+    coordinator.verified_inventory_ids = async_process_device_inventory(
+        hass, entry, "charger", SimpleNamespace(chargers=[SimpleNamespace(id=None)])
+    )
+    assert not await async_remove_config_entry_device(hass, entry, device)
 
 
 async def test_setup_entry_auth_failure(
@@ -402,7 +629,6 @@ async def test_get_fernet_key_raises_when_core_uuid_missing(
         real_get_fernet_key(hass)
 
 
-@pytest.mark.skip(reason="Lingering timer false positive during mock teardown")
 async def test_setup_entry_recovery_via_renew(
     hass: HomeAssistant,
     aioclient_responses: ResponseMocks,
@@ -442,6 +668,9 @@ async def test_setup_entry_recovery_via_renew(
         api_instance = mock_api.return_value
         api_instance.__aenter__.return_value = api_instance
         api_instance.is_authenticated = True
+        # Smart HVAC is fetched during authenticated setup on current main.
+        api_instance.smart_hvacs = AsyncMock(return_value=[])
+        api_instance.smart_hvac_connect_requests = AsyncMock(return_value=[])
 
         # First call to UserSites fails, subsequent calls succeed
         mock_user_sites = MagicMock()
@@ -480,9 +709,10 @@ async def test_setup_entry_recovery_via_renew(
         assert result is True
         assert entry.state is ConfigEntryState.LOADED
         assert entry.data["access_token"] == "new_auth_token"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
 
 
-@pytest.mark.skip(reason="Lingering timer false positive during mock teardown")
 async def test_setup_entry_recovery_via_login(
     hass: HomeAssistant,
     aioclient_responses: ResponseMocks,
@@ -522,6 +752,9 @@ async def test_setup_entry_recovery_via_login(
         api_instance = mock_api.return_value
         api_instance.__aenter__.return_value = api_instance
         api_instance.is_authenticated = True
+        # Smart HVAC is fetched during authenticated setup on current main.
+        api_instance.smart_hvacs = AsyncMock(return_value=[])
+        api_instance.smart_hvac_connect_requests = AsyncMock(return_value=[])
 
         # UserSites fails with AuthException on first call
         mock_user_sites = MagicMock()
@@ -565,9 +798,10 @@ async def test_setup_entry_recovery_via_login(
         assert result is True
         assert entry.state is ConfigEntryState.LOADED
         assert entry.data["access_token"] == "logged_in_auth_token"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
 
 
-@pytest.mark.skip(reason="Lingering timer false positive during mock teardown")
 async def test_setup_entry_restores_title(
     hass: HomeAssistant,
     aioclient_responses: ResponseMocks,
@@ -605,6 +839,9 @@ async def test_setup_entry_restores_title(
         api_instance = mock_api.return_value
         api_instance.__aenter__.return_value = api_instance
         api_instance.is_authenticated = True
+        # Smart HVAC is fetched during authenticated setup on current main.
+        api_instance.smart_hvacs = AsyncMock(return_value=[])
+        api_instance.smart_hvac_connect_requests = AsyncMock(return_value=[])
 
         mock_user_sites = MagicMock()
         mock_address = MagicMock()
@@ -629,3 +866,5 @@ async def test_setup_entry_restores_title(
         assert entry.state is ConfigEntryState.LOADED
         # Title should be healed back to the address
         assert entry.title == "Main Street 123"
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()

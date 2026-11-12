@@ -22,6 +22,7 @@ def build_smart_feature_sensors(
         description = SmartFeatureBinarySensorDescription(
             key=feature_id,
             name=feature.get("name", f"Feature {feature_id}"),
+            icon="mdi:toggle-switch-outline",
             feature_id=feature_id,
             feature_type=feature_type,
             context=feature.get("context"),

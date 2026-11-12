@@ -122,7 +122,7 @@ def test_ruff_checks_main_pushes_and_python_pull_requests() -> None:
 def test_release_uses_supported_python_and_safe_shell_parameters() -> None:
     """Never interpolate untrusted tag names into a shell command."""
     python_setup = _named_step("release.yml", "release_zip_file", "Set up Python")
-    assert python_setup["with"]["python-version"] == "3.14"
+    assert python_setup["with"]["python-version"] == "3.14.10"
     version_step = _named_step("release.yml", "release_zip_file", "Set version number")
     asset_step = _named_step("release.yml", "release_zip_file", "Upload Release Asset")
     for step in (version_step, asset_step):
@@ -152,13 +152,56 @@ def test_quality_workflow_performs_json_validation_without_tier_claims() -> None
 
 
 def test_ci_blocks_new_full_flake8_violations() -> None:
-    """Ensure the full linter has a gate and the Python matrix is retained."""
+    """Require stable Python while keeping experimental wheels diagnostic."""
     workflow = _read_workflow("ci.yaml")
     jobs = workflow["jobs"]
     assert isinstance(jobs, dict)
     job = jobs["run"]
     assert isinstance(job, dict)
-    assert job["strategy"]["matrix"]["python-version"] == ["3.14.2", "3.14"]
+    assert job["runs-on"] == "ubuntu-24.04"
+    assert job["strategy"]["matrix"]["include"] == [
+        {"python-version": "3.14.10", "experimental": False},
+        {"python-version": "3.15.2", "experimental": True},
+    ]
+    assert job["continue-on-error"] == "${{ matrix.experimental }}"
+    assert job["strategy"]["fail-fast"] is False
+    environment_step = _named_step(
+        "ci.yaml", "run", "Verify Home Assistant test environment"
+    )
+    assert environment_step["if"] == "${{ !matrix.experimental }}"
+    assert "(3, 14, 10)" in str(environment_step["run"])
+    wheel_step = _named_step(
+        "ci.yaml", "run", "Diagnose experimental Python wheel availability"
+    )
+    assert wheel_step["if"] == "${{ matrix.experimental }}"
+    assert "parse_wheel_filename" in str(wheel_step["run"])
+    assert "sys_tags" in str(wheel_step["run"])
+    install_step = _named_step("ci.yaml", "run", "Install dependencies with Poetry")
+    assert install_step["if"] == "${{ !matrix.experimental }}"
+    assert install_step["timeout-minutes"] == 10
+    assert "poetry sync --with dev --no-root" in str(install_step["run"])
+    client_step = _named_step(
+        "ci.yaml", "run", "Install Python 3.15 upstream client for offline smoke tests"
+    )
+    assert client_step["if"] == "${{ matrix.experimental }}"
+    assert "--only-binary=:all:" in str(client_step["run"])
+    assert "manifest.json" in str(client_step["run"])
+    smoke_step = _named_step(
+        "ci.yaml", "run", "Run Python 3.15 upstream client smoke tests"
+    )
+    assert smoke_step["if"] == "${{ matrix.experimental }}"
+    assert "test_python315_smoke.py" in str(smoke_step["run"])
+    assert _named_step("ci.yaml", "run", "Test with pytest")["if"] == (
+        "${{ !cancelled() && !matrix.experimental && steps.environment.outcome == 'success' }}"
+    )
+    summary_step = _named_step(
+        "ci.yaml", "run", "Summarize experimental Python compatibility"
+    )
+    assert summary_step["if"] == "${{ always() && matrix.experimental }}"
+    assert "CLIENT_INSTALL_OUTCOME" in summary_step["env"]
+    assert "SMOKE_OUTCOME" in summary_step["env"]
+    assert "Home Assistant dependencies and pytest: not run" in str(summary_step["run"])
+
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (
         "poetry run python .github/helpers/check_flake8_baseline.py"

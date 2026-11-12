@@ -116,6 +116,9 @@
     "frank_energie_usage": {
       "name": "Frank Energie - Inzicht"
     },
+    "frank_energie_smart_heating": {
+      "name": "Frank Energie - Slim verwarmen"
+    },
     "frank_energie_user": {
       "name": "Frank Energie - Gebruiker"
     },
@@ -128,6 +131,79 @@
   },
   "entity": {
     "sensor": {
+      "smart_hvac_device_count": {
+        "name": "Gekoppelde toestellen"
+      },
+      "smart_hvac_profile_created_at": {
+        "name": "Profiel Slim verwarmen aangemaakt",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Beschikbaar in land"
+          },
+          "available_on_site": {
+            "name": "Beschikbaar op leveringslocatie"
+          },
+          "has_accepted_terms": {
+            "name": "Voorwaarden aanvaard"
+          }
+        }
+      },
+      "smart_hvac_connection_requests": {
+        "name": "Koppelverzoeken Slim verwarmen (account)",
+        "state_attributes": {
+          "requests": {
+            "name": "Details van koppelverzoeken"
+          }
+        }
+      },
+      "smart_hvac_equipment": {
+        "name": "Toestel",
+        "state_attributes": {
+          "brand": {
+            "name": "Merk"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "device_type": {
+            "name": "Toesteltype"
+          },
+          "provider": {
+            "name": "Aanbieder"
+          },
+          "created_at": {
+            "name": "Aangemaakt op"
+          },
+          "updated_at": {
+            "name": "Bijgewerkt op"
+          },
+          "needs_reauthentication": {
+            "name": "Opnieuw aanmelden vereist"
+          }
+        }
+      },
+      "smart_hvac_operational_status": {
+        "name": "Operationele status"
+      },
+      "smart_hvac_steering_status": {
+        "name": "Sturingsstatus",
+        "state": {
+          "active": "Actief",
+          "inactive": "Inactief"
+        }
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "name": "Tijdstip operationele status"
+      },
+      "smart_hvac_first_session_date": {
+        "name": "Datum eerste sessie"
+      },
+      "smart_hvac_last_session_date": {
+        "name": "Datum laatste sessie"
+      },
+      "smart_hvac_total_result": {
+        "name": "Totale besparingen"
+      },
       "current_electricity_price": {
         "name": "Huidige elektriciteitsprijs (All-in)",
         "state_attributes": {
@@ -655,14 +731,8 @@
       "charger_model": {
         "name": "Model"
       },
-      "can_smart_charge": {
-        "name": "Kan slim laden"
-      },
       "charge_capacity": {
         "name": "Laadcapaciteit"
-      },
-      "is_plugged_in": {
-        "name": "Is ingeplugd"
       },
       "power_delivery_state": {
         "name": "Stroomvoorziening status",
@@ -679,29 +749,17 @@
           "error": "Fout"
         }
       },
-      "charger_is_reachable": {
-        "name": "Lader bereikbaar"
-      },
-      "is_reachable": {
-        "name": "Voertuig bereikbaar"
-      },
-      "is_charging": {
-        "name": "Is aan het laden"
-      },
       "charge_rate": {
         "name": "Laadsnelheid"
-      },
-      "is_smart_charging_enabled": {
-        "name": "Is slim laden ingeschakeld"
-      },
-      "is_solar_charging_enabled": {
-        "name": "Is laden op zon ingeschakeld"
       },
       "total_batteries": {
         "name": "Totaal aantal batterijen"
       },
       "battery_capacity": {
         "name": "Batterijcapaciteit"
+      },
+      "battery_current_capacity": {
+        "name": "Huidige capaciteit"
       },
       "battery_level": {
         "name": "Batterijniveau"
@@ -718,15 +776,6 @@
       "charge_last_updated": {
         "name": "Laden laatst bijgewerkt"
       },
-      "is_fully_charged": {
-        "name": "Volledig opgeladen"
-      },
-      "smart_charging_enabled": {
-        "name": "Slim laden ingeschakeld"
-      },
-      "solar_charging_enabled": {
-        "name": "Laden op zon ingeschakeld"
-      },
       "last_seen": {
         "name": "Laatst gezien"
       },
@@ -735,6 +784,27 @@
       },
       "deadline": {
         "name": "Vertrektijd"
+      },
+      "charging_hour_monday": {
+        "name": "Vertrektijd maandag"
+      },
+      "charging_hour_tuesday": {
+        "name": "Vertrektijd dinsdag"
+      },
+      "charging_hour_wednesday": {
+        "name": "Vertrektijd woensdag"
+      },
+      "charging_hour_thursday": {
+        "name": "Vertrektijd donderdag"
+      },
+      "charging_hour_friday": {
+        "name": "Vertrektijd vrijdag"
+      },
+      "charging_hour_saturday": {
+        "name": "Vertrektijd zaterdag"
+      },
+      "charging_hour_sunday": {
+        "name": "Vertrektijd zondag"
       },
       "charge_settings_id": {
         "name": "Laadinstellingen ID"
@@ -756,9 +826,6 @@
       },
       "intervention_title": {
         "name": "Interventie titel"
-      },
-      "device_id": {
-        "name": "Apparaat ID"
       },
       "period_start_date": {
         "name": "Periode startdatum"
@@ -793,6 +860,9 @@
       "total_capacity": {
         "name": "Totale batterijcapaciteit"
       },
+      "total_current_capacity": {
+        "name": "Huidige capaciteit"
+      },
       "total_max_charge_power": {
         "name": "Totaal max laadvermogen"
       },
@@ -812,7 +882,8 @@
           "trading": "Handelen",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
-          "unknown": "Unknown"
+          "unknown": "Unknown",
+          "congestion": "Congestie"
         }
       },
       "battery_imbalance_trading_strategy": {
@@ -974,6 +1045,36 @@
       },
       "smart_push_notification_price_alerts": {
         "name": "Slimme pushmeldingen prijsalerts"
+      },
+      "can_smart_charge": {
+        "name": "Kan slim laden"
+      },
+      "is_reachable": {
+        "name": "Voertuig bereikbaar"
+      },
+      "charger_is_reachable": {
+        "name": "Lader bereikbaar"
+      },
+      "is_plugged_in": {
+        "name": "Is ingeplugd"
+      },
+      "is_charging": {
+        "name": "Is aan het laden"
+      },
+      "is_fully_charged": {
+        "name": "Volledig opgeladen"
+      },
+      "smart_charging_enabled": {
+        "name": "Slim laden ingeschakeld"
+      },
+      "solar_charging_enabled": {
+        "name": "Laden op zon ingeschakeld"
+      },
+      "is_smart_charging_enabled": {
+        "name": "Is slim laden ingeschakeld"
+      },
+      "is_solar_charging_enabled": {
+        "name": "Is laden op zon ingeschakeld"
       }
     },
     "select": {
@@ -1044,11 +1145,37 @@
       "battery_mode": {
         "name": "Slimme batterijmodus",
         "state": {
+          "congestion": "Congestie",
           "imbalance_trading": "Onbalans handelen",
           "self_consumption": "Zelfconsumptie",
           "self_consumption_mix": "Zelfconsumptie Plus",
           "trading": "Handelen",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "congestion": "Congestie",
+              "imbalance_trading": "Onbalans handelen",
+              "self_consumption": "Zelfconsumptie",
+              "self_consumption_mix": "Zelfconsumptie Plus",
+              "trading": "Handelen"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
+          }
         }
       },
       "battery_strategy": {
@@ -1060,6 +1187,31 @@
           "imbalance_only": "Alleen onbalans",
           "standard": "Standaard",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Aangevraagde wijziging ingangsdatum"
+          },
+          "is_change_request_possible": {
+            "name": "Wijziging mogelijk",
+            "state": {
+              "false": "Nee",
+              "true": "Ja"
+            }
+          },
+          "upcoming_change": {
+            "name": "Aankomende wijziging",
+            "state": {
+              "aggressive": "Agressief",
+              "balanced": "Gebalanceerd",
+              "conservative": "Conservatief",
+              "imbalance_only": "Alleen onbalans",
+              "standard": "Standaard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Aankomende wijziging ingangsdatum"
+          }
         }
       },
       "enode_charging_mode": {
@@ -1110,6 +1262,23 @@
       },
       "initial_charge": {
         "name": "Startniveau batterij"
+      }
+    }
+  },
+  "issues": {
+    "stale_device": {
+      "title": "Niet meer gekoppeld Frank Energie-apparaat: {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Niet meer gekoppeld apparaat verwijderen?",
+            "description": "Frank Energie vermeldt **{device}** niet meer in twee volledige inventarisantwoorden. Het verwijderen uit Home Assistant verwijdert ook de bijbehorende entiteiten en kan automatiseringen beïnvloeden. Kies **Verzenden** om de actuele accountgegevens opnieuw te controleren en het apparaat enkel te verwijderen wanneer het nog ontbreekt."
+          }
+        },
+        "abort": {
+          "cannot_verify": "De actuele inventaris van Frank Energie kon niet worden gecontroleerd. Er is geen apparaat verwijderd. Probeer opnieuw na een geslaagde update.",
+          "device_restored": "Het apparaat is opnieuw aanwezig of kan niet veilig worden verwijderd. Er is geen apparaat verwijderd."
+        }
       }
     }
   }

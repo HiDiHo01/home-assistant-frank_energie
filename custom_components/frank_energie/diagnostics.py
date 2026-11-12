@@ -48,21 +48,32 @@ TO_REDACT: set[str] = {
     "mobile",
     "telephone",
     "address",
+    "addressFormatted",
+    "address_formatted",
     "street",
     "houseNumber",
     "houseNumberAddition",
     "postalCode",
+    "postal_code",
     "zipCode",
     "city",
     "connectionAddress",
+    "connection_address",
     "deliveryAddress",
+    "delivery_address",
     "latitude",
     "longitude",
     "customer_id",
     "customerId",
+    "customer_number",
+    "customerNumber",
     "account_id",
     "accountId",
     "userId",
+    "user_id",
+    # Generic IDs are used by nested user, battery, vehicle, HVAC, and PV models.
+    "id",
+    "userCreatedAt",
     "personId",
     "title",
     "contract_id",
@@ -70,9 +81,13 @@ TO_REDACT: set[str] = {
     "contractReference",
     "contractNumber",
     "agreementId",
+    "productName",
+    "contractProductName",
     "site_reference",
     "siteReference",
     "reference",
+    "externalReference",
+    "external_reference",
     "TotalAmount",
     "Total amount",
     "Total_amount",
@@ -84,8 +99,11 @@ TO_REDACT: set[str] = {
     "connection_id",
     "connectionId",
     "bankAccountNumber",
+    "mandateId",
     "EAN",
     "ean",
+    "connectionEAN",
+    "connection_ean",
     "electricityEAN",
     "electricity_ean",
     "gasEAN",
@@ -181,7 +199,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> dict[str, object]:
-    """Return diagnostics for a config entry."""
+    """Return redacted config-entry diagnostics, including optional HVAC counts."""
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
     coordinator = runtime_data.coordinator
@@ -220,5 +238,16 @@ async def async_get_config_entry_diagnostics(
             runtime_data.battery_session_coordinators,
         ),
     }
+    if (smart_hvac := runtime_data.smart_hvac_coordinator) is not None:
+        snapshot = smart_hvac.data
+        diagnostics["smart_hvac"] = {
+            "last_update_success": smart_hvac.last_update_success,
+            "device_count": len(snapshot.devices)
+            if snapshot.devices is not None
+            else None,
+            "connection_request_count": (
+                len(snapshot.requests) if snapshot.requests is not None else None
+            ),
+        }
 
     return async_redact_data(diagnostics, TO_REDACT)

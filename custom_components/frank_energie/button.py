@@ -99,7 +99,7 @@ async def async_setup_entry(
                 coordinator=first_session_coordinator,
                 description=FrankEnergieButtonEntityDescription(
                     key="refresh_battery_sessions",
-                    name="Refresh Battery Sessions",
+                    translation_key="refresh_battery_sessions",
                     service_name=SERVICE_NAME_BATTERIES,
                 ),
                 entry=entry,

@@ -8,10 +8,11 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-import sys
+import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Final, TypedDict, cast
 from zoneinfo import ZoneInfo
 
@@ -25,6 +26,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -54,6 +56,7 @@ from python_frank_energie.models import (
     PriceData,
     Resolution,
     SmartBatteries,
+    SmartBattery,
     SmartBatteryDetails,
     SmartBatterySessions,
     SmartPvSystems,
@@ -63,7 +66,6 @@ from python_frank_energie.models import (
     UserSmartFeedInStatus,
 )
 
-from . import helpers
 from .const import (
     CONF_INTERVAL_BATTERIES,
     CONF_INTERVAL_BATTERY_SESSIONS,
@@ -76,6 +78,7 @@ from .const import (
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
+    DATA_BATTERY_SETTINGS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -108,10 +111,22 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
-from .helpers import decrypt_password, known_site_contracts, price_cache_store
+from .device_inventory import async_identify_inventory_device
+from .helpers import (
+    api_maintenance_active,
+    decrypt_password,
+    known_site_contracts,
+    price_cache_store,
+)
 from .mutation_queue import MutationQueue
+from .repairs import async_process_device_inventory
 
 _LOGGER = logging.getLogger(__name__)
+
+# Battery options and change windows change rarely; refetch them at most this often.
+BATTERY_SETTINGS_REFRESH_INTERVAL: Final[timedelta] = timedelta(minutes=30)
+# Retry ambiguous empty responses and transient failures without discarding cache.
+BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL: Final[timedelta] = timedelta(minutes=15)
 _LOG_AUTH_TOKENS_EXPIRED: Final = (
     "Authentication tokens expired, trying to renew them (%s)"
 )
@@ -301,16 +316,6 @@ def _extract_electricity_connection_id(user_data: Any) -> str | None:
     return None
 
 
-if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
-    # Python 3.14-3.16
-    try:
-        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which is deprecated and can cause issues with aiohttp
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    except Exception:
-        # fallback for Python 3.17+ where Proactor policy is default and Selector policy is deprecated
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-
 ERROR_NO_MARKET_PRICES: Final[str] = "No marketprices found"
 
 
@@ -363,6 +368,9 @@ class FrankEnergieData(TypedDict):
     battery_sessions: list[SmartBatterySessions]
     """Optional smart battery sessions data."""
 
+    smart_battery_settings: dict[str, object]
+    """Per-battery adjustable settings and options, keyed by battery ID."""
+
     smart_pv_systems: SmartPvSystems | None
     """Optional smart PV systems data."""
 
@@ -414,6 +422,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_BATTERIES: None,
         DATA_BATTERY_DETAILS: [],
         DATA_BATTERY_SESSIONS: [],
+        DATA_BATTERY_SETTINGS: {},
         DATA_ENODE_VEHICLES: None,
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
@@ -473,6 +482,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         self._resolution_change_pending: bool = False
         self.enode_chargers: EnodeChargers | None = None
         self.data: FrankEnergieData = _empty_data()
+        self.verified_inventory_ids: set[str] | None = None
         self.update_interval = timedelta(
             minutes=15 if self.resolution == "PT15M" else 60
         )
@@ -529,7 +539,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     ) -> bool:
         """Return True when API calls should be skipped."""
 
-        return now_utc.hour == 0 and 0 <= now_utc.minute < 60
+        return api_maintenance_active(now_utc)
 
     def _is_not_in_delivery_site(
         self, data_month_summary, data_invoices, user_sites
@@ -850,10 +860,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.debug("Tomorrow prices not yet available, retrying on next refresh")
 
         if self.cached_prices_today is not None:
-            entry_id = self.config_entry.entry_id if self.config_entry else "Unknown"
+            entry_title = self.config_entry.title if self.config_entry else "Unknown"
             _LOGGER.debug(
-                "[%s] Tomorrow electricity periods: %s",
-                entry_id,
+                "[%s][%s] Tomorrow electricity periods: %s",
+                entry_title,
+                self.site_reference,
                 (
                     len(prices_tomorrow.electricity.all)
                     if prices_tomorrow and prices_tomorrow.electricity
@@ -1373,11 +1384,23 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
         try:
             vehicles = await self.api.enode_vehicles()
-            _LOGGER.debug("Fetched Enode vehicles")
+            _LOGGER.debug("Fetched Enode vehicles: %s", vehicles)
             return vehicles
         except Exception as err:
             self._handle_dynamic_fetch_error("enode vehicles", err)
             return None
+
+    def _process_device_inventory(self, kind: str, inventory: object) -> None:
+        """Record only validated live inventories without breaking hardware polling."""
+        if inventory is None:
+            return
+        try:
+            self.verified_inventory_ids = async_process_device_inventory(
+                self.hass, self.config_entry, kind, inventory
+            )
+        except Exception:  # noqa: BLE001 - Repairs must not break polling
+            self.verified_inventory_ids = None
+            _LOGGER.exception("Failed to process the %s inventory for Repairs", kind)
 
     async def _fetch_smart_pv_systems(self) -> SmartPvSystems | None:
         """Fetch Smart PV systems; skips call when no systems were found this session.
@@ -1393,7 +1416,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "Skipping smart PV systems fetch because the client is not authenticated"
             )
             return None
-        if self._has_pv_systems is False:
+        if self._has_pv_systems is False and not any(
+            async_identify_inventory_device(
+                self.hass, self.config_entry, device, expected_kind="pv"
+            )
+            for device in dr.async_entries_for_config_entry(
+                dr.async_get(self.hass), self.config_entry.entry_id
+            )
+        ):
             return None
         try:
             result = await self.api.smart_pv_systems()
@@ -1460,7 +1490,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 # Merge SUMMARY
                 if details.smart_battery_summary:
                     battery.summary = details.smart_battery_summary
-                _LOGGER.debug("Merged smart battery settings and summary")
+                _LOGGER.debug(
+                    "Merged battery data %s | settings=%s summary=%s",
+                    battery.id,
+                    battery.settings,
+                    battery.summary,
+                )
             return details
         except Exception as err:
             self._handle_dynamic_fetch_error(f"details for battery {battery.id}", err)
@@ -1503,50 +1538,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         except Exception as err:
             self._handle_dynamic_fetch_error(f"sessions for battery {battery.id}", err)
             return None
-
-    async def _fetch_battery_details_and_sessions(
-        self, battery, start_date: date, tomorrow: date
-    ) -> tuple[SmartBatteryDetails | None, SmartBatterySessions | None]:
-        """Fetch details and sessions for each smart battery concurrently."""
-        if not battery:
-            return None, None
-
-        _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
-        return await asyncio.gather(
-            self._fetch_battery_details(battery),
-            self._fetch_battery_sessions(battery, start_date, tomorrow),
-        )
-
-    async def _get_battery_details_and_sessions(
-        self,
-        data_smart_batteries: SmartBatteries | None,
-        start_date: date,
-        tomorrow: date,
-    ) -> tuple[list[SmartBatteryDetails], list[SmartBatterySessions]]:
-        """Fetch details and sessions for all smart batteries concurrently."""
-        details_list: list[SmartBatteryDetails] = []
-        sessions_list: list[SmartBatterySessions] = []
-
-        if not (data_smart_batteries and data_smart_batteries.batteries):
-            _LOGGER.debug("No smart batteries found")
-            return details_list, sessions_list
-
-        battery_tasks = [
-            self._fetch_battery_details_and_sessions(battery, start_date, tomorrow)
-            for battery in data_smart_batteries.batteries
-            if battery
-        ]
-        if not battery_tasks:
-            return details_list, sessions_list
-
-        results = await asyncio.gather(*battery_tasks)
-        for details, sessions in results:
-            if details:
-                details_list.append(details)
-            if sessions:
-                sessions_list.append(sessions)
-
-        return details_list, sessions_list
 
     async def _fetch_tomorrow_data(
         self,
@@ -2013,7 +2004,8 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         user_country = self._user_country or default_country
 
         _LOGGER.debug(
-            "Fetching user prices for country=%s resolution=%s",
+            "Fetching user prices for site_reference=%s country=%s resolution=%s",
+            site_reference,
             user_country,
             self.resolution,
         )
@@ -2234,25 +2226,25 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated:
             _LOGGER.warning(
                 "API not authenticated, skipping call to %s",
-                getattr(method, "__name__", type(method).__name__),
+                getattr(method, "__name__", repr(method)),
             )
             return None
         try:
             result = await method(*args)
             _LOGGER.debug(
-                "Fetched data from %s",
-                getattr(method, "__name__", type(method).__name__),
+                "Fetched data from %s: %s",
+                getattr(method, "__name__", repr(method)),
+                result,
             )
             return result
         except asyncio.CancelledError:
             # Required for correct task cancellation handling in Home Assistant
             raise
         except Exception as err:
-            helpers.log_api_exception(
-                _LOGGER,
-                "Failed to fetch data using %s",
+            _LOGGER.exception(
+                "Failed to fetch data using %s: %s",
+                getattr(method, "__name__", repr(method)),
                 err,
-                getattr(method, "__name__", type(method).__name__),
             )
             return None
 
@@ -2262,34 +2254,140 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return value.replace(tzinfo=ZoneInfo("UTC"))
         return value
 
+    @staticmethod
+    def _slide_price_window_totals(
+        incoming: float,
+        outgoing: float,
+        current_sum: float,
+        invalid_count: int,
+        exact_sum: Decimal | None,
+    ) -> tuple[float, int, Decimal | None]:
+        """Advance the float and optional decimal totals by one price slot."""
+        if math.isfinite(incoming):
+            current_sum += incoming
+            if exact_sum is not None:
+                exact_sum += Decimal(str(incoming))
+        else:
+            invalid_count += 1
+
+        if math.isfinite(outgoing):
+            current_sum -= outgoing
+            if exact_sum is not None:
+                exact_sum -= Decimal(str(outgoing))
+        else:
+            invalid_count -= 1
+
+        return current_sum, invalid_count, exact_sum
+
+    @staticmethod
+    def _decimal_price_window_total(
+        prices: list[Price],
+        start_index: int,
+        window: int,
+    ) -> Decimal:
+        """Sum a finite price window exactly as decimal price values."""
+        return sum(
+            (
+                Decimal(str(prices[index].total))
+                for index in range(start_index, start_index + window)
+            ),
+            Decimal(0),
+        )
+
+    @staticmethod
+    def _compare_close_price_windows(
+        prices: list[Price],
+        window: int,
+        candidate_index: int,
+        lowest_index: int,
+        candidate_exact: Decimal | None,
+        lowest_exact: Decimal | None,
+    ) -> tuple[bool, Decimal, Decimal]:
+        """Resolve close float totals without moving an exactly tied window."""
+        if candidate_exact is None:
+            candidate_exact = FrankEnergieCoordinator._decimal_price_window_total(
+                prices, candidate_index, window
+            )
+        if lowest_exact is None:
+            lowest_exact = FrankEnergieCoordinator._decimal_price_window_total(
+                prices, lowest_index, window
+            )
+        return candidate_exact < lowest_exact, candidate_exact, lowest_exact
+
     def _find_lowest_consecutive_hours(
         self,
         prices: list[Price],
         window: int,
     ) -> tuple[float, Price, Price] | None:
-        """Find lowest average price for consecutive hours."""
+        """Find the earliest cheapest finite price window in linear time.
 
-        if len(prices) < window:
+        Maintain a sliding total without allocating window slices. Resolve
+        nearly equal totals with decimal comparisons to avoid floating-point
+        drift. Skip non-finite price windows and resume when they become valid.
+        """
+        if window <= 0 or len(prices) < window:
             return None
 
-        lowest_avg: float | None = None
-        lowest_start: Price | None = None
-        lowest_end: Price | None = None
+        current_sum = 0.0
+        invalid_count = 0
+        for index in range(window):
+            value = prices[index].total
+            if math.isfinite(value):
+                current_sum += value
+            else:
+                invalid_count += 1
 
-        for index in range(len(prices) - window + 1):
-            window_prices = prices[index : index + window]
+        lowest_sum: float | None = current_sum if invalid_count == 0 else None
+        lowest_index: int | None = 0 if invalid_count == 0 else None
+        exact_sum: Decimal | None = None
+        lowest_exact: Decimal | None = None
 
-            avg_price = sum(price.total for price in window_prices) / window
+        for index in range(window, len(prices)):
+            current_sum, invalid_count, exact_sum = self._slide_price_window_totals(
+                prices[index].total,
+                prices[index - window].total,
+                current_sum,
+                invalid_count,
+                exact_sum,
+            )
+            if invalid_count:
+                continue
 
-            if lowest_avg is None or avg_price < lowest_avg:
-                lowest_avg = avg_price
-                lowest_start = window_prices[0]
-                lowest_end = window_prices[-1]
+            start_index = index - window + 1
+            if lowest_sum is None:
+                lowest_sum = current_sum
+                lowest_index = start_index
+                lowest_exact = exact_sum
+                continue
 
-        if lowest_avg is None or lowest_start is None or lowest_end is None:
+            assert lowest_index is not None
+            if math.isclose(current_sum, lowest_sum, rel_tol=1e-12, abs_tol=1e-12):
+                better, exact_sum, lowest_exact = self._compare_close_price_windows(
+                    prices, window, start_index, lowest_index, exact_sum, lowest_exact
+                )
+            else:
+                better = current_sum < lowest_sum
+
+            if better:
+                lowest_sum = current_sum
+                lowest_index = start_index
+                lowest_exact = exact_sum
+
+        if lowest_index is None:
             return None
 
-        return lowest_avg, lowest_start, lowest_end
+        lowest_avg = (
+            math.fsum(
+                prices[position].total
+                for position in range(lowest_index, lowest_index + window)
+            )
+            / window
+        )
+        return (
+            lowest_avg,
+            prices[lowest_index],
+            prices[lowest_index + window - 1],
+        )
 
     def _should_fire_lowest_price_event(self, today: date) -> bool:
         """Return True if the lowest-price event was not fired today."""
@@ -2392,8 +2490,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                     options={**self.config_entry.options, "resolution": value},
                 )
                 _LOGGER.debug(
-                    "Resolution saved to options (unauthenticated API): %s",
+                    "Resolution saved to options (unauthenticated API): %s -> options=%s",
                     value,
+                    self.config_entry.options,
                 )
                 # Invalidate price cache so next refresh fetches with new resolution
                 self._static_prices_today = None
@@ -3283,9 +3382,237 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
                 CONF_INTERVAL_BATTERIES, DEFAULT_INTERVAL_BATTERIES
             )
         )
+        # Last known ``smartBatterySettings`` per battery, when each was fetched,
+        # when a failed or empty request may be retried, and how often each was
+        # invalidated, so a request that overlaps a change is not marked fresh.
+        self._battery_settings: dict[str, object] = {}
+        self._battery_settings_fetched_at: dict[str, datetime] = {}
+        self._battery_settings_retry_after: dict[str, datetime] = {}
+        self._battery_settings_generation: dict[str, int] = {}
+        # Per-battery request numbers: the last one issued and the last one
+        # recorded, so an older response can never overwrite a newer one.
+        self._battery_settings_requested: dict[str, int] = {}
+        self._battery_settings_recorded: dict[str, int] = {}
+
+    async def async_update_battery_settings(
+        self, battery_id: str, settings: dict[str, object]
+    ) -> bool:
+        """Send a smart battery setting change through the mutation queue.
+
+        Changes are serialized, so overlapping changes are applied in the order
+        they were requested and the last requested value wins. A successful
+        change invalidates the battery's settings before the next queued change
+        starts, then requests a refresh to show the pending change.
+        """
+        outcome: list[bool] = []
+
+        async def _update() -> None:
+            applied = bool(
+                await self.api.smart_battery_update_settings(battery_id, settings)
+            )
+            if applied:
+                self.invalidate_battery_settings(battery_id)
+            outcome.append(applied)
+
+        await self._mutation_queue.add(_update)
+        success = bool(outcome and outcome[0])
+        if success:
+            await self.async_request_refresh()
+        return success
+
+    def invalidate_battery_settings(self, battery_id: str) -> None:
+        """Refetch a battery's settings on the next refresh, e.g. after a change."""
+        self._battery_settings_fetched_at.pop(battery_id, None)
+        self._battery_settings_retry_after.pop(battery_id, None)
+        self._battery_settings_generation[battery_id] = (
+            self._battery_settings_generation.get(battery_id, 0) + 1
+        )
+
+    def _battery_settings_are_fresh(self, battery_id: str, now: datetime) -> bool:
+        """Skip requests while settings are fresh or a retry cooldown is active."""
+        retry_after = self._battery_settings_retry_after.get(battery_id)
+        if retry_after is not None:
+            return now < retry_after
+
+        fetched_at = self._battery_settings_fetched_at.get(battery_id)
+        return (
+            battery_id in self._battery_settings
+            and fetched_at is not None
+            and now - fetched_at < BATTERY_SETTINGS_REFRESH_INTERVAL
+        )
+
+    async def _fetch_battery_settings(
+        self, battery: SmartBattery, now: datetime
+    ) -> tuple[bool, object | None, timedelta | None]:
+        """Fetch the adjustable settings and allowed options of one smart battery.
+
+        Returns ``(fetched, settings, retry_delay)``. ``fetched`` is False when
+        the settings are still fresh (see ``BATTERY_SETTINGS_REFRESH_INTERVAL``
+        and ``invalidate_battery_settings``), when the request failed, and on
+        library releases without ``smart_battery_settings``, where the battery
+        entities keep their static option lists. ``retry_delay`` is set when
+        the request did not produce settings. The library returns None both
+        for a battery without settings and for GraphQL errors or malformed
+        responses, so None keeps the known settings and is retried at the
+        normal refresh interval. Only authentication failures propagate: the
+        settings only refine which options the entities offer, so they must
+        never fail the battery update.
+        """
+        if not hasattr(self.api, "smart_battery_settings"):
+            return False, None, None
+        if self._battery_settings_are_fresh(battery.id, now):
+            return False, None, None
+
+        try:
+            settings = await self.api.smart_battery_settings(battery.id)
+        except (AuthException, AuthRequiredException):
+            raise
+        except Exception as err:
+            # Same authentication shape that ``_handle_fetch_exceptions`` handles.
+            if isinstance(err, RequestException) and str(err).startswith("user-error:"):
+                raise
+            # Deliberately not ``_handle_dynamic_fetch_error``: it re-raises
+            # network errors on the first refresh, and settings must never fail
+            # the update.
+            retry_delay = BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL
+            retry_after = getattr(err, "retry_after", None)
+            if (
+                isinstance(err, RequestException)
+                and isinstance(retry_after, int | float)
+                and not isinstance(retry_after, bool)
+                and math.isfinite(retry_after)
+                and retry_after > 0
+            ):
+                # New clients have a rate-limit error; older pinned clients do
+                # not export that class. Respect a bounded Retry-After hint.
+                retry_delay = max(
+                    retry_delay, timedelta(seconds=min(retry_after, 86400))
+                )
+
+            # Upstream error messages can contain private account data.
+            _LOGGER.debug(
+                "Failed to fetch settings for battery %s: %s",
+                battery.id,
+                type(err).__name__,
+            )
+            return False, None, retry_delay
+
+        if settings is None:
+            return False, None, BATTERY_SETTINGS_REFRESH_INTERVAL
+        return True, settings, None
+
+    async def _fetch_battery_data(
+        self, battery: SmartBattery, start_date: date, tomorrow: date, now: datetime
+    ) -> tuple[
+        SmartBatteryDetails | None,
+        SmartBatterySessions | None,
+        tuple[bool, object | None, timedelta | None],
+    ]:
+        """Fetch details, sessions and settings for one smart battery concurrently."""
+        _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
+        return await asyncio.gather(
+            self._fetch_battery_details(battery),
+            self._fetch_battery_sessions(battery, start_date, tomorrow),
+            self._fetch_battery_settings(battery, now),
+        )
+
+    def _record_battery_settings(
+        self,
+        battery_id: str,
+        fetched: bool,
+        settings: object | None,
+        request: tuple[int, int],
+        now: datetime,
+        retry_delay: timedelta | None,
+    ) -> object | None:
+        """Keep valid settings and guard both success and retry timestamps.
+
+        Generation and request ordering prevent an older response from changing
+        the cache or its cooldown after an overlapping mutation or newer fetch.
+        A request without settings keeps the last known settings and schedules
+        a retry after ``retry_delay``.
+        """
+        generation, request_number = request
+        current = self._battery_settings_generation.get(battery_id, 0) == generation
+        newest = request_number > self._battery_settings_recorded.get(battery_id, 0)
+        if current and newest:
+            if retry_delay is not None:
+                self._battery_settings_retry_after[battery_id] = now + retry_delay
+                self._battery_settings_recorded[battery_id] = request_number
+            elif fetched:
+                self._battery_settings[battery_id] = settings
+                self._battery_settings_recorded[battery_id] = request_number
+                self._battery_settings_fetched_at[battery_id] = now
+                self._battery_settings_retry_after.pop(battery_id, None)
+
+        return self._battery_settings.get(battery_id)
+
+    def _start_battery_settings_request(self, battery_id: str) -> tuple[int, int]:
+        """Return the battery's generation and a new, increasing request number."""
+        request_number = self._battery_settings_requested.get(battery_id, 0) + 1
+        self._battery_settings_requested[battery_id] = request_number
+        return (self._battery_settings_generation.get(battery_id, 0), request_number)
+
+    async def _get_battery_data(
+        self,
+        data_smart_batteries: SmartBatteries | None,
+        start_date: date,
+        tomorrow: date,
+    ) -> tuple[
+        list[SmartBatteryDetails], list[SmartBatterySessions], dict[str, object]
+    ]:
+        """Fetch details, sessions and settings for all smart batteries concurrently.
+
+        Fetched settings and their timestamps are only recorded once every
+        battery's requests completed, and a result is only marked fresh when the
+        battery was not invalidated while it was in flight. Batteries whose
+        settings were not refetched keep their last known settings, including
+        batteries that were briefly missing from the battery list.
+        """
+        details_list: list[SmartBatteryDetails] = []
+        sessions_list: list[SmartBatterySessions] = []
+        settings_by_battery: dict[str, object] = {}
+
+        batteries = [
+            battery
+            for battery in (
+                data_smart_batteries.batteries if data_smart_batteries else []
+            )
+            if battery and battery.id
+        ]
+        if not batteries:
+            _LOGGER.debug("No smart batteries found")
+            return details_list, sessions_list, settings_by_battery
+
+        now = datetime.now(UTC)
+        requests = {
+            battery.id: self._start_battery_settings_request(battery.id)
+            for battery in batteries
+        }
+        results = await asyncio.gather(
+            *(
+                self._fetch_battery_data(battery, start_date, tomorrow, now)
+                for battery in batteries
+            )
+        )
+        for battery, (details, sessions, (fetched, settings, retry_delay)) in zip(
+            batteries, results
+        ):
+            if details:
+                details_list.append(details)
+            if sessions:
+                sessions_list.append(sessions)
+            known = self._record_battery_settings(
+                battery.id, fetched, settings, requests[battery.id], now, retry_delay
+            )
+            if known is not None:
+                settings_by_battery[battery.id] = known
+
+        return details_list, sessions_list, settings_by_battery
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch battery data."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             if self.last_update_success:
@@ -3305,9 +3632,8 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             (
                 data_smart_battery_details,
                 data_smart_battery_sessions,
-            ) = await self._get_battery_details_and_sessions(
-                data_smart_batteries, start_date, tomorrow
-            )
+                data_smart_battery_settings,
+            ) = await self._get_battery_data(data_smart_batteries, start_date, tomorrow)
 
             if data_smart_batteries and data_smart_batteries.batteries:
                 self.update_interval = timedelta(
@@ -3329,6 +3655,8 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             result[DATA_BATTERIES] = data_smart_batteries
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
+            result[DATA_BATTERY_SETTINGS] = data_smart_battery_settings
+            self._process_device_inventory("battery", data_smart_batteries)
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -3358,6 +3686,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch charger data."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             if self.last_update_success:
@@ -3399,6 +3728,7 @@ class FrankEnergieChargerCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_ENODE_CHARGERS] = data_enode_chargers
+            self._process_device_inventory("charger", data_enode_chargers)
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
@@ -3425,7 +3755,8 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
         )
 
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch PV data."""
+        """Fetch PV data and validate freshly retrieved physical system IDs."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             if self.last_update_success:
@@ -3476,6 +3807,7 @@ class FrankEnergiePVCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_PV_SYSTEMS] = data_pv_systems
+            self._process_device_inventory("pv", data_pv_systems)
             result[DATA_PV_SUMMARY] = data_pv_summary
             result[DATA_USER_SMART_FEED_IN] = data_user_smart_feed_in
             result[DATA_USER_SMART_FEED_IN_FETCHED] = feed_in_fetched
@@ -3508,6 +3840,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch vehicle data."""
+        self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             _LOGGER.debug("Skipping vehicle fetch during maintenance window")
@@ -3550,6 +3883,7 @@ class FrankEnergieVehicleCoordinator(FrankEnergieCoordinator):
                     DATA_USER_SITES
                 )
             result[DATA_ENODE_VEHICLES] = enode_vehicles
+            self._process_device_inventory("vehicle", enode_vehicles)
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)

@@ -21,6 +21,11 @@ blueprint:
       - any-glob-to-any-file:
           - "config/blueprints/**"
 
+diagnostics:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "custom_components/frank_energie/diagnostics.py‎"
+
 documentation:
   - changed-files:
       - any-glob-to-any-file:

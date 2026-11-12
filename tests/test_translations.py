@@ -3,6 +3,13 @@
 import ast
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.translation import async_get_translations
 
 INTEGRATION_DIR = Path(__file__).parent.parent / "custom_components" / "frank_energie"
 STRINGS_FILE = INTEGRATION_DIR / "strings.json"
@@ -31,19 +38,24 @@ def test_get_key_paths():
     assert get_key_paths(test_dict) == expected
 
 
-def test_translation_keys_alignment():
+def test_translation_keys_alignment() -> None:
     """Verify that strings.json and all translation files have the exact same keys."""
     json_files = list(TRANSLATIONS_DIR.glob("*.json"))
     json_files.append(STRINGS_FILE)
 
     file_names = {file_path.name for file_path in json_files}
-    required_files = {"strings.json", "en.json", "fr.json", "nl.json", "nl-BE.json"}
+    required_files = {
+        "strings.json",
+        "en.json",
+        "fr.json",
+        "fr-BE.json",
+        "nl.json",
+        "nl-BE.json",
+    }
 
     missing_files = required_files - file_names
     assert not missing_files, (
-        "Missing required translation files: "
-        f"{', '.join(sorted(missing_files))}. "
-        "Expected strings.json and all supported locale files (en.json, fr.json, nl.json, nl-BE.json) to be present."
+        f"Missing required translation files: {', '.join(sorted(missing_files))}"
     )
 
     translations = {}
@@ -69,6 +81,149 @@ def test_translation_keys_alignment():
         )
         assert not only_in_translation, (
             f"Keys found in {name} but missing in strings.json: {sorted(only_in_translation)}"
+        )
+
+
+def test_smart_hvac_steering_status_translations() -> None:
+    """Translate HVAC steering enum states in every supported language."""
+    expected_states = {
+        "strings.json": {"active": "Active", "inactive": "Inactive"},
+        "en.json": {"active": "Active", "inactive": "Inactive"},
+        "nl.json": {"active": "Actief", "inactive": "Inactief"},
+        "nl-BE.json": {"active": "Actief", "inactive": "Inactief"},
+        "fr.json": {"active": "Actif", "inactive": "Inactif"},
+        "fr-BE.json": {"active": "Actif", "inactive": "Inactif"},
+    }
+    for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation = json.loads(path.read_text(encoding="utf-8"))
+        states = translation["entity"]["sensor"]["smart_hvac_steering_status"]["state"]
+        assert states == expected_states[path.name], (
+            f"{path.name} must translate HVAC active and inactive states"
+        )
+
+
+def test_smart_hvac_total_savings_translations() -> None:
+    """Keep the total-savings sensor key stable and localize its display name."""
+    expected_names = {
+        "strings.json": "Total savings",
+        "en.json": "Total savings",
+        "nl.json": "Totale besparingen",
+        "nl-BE.json": "Totale besparingen",
+        "fr.json": "Économies totales",
+        "fr-BE.json": "Économies totales",
+    }
+    for path in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation = json.loads(path.read_text(encoding="utf-8"))
+        sensor = translation["entity"]["sensor"]["smart_hvac_total_result"]
+        assert sensor["name"] == expected_names[path.name], (
+            f"{path.name} must localize the existing total-savings sensor key"
+        )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
+    ("language", "localized_days", "prefix"),
+    [
+        (
+            "en",
+            (
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ),
+            "Departure time ",
+        ),
+        (
+            "nl",
+            (
+                "maandag",
+                "dinsdag",
+                "woensdag",
+                "donderdag",
+                "vrijdag",
+                "zaterdag",
+                "zondag",
+            ),
+            "Vertrektijd ",
+        ),
+        (
+            "nl-BE",
+            (
+                "maandag",
+                "dinsdag",
+                "woensdag",
+                "donderdag",
+                "vrijdag",
+                "zaterdag",
+                "zondag",
+            ),
+            "Vertrektijd ",
+        ),
+        (
+            "fr",
+            ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"),
+            "Heure de départ ",
+        ),
+        (
+            "fr-BE",
+            ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"),
+            "Heure de départ ",
+        ),
+    ],
+)
+async def test_vehicle_weekday_departure_translations(
+    hass: HomeAssistant,
+    language: str,
+    localized_days: tuple[str, ...],
+    prefix: str,
+) -> None:
+    """Resolve all seven vehicle departure-time names through Home Assistant."""
+    from custom_components.frank_energie.const import DOMAIN
+    from custom_components.frank_energie.device_inventory import (
+        inventory_device_identifiers,
+    )
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+        WEEKDAYS,
+    )
+
+    translations = await async_get_translations(hass, language, "entity", {DOMAIN})
+    weekday_descriptions = {
+        description.key: description
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key.startswith("charging_hour_")
+    }
+    assert set(weekday_descriptions) == {f"charging_hour_{day}" for day in WEEKDAYS}
+
+    coordinator = MagicMock()
+    coordinator.config_entry.entry_id = "test_entry_id"
+    for weekday, localized_day in zip(WEEKDAYS, localized_days, strict=True):
+        key = f"charging_hour_{weekday}"
+        description = weekday_descriptions[key]
+        translation_path = f"component.{DOMAIN}.entity.sensor.{key}.name"
+
+        assert translations[translation_path] == f"{prefix}{localized_day}"
+        assert description.translation_key == key
+        assert description.entity_category is EntityCategory.DIAGNOSTIC
+        assert description.device_class is SensorDeviceClass.TIMESTAMP
+
+        # Verify the real entity's stable fallback ID: the description does
+        # not retain the optional unique_id_fn passed by its factory.
+        sensor = EnodeVehicleSensor(
+            hass=hass,
+            coordinator=coordinator,
+            description=description,
+            vehicle_data={"id": "fixture-vehicle"},
+            vehicle_index=0,
+        )
+        assert sensor.unique_id == f"{DOMAIN}_fixture-vehicle_{key}"
+        assert sensor.device_info["identifiers"] == inventory_device_identifiers(
+            "test_entry_id", "vehicle", "fixture-vehicle"
         )
 
 
@@ -183,83 +338,76 @@ def test_select_attributes_translation_keys():
     )
 
 
-def test_no_unused_or_missing_translation_keys():
-    """Verify that all translation keys defined in strings.json are used in the codebase, and vice versa."""
-    import ast
+class _TranslationKeyExtractor(ast.NodeVisitor):
+    """Collect entity and service translation keys from integration Python code."""
 
-    class TranslationKeyExtractor(ast.NodeVisitor):
-        def __init__(self):
-            self.translation_keys = set()
-            self.button_keys = set()
-            self.service_names = set()
+    def __init__(self) -> None:
+        """Initialize disjoint sets of declared translation and service keys."""
+        self.translation_keys: set[str] = set()
+        self.button_keys: set[str] = set()
+        self.service_names: set[str] = set()
 
-        def visit_Assign(self, node):
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Name)
-                    and target.id == "_attr_translation_key"
-                ):
-                    if isinstance(node.value, ast.Constant) and isinstance(
-                        node.value.value, str
-                    ):
-                        self.translation_keys.add(node.value.value)
-                elif (
-                    isinstance(target, ast.Attribute)
-                    and target.attr == "_attr_translation_key"
-                ):
-                    if isinstance(node.value, ast.Constant) and isinstance(
-                        node.value.value, str
-                    ):
-                        self.translation_keys.add(node.value.value)
+    def _record_assignment(self, target: ast.expr, value: ast.expr | None) -> None:
+        """Track translation keys and service constants from string assignments."""
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            return
+        if (isinstance(target, ast.Name) and target.id == "_attr_translation_key") or (
+            isinstance(target, ast.Attribute) and target.attr == "_attr_translation_key"
+        ):
+            self.translation_keys.add(value.value)
+        if isinstance(target, ast.Name) and target.id.startswith("SERVICE_NAME_"):
+            self.service_names.add(value.value)
 
-                if isinstance(target, ast.Name) and target.id.startswith(
-                    "SERVICE_NAME_"
-                ):
-                    if isinstance(node.value, ast.Constant) and isinstance(
-                        node.value.value, str
-                    ):
-                        self.service_names.add(node.value.value)
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Record unannotated assignments and visit their nested expressions."""
+        for target in node.targets:
+            self._record_assignment(target, node.value)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """Record annotated assignments and visit their nested expressions."""
+        self._record_assignment(node.target, node.value)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Keep Repairs issue keys separate from entity and button keys."""
+        is_issue_call = (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "async_create_issue"
+        ) or (isinstance(node.func, ast.Name) and node.func.id == "async_create_issue")
+        if is_issue_call:
             self.generic_visit(node)
-
-        def visit_AnnAssign(self, node):
-            target = node.target
-            if isinstance(target, ast.Name) and target.id == "_attr_translation_key":
-                if isinstance(node.value, ast.Constant) and isinstance(
-                    node.value.value, str
-                ):
-                    self.translation_keys.add(node.value.value)
-            elif (
-                isinstance(target, ast.Attribute)
-                and target.attr == "_attr_translation_key"
+            return
+        for keyword in node.keywords:
+            if not isinstance(keyword.value, ast.Constant) or not isinstance(
+                keyword.value.value, str
             ):
-                if isinstance(node.value, ast.Constant) and isinstance(
-                    node.value.value, str
-                ):
-                    self.translation_keys.add(node.value.value)
+                continue
+            if keyword.arg == "translation_key":
+                self.translation_keys.add(keyword.value.value)
+            elif keyword.arg == "key":
+                self.button_keys.add(keyword.value.value)
+        self.generic_visit(node)
 
-            if isinstance(target, ast.Name) and target.id.startswith("SERVICE_NAME_"):
-                if isinstance(node.value, ast.Constant) and isinstance(
-                    node.value.value, str
-                ):
-                    self.service_names.add(node.value.value)
-            self.generic_visit(node)
 
-        def visit_Call(self, node):
-            for keyword in node.keywords:
-                if keyword.arg == "translation_key":
-                    if isinstance(keyword.value, ast.Constant) and isinstance(
-                        keyword.value.value, str
-                    ):
-                        self.translation_keys.add(keyword.value.value)
-                elif keyword.arg == "key":
-                    if isinstance(keyword.value, ast.Constant) and isinstance(
-                        keyword.value.value, str
-                    ):
-                        # Match button/select entity keys which serve as translation_key
-                        self.button_keys.add(keyword.value.value)
-            self.generic_visit(node)
+def test_translation_key_extractor_separates_repairs_and_entities() -> None:
+    """A Repairs key must never satisfy an entity translation requirement."""
+    source = """
+ir.async_create_issue(translation_key="stale_device")
+async_create_issue(translation_key="stale_device")
+SensorEntityDescription(translation_key="current_price", key="current_price")
+"""
+    extractor = _TranslationKeyExtractor()
+    extractor.visit(ast.parse(source))
 
-    extractor = TranslationKeyExtractor()
+    assert extractor.translation_keys == {"current_price"}
+    assert extractor.button_keys == {"current_price"}
+    assert "stale_device" not in extractor.translation_keys
+
+
+def test_no_unused_or_missing_translation_keys() -> None:
+    """Verify that every declared entity and service translation key is used."""
+    extractor = _TranslationKeyExtractor()
     for py_file in INTEGRATION_DIR.glob("**/*.py"):
         with open(py_file, "r", encoding="utf-8") as f:
             tree = ast.parse(f.read(), filename=py_file.name)
@@ -295,9 +443,26 @@ def test_no_unused_or_missing_translation_keys():
         "pv_panel_group",
     }
 
+    # Resolve the generated vehicle keys from the actual sensor descriptions,
+    # rather than exempting unknown translations through a static whitelist.
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        WEEKDAYS,
+    )
+
+    dynamic_vehicle_keys = {
+        description.translation_key
+        for description in ENODE_VEHICLE_SENSOR_TYPES
+        if description.key.startswith("charging_hour_")
+    }
+    assert dynamic_vehicle_keys == {f"charging_hour_{weekday}" for weekday in WEEKDAYS}
+
     # Verify that all translation keys in strings.json are used in the codebase
     all_used_entity_keys = (
-        extractor.translation_keys | extractor.button_keys | dynamic_whitelist
+        extractor.translation_keys
+        | extractor.button_keys
+        | dynamic_whitelist
+        | dynamic_vehicle_keys
     )
     unused_entity_keys = strings_entity_keys - all_used_entity_keys
     assert not unused_entity_keys, (
@@ -310,10 +475,41 @@ def test_no_unused_or_missing_translation_keys():
     )
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
-    missing_entity_keys = extractor.translation_keys - strings_entity_keys
+    missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys) - (
+        strings_entity_keys
+    )
     assert not missing_entity_keys, (
         f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
     )
+
+
+def test_repairs_issue_translation_keys() -> None:
+    """Validate Repairs issue keys independently of entity and device keys."""
+    repairs_file = INTEGRATION_DIR / "repairs.py"
+    module = ast.parse(repairs_file.read_text(encoding="utf-8"))
+    defined_keys: set[str] = set()
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "async_create_issue":
+            continue
+        for keyword in node.keywords:
+            if (
+                keyword.arg == "translation_key"
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ):
+                defined_keys.add(keyword.value.value)
+
+    assert defined_keys, "No Repairs issue translations were extracted"
+    for locale_file in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation_data = json.loads(locale_file.read_text(encoding="utf-8"))
+        declared_keys = set(translation_data.get("issues", {}))
+        assert declared_keys == defined_keys, (
+            f"{locale_file.name}: Repairs issue keys do not match their source"
+        )
 
 
 def test_all_translation_keys_are_lowercase():

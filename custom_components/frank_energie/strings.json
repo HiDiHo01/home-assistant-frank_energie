@@ -91,6 +91,9 @@
     "frank_energie_usage": {
       "name": "Frank Energie - Usage"
     },
+    "frank_energie_smart_heating": {
+      "name": "Frank Energie - Smart heating"
+    },
     "frank_energie_user": {
       "name": "Frank Energie - User"
     },
@@ -181,6 +184,36 @@
             "name": "User created at"
           }
         }
+      },
+      "can_smart_charge": {
+        "name": "Can Smart Charge"
+      },
+      "is_reachable": {
+        "name": "Vehicle Reachable"
+      },
+      "charger_is_reachable": {
+        "name": "Charger Reachable"
+      },
+      "is_plugged_in": {
+        "name": "Is Plugged In"
+      },
+      "is_charging": {
+        "name": "Is Charging"
+      },
+      "is_fully_charged": {
+        "name": "Fully Charged"
+      },
+      "smart_charging_enabled": {
+        "name": "Smart Charging Enabled"
+      },
+      "solar_charging_enabled": {
+        "name": "Solar Charging Enabled"
+      },
+      "is_smart_charging_enabled": {
+        "name": "Is Smart Charging Enabled"
+      },
+      "is_solar_charging_enabled": {
+        "name": "Is Solar Charging Enabled"
       }
     },
     "button": {
@@ -229,11 +262,37 @@
       "battery_mode": {
         "name": "Smart battery mode",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
           "trading": "Trading",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Change request effective date"
+          },
+          "is_change_request_possible": {
+            "name": "Change possible",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "upcoming_change": {
+            "name": "Upcoming change",
+            "state": {
+              "congestion": "Congestion",
+              "imbalance_trading": "Imbalance trading",
+              "self_consumption": "Self-consumption",
+              "self_consumption_mix": "Self-consumption Plus",
+              "trading": "Trading"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Upcoming change effective date"
+          }
         }
       },
       "battery_strategy": {
@@ -245,6 +304,31 @@
           "imbalance_only": "Imbalance only",
           "standard": "Standard",
           "unknown": "Unknown"
+        },
+        "state_attributes": {
+          "change_request_effective_date": {
+            "name": "Change request effective date"
+          },
+          "is_change_request_possible": {
+            "name": "Change possible",
+            "state": {
+              "false": "No",
+              "true": "Yes"
+            }
+          },
+          "upcoming_change": {
+            "name": "Upcoming change",
+            "state": {
+              "aggressive": "Aggressive",
+              "balanced": "Balanced",
+              "conservative": "Conservative",
+              "imbalance_only": "Imbalance only",
+              "standard": "Standard"
+            }
+          },
+          "upcoming_change_effective_date": {
+            "name": "Upcoming change effective date"
+          }
         }
       },
       "resolution": {
@@ -320,6 +404,79 @@
       }
     },
     "sensor": {
+      "smart_hvac_device_count": {
+        "name": "Connected devices"
+      },
+      "smart_hvac_profile_created_at": {
+        "name": "Smart heating profile created",
+        "state_attributes": {
+          "available_in_country": {
+            "name": "Available in country"
+          },
+          "available_on_site": {
+            "name": "Available at delivery site"
+          },
+          "has_accepted_terms": {
+            "name": "Terms accepted"
+          }
+        }
+      },
+      "smart_hvac_connection_requests": {
+        "name": "Smart heating connection requests (account)",
+        "state_attributes": {
+          "requests": {
+            "name": "Connection request details"
+          }
+        }
+      },
+      "smart_hvac_equipment": {
+        "name": "Equipment",
+        "state_attributes": {
+          "brand": {
+            "name": "Brand"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "device_type": {
+            "name": "Equipment type"
+          },
+          "provider": {
+            "name": "Provider"
+          },
+          "created_at": {
+            "name": "Created at"
+          },
+          "updated_at": {
+            "name": "Updated at"
+          },
+          "needs_reauthentication": {
+            "name": "Needs reauthentication"
+          }
+        }
+      },
+      "smart_hvac_operational_status": {
+        "name": "Operational status"
+      },
+      "smart_hvac_steering_status": {
+        "name": "Steering status",
+        "state": {
+          "active": "Active",
+          "inactive": "Inactive"
+        }
+      },
+      "smart_hvac_operational_status_timestamp": {
+        "name": "Operational status timestamp"
+      },
+      "smart_hvac_first_session_date": {
+        "name": "First session date"
+      },
+      "smart_hvac_last_session_date": {
+        "name": "Last session date"
+      },
+      "smart_hvac_total_result": {
+        "name": "Total savings"
+      },
       "ean": {
         "name": "EAN (Energy Account Number)"
       },
@@ -847,14 +1004,8 @@
       "charger_model": {
         "name": "Model"
       },
-      "can_smart_charge": {
-        "name": "Can Smart Charge"
-      },
       "charge_capacity": {
         "name": "Charge Capacity"
-      },
-      "is_plugged_in": {
-        "name": "Is Plugged In"
       },
       "power_delivery_state": {
         "name": "Power Delivery State",
@@ -871,29 +1022,17 @@
           "error": "Error"
         }
       },
-      "charger_is_reachable": {
-        "name": "Charger Reachable"
-      },
-      "is_reachable": {
-        "name": "Vehicle Reachable"
-      },
-      "is_charging": {
-        "name": "Is Charging"
-      },
       "charge_rate": {
         "name": "Charge Rate"
-      },
-      "is_smart_charging_enabled": {
-        "name": "Is Smart Charging Enabled"
-      },
-      "is_solar_charging_enabled": {
-        "name": "Is Solar Charging Enabled"
       },
       "total_batteries": {
         "name": "Total Batteries"
       },
       "battery_capacity": {
         "name": "Battery Capacity"
+      },
+      "battery_current_capacity": {
+        "name": "Current capacity"
       },
       "battery_level": {
         "name": "Battery Level"
@@ -910,15 +1049,6 @@
       "charge_last_updated": {
         "name": "Charge Last Updated"
       },
-      "is_fully_charged": {
-        "name": "Fully Charged"
-      },
-      "smart_charging_enabled": {
-        "name": "Smart Charging Enabled"
-      },
-      "solar_charging_enabled": {
-        "name": "Solar Charging Enabled"
-      },
       "last_seen": {
         "name": "Last Seen"
       },
@@ -927,6 +1057,27 @@
       },
       "deadline": {
         "name": "Charging Deadline"
+      },
+      "charging_hour_monday": {
+        "name": "Departure time Monday"
+      },
+      "charging_hour_tuesday": {
+        "name": "Departure time Tuesday"
+      },
+      "charging_hour_wednesday": {
+        "name": "Departure time Wednesday"
+      },
+      "charging_hour_thursday": {
+        "name": "Departure time Thursday"
+      },
+      "charging_hour_friday": {
+        "name": "Departure time Friday"
+      },
+      "charging_hour_saturday": {
+        "name": "Departure time Saturday"
+      },
+      "charging_hour_sunday": {
+        "name": "Departure time Sunday"
       },
       "charge_settings_id": {
         "name": "Charge Settings ID"
@@ -948,9 +1099,6 @@
       },
       "intervention_title": {
         "name": "Intervention Title"
-      },
-      "device_id": {
-        "name": "Device ID"
       },
       "period_start_date": {
         "name": "Period Start Date"
@@ -985,6 +1133,9 @@
       "total_capacity": {
         "name": "Total Battery Capacity"
       },
+      "total_current_capacity": {
+        "name": "Current capacity"
+      },
       "total_max_charge_power": {
         "name": "Total Max Charge Power"
       },
@@ -1000,6 +1151,7 @@
       "battery_mode": {
         "name": "Battery Mode",
         "state": {
+          "congestion": "Congestion",
           "imbalance_trading": "Imbalance trading",
           "self_consumption": "Self-consumption",
           "self_consumption_mix": "Self-consumption Plus",
@@ -1112,5 +1264,22 @@
       "wrong_account": "The signed-in account cannot access the configured delivery site. Sign in with the account associated with this entry."
     }
   },
-  "title": "Frank Energie"
+  "title": "Frank Energie",
+  "issues": {
+    "stale_device": {
+      "title": "Disconnected Frank Energie device: {device}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Remove disconnected device?",
+            "description": "Frank Energie no longer lists **{device}** in two complete inventory responses. Removing the device from Home Assistant also removes its entities and can affect automations. Select **Submit** to verify the live account again and remove this device only if it is still absent."
+          }
+        },
+        "abort": {
+          "cannot_verify": "The current Frank Energie inventory could not be verified. No device was removed. Try again after the next successful update.",
+          "device_restored": "The device is present again or is no longer safe to remove. No device was removed."
+        }
+      }
+    }
+  }
 }
