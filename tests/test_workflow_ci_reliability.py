@@ -122,7 +122,7 @@ def test_ruff_checks_main_pushes_and_python_pull_requests() -> None:
 def test_release_uses_supported_python_and_safe_shell_parameters() -> None:
     """Never interpolate untrusted tag names into a shell command."""
     python_setup = _named_step("release.yml", "release_zip_file", "Set up Python")
-    assert python_setup["with"]["python-version"] == "3.14"
+    assert python_setup["with"]["python-version"] == "3.14.10"
     version_step = _named_step("release.yml", "release_zip_file", "Set version number")
     asset_step = _named_step("release.yml", "release_zip_file", "Upload Release Asset")
     for step in (version_step, asset_step):
@@ -159,7 +159,10 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     job = jobs["run"]
     assert isinstance(job, dict)
     assert job["runs-on"] == "ubuntu-24.04"
-    assert job["strategy"]["matrix"]["python-version"] == ["3.14.2", "3.14"]
+    assert job["strategy"]["matrix"]["python-version"] == ["3.14.10", "3.15.2"]
+    environment_step = _named_step("ci.yaml", "run", "Verify Home Assistant test environment")
+    assert "(3, 14, 10)" in str(environment_step["run"])
+    assert "(3, 15, 2)" in str(environment_step["run"])
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (
         "poetry run python .github/helpers/check_flake8_baseline.py"
