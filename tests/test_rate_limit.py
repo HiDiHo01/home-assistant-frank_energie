@@ -904,7 +904,11 @@ async def test_setup_throttling_is_temporary_and_respects_reload(
         assert not await hass.config_entries.async_setup(rate_entry.entry_id)
         await hass.async_block_till_done()
         assert rate_entry.state is ConfigEntryState.SETUP_RETRY
-        assert isinstance(rate_entry.runtime_data, FrankEnergieSetupData)
+        # HA clears partial runtime_data, but the entry cooldown survives.
+        assert not hasattr(rate_entry, "runtime_data")
+        assert isinstance(
+            hass.data[DOMAIN]["rate_limit_states"][rate_entry.entry_id], RateLimitState
+        )
         counts = (
             rate_api.UserSites.await_count,
             rate_api.renew_token.await_count,
@@ -1105,7 +1109,7 @@ async def test_site_helper_does_not_swallow_or_retry_rate_limits(
         new_callable=AsyncMock,
     ) as sleep:
         with pytest.raises(RateLimitException) as raised:
-            await flow._get_available_sites("test@example.com")
+            await flow._get_available_sites()
     assert raised.value is error
     api.UserSites.assert_awaited_once()
     sleep.assert_not_awaited()
