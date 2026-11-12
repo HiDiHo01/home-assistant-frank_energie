@@ -32,6 +32,20 @@ The integration exposes battery monitoring entities such as:
 
 These entities can be used in dashboards, automations, and energy management workflows.
 
+### Current capacity
+
+The **Current capacity** sensor (*Huidige capaciteit* in Dutch) estimates the
+energy currently stored in an individual Smart Battery, in kWh:
+
+`Battery capacity (kWh) × State of charge (%) / 100`
+
+The calculation uses the same rounded charge percentage reported by the existing
+State of charge sensor. It is an instantaneous energy-storage measurement, not a
+cumulative energy meter. If the reported charge level or battery capacity is
+missing or invalid, or the API marks the charge data unreliable, the sensor
+reports `unknown` rather than treating missing data as zero. The sensor is
+created when the battery summary is available.
+
 ## Battery Operating Modes
 
 Supported batteries expose selectable operating modes.
