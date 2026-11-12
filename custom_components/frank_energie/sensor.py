@@ -5010,6 +5010,23 @@ def _get_total_result(data: Any) -> float | None:
     return sum((b.summary.total_result or 0) for b in bats if b.summary) or None
 
 
+def _get_total_battery_current_capacity(
+    data: FrankEnergieData,
+) -> float | None:
+    """Sum stored kWh for all batteries without publishing partial totals."""
+    batteries = _get_batteries_from_data(data)
+    if not batteries:
+        return None
+
+    total = 0.0
+    for idx in range(len(batteries)):
+        current_capacity = _get_battery_current_capacity(data, idx)
+        if current_capacity is None:
+            return None
+        total += current_capacity
+    return total
+
+
 def _get_average_state_of_charge(data: Any) -> int | None:
     valid_bats = [
         b
@@ -5054,6 +5071,18 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                     )
                     or None
                 ),
+            ),
+            FrankEnergieEntityDescription(
+                key="total_current_capacity",
+                translation_key="total_current_capacity",
+                authenticated=True,
+                service_name=SERVICE_NAME_BATTERIES,
+                icon="mdi:battery",
+                device_class=SensorDeviceClass.ENERGY_STORAGE,
+                state_class=SensorStateClass.MEASUREMENT,
+                native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+                suggested_display_precision=2,
+                value_fn=_get_total_battery_current_capacity,
             ),
             FrankEnergieEntityDescription(
                 key="total_max_charge_power",
