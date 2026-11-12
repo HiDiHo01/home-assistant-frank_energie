@@ -4784,6 +4784,7 @@ def _build_single_smart_battery_descriptions(
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:fingerprint",
+                entity_category=EntityCategory.DIAGNOSTIC,
                 value_fn=lambda _, val=battery_id: val,
                 entity_registry_enabled_default=False,
             ),
