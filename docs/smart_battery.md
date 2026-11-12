@@ -46,6 +46,13 @@ missing or invalid, or the API marks the charge data unreliable, the sensor
 reports `unknown` rather than treating missing data as zero. The sensor is
 created when the battery summary is available.
 
+The **Batteries** service also exposes a **Current capacity** sensor
+(*Huidige capaciteit*) in kWh. It sums the stored-energy values from every
+Smart Battery connected to this integration entry, using the same per-battery
+calculation. If any reported battery is missing a reliable capacity or charge
+level, the service sensor reports `unknown` instead of a misleading partial
+total. A genuine combined 0 kWh remains 0 kWh.
+
 ## Battery Operating Modes
 
 Supported batteries expose selectable operating modes.
