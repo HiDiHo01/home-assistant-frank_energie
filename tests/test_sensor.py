@@ -20,6 +20,9 @@ from python_frank_energie.domain import (
 from python_frank_energie.models import PriceData
 
 from custom_components.frank_energie import const
+from custom_components.frank_energie.device_inventory import (
+    inventory_device_identifiers,
+)
 from tests.utils import ResponseMocks
 
 
@@ -757,6 +760,7 @@ def test_enode_charger_sensor_properties_and_value(
     mock_chargers = MagicMock()
     mock_chargers.chargers = [mock_charger]
     mock_coordinator.data = {DATA_ENODE_CHARGERS: mock_chargers}
+    mock_coordinator.config_entry.entry_id = mock_config_entry.entry_id
 
     # Find the brand description
     brand_desc = next(d for d in ENODE_CHARGER_SENSOR_TYPES if d.key == "charger_brand")
@@ -765,7 +769,9 @@ def test_enode_charger_sensor_properties_and_value(
     )
 
     assert sensor.unique_id == f"frank_energie_{charger_id}_charger_brand"
-    assert sensor.device_info["identifiers"] == {("frank_energie", charger_id)}
+    assert sensor.device_info["identifiers"] == inventory_device_identifiers(
+        mock_config_entry.entry_id, "charger", charger_id
+    )
     assert sensor.device_info["manufacturer"] == "Wallbox"
     assert sensor.device_info["model"] == "Copper"
     assert sensor.device_info["name"] == "Wallbox Copper"
@@ -805,7 +811,7 @@ async def _parent_and_child_devices_after_add(
             (DOMAIN, f"{entry.entry_id}_{service_name}"), config_entry_id=entry.entry_id
         )
         child = dev_reg.async_get_device_by_identifier(
-            next(iter(sensor.device_info["identifiers"])),
+            (DOMAIN, sensor._charger_id),
             config_entry_id=entry.entry_id,
         )
     else:
@@ -1058,6 +1064,7 @@ def test_enode_vehicle_battery_capacity_from_parsed_model(
     vehicle.charge_state.is_plugged_in = False
 
     coordinator = MagicMock()
+    coordinator.config_entry.entry_id = "test_entry_id"
     coordinator.data = {DATA_ENODE_VEHICLES: EnodeVehicles(vehicles=[vehicle])}
     coordinator.last_update_success = True
 
@@ -1103,7 +1110,9 @@ def test_enode_vehicle_battery_capacity_from_parsed_model(
     assert charge_limit_sensor.native_value == 100
     assert charge_limit_sensor.available is True
     assert charge_limit_sensor.unique_id == "frank_energie_veh_123_charge_limit"
-    assert sensor.device_info["identifiers"] == {("frank_energie", "veh_123")}
+    assert sensor.device_info["identifiers"] == inventory_device_identifiers(
+        "test_entry_id", "vehicle", "veh_123"
+    )
     assert sensor.device_info["name"] == "Tesla Model 3"
 
 

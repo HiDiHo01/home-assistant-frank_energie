@@ -211,8 +211,7 @@ class StaleDeviceRepairFlow(RepairsFlow):
         if current_device is None:
             return self.async_create_entry(data={})
         if (
-            current_device.identifiers != device.identifiers
-            or current_device.config_entry_id != device.config_entry_id
+            current_device.config_entry_id != device.config_entry_id
             or async_identify_inventory_device(
                 self.hass, entry, current_device, expected_kind=kind
             )

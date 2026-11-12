@@ -195,7 +195,7 @@ def _is_device_removal_safe(
     entry: ConfigEntry[FrankEnergieEntryData],
     device_entry: dr.DeviceEntry,
 ) -> bool:
-    """Validate two independent absences using owned entity registry markers."""
+    """Validate two absences using owned provider identities and device kinds."""
     if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
         return False
 
@@ -253,7 +253,7 @@ async def async_remove_config_entry_device(
     current_device = dr.async_get(hass).async_get(device_entry.id)
     if (
         current_device is None
-        or current_device.identifiers != device_entry.identifiers
+        or async_identify_inventory_device(hass, entry, current_device) != identified
         or current_device.config_entry_id != device_entry.config_entry_id
         or entry.runtime_data is not runtime_data
         or coordinator.site_reference != previous_site_reference
