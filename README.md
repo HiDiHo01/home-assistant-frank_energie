@@ -3,6 +3,8 @@
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-orange)](https://buymeacoffee.com/royarx)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue)](https://www.paypal.me/royarx)
 
+**Language:** [English](README.md) | [Nederlands](README.nl.md) | [Français](README.fr.md)
+
 # Frank Energie Custom Component voor Home Assistant
 Middels deze integratie wordt de huidige prijsinformatie van Frank Energie beschikbaar gemaakt binnen Home Assistant.
 
