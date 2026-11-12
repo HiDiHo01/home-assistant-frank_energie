@@ -382,6 +382,7 @@ async def test_site_title_setup_does_not_log_the_delivery_address(
     entry = _entry(hass, include_site=False)
     coordinator = MagicMock()
     coordinator.api.UserSites = AsyncMock(return_value=_user_sites())
+    coordinator.async_api_call = AsyncMock(return_value=_user_sites())
     await FrankEnergieComponent(hass, entry)._select_site_reference(coordinator)
     assert entry.data[CONF_SITE] == SITE_REFERENCE
     assert entry.title == f"{STREET} 42"
