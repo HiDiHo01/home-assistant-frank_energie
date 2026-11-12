@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from types import SimpleNamespace
@@ -11,6 +11,14 @@ from uuid import UUID
 from unittest.mock import MagicMock
 
 import pytest
+
+from python_frank_energie.models import (
+    SmartBattery,
+    SmartBatteries,
+    SmartPvSystem,
+    SmartPvSystems,
+    UserSmartFeedInStatus,
+)
 
 from custom_components.frank_energie.diagnostics import (
     _serialize,
@@ -233,6 +241,57 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
         }
     )
 
+    coordinator.data.update(
+        {
+            "smart_batteries": SmartBatteries(
+                batteries=[
+                    SmartBattery(
+                        id="battery-test-01",
+                        external_reference="battery-provider-ref",
+                        brand="Test Battery",
+                        capacity=10.0,
+                    ),
+                ],
+            ),
+            "smart_pv_systems": SmartPvSystems(
+                systems=[
+                    SmartPvSystem.from_dict(
+                        {
+                            "id": "pv-test-01",
+                            "brand": "Test PV",
+                            "connectionEAN": "871234567890123456",
+                            "createdAt": "2026-11-01T10:00:00Z",
+                            "deletedAt": None,
+                            "displayName": "Example PV",
+                            "externalReference": "pv-provider-ref",
+                            "inverterSerialNumbers": ["PV-INV-TEST"],
+                            "model": "Example",
+                            "onboardingStatus": "COMPLETED",
+                            "provider": "Test Provider",
+                            "steeringStatus": "ACTIVE",
+                            "updatedAt": "2026-11-01T12:00:00Z",
+                            "SmartPvSystemPanelGroups": [{"id": "panel-test-01"}],
+                        }
+                    ),
+                ],
+            ),
+            "user_smart_feed_in": UserSmartFeedInStatus(
+                has_accepted_terms=True,
+                is_activated=True,
+                is_app_onboarding_available=True,
+                is_available_in_country=True,
+                user_created_at=datetime(2026, 11, 1, tzinfo=UTC),
+                user_id="feed-in-user-01",
+            ),
+            "raw_provider_data": {
+                "connectionEAN": "871234567890123456",
+                "externalReference": "raw-provider-ref",
+                "userId": "user-provider-ref",
+                "status": "ACTIVE",
+            },
+        }
+    )
+
     diagnostics = await async_get_config_entry_diagnostics(
         MagicMock(),
         entry,
@@ -287,6 +346,31 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["data"]["customer_number"] == "**REDACTED**"
     assert diagnostics["data"]["customerNumber"] == "**REDACTED**"
     assert diagnostics["data"]["mandateId"] == "**REDACTED**"
+
+    # Real provider dataclasses are serialized before recursive key redaction.
+    battery = diagnostics["data"]["smart_batteries"]["batteries"][0]
+    assert battery["id"] == "**REDACTED**"
+    assert battery["external_reference"] == "**REDACTED**"
+    assert battery["brand"] == "Test Battery"
+    assert battery["capacity"] == 10.0
+
+    pv_system = diagnostics["data"]["smart_pv_systems"]["systems"][0]
+    assert pv_system["id"] == "**REDACTED**"
+    assert pv_system["connection_ean"] == "**REDACTED**"
+    assert pv_system["external_reference"] == "**REDACTED**"
+    assert pv_system["inverter_serial_numbers"] == "**REDACTED**"
+    assert pv_system["panel_groups"][0]["id"] == "**REDACTED**"
+    assert pv_system["brand"] == "Test PV"
+
+    feed_in = diagnostics["data"]["user_smart_feed_in"]
+    assert feed_in["user_id"] == "**REDACTED**"
+    assert feed_in["is_activated"] is True
+
+    provider_data = diagnostics["data"]["raw_provider_data"]
+    assert provider_data["connectionEAN"] == "**REDACTED**"
+    assert provider_data["externalReference"] == "**REDACTED**"
+    assert provider_data["userId"] == "**REDACTED**"
+    assert provider_data["status"] == "ACTIVE"
 
     assert diagnostics["data"]["safe"] == "value"
 
