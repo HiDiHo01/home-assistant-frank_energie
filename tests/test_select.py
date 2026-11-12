@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 from python_frank_energie.domain import (
     SmartBatteryImbalanceStrategy,
-    SmartBatteryTradingAlgorithm,
     SmartBatteryMode,
     SmartBatteryStatus,
+    SmartBatteryTradingAlgorithm,
 )
 from python_frank_energie.models import (
     SmartBattery,
