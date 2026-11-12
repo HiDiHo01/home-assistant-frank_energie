@@ -262,7 +262,9 @@ async def async_get_config_entry_diagnostics(
         },
     }
 
-    if (smart_hvac := getattr(runtime_data, "smart_hvac_coordinator", None)) is not None:
+    if (
+        smart_hvac := getattr(runtime_data, "smart_hvac_coordinator", None)
+    ) is not None:
         snapshot = smart_hvac.data
         diagnostics["smart_hvac"] = {
             "last_update_success": smart_hvac.last_update_success,
