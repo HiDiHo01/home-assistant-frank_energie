@@ -527,12 +527,12 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             # Controleer of de titel correct is gegenereerd
             if not isinstance(title, str):
                 _LOGGER.warning(
-                    "Failed to generate title for the site reference: %s",
-                    site_reference,
+                    "Failed to generate a delivery site title for entry %s",
+                    self.entry.entry_id,
                 )
                 return
 
-            _LOGGER.debug("Site reference: %s, Title: %s", site_reference, title)
+            _LOGGER.debug("Selected delivery site for entry %s", self.entry.entry_id)
             # Update entry data and title using async_update_entry method
             self.hass.config_entries.async_update_entry(
                 self.entry,
@@ -590,7 +590,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         reference = str(getattr(selected_site, "reference", user_sites_data.reference))
 
-        _LOGGER.debug("Generated title: %s for site reference: %s", title, reference)
+        _LOGGER.debug("Generated delivery site title for entry %s", self.entry.entry_id)
         return reference, title
 
     async def _async_forward_entry_setups(self) -> None:
