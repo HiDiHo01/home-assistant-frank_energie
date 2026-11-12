@@ -810,8 +810,16 @@ async def _parent_and_child_devices_after_add(
         parent = dev_reg.async_get_device_by_identifier(
             (DOMAIN, f"{entry.entry_id}_{service_name}"), config_entry_id=entry.entry_id
         )
+        # The original provider ID remains a stable lookup key even after
+        # hardware category identification is added to the registry.
+        original_identifiers = {
+            identifier
+            for identifier in sensor.device_info["identifiers"]
+            if not identifier[1].startswith("hardware_v1:")
+        }
+        assert len(original_identifiers) == 1
         child = dev_reg.async_get_device_by_identifier(
-            (DOMAIN, sensor._charger_id),
+            next(iter(original_identifiers)),
             config_entry_id=entry.entry_id,
         )
     else:
