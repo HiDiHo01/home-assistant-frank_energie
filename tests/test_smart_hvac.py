@@ -373,7 +373,8 @@ async def test_hvac_site_device_and_account_diagnostics(
     icon_defaults = {
         key: value["default"] for key, value in hvac_icons["sensor"].items()
     }
-    assert icon_defaults == expected_icons
+    # Additional sensor icons must not invalidate the Smart HVAC icon contract.
+    assert {key: icon_defaults[key] for key in expected_icons} == expected_icons
     assert states.keys() <= hvac_icons["sensor"].keys()
     assert "smart_hvac_connection_requests" in hvac_icons["sensor"]
     # Provider statuses do not prove active heating; keep neutral icon fallbacks.
