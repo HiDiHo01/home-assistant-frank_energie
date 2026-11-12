@@ -62,7 +62,14 @@ def test_all_sensor_and_binary_descriptions_have_an_icon() -> None:
                 and device_class.value.id == "SensorDeviceClass"
                 and device_class.attr == "MONETARY"
             ):
-                assert translation.value not in icons.get(platform, {}), (
+                icon_entry = icons.get(platform, {}).get(translation.value)
+                # Smart HVAC already had a currency icon before this change.
+                legacy_hvac_icon = (
+                    platform == "sensor"
+                    and translation.value == "smart_hvac_total_result"
+                    and icon_entry == {"default": "mdi:currency-eur"}
+                )
+                assert icon_entry is None or legacy_hvac_icon, (
                     f"{file_name}:{node.lineno} overrides the existing "
                     f"monetary icon for {translation.value}"
                 )
