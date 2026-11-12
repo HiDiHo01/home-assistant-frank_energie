@@ -1099,6 +1099,73 @@ def _sync_price_contract_entities(
     return electricity_supported
 
 
+def _build_enode_charger_binary_sensors(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    settings_coordinator: FrankEnergieCoordinator,
+    charger_coordinator: FrankEnergieCoordinator,
+) -> list[EnodeChargerBinarySensor]:
+    """Build authenticated charger statuses and migrate matching legacy entries."""
+    if not charger_coordinator.api.is_authenticated:
+        return []
+    chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+    if not chargers or not chargers.chargers:
+        return []
+
+    user_data = (
+        settings_coordinator.data.get(DATA_USER)
+        if settings_coordinator.api.is_authenticated
+        else None
+    )
+    parent_id = register_service_device(
+        hass,
+        config_entry,
+        SERVICE_NAME_ENODE_CHARGERS,
+        configuration_url=getattr(user_data, "websiteUrl", None),
+    )
+    entities: list[EnodeChargerBinarySensor] = []
+    for charger in chargers.chargers:
+        if not isinstance(charger.id, str) or not charger.id:
+            continue
+        for description in ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS:
+            _migrate_legacy_enode_sensor(
+                hass, config_entry, f"{DOMAIN}_{charger.id}_{description.key}", description
+            )
+            entities.append(
+                EnodeChargerBinarySensor(
+                    charger_coordinator, description, charger, parent_id
+                )
+            )
+    return entities
+
+
+def _build_enode_vehicle_binary_sensors(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    vehicle_coordinator: FrankEnergieCoordinator,
+) -> list[EnodeVehicleBinarySensor]:
+    """Build authenticated vehicle statuses and migrate matching legacy entries."""
+    if not vehicle_coordinator.api.is_authenticated:
+        return []
+    vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+    if not vehicles or not vehicles.vehicles:
+        return []
+
+    entities: list[EnodeVehicleBinarySensor] = []
+    for vehicle in vehicles.vehicles:
+        vehicle_id = vehicle.get("id")
+        if not isinstance(vehicle_id, str) or not vehicle_id:
+            continue
+        for description in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS:
+            _migrate_legacy_enode_sensor(
+                hass, config_entry, f"{DOMAIN}_{vehicle_id}_{description.key}", description
+            )
+            entities.append(
+                EnodeVehicleBinarySensor(vehicle_coordinator, description, vehicle)
+            )
+    return entities
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -1149,51 +1216,16 @@ async def async_setup_entry(
             )
         )
 
-    if charger_coordinator.api.is_authenticated:
-        chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
-        if chargers and chargers.chargers:
-            user_data = (
-                settings_coordinator.data.get(DATA_USER)
-                if settings_coordinator.api.is_authenticated
-                else None
-            )
-            parent_id = register_service_device(
-                hass,
-                config_entry,
-                SERVICE_NAME_ENODE_CHARGERS,
-                configuration_url=getattr(user_data, "websiteUrl", None),
-            )
-            for charger in chargers.chargers:
-                if not isinstance(charger.id, str) or not charger.id:
-                    continue
-                for description in ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS:
-                    unique_id = f"{DOMAIN}_{charger.id}_{description.key}"
-                    _migrate_legacy_enode_sensor(
-                        hass, config_entry, unique_id, description
-                    )
-                    entities.append(
-                        EnodeChargerBinarySensor(
-                            charger_coordinator, description, charger, parent_id
-                        )
-                    )
-
-    if vehicle_coordinator.api.is_authenticated:
-        vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
-        if vehicles and vehicles.vehicles:
-            for vehicle in vehicles.vehicles:
-                vehicle_id = vehicle.get("id")
-                if not isinstance(vehicle_id, str) or not vehicle_id:
-                    continue
-                for description in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS:
-                    unique_id = f"{DOMAIN}_{vehicle_id}_{description.key}"
-                    _migrate_legacy_enode_sensor(
-                        hass, config_entry, unique_id, description
-                    )
-                    entities.append(
-                        EnodeVehicleBinarySensor(
-                            vehicle_coordinator, description, vehicle
-                        )
-                    )
+    entities.extend(
+        _build_enode_charger_binary_sensors(
+            hass, config_entry, settings_coordinator, charger_coordinator
+        )
+    )
+    entities.extend(
+        _build_enode_vehicle_binary_sensors(
+            hass, config_entry, vehicle_coordinator
+        )
+    )
 
     _LOGGER.debug(
         "Created %s binary sensors",
