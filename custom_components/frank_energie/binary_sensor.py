@@ -582,7 +582,8 @@ class FrankEnergieBinarySensor(
 
 
 _HAS_VIA_DEVICE_ID = (
-    "via_device_id" in inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
+    "via_device_id"
+    in inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
 )
 
 
@@ -776,7 +777,9 @@ def _migrate_legacy_enode_sensor(
     if new_entity_id is not None:
         new_entry = registry.async_get(new_entity_id)
         if new_entry is None or new_entry.config_entry_id != config_entry.entry_id:
-            _LOGGER.warning("Skipped cross-entry Enode entity migration for %s", description.key)
+            _LOGGER.warning(
+                "Skipped cross-entry Enode entity migration for %s", description.key
+            )
             return
     else:
         new_entry = registry.async_get_or_create(
