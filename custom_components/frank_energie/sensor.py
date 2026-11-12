@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from math import isfinite
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
@@ -4723,6 +4724,32 @@ def _get_battery_summary_lower(data: Any, idx: int, key: str) -> str | None:
     return val.lower() if val else None
 
 
+def _get_battery_current_capacity(data: FrankEnergieData, idx: int) -> float | None:
+    """Calculate stored energy in kWh from capacity and displayed charge percentage."""
+    battery = _get_battery(data, idx)
+    if battery is None or battery.summary is None:
+        return None
+
+    capacity = battery.capacity
+    charge_level = battery.summary.last_known_state_of_charge
+    if (
+        not isinstance(capacity, (int, float))
+        or not isinstance(charge_level, (int, float))
+        or isinstance(capacity, bool)
+        or isinstance(charge_level, bool)
+        or not isfinite(capacity)
+        or not isfinite(charge_level)
+        or capacity < 0
+        or not 0 <= charge_level <= 100
+        or _get_battery_summary_lower(data, idx, "last_known_status")
+        == "status_unreliable_data"
+    ):
+        return None
+
+    # Use the same rounded percentage shown by the Laadniveau sensor.
+    return capacity * round(charge_level) / 100
+
+
 def _build_single_smart_battery_descriptions(
     battery: Any,
     i: int,
@@ -4905,6 +4932,20 @@ def _build_single_smart_battery_descriptions(
                         and _get_battery_summary_lower(data, idx, "last_known_status")
                         != "status_unreliable_data"
                         else None
+                    ),
+                ),
+                FrankEnergieEntityDescription(
+                    key=f"{base_key}_current_capacity",
+                    translation_key="battery_current_capacity",
+                    authenticated=True,
+                    service_name=SERVICE_NAME_BATTERIES,
+                    icon="mdi:battery",
+                    device_class=SensorDeviceClass.ENERGY,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+                    suggested_display_precision=2,
+                    value_fn=lambda data, idx=i: _get_battery_current_capacity(
+                        data, idx
                     ),
                 ),
                 FrankEnergieEntityDescription(
