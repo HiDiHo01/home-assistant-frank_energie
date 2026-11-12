@@ -66,7 +66,7 @@ A failure in [vehicle deadline PR #449](https://github.com/HiDiHo01/home-assista
 - Keep callback type hints and a clear docstring; preserve the exact expected call contract rather than broad `*args`/`**kwargs` shims that can hide integration regressions.
 - For tests claiming a specific Home Assistant state such as `unknown`, add the entity through the actual test entity platform and assert `hass.states.get(entity_id).state`. Checking only `native_value is None` and `available is True` does not prove serialization or registry behavior.
 - Diagnose failures from each required Python job's `Test with pytest` step and the shortest relevant traceback. Correct the test harness only when it violates the real API signature; do not change production availability logic to work around a faulty test callback.
-- After any new test or documentation change, rerun the **current-head** pytest matrix and the pinned Ruff lint/format checks before reporting success.
+- After any new test or documentation change, rerun the **current-head** Python 3.14.10 / 3.15.2 pytest matrix and the pinned Ruff lint/format checks before reporting success.
 
 Example callback for a focused platform setup test:
 
@@ -134,7 +134,7 @@ For workflow or release-manifest changes, also run `poetry run pytest -q tests/t
 
 1. Read the failing Python setup step and identify the actual runner image, architecture, and requested patch. Check that combination against the official build manifest before changing the Python matrix or dependencies. [GitHub Actions Python build manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
 2. If a rolling runner label moved to an image without the minimum patch, choose a fixed image with builds for both matrix entries. Reproduce locally with the exact minimum interpreter and the existing Poetry lock.
-3. Run the workflow regression tests and verify that both Python jobs reach pytest and pass on the current PR head. Record interpreter setup failures separately from test failures.
+3. Run the workflow regression tests and verify that both pinned Python 3.14.10 and 3.15.2 jobs reach pytest and pass on the current PR head. Record interpreter setup failures separately from test failures.
 
 ## PR and completion rules
 
