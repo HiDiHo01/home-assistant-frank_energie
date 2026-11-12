@@ -152,19 +152,43 @@ def test_quality_workflow_performs_json_validation_without_tier_claims() -> None
 
 
 def test_ci_blocks_new_full_flake8_violations() -> None:
-    """Retain the lint gate and a runner that supports both Python builds."""
+    """Require stable Python while keeping experimental wheels diagnostic."""
     workflow = _read_workflow("ci.yaml")
     jobs = workflow["jobs"]
     assert isinstance(jobs, dict)
     job = jobs["run"]
     assert isinstance(job, dict)
     assert job["runs-on"] == "ubuntu-24.04"
-    assert job["strategy"]["matrix"]["python-version"] == ["3.14.10", "3.15.2"]
+    assert job["strategy"]["matrix"]["include"] == [
+        {"python-version": "3.14.10", "experimental": False},
+        {"python-version": "3.15.2", "experimental": True},
+    ]
+    assert job["continue-on-error"] == "${{ matrix.experimental }}"
+    assert job["strategy"]["fail-fast"] is False
     environment_step = _named_step(
         "ci.yaml", "run", "Verify Home Assistant test environment"
     )
     assert "(3, 14, 10)" in str(environment_step["run"])
     assert "(3, 15, 2)" in str(environment_step["run"])
+    wheel_step = _named_step(
+        "ci.yaml", "run", "Diagnose experimental Python wheel availability"
+    )
+    assert wheel_step["if"] == "${{ matrix.experimental }}"
+    assert "parse_wheel_filename" in str(wheel_step["run"])
+    assert "sys_tags" in str(wheel_step["run"])
+    install_step = _named_step("ci.yaml", "run", "Install dependencies with Poetry")
+    assert install_step["timeout-minutes"] == 10
+    assert install_step["env"]["POETRY_INSTALLER_ONLY_BINARY"] == (
+        "${{ matrix.experimental && ':all:' || ':none:' }}"
+    )
+    assert "poetry sync --with dev --no-root" in str(install_step["run"])
+    summary_step = _named_step(
+        "ci.yaml", "run", "Summarize experimental Python compatibility"
+    )
+    assert summary_step["if"] == "${{ always() && matrix.experimental }}"
+    assert "INSTALL_OUTCOME" in summary_step["env"]
+    assert "PYTEST_OUTCOME" in summary_step["env"]
+
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (
         "poetry run python .github/helpers/check_flake8_baseline.py"
