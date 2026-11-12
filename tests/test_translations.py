@@ -344,9 +344,7 @@ class _TranslationKeyExtractor(ast.NodeVisitor):
         """Track translation keys and service constants from string assignments."""
         if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
             return
-        if (
-            isinstance(target, ast.Name) and target.id == "_attr_translation_key"
-        ) or (
+        if (isinstance(target, ast.Name) and target.id == "_attr_translation_key") or (
             isinstance(target, ast.Attribute) and target.attr == "_attr_translation_key"
         ):
             self.translation_keys.add(value.value)
@@ -366,11 +364,16 @@ class _TranslationKeyExtractor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         """Keep Repairs issue keys separate from entity and button keys."""
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "async_create_issue":
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "async_create_issue"
+        ):
             self.generic_visit(node)
             return
         for keyword in node.keywords:
-            if not isinstance(keyword.value, ast.Constant) or not isinstance(keyword.value.value, str):
+            if not isinstance(keyword.value, ast.Constant) or not isinstance(
+                keyword.value.value, str
+            ):
                 continue
             if keyword.arg == "translation_key":
                 self.translation_keys.add(keyword.value.value)
@@ -395,7 +398,6 @@ SensorEntityDescription(translation_key="current_price", key="current_price")
 
 def test_no_unused_or_missing_translation_keys() -> None:
     """Verify that every declared entity and service translation key is used."""
-
     extractor = _TranslationKeyExtractor()
     for py_file in INTEGRATION_DIR.glob("**/*.py"):
         with open(py_file, "r", encoding="utf-8") as f:
