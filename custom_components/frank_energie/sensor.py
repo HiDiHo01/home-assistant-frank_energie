@@ -391,6 +391,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             native_unit_of_measurement=native_unit_of_measurement,
             suggested_display_precision=suggested_display_precision,
             translation_key=translation_key or key,
+            icon=icon,
             options=options,
             entity_category=EntityCategory(entity_category)
             if isinstance(entity_category, str)
@@ -692,7 +693,7 @@ PV_SENSORS: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="operational_status",
         translation_key="pv_operational_status",
-        icon="mdi:information-outline",
+        icon="mdi:solar-panel",
         device_class=SensorDeviceClass.ENUM,
         options=["on", "off", "operational", "no_connection", "error", "unknown"],
         value_fn=lambda summary: str(summary.operational_status).lower(),
@@ -901,7 +902,7 @@ STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_CHARGERS,
-        icon="mdi:flash",
+        icon="mdi:battery-charging",
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda data: (
             sum(
@@ -978,7 +979,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="can_smart_charge",
-        icon="mdi:flash",
+        icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: charger.can_smart_charge,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -986,7 +987,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ChargerSensorDescription(
         key="charge_capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:flash",
+        icon="mdi:battery",
         device_class=SensorDeviceClass.ENERGY,
         authenticated=True,
         value_fn=lambda charger: (
@@ -995,7 +996,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_plugged_in",
-        icon="mdi:flash",
+        icon="mdi:power-plug",
         authenticated=True,
         value_fn=lambda charger: (
             charger.charge_state.is_plugged_in if charger.charge_state else None
@@ -1004,7 +1005,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ChargerSensorDescription(
         key="power_delivery_state",
         translation_key="power_delivery_state",
-        icon="mdi:flash",
+        icon="mdi:transmission-tower",
         authenticated=True,
         device_class=SensorDeviceClass.ENUM,
         options=list(POWER_DELIVERY_STATES),
@@ -1017,7 +1018,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ChargerSensorDescription(
         key="is_reachable",
         translation_key="charger_is_reachable",
-        icon="mdi:ev-station",
+        icon="mdi:lan-connect",
         authenticated=True,
         value_fn=lambda charger: charger.is_reachable,
     ),
@@ -1042,7 +1043,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_smart_charging_enabled",
-        icon="mdi:flash",
+        icon="mdi:ev-station",
         authenticated=True,
         value_fn=lambda charger: (
             charger.charge_settings.is_smart_charging_enabled
@@ -1052,7 +1053,7 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
     ),
     ChargerSensorDescription(
         key="is_solar_charging_enabled",
-        icon="mdi:flash",
+        icon="mdi:solar-power",
         authenticated=True,
         value_fn=lambda charger: (
             charger.charge_settings.is_solar_charging_enabled
@@ -1154,7 +1155,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="charge_limit",
-        icon="mdi:battery-charging-70",
+        icon="mdi:battery-lock",
         native_unit_of_measurement=PERCENTAGE,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1290,6 +1291,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="last_seen",
+        icon=ICON_CLOCK_OUTLINE,
         device_class=SensorDeviceClass.TIMESTAMP,
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
@@ -1359,7 +1361,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     ),
     EnodeVehicleEntityDescription(
         key="vehicle_vin",
-        icon="mdi:card-account-details",
+        icon="mdi:identifier",
         authenticated=True,
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: (
@@ -1558,7 +1560,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
 ] = (
     FrankEnergieEntityDescription(
         key="device_id",
-        icon="mdi:battery",
+        icon="mdi:identifier",
         native_unit_of_measurement=None,
         state_class=None,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -2541,7 +2543,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="elec_hourcount",
         translation_key="elec_hourcount",
-        icon="mdi:numeric-0-box-multiple",
+        icon="mdi:counter",
         suggested_display_precision=0,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data[DATA_ELECTRICITY].length,
@@ -2557,7 +2559,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gas_hourcount",
         translation_key="gas_hourcount",
-        icon="mdi:numeric-0-box-multiple",
+        icon="mdi:counter",
         suggested_display_precision=0,
         state_class=SensorStateClass.MEASUREMENT,
         service_name=SERVICE_NAME_GAS_PRICES,
@@ -3634,7 +3636,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="usage_electricity_yesterday",
         is_electricity=True,
         translation_key="usage_electricity_yesterday",
-        icon="mdi:transmission-tower-export",
+        icon="mdi:transmission-tower-import",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -3719,7 +3721,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="delivered_feed_in_yesterday",
         translation_key="delivered_feed_in_yesterday",
-        icon="mdi:transmission-tower-import",
+        icon="mdi:transmission-tower-export",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -3901,7 +3903,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="preferredAutomaticCollectionDay",
         translation_key="preferred_automatic_collection_day",
-        icon="mdi:bank",
+        icon="mdi:calendar-month",
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
@@ -4775,7 +4777,7 @@ def _build_single_smart_battery_descriptions(
                 translation_key="battery_brand",
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
-                icon="mdi:battery",
+                icon="mdi:factory",
                 value_fn=lambda _, val=brand: val,
             ),
             FrankEnergieEntityDescription(
@@ -4898,7 +4900,7 @@ def _build_single_smart_battery_descriptions(
                     translation_key="battery_state_of_charge",
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
-                    icon="mdi:battery-high",
+                    icon="mdi:battery",
                     device_class=SensorDeviceClass.BATTERY,
                     suggested_display_precision=0,
                     native_unit_of_measurement="%",
@@ -5058,7 +5060,7 @@ def _build_aggregated_smart_batteries_descriptions() -> list[
                 service_name=SERVICE_NAME_BATTERIES,
                 device_class=SensorDeviceClass.BATTERY,
                 suggested_display_precision=0,
-                icon="mdi:battery-high",
+                icon="mdi:battery",
                 native_unit_of_measurement="%",
                 value_fn=_get_average_state_of_charge,
             ),
