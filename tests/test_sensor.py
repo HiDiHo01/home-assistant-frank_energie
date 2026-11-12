@@ -2043,7 +2043,7 @@ def test_smart_battery_current_capacity_sensor(
 
     assert current.key == "smart_battery_0_current_capacity"
     assert current.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
-    assert current.device_class is SensorDeviceClass.ENERGY
+    assert current.device_class is SensorDeviceClass.ENERGY_STORAGE
     assert current.state_class is SensorStateClass.MEASUREMENT
     assert current.entity_category is None
     assert current.icon == "mdi:battery"
