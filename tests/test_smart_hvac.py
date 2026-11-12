@@ -894,9 +894,7 @@ async def test_hvac_registry_identity_survives_deleted_equipment_entities(
     entity_registry = er.async_get(hass)
     for entity in er.async_entries_for_device(entity_registry, device.id):
         entity_registry.async_remove(entity.entity_id)
-    assert async_identify_inventory_device(hass, entry, device) == (
-        "hvac", identifier
-    )
+    assert async_identify_inventory_device(hass, entry, device) == ("hvac", identifier)
 
     api.smart_hvacs.return_value = []
     await coordinator.async_refresh()

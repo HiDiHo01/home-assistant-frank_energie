@@ -57,6 +57,7 @@ INVENTORY_SPECS: Final[dict[str, InventorySpec]] = {
     ),
 }
 
+
 def _typed_device_marker(entry_id: str, kind: str, identifier: str) -> str:
     """Create an entry-scoped, opaque category marker from an existing provider ID."""
     digest = sha256(identifier.encode()).hexdigest()
@@ -216,8 +217,7 @@ def async_identify_inventory_device(
         matching_kinds = [
             kind
             for kind in INVENTORY_SPECS
-            if _typed_device_marker(entry.entry_id, kind, identifier)
-            in typed_markers
+            if _typed_device_marker(entry.entry_id, kind, identifier) in typed_markers
         ]
         if (
             len(typed_markers) != 1
@@ -284,11 +284,14 @@ def async_persist_inventory_device(
     updated = registry.async_update_device(
         device.id, new_identifiers=set(device.identifiers) | expected_identifiers
     )
-    if updated is None or async_identify_inventory_device(
-        hass, entry, updated, expected_kind=kind
-    ) != identified:
+    if (
+        updated is None
+        or async_identify_inventory_device(hass, entry, updated, expected_kind=kind)
+        != identified
+    ):
         return None
     return identified
+
 
 def validated_inventory_ids(collection_key: str, inventory: object) -> set[str] | None:
     """Return unique inventory IDs, or None when the response is incomplete."""
