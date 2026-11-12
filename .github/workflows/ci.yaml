@@ -22,7 +22,11 @@ jobs:
   run:
     permissions:
       contents: read
-    name: Run flake8/pytest (Python ${{ matrix.python-version }})
+    name: Run flake8/pytest (Python ${{ matrix.python-version }}${{ matrix.experimental && ' experimental' || '' }})
+    # Only the officially supported Python 3.14 job is mandatory.
+    # GitHub reports failures in the Python 3.15 compatibility job without
+    # blocking the stable Home Assistant test gate.
+    continue-on-error: ${{ matrix.experimental }}
     # Both Python 3.14.10 and 3.15.2 have verified Ubuntu 24.04 x64 builds.
     # Keep the runner pinned to the verified platform for both versions.
     runs-on: ubuntu-24.04
@@ -30,8 +34,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Exercise the exact maintenance and current stable releases.
-        python-version: ["3.14.10", "3.15.2"]
+        include:
+          - python-version: "3.14.10"
+            experimental: false
+          - python-version: "3.15.2"
+            experimental: true
 
     steps:
       - name: Harden Runner
@@ -81,11 +88,64 @@ jobs:
       - name: Validate lockfile
         run: poetry check --lock
 
+      - name: Diagnose experimental Python wheel availability
+        if: ${{ matrix.experimental }}
+        run: |
+          python - <<'PY'
+          """Report locked packages without a wheel for the current runner."""
+          import tomllib
+          from pathlib import Path
+
+          from packaging.markers import Marker
+          from packaging.tags import sys_tags
+          from packaging.utils import parse_wheel_filename
+
+          lock = tomllib.loads(Path("poetry.lock").read_text(encoding="utf-8"))
+          supported_tags = set(sys_tags())
+          missing = []
+          for package in lock["package"]:
+              markers = package.get("markers")
+              if isinstance(markers, str) and not Marker(markers).evaluate():
+                  continue
+              if isinstance(markers, dict) and not any(
+                  Marker(expression).evaluate() for expression in markers.values()
+              ):
+                  continue
+              wheel_names = [
+                  item["file"]
+                  for item in package.get("files", [])
+                  if item["file"].endswith(".whl")
+              ]
+              if any(
+                  not parse_wheel_filename(filename)[3].isdisjoint(supported_tags)
+                  for filename in wheel_names
+              ):
+                  continue
+              missing.append(f"{package['name']}=={package['version']}")
+
+          if missing:
+              print("Locked packages without a compatible wheel on this runner:")
+              for package_name in sorted(missing):
+                  print(f"  {package_name}")
+              print(
+                  "::warning title=Python 3.15 wheel availability::"
+                  f"{len(missing)} locked packages lack a compatible wheel; "
+                  "a source build would be required."
+              )
+          else:
+              print("All applicable locked packages have compatible wheels.")
+          PY
+
       - name: Install dependencies with Poetry
         id: install
+        timeout-minutes: 10
+        env:
+          # A missing wheel must fail the experimental check promptly rather
+          # than spend the runner budget compiling unsupported native modules.
+          POETRY_INSTALLER_ONLY_BINARY: ${{ matrix.experimental && ':all:' || ':none:' }}
         run: |
           poetry env use python
-          poetry sync --with dev --no-root
+          poetry sync --with dev --no-root --no-ansi -v
           poetry run python -m pip check
 
       - name: Verify Home Assistant test environment
@@ -136,3 +196,18 @@ jobs:
           path: pytest-results.xml
           if-no-files-found: error
           retention-days: 14
+
+      - name: Summarize experimental Python compatibility
+        if: ${{ always() && matrix.experimental }}
+        env:
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          ENVIRONMENT_OUTCOME: ${{ steps.environment.outcome }}
+          PYTEST_OUTCOME: ${{ steps.pytest.outcome }}
+        run: |
+          {
+            echo "### Python 3.15.2 (experimental; non-blocking)"
+            echo "Dependency installation: ${INSTALL_OUTCOME}"
+            echo "Home Assistant environment: ${ENVIRONMENT_OUTCOME}"
+            echo "Full pytest suite: ${PYTEST_OUTCOME}"
+            echo "These results do not establish official Home Assistant support."
+          } >> "$GITHUB_STEP_SUMMARY"
