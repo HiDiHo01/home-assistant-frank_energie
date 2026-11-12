@@ -9,7 +9,6 @@ import asyncio
 import copy
 import logging
 import math
-import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -315,16 +314,6 @@ def _extract_electricity_connection_id(user_data: Any) -> str | None:
         "Resolution changes are only supported for electricity."
     )
     return None
-
-
-if sys.platform == "win32" and hasattr(asyncio, "set_event_loop_policy"):
-    # Python 3.14-3.16
-    try:
-        # Proactor is default on Python 3.17+, but explicitly set it for 3.14-3.16 to avoid Selector which is deprecated and can cause issues with aiohttp
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    except Exception:
-        # fallback for Python 3.17+ where Proactor policy is default and Selector policy is deprecated
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 ERROR_NO_MARKET_PRICES: Final[str] = "No marketprices found"
