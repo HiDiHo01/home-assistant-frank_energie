@@ -13,14 +13,14 @@ from zoneinfo import ZoneInfo
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
-from python_frank_energie.exceptions import AuthException
+from python_frank_energie.exceptions import AuthException, RateLimitException
 from python_frank_energie.models import UserSites
 
 from .const import (
@@ -43,10 +43,12 @@ from .coordinator import (
     FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
+    FrankEnergieInvoiceCoordinator,
 )
 from .device_inventory import INVENTORY_SPECS, async_identify_inventory_device
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
+from .rate_limit import FrankEnergieSetupData, get_rate_limit_state, remove_rate_limit_state
 from .smart_hvac import FrankEnergieSmartHvacCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,7 +61,7 @@ _HAS_DEVICE_BY_IDENTIFIER: Final = hasattr(
 
 
 @dataclass
-class FrankEnergieEntryData:
+class FrankEnergieEntryData(FrankEnergieSetupData):
     """Runtime data stored on a ConfigEntry."""
 
     coordinator: FrankEnergieCoordinator
@@ -70,6 +72,7 @@ class FrankEnergieEntryData:
     pv_coordinator: FrankEnergiePVCoordinator
     vehicle_coordinator: FrankEnergieVehicleCoordinator
     statistics_coordinator: FrankEnergieStatisticsCoordinator
+    invoice_coordinator: FrankEnergieInvoiceCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
     smart_hvac_coordinator: FrankEnergieSmartHvacCoordinator | None = None
     stale_device_absences: dict[str, int] = field(default_factory=dict)
@@ -150,6 +153,7 @@ async def async_remove_entry(
     """Clean up persistent storage when a config entry is removed."""
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
     await price_cache_store(hass, entry.entry_id).async_remove()
+    remove_rate_limit_state(hass, entry.entry_id)
 
 
 def _is_unused_service_device(
@@ -398,29 +402,32 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         statistics_coordinator = FrankEnergieStatisticsCoordinator(
             self.hass, self.entry, api, settings_coordinator
         )
-
-        # Awaiting the site reference selection using settings coordinator
-        await self._select_site_reference(settings_coordinator)
-
-        # Make runtime data available before refreshes, so diagnostics, services,
-        # and error paths can resolve the coordinators during setup.
-        await self._save_coordinator_to_hass_data(
-            settings_coordinator,
-            price_coordinator,
-            battery_coordinator,
-            charger_coordinator,
-            pv_coordinator,
-            vehicle_coordinator,
-            statistics_coordinator,
+        invoice_coordinator = FrankEnergieInvoiceCoordinator(
+            self.hass, self.entry, api, settings_coordinator
         )
 
         try:
+            await self._select_site_reference(settings_coordinator)
+
+            # Runtime is published before concurrent refreshes and platform setup.
+            await self._save_coordinator_to_hass_data(
+                settings_coordinator,
+                price_coordinator,
+                battery_coordinator,
+                charger_coordinator,
+                pv_coordinator,
+                vehicle_coordinator,
+                statistics_coordinator,
+                invoice_coordinator,
+            )
+
             # The other coordinators can refresh concurrently once settings are ready.
             _LOGGER.debug("Performing initial refresh for sub-coordinators")
             await settings_coordinator.async_config_entry_first_refresh()
             refreshes = [
                 price_coordinator.async_config_entry_first_refresh(),
                 statistics_coordinator.async_config_entry_first_refresh(),
+                invoice_coordinator.async_refresh(),
                 battery_coordinator.async_config_entry_first_refresh(),
                 charger_coordinator.async_config_entry_first_refresh(),
                 pv_coordinator.async_config_entry_first_refresh(),
@@ -447,12 +454,14 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             _LOGGER.debug("Scheduling aligned updates for price coordinator")
             await self._schedule_aligned_updates(price_coordinator)
             return True
-        except BaseException:
+        except BaseException as err:
             # Failed or cancelled setup must not publish a partial runtime.
-            # Home Assistant processes async_on_unload callbacks on failure.
+            # Keep server-provided cooldowns in the entry-scoped rate-limit store.
             self.hass.data.setdefault(DOMAIN, {}).pop(self.entry.entry_id, None)
             if hasattr(self.entry, "runtime_data"):
                 del self.entry.runtime_data
+            if isinstance(err, RateLimitException):
+                raise ConfigEntryNotReady("Frank Energie API rate limited") from None
             raise
 
     async def _async_refresh_coordinators(
@@ -548,14 +557,21 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
 
         try:
             # Haal de 'UserSites' gegevens op van de coordinator API
-            user_sites_data: UserSites = await coordinator.api.UserSites()
+            user_sites_data: UserSites = await coordinator.async_api_call(
+                "UserSites", coordinator.api.UserSites
+            )
         except AuthException:
+            coordinator.rate_limits.check_authentication_recovery()
             _LOGGER.debug(
                 "Authentication failed during site fetch, attempting token renewal"
             )
             try:
                 await coordinator._try_renew_token()
-                user_sites_data = await coordinator.api.UserSites()
+                user_sites_data = await coordinator.async_api_call(
+                    "UserSites", coordinator.api.UserSites
+                )
+            except RateLimitException:
+                raise
             except Exception as renew_ex:
                 _LOGGER.exception("Token renewal failed during setup: %s", renew_ex)
                 raise ConfigEntryAuthFailed from renew_ex
@@ -634,6 +650,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         pv_coordinator: FrankEnergiePVCoordinator,
         vehicle_coordinator: FrankEnergieVehicleCoordinator,
         statistics_coordinator: FrankEnergieStatisticsCoordinator,
+        invoice_coordinator: FrankEnergieInvoiceCoordinator,
     ) -> None:
         """Save the coordinators to the Home Assistant data."""
         _LOGGER.debug("Saving coordinators to Home Assistant data (entry.runtime_data)")
@@ -643,6 +660,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         }
 
         self.entry.runtime_data = FrankEnergieEntryData(
+            rate_limits=get_rate_limit_state(self.hass, self.entry),
             coordinator=price_coordinator,
             settings_coordinator=settings_coordinator,
             price_coordinator=price_coordinator,
@@ -651,6 +669,7 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
             pv_coordinator=pv_coordinator,
             vehicle_coordinator=vehicle_coordinator,
             statistics_coordinator=statistics_coordinator,
+            invoice_coordinator=invoice_coordinator,
         )
 
     def _remove_entry_from_hass_data(self) -> None:
