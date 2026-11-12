@@ -184,6 +184,36 @@
             "name": "User created at"
           }
         }
+      },
+      "can_smart_charge": {
+        "name": "Can Smart Charge"
+      },
+      "is_reachable": {
+        "name": "Vehicle Reachable"
+      },
+      "charger_is_reachable": {
+        "name": "Charger Reachable"
+      },
+      "is_plugged_in": {
+        "name": "Is Plugged In"
+      },
+      "is_charging": {
+        "name": "Is Charging"
+      },
+      "is_fully_charged": {
+        "name": "Fully Charged"
+      },
+      "smart_charging_enabled": {
+        "name": "Smart Charging Enabled"
+      },
+      "solar_charging_enabled": {
+        "name": "Solar Charging Enabled"
+      },
+      "is_smart_charging_enabled": {
+        "name": "Is Smart Charging Enabled"
+      },
+      "is_solar_charging_enabled": {
+        "name": "Is Solar Charging Enabled"
       }
     },
     "button": {
@@ -974,14 +1004,8 @@
       "charger_model": {
         "name": "Model"
       },
-      "can_smart_charge": {
-        "name": "Can Smart Charge"
-      },
       "charge_capacity": {
         "name": "Charge Capacity"
-      },
-      "is_plugged_in": {
-        "name": "Is Plugged In"
       },
       "power_delivery_state": {
         "name": "Power Delivery State",
@@ -998,23 +1022,8 @@
           "error": "Error"
         }
       },
-      "charger_is_reachable": {
-        "name": "Charger Reachable"
-      },
-      "is_reachable": {
-        "name": "Vehicle Reachable"
-      },
-      "is_charging": {
-        "name": "Is Charging"
-      },
       "charge_rate": {
         "name": "Charge Rate"
-      },
-      "is_smart_charging_enabled": {
-        "name": "Is Smart Charging Enabled"
-      },
-      "is_solar_charging_enabled": {
-        "name": "Is Solar Charging Enabled"
       },
       "total_batteries": {
         "name": "Total Batteries"
@@ -1039,15 +1048,6 @@
       },
       "charge_last_updated": {
         "name": "Charge Last Updated"
-      },
-      "is_fully_charged": {
-        "name": "Fully Charged"
-      },
-      "smart_charging_enabled": {
-        "name": "Smart Charging Enabled"
-      },
-      "solar_charging_enabled": {
-        "name": "Solar Charging Enabled"
       },
       "last_seen": {
         "name": "Last Seen"
