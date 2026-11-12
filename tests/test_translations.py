@@ -367,10 +367,7 @@ class _TranslationKeyExtractor(ast.NodeVisitor):
         is_issue_call = (
             isinstance(node.func, ast.Attribute)
             and node.func.attr == "async_create_issue"
-        ) or (
-            isinstance(node.func, ast.Name)
-            and node.func.id == "async_create_issue"
-        )
+        ) or (isinstance(node.func, ast.Name) and node.func.id == "async_create_issue")
         if is_issue_call:
             self.generic_visit(node)
             return
