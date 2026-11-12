@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import inspect
 import logging
-from math import isfinite
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
+from math import isfinite
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
 
