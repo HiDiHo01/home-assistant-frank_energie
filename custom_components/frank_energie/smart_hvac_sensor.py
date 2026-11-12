@@ -22,7 +22,10 @@ from python_frank_energie.models import SmartHvacDevice, SmartHvacSummary
 
 from .const import DATA_USER, DOMAIN, SERVICE_NAME_SMART_HVAC, SERVICE_NAME_USER
 from .coordinator import FrankEnergieSettingsCoordinator
-from .device_inventory import smart_hvac_device_identifier
+from .device_inventory import (
+    inventory_device_identifiers,
+    smart_hvac_device_identifier,
+)
 from .helpers import service_device_info
 from .smart_hvac import (
     FrankEnergieSmartHvacCoordinator,
@@ -226,7 +229,11 @@ class _SmartHvacDeviceSensor(
         self._attr_unique_id = (
             f"{entry_id}_{_EQUIPMENT_ID_PREFIX}_{fingerprint}_{description.key}"
         )
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, device_identifier)})
+        self._attr_device_info = DeviceInfo(
+            identifiers=inventory_device_identifiers(
+                entry_id, "hvac", device_identifier
+            )
+        )
 
     @property
     def _device(self) -> SmartHvacDevice | None:
@@ -327,7 +334,9 @@ def _async_sync_equipment(
         device_registry.async_get_or_create(
             config_entry_id=entry_id,
             **DeviceInfo(
-                identifiers={(DOMAIN, identifier)},
+                identifiers=inventory_device_identifiers(
+                    entry_id, "hvac", identifier
+                ),
                 name=device.display_name or device.model or device.brand or "HVAC",
                 manufacturer=device.brand,
                 model=device.model,
