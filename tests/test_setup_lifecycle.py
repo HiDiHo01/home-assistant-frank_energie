@@ -67,7 +67,9 @@ async def test_failed_setup_discards_runtime(
     aioclient_responses: ResponseMocks,
     freezer: FrozenDateTimeFactory,
     error_type: type[Exception],
-    coordinator_type: type[FrankEnergieSettingsCoordinator | FrankEnergiePriceCoordinator],
+    coordinator_type: type[
+        FrankEnergieSettingsCoordinator | FrankEnergiePriceCoordinator
+    ],
 ) -> None:
     """No entry runtime or global coordinator may survive initial-refresh errors."""
     entry = await _prepare_entry(hass, aioclient_responses, freezer)
@@ -159,7 +161,9 @@ async def test_cancelled_initial_refresh_discards_runtime(
         "async_config_entry_first_refresh",
         new=AsyncMock(side_effect=blocked_refresh),
     ):
-        setup_task = hass.async_create_task(hass.config_entries.async_setup(entry.entry_id))
+        setup_task = hass.async_create_task(
+            hass.config_entries.async_setup(entry.entry_id)
+        )
         try:
             async with asyncio.timeout(5):
                 await started.wait()
@@ -187,9 +191,7 @@ async def test_partial_platform_setup_rolls_back(
     component = FrankEnergieComponent(hass, entry)
     forwarded: list[list[Platform | str]] = []
 
-    async def forward(
-        _entry: MockConfigEntry, platforms: list[Platform | str]
-    ) -> None:
+    async def forward(_entry: MockConfigEntry, platforms: list[Platform | str]) -> None:
         """Allow the sensor platform, then raise on dependent platforms."""
         forwarded.append(platforms)
         if platforms != [Platform.SENSOR]:
@@ -257,7 +259,9 @@ async def test_failed_unload_preserves_runtime(
 def test_coordinator_import_preserves_windows_event_loop_policy() -> None:
     """Import on Windows leaves Home Assistant's process-wide loop policy alone."""
     module_name = f"{coordinator_module.__package__}._loop_policy_probe"
-    spec = importlib.util.spec_from_file_location(module_name, coordinator_module.__file__)
+    spec = importlib.util.spec_from_file_location(
+        module_name, coordinator_module.__file__
+    )
     assert spec is not None
     assert spec.loader is not None
     probe = importlib.util.module_from_spec(spec)
