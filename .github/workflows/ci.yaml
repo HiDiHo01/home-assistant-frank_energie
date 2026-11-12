@@ -114,7 +114,10 @@ jobs:
           print(requirements[0])
           PY
           )
-          python -m pip install --only-binary=:all: "$client_requirement" "packaging>=24.2,<27"
+          # The released client models import dateutil but its package
+          # metadata does not yet declare python-dateutil as a dependency.
+          python -m pip install --only-binary=:all: \
+            "$client_requirement" "python-dateutil>=2.9,<3" "packaging>=24.2,<27"
           python -m pip check
 
       - name: Diagnose experimental Python wheel availability
