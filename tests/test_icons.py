@@ -150,7 +150,7 @@ def test_existing_energy_flow_and_binary_sensor_icons_are_preserved() -> None:
     binary_icons = {
         description.key: description.icon for description in BINARY_SENSOR_DESCRIPTIONS
     }
-    assert binary_icons["electricity_price_lowest_today"] == "mdi:currency-eur"
+    assert binary_icons["electricity_price_lowest_today"] == "mdi:arrow-down-bold"
     assert binary_icons["tomorrow_prices_available"] == "mdi:currency-eur"
     assert _read_icons()["entity"]["binary_sensor"]["smart_hvac"]["default"] == (
         "mdi:heat-pump"
