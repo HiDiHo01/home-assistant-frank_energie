@@ -392,6 +392,7 @@ class EnodeVehicleEntityDescription(SensorEntityDescription):
             suggested_display_precision=suggested_display_precision,
             translation_key=translation_key or key,
             icon=icon,
+            entity_registry_enabled_default=entity_registry_enabled_default,
             options=options,
             entity_category=EntityCategory(entity_category)
             if isinstance(entity_category, str)
@@ -526,9 +527,6 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
 
     _attr_should_poll = False
     _attr_has_entity_name = True  # Allow entity name to be set in the UI
-    _attr_entity_registry_enabled_default = (
-        True  # Default to enabled in entity registry
-    )
 
     def __init__(
         self,
