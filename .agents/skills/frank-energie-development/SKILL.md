@@ -66,7 +66,7 @@ A failure in [vehicle deadline PR #449](https://github.com/HiDiHo01/home-assista
 - Keep callback type hints and a clear docstring; preserve the exact expected call contract rather than broad `*args`/`**kwargs` shims that can hide integration regressions.
 - For tests claiming a specific Home Assistant state such as `unknown`, add the entity through the actual test entity platform and assert `hass.states.get(entity_id).state`. Checking only `native_value is None` and `available is True` does not prove serialization or registry behavior.
 - Diagnose failures from each required Python job's `Test with pytest` step and the shortest relevant traceback. Correct the test harness only when it violates the real API signature; do not change production availability logic to work around a faulty test callback.
-- After any new test or documentation change, rerun the **current-head** required Python 3.14.10 pytest/Flake8 gate, the experimental Python 3.15.2 compatibility job, and the pinned Ruff lint/format checks. Do not mistake a non-blocking Python 3.15 install failure for established compatibility.
+- After any new test or documentation change, rerun the **current-head** required Python 3.14.10 pytest/Flake8 gate, the limited experimental Python 3.15.2 client smoke job, and the pinned Ruff lint/format checks. A green client smoke job does not establish Home Assistant Python 3.15 compatibility.
 
 Example callback for a focused platform setup test:
 
@@ -134,7 +134,7 @@ For workflow or release-manifest changes, also run `poetry run pytest -q tests/t
 
 1. Read the failing Python setup step and identify the actual runner image, architecture, and requested patch. Check that combination against the official build manifest before changing the Python matrix or dependencies. [GitHub Actions Python build manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json)
 2. If a rolling runner label moved to an image without the minimum patch, choose a fixed image with builds for both matrix entries. Reproduce locally with the exact minimum interpreter and the existing Poetry lock.
-3. Run the workflow regression tests and verify that Python 3.14.10 reaches pytest and passes on the current PR head. Inspect the non-blocking Python 3.15.2 job independently: it audits the lockfile for missing wheels and installs wheels only, failing promptly rather than compiling unverified native dependencies. If installation is blocked, report it as unverified compatibility rather than a passing 3.15 test. Record interpreter setup failures separately from test failures.
+3. Run workflow regression tests and verify Python 3.14.10 reaches and passes the complete Home Assistant pytest suite on the current PR head. Independently inspect the experimental Python 3.15.2 job: it reports unavailable wheels for the full Home Assistant dependency lock, installs only the manifest-pinned upstream price client with binary wheels, and runs standalone offline import/model/integration syntax smoke tests. A green result is **not** Home Assistant compatibility. Record setup failures separately from test failures.
 
 ## PR and completion rules
 
