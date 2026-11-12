@@ -168,8 +168,8 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     environment_step = _named_step(
         "ci.yaml", "run", "Verify Home Assistant test environment"
     )
+    assert environment_step["if"] == "${{ !matrix.experimental }}"
     assert "(3, 14, 10)" in str(environment_step["run"])
-    assert "(3, 15, 2)" in str(environment_step["run"])
     wheel_step = _named_step(
         "ci.yaml", "run", "Diagnose experimental Python wheel availability"
     )
@@ -177,17 +177,30 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     assert "parse_wheel_filename" in str(wheel_step["run"])
     assert "sys_tags" in str(wheel_step["run"])
     install_step = _named_step("ci.yaml", "run", "Install dependencies with Poetry")
+    assert install_step["if"] == "${{ !matrix.experimental }}"
     assert install_step["timeout-minutes"] == 10
-    assert install_step["env"]["POETRY_INSTALLER_ONLY_BINARY"] == (
-        "${{ matrix.experimental && ':all:' || ':none:' }}"
-    )
     assert "poetry sync --with dev --no-root" in str(install_step["run"])
+    client_step = _named_step(
+        "ci.yaml", "run", "Install Python 3.15 upstream client for offline smoke tests"
+    )
+    assert client_step["if"] == "${{ matrix.experimental }}"
+    assert "--only-binary=:all:" in str(client_step["run"])
+    assert "manifest.json" in str(client_step["run"])
+    smoke_step = _named_step(
+        "ci.yaml", "run", "Run Python 3.15 upstream client smoke tests"
+    )
+    assert smoke_step["if"] == "${{ matrix.experimental }}"
+    assert "test_python315_smoke.py" in str(smoke_step["run"])
+    assert _named_step("ci.yaml", "run", "Test with pytest")["if"] == (
+        "${{ !cancelled() && !matrix.experimental && steps.environment.outcome == 'success' }}"
+    )
     summary_step = _named_step(
         "ci.yaml", "run", "Summarize experimental Python compatibility"
     )
     assert summary_step["if"] == "${{ always() && matrix.experimental }}"
-    assert "INSTALL_OUTCOME" in summary_step["env"]
-    assert "PYTEST_OUTCOME" in summary_step["env"]
+    assert "CLIENT_INSTALL_OUTCOME" in summary_step["env"]
+    assert "SMOKE_OUTCOME" in summary_step["env"]
+    assert "Home Assistant dependencies and pytest: not run" in str(summary_step["run"])
 
     full_check = _named_step("ci.yaml", "run", "Enforce no new Flake8 violations")
     assert full_check["run"] == (
