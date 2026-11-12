@@ -204,6 +204,8 @@ async def async_get_config_entry_diagnostics(
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
     coordinator = getattr(runtime_data, "coordinator", None)
+    invoice_coordinator = getattr(runtime_data, "invoice_coordinator", None)
+    invoice_data = getattr(invoice_coordinator, "data", None)
 
     diagnostics: dict[str, object] = {
         "entry": {
@@ -244,21 +246,23 @@ async def async_get_config_entry_diagnostics(
         ),
         "invoice_coordinator": {
             "last_update_success": (
-                getattr(runtime_data.invoice_coordinator, "last_update_success", False)
-                if getattr(runtime_data, "invoice_coordinator", None) is not None
+                getattr(invoice_coordinator, "last_update_success", False)
+                if invoice_coordinator is not None
                 else False
             ),
+            "update_interval": (
+                str(invoice_coordinator.update_interval)
+                if invoice_coordinator is not None
+                else None
+            ),
             "has_cached_invoices": (
-                isinstance(getattr(runtime_data.invoice_coordinator, "data", None), dict)
-                and getattr(runtime_data.invoice_coordinator, "data", {}).get(DATA_INVOICES)
-                is not None
-                if getattr(runtime_data, "invoice_coordinator", None) is not None
-                else False
+                isinstance(invoice_data, dict)
+                and invoice_data.get(DATA_INVOICES) is not None
             ),
         },
     }
 
-    if (smart_hvac := runtime_data.smart_hvac_coordinator) is not None:
+    if (smart_hvac := getattr(runtime_data, "smart_hvac_coordinator", None)) is not None:
         snapshot = smart_hvac.data
         diagnostics["smart_hvac"] = {
             "last_update_success": smart_hvac.last_update_success,
