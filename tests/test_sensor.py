@@ -14,6 +14,7 @@ from pytest_homeassistant.common import (
 )
 from python_frank_energie.domain import (
     SmartBatteryImbalanceStrategy,
+    SmartBatteryTradingAlgorithm,
     SmartPvOperationalStatus,
     SmartPvSteeringStatus,
 )
@@ -2259,7 +2260,10 @@ def test_battery_strategy_sensor_options_cover_domain_and_translations() -> None
 
 
 async def _battery_strategy_sensor_state(
-    hass: HomeAssistant, strategy: SmartBatteryImbalanceStrategy
+    hass: HomeAssistant,
+    strategy: SmartBatteryImbalanceStrategy,
+    *,
+    trading_algorithm: SmartBatteryTradingAlgorithm | None = None,
 ) -> str | None:
     """Register the smart_battery_0 imbalance_trading_strategy sensor on a real
     entity platform and return the state Home Assistant computed for it
@@ -2273,7 +2277,10 @@ async def _battery_strategy_sensor_state(
     from custom_components.frank_energie.sensor import FrankEnergieSmartBatterySensor
 
     battery = SimpleNamespace(
-        settings=SmartBatterySettings(imbalance_trading_strategy=strategy)
+        settings=SmartBatterySettings(
+            imbalance_trading_strategy=strategy,
+            trading_algorithm=trading_algorithm,
+        )
     )
     coordinator = MagicMock()
     coordinator.data = {DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
@@ -2302,6 +2309,21 @@ async def test_battery_strategy_sensor_passes_ha_enum_validation(
     validation accepts."""
     state = await _battery_strategy_sensor_state(hass, strategy)
     assert state == strategy.value.lower()
+
+
+@pytest.mark.asyncio
+async def test_t3_algorithm_preserves_battery_strategy_enum_sensor(
+    hass: HomeAssistant,
+) -> None:
+    """A T3 trading algorithm must not change Home Assistant strategy states."""
+    state = await _battery_strategy_sensor_state(
+        hass,
+        SmartBatteryImbalanceStrategy.STANDARD,
+        trading_algorithm=SmartBatteryTradingAlgorithm.T3,
+    )
+
+    assert state == "standard"
+    assert "t3" not in _battery_strategy_sensor_description().options
 
 
 def test_parse_contract_product_name() -> None:

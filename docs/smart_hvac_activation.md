@@ -37,7 +37,7 @@ EANs and device IDs are never exposed as Smart HVAC state attributes.
    reference to query Smart HVAC data.
 2. The settings coordinator retains `api.user(site_reference)` for existing
    user/account entities.
-3. In the published **python-frank-energie 2026.11.9** client, the separate
+3. In the published **python-frank-energie 2026.11.13** client, the separate
    `api.me(site_reference)` request includes the root-level GraphQL field
    `userSmartHvac(siteReference: $siteReference)`.
 4. The library parses this field as `Me.user_smart_hvac`. The settings
@@ -69,12 +69,14 @@ entity's existing unique ID and the User service device association unchanged.
 
 ## Library dependency and release gate
 
-The published [python-frank-energie 2026.11.9 source](https://github.com/HiDiHo01/python-frank-energie/blob/v2026.11.9/python_frank_energie/models.py)
+The published [python-frank-energie 2026.11.13 source](https://github.com/HiDiHo01/python-frank-energie/blob/v2026.11.13/python_frank_energie/models.py)
 includes `Me.user_smart_hvac`, populated by the site-scoped
-`userSmartHvac(siteReference: $siteReference)` query. The integration's
-`manifest.json` pins `python-frank-energie==2026.11.9`, `pyproject.toml`
-requires `python-frank-energie>=2026.11.9`, and `poetry.lock` resolves
-`2026.11.9`. The former **unpublished-client release blocker is cleared**.
+`userSmartHvac(siteReference: $siteReference)` query. As of integration
+version `2026.11.13`, `manifest.json` pins `python-frank-energie==2026.11.13`,
+`pyproject.toml` requires `python-frank-energie>=2026.11.13`, and
+`poetry.lock` resolves `2026.11.13`. This is a release snapshot, not a
+rolling dependency guarantee; check those files for the current versions.
+The former **unpublished-client release blocker is cleared**.
 
 Future client upgrades must verify the *published* package, synchronize the
 runtime manifest, Poetry declaration and lockfile, and test the actual
@@ -179,7 +181,7 @@ used internally. Downloadable HVAC diagnostics contain counts and update
 status. Logs and diagnostics redact personal identifiers and raw errors.
 The published client exposes settings changes through a write method with a
 Boolean result. Reading current modes and temperature bounds requires a
-verified read operation. [Python client Smart HVAC API](https://github.com/HiDiHo01/python-frank-energie/blob/v2026.11.9/docs/smart-hvac.md)
+verified read operation. [Python client Smart HVAC API](https://github.com/HiDiHo01/python-frank-energie/blob/v2026.11.13/docs/smart-hvac.md)
 
 ## Developer verification
 

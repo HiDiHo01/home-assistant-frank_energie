@@ -3732,14 +3732,14 @@ six = ">=1.5"
 
 [[package]]
 name = "python-frank-energie"
-version = "2026.11.12"
+version = "2026.11.13"
 description = "Asynchronous Python client for the Frank Energie integration"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "python_frank_energie-2026.11.12-py3-none-any.whl", hash = "sha256:82c9c845467c30456cbbcc6c3374f324dd55ba40ead04b66ff80d2288e716b80"},
-    {file = "python_frank_energie-2026.11.12.tar.gz", hash = "sha256:8f0a3b9fb6df0176f7e169f8ff69d0d4cbc07029ac2ca08a18c265f122bc3cfa"},
+    {file = "python_frank_energie-2026.11.13-py3-none-any.whl", hash = "sha256:4b0345a6d6eb84c8449f57f7531c0ce84d75f3a23103ea246d0d66cfaa09f39b"},
+    {file = "python_frank_energie-2026.11.13.tar.gz", hash = "sha256:0986f02e8766baf82c5feec11739903a1d757a7aa6dae6bc7a9f4cbc22d115ae"},
 ]
 
 [package.dependencies]
@@ -5065,4 +5065,4 @@ ifaddr = ">=0.1.7"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14.2,<4.0"
-content-hash = "87e3d03ae9acbccd3f55cff6a20060829812d4236c3af413ef804406e95ae0a9"
+content-hash = "55f50f91d44c9b19ff0398210ce45697aa20325e8a0c4bb7f534e802e4d72de8"

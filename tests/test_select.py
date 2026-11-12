@@ -7,6 +7,7 @@ from python_frank_energie.domain import (
     SmartBatteryImbalanceStrategy,
     SmartBatteryMode,
     SmartBatteryStatus,
+    SmartBatteryTradingAlgorithm,
 )
 from python_frank_energie.models import (
     SmartBattery,
@@ -458,6 +459,45 @@ def test_battery_strategy_select_uses_per_battery_options(
     assert entity.available is True
     assert entity.options == ["standard", "aggressive"]
     assert entity.current_option == "aggressive"
+
+
+@pytest.mark.asyncio
+async def test_t3_trading_algorithm_is_not_an_imbalance_strategy(
+    mock_coordinator, mock_config_entry
+) -> None:
+    """Keep T3 algorithm metadata distinct from selectable imbalance strategies."""
+    parsed_settings = SmartBatterySettings.from_dict(
+        {
+            "batteryMode": "IMBALANCE_TRADING",
+            "imbalanceTradingStrategy": "STANDARD",
+            "tradingAlgorithm": "T3",
+        }
+    )
+    assert parsed_settings is not None
+    assert parsed_settings.trading_algorithm is SmartBatteryTradingAlgorithm.T3
+    assert (
+        parsed_settings.imbalance_trading_strategy
+        is SmartBatteryImbalanceStrategy.STANDARD
+    )
+
+    details = _details(SmartBatteryMode.IMBALANCE_TRADING)
+    details.smart_battery.settings = parsed_settings
+    mock_coordinator.data = {DATA_BATTERY_DETAILS: [details]}
+    entity = _select(
+        FrankEnergieBatteryStrategySelect,
+        mock_coordinator,
+        mock_config_entry,
+        "battery_strategy",
+    )
+
+    assert entity.available is True
+    assert entity.current_option == "standard"
+    assert "standard" in entity.options
+    assert "t3" not in entity.options
+
+    with pytest.raises(HomeAssistantError, match="not selectable"):
+        await entity.async_select_option("t3")
+    mock_coordinator.async_update_battery_settings.assert_not_awaited()
 
 
 # --- Real-platform layer for the battery selects ---------------------------
