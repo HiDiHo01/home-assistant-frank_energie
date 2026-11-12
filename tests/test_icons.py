@@ -17,7 +17,9 @@ from custom_components.frank_energie.smart_feature_factory import (
     build_smart_feature_sensors,
 )
 
-_INTEGRATION_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "frank_energie"
+_INTEGRATION_DIR = (
+    Path(__file__).resolve().parents[1] / "custom_components" / "frank_energie"
+)
 _DESCRIPTION_PLATFORM = {
     "FrankEnergieEntityDescription": "sensor",
     "ChargerSensorDescription": "sensor",
