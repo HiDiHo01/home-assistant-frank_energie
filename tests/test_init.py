@@ -289,7 +289,9 @@ async def test_service_device_removal_checks_all_registry_dependencies(
         assert device_registry.async_get(service_id) is None
 
 
-@pytest.mark.parametrize("invalid_case", ["wrong_entry", "unscoped", "extra_id", "hardware"])
+@pytest.mark.parametrize(
+    "invalid_case", ["wrong_entry", "unscoped", "extra_id", "hardware"]
+)
 async def test_service_device_removal_rejects_unverified_identity(
     hass: HomeAssistant,
     frank_energie_setup,
@@ -313,6 +315,7 @@ async def test_service_device_removal_rejects_unverified_identity(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, "not-entry-scoped")},
             entry_type=dr.DeviceEntryType.SERVICE,
+            name="Unscoped service",
         )
         assert not await async_remove_config_entry_device(
             hass, entry, foreign_device
