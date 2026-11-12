@@ -62,7 +62,7 @@ from .const import (
     DATA_ENODE_VEHICLES,
     DATA_PV_SYSTEMS,
 )
-from .helpers import decrypt_password, encrypt_password
+from .helpers import decrypt_password, encrypt_password, log_api_exception
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
@@ -109,34 +109,25 @@ async def _async_account_matches_entry(
     )
 
 
-async def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle an authentication failure by triggering reauthentication.
-
-    This function attempts to start a reauthentication flow for the given config entry.
-    If the entry is not found or reauth initiation fails, it logs the error.
-    """
+@callback
+def async_handle_auth_failure(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Start reauthentication for the active entry using the Home Assistant API."""
     try:
-        current_entry = next(
-            (
-                e
-                for e in hass.config_entries.async_entries(entry.domain)
-                if e.entry_id == entry.entry_id
-            ),
-            None,
-        )
-        if not current_entry:
+        current_entry = hass.config_entries.async_get_entry(entry.entry_id)
+        if current_entry is None:
             _LOGGER.warning(
                 "Config entry %s not found for reauthentication", entry.entry_id
             )
             return
 
         _LOGGER.info(
-            "Authentication failure detected, triggering reauth for %s", entry.title
+            "Authentication failure detected; reauth for entry %s",
+            entry.entry_id,
         )
-        await hass.config_entries.async_start_reauth(entry.entry_id)
+        current_entry.async_start_reauth(hass)
     except Exception as err:
-        _LOGGER.error(
-            "Failed to initiate reauthentication for %s: %s", entry.entry_id, err
+        log_api_exception(
+            _LOGGER, "Failed to initiate reauth for entry %s", err, entry.entry_id
         )
 
 
@@ -184,12 +175,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             # Network/API issues
             return await self._handle_authentication_failure(reason="connection_error")
         except Exception as ex:
-            # Keep traceback frames without exposing provider messages or chained errors.
-            sanitized_exception = RuntimeError(type(ex).__name__)
-            _LOGGER.exception(
-                "Unexpected error during login",
-                exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
-            )
+            log_api_exception(_LOGGER, "Unexpected error during login", ex)
             return await self._handle_authentication_failure(reason="unknown_error")
 
     async def async_step_site(
@@ -222,11 +208,11 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         try:
             async with FrankEnergie(
+                clientsession=async_get_clientsession(self.hass),
                 auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
             ) as api:
                 user_sites = await api.UserSites()
-                _LOGGER.debug("All user_sites: %s", user_sites)
 
                 # Check if the user has any delivery sites
                 if not user_sites or not user_sites.deliverySites:
@@ -241,7 +227,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 )
                 for i, site in enumerate(user_sites.deliverySites):
                     status = getattr(site, "status", "NO_STATUS")
-                    _LOGGER.debug("Site %d: status=%s, site=%s", i, status, site)
+                    _LOGGER.debug("Site %d: status=%s", i, status)
 
                 # Get all sites that have a status attribute
                 all_delivery_sites = [
@@ -405,7 +391,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 errors=errors,
             )
         except Exception as err:
-            _LOGGER.exception("Failed to retrieve delivery sites: %s", err)
+            log_api_exception(_LOGGER, "Failed to retrieve delivery sites", err)
             errors = {"base": "site_retrieval_failed"}
             return self.async_show_form(
                 step_id="site",
@@ -457,7 +443,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         self._reauth_entry = self._get_reconfigure_entry()
         return await self.async_step_login(user_input, errors)
 
-    async def _get_available_sites(self, username: str) -> list[dict[str, str]]:
+    async def _get_available_sites(self) -> list[dict[str, str]]:
         """Retrieve and normalize available delivery sites for the user."""
         try:
             user_sites = await self._fetch_user_sites_with_retry()
@@ -487,31 +473,26 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         except NoDeliverySitesError as err:
             _LOGGER.error(
-                "No delivery sites found for user %s: %s",
-                username,
+                "No delivery sites found: %s",
                 err,
             )
             return []
 
         except NoSitesFoundError as err:
             _LOGGER.error(
-                "No suitable sites found for user %s: %s",
-                username,
+                "No suitable sites found: %s",
                 err,
             )
             return []
 
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception(
-                "Unexpected error fetching sites for user %s: %s",
-                username,
-                err,
-            )
+            log_api_exception(_LOGGER, "Unexpected error fetching delivery sites", err)
             return []
 
     async def _fetch_user_sites_with_retry(self) -> object:
         """Fetch user sites with retry logic."""
         async with FrankEnergie(
+            clientsession=async_get_clientsession(self.hass),
             auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN),
             refresh_token=self.sign_in_data.get(CONF_TOKEN),
         ) as api:
@@ -523,9 +504,9 @@ class ConfigFlow(config_entries.ConfigFlow):
                 except ConnectionException as err:
                     last_err = err
                     _LOGGER.warning(
-                        "UserSites fetch failed (attempt %d): %s",
+                        "UserSites fetch failed (attempt %d, %s)",
                         attempt + 1,
-                        err,
+                        type(err).__name__,
                     )
                     await asyncio.sleep(1)
 
@@ -705,9 +686,9 @@ class ConfigFlow(config_entries.ConfigFlow):
             AuthException: If authentication fails due to invalid credentials.
             ConnectionException: If a network-related error occurs.
         """
-        async with FrankEnergie() as api:
-            # Let the login flow classify failures and sanitize their logging.
-            # Never log provider exception text or account identifiers here.
+        async with FrankEnergie(
+            clientsession=async_get_clientsession(self.hass)
+        ) as api:
             return await api.login(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
 
     async def _handle_authentication_success(
@@ -756,14 +737,10 @@ class ConfigFlow(config_entries.ConfigFlow):
         config_entry: config_entries.ConfigEntry,
     ) -> Optional[config_entries.OptionsFlow]:
         """Get options flow handler only if a site is selected."""
-        _LOGGER.debug("config_entry for %s", config_entry)
+        _LOGGER.debug("Preparing options flow for entry %s", config_entry.entry_id)
         entry_data = config_entry.data
         if CONF_SITE in entry_data:
-            _LOGGER.debug(
-                "Site %s is selected, providing options flow: %s",
-                entry_data[CONF_SITE],
-                entry_data,
-            )
+            _LOGGER.debug("Delivery site selected; providing options flow")
             return FrankEnergieOptionsFlowHandler(entry_data)
 
         _LOGGER.debug("No site selected, no options flow available.")
@@ -1034,7 +1011,9 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             )
 
             try:
-                async with FrankEnergie() as api:
+                async with FrankEnergie(
+                    clientsession=async_get_clientsession(self.hass)
+                ) as api:
                     auth = await api.login(
                         user_input[CONF_USERNAME], password_to_validate
                     )
@@ -1068,11 +1047,7 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:
-                sanitized_exception = RuntimeError(type(ex).__name__)
-                _LOGGER.exception(
-                    "Unexpected error in options flow",
-                    exc_info=(RuntimeError, sanitized_exception, ex.__traceback__),
-                )
+                log_api_exception(_LOGGER, "Unexpected error in options flow", ex)
                 errors = {"base": "unknown_error"}
 
         schema_dict = {
