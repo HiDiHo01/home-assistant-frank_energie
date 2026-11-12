@@ -257,9 +257,7 @@ async def test_service_device_removal_checks_all_registry_dependencies(
             config_entry=entry,
             device_id=service_id,
             disabled_by=(
-                er.RegistryEntryDisabler.USER
-                if blocker == "disabled_entity"
-                else None
+                er.RegistryEntryDisabler.USER if blocker == "disabled_entity" else None
             ),
         )
     elif blocker == "via_device":
@@ -317,9 +315,7 @@ async def test_service_device_removal_rejects_unverified_identity(
             entry_type=dr.DeviceEntryType.SERVICE,
             name="Unscoped service",
         )
-        assert not await async_remove_config_entry_device(
-            hass, entry, foreign_device
-        )
+        assert not await async_remove_config_entry_device(hass, entry, foreign_device)
     elif invalid_case == "extra_id":
         updated = registry.async_update_device(
             service_id,
