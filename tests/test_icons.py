@@ -55,6 +55,18 @@ def test_all_sensor_and_binary_descriptions_have_an_icon() -> None:
             assert isinstance(translation, ast.Constant) and isinstance(
                 translation.value, str
             ), f"{file_name}:{node.lineno} has no icon or static translation key"
+            device_class = keywords.get("device_class")
+            if (
+                isinstance(device_class, ast.Attribute)
+                and isinstance(device_class.value, ast.Name)
+                and device_class.value.id == "SensorDeviceClass"
+                and device_class.attr == "MONETARY"
+            ):
+                assert translation.value not in icons.get(platform, {}), (
+                    f"{file_name}:{node.lineno} overrides the existing "
+                    f"monetary icon for {translation.value}"
+                )
+                continue
             assert icons.get(platform, {}).get(translation.value, {}).get("default"), (
                 f"{file_name}:{node.lineno} ({translation.value}) has no icon"
             )
@@ -91,19 +103,29 @@ def test_every_vehicle_and_charger_description_preserves_its_icon() -> None:
 
 
 @pytest.mark.parametrize(
-    ("key", "expected_icon"),
+    "translation_key",
     (
-        ("current_electricity_price", "mdi:lightning-bolt"),
-        ("gas_market", "mdi:fire"),
-        ("elec_min", "mdi:arrow-down-bold-circle"),
-        ("elec_max", "mdi:arrow-up-bold-circle"),
-        ("invoice_current_period", "mdi:receipt-text"),
-        ("costs_this_year", "mdi:cash"),
+        "current_electricity_price",
+        "gas_market",
+        "elec_min",
+        "elec_max",
+        "invoice_current_period",
+        "costs_this_year",
     ),
 )
-def test_price_and_cost_icons_are_semantic(key: str, expected_icon: str) -> None:
-    """Differentiate electricity, gas, extremes, invoices and expenses."""
-    assert _read_icons()["entity"]["sensor"][key]["default"] == expected_icon
+def test_monetary_sensor_keeps_its_existing_icon(translation_key: str) -> None:
+    """Do not replace existing monetary device-class icons with MDI overrides."""
+    from homeassistant.components.sensor import SensorDeviceClass
+
+    from custom_components.frank_energie.const import ICON
+
+    descriptions = {description.translation_key: description for description in SENSOR_TYPES}
+    description = descriptions[translation_key]
+
+    assert ICON == "mdi:currency-eur"
+    assert description.device_class is SensorDeviceClass.MONETARY
+    assert description.icon is None
+    assert translation_key not in _read_icons()["entity"]["sensor"]
 
 
 def test_existing_energy_flow_and_binary_sensor_icons_are_preserved() -> None:
