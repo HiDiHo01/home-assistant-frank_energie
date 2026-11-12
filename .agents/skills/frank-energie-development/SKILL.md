@@ -82,6 +82,13 @@ def _async_add_entities(
 await async_setup_entry(hass, config_entry, _async_add_entities)
 ```
 
+## Sensor icon metadata and custom description constructors (PR #460)
+
+- **Verify the rendered metadata path:** a custom `EntityDescription` constructor that accepts `icon` must pass it to `super().__init__(icon=icon, ...)`; accepting but silently dropping the argument leaves configured vehicle icons missing. Assert the actual description's `icon` value in regressions.
+- **Keep translation icons discoverable:** use `custom_components/frank_energie/icons.json` keyed by an entity's *translation key*, not its internal `key`, for sensor descriptions without an explicit icon. Preserve existing Smart Heating icon mappings, keep all referenced keys in `strings.json`, and use valid, semantically suitable `mdi:` identifiers.
+- **Audit every sensor family:** include normal price/cost sensors, Enode charger/vehicle sensors, generated battery sensors, PV, Smart Heating and dynamic binary features; check `EntityDescription.icon`, class-level `_attr_icon`, and translated icons, not only presence of one field.
+- **Allow resource extension without losing invariants:** tests for a subset (such as Smart Heating icon entries) should assert those exact mappings rather than that the entire `icons.json` platform dictionary contains no other entities. Always rerun the real Home Assistant suite and the current-head Ruff/Flake8 checks.
+
 ## Verified stale-device Repairs consolidation lessons (PR #454)
 
 The fixes and regressions in [PR #454](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/454), consolidating [#404](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/404), [#405](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/405), and [#406](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/406), establish these reusable practices:
