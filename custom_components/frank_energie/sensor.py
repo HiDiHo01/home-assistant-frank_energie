@@ -978,13 +978,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     ChargerSensorDescription(
-        key="can_smart_charge",
-        icon="mdi:flash",
-        authenticated=True,
-        value_fn=lambda charger: charger.can_smart_charge,
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    ChargerSensorDescription(
         key="charge_capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         icon="mdi:flash",
@@ -992,14 +985,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         authenticated=True,
         value_fn=lambda charger: (
             charger.charge_settings.capacity if charger.charge_settings else None
-        ),
-    ),
-    ChargerSensorDescription(
-        key="is_plugged_in",
-        icon="mdi:flash",
-        authenticated=True,
-        value_fn=lambda charger: (
-            charger.charge_state.is_plugged_in if charger.charge_state else None
         ),
     ),
     ChargerSensorDescription(
@@ -1016,21 +1001,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         ),
     ),
     ChargerSensorDescription(
-        key="is_reachable",
-        translation_key="charger_is_reachable",
-        icon="mdi:ev-station",
-        authenticated=True,
-        value_fn=lambda charger: charger.is_reachable,
-    ),
-    ChargerSensorDescription(
-        key="is_charging",
-        icon="mdi:ev-station",
-        authenticated=True,
-        value_fn=lambda charger: (
-            charger.charge_state.is_charging if charger.charge_state else None
-        ),
-    ),
-    ChargerSensorDescription(
         key="charge_rate",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
@@ -1039,26 +1009,6 @@ ENODE_CHARGER_SENSOR_TYPES: tuple[ChargerSensorDescription, ...] = (
         authenticated=True,
         value_fn=lambda charger: (
             charger.charge_state.charge_rate if charger.charge_state else None
-        ),
-    ),
-    ChargerSensorDescription(
-        key="is_smart_charging_enabled",
-        icon="mdi:flash",
-        authenticated=True,
-        value_fn=lambda charger: (
-            charger.charge_settings.is_smart_charging_enabled
-            if charger.charge_settings
-            else None
-        ),
-    ),
-    ChargerSensorDescription(
-        key="is_solar_charging_enabled",
-        icon="mdi:flash",
-        authenticated=True,
-        value_fn=lambda charger: (
-            charger.charge_settings.is_solar_charging_enabled
-            if charger.charge_settings
-            else None
         ),
     ),
 )
@@ -1112,27 +1062,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    EnodeVehicleEntityDescription(
-        key="can_smart_charge",
-        icon="mdi:car-electric",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            bool(data.get("canSmartCharge")) if "canSmartCharge" in data else None
-        ),
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    EnodeVehicleEntityDescription(
-        key="is_reachable",
-        translation_key="is_reachable",
-        icon="mdi:car-connected",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        value_fn=lambda data: (
-            bool(data.get("isReachable")) if "isReachable" in data else None
-        ),
     ),
     EnodeVehicleEntityDescription(
         key="battery_capacity",
@@ -1197,18 +1126,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         ),
     ),
     EnodeVehicleEntityDescription(
-        key="is_charging",
-        icon="mdi:ev-station",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda data: (
-            bool(data.get("chargeState", {}).get("isCharging"))
-            if "isCharging" in data.get("chargeState", {})
-            else None
-        ),
-    ),
-    EnodeVehicleEntityDescription(
         key="charge_last_updated",
         device_class=SensorDeviceClass.TIMESTAMP,
         icon=ICON_CLOCK_OUTLINE,
@@ -1216,30 +1133,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
         service_name=SERVICE_NAME_ENODE_VEHICLES,
         value_fn=lambda data: _parse_iso_datetime(
             data.get("chargeState", {}).get("lastUpdated")
-        ),
-    ),
-    EnodeVehicleEntityDescription(
-        key="is_fully_charged",
-        icon="mdi:battery-check",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda data: (
-            bool(data.get("chargeState", {}).get("isFullyCharged"))
-            if "isFullyCharged" in data.get("chargeState", {})
-            else None
-        ),
-    ),
-    EnodeVehicleEntityDescription(
-        key="is_plugged_in",
-        icon="mdi:power-plug",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        device_class=BinarySensorDeviceClass.PLUG,
-        value_fn=lambda data: (
-            bool(data.get("chargeState", {}).get("isPluggedIn"))
-            if "isPluggedIn" in data.get("chargeState", {})
-            else None
         ),
     ),
     EnodeVehicleEntityDescription(
@@ -1256,35 +1149,6 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
             .lower()
             .replace(":", "_")
             if isinstance(data.get("chargeState", {}).get("powerDeliveryState"), str)
-            else None
-        ),
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    EnodeVehicleEntityDescription(
-        key="smart_charging_enabled",
-        icon="mdi:car-electric",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda data: (
-            data.get("chargeSettings", {}).get("isSmartChargingEnabled")
-            if isinstance(
-                data.get("chargeSettings", {}).get("isSmartChargingEnabled"), bool
-            )
-            else None
-        ),
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    EnodeVehicleEntityDescription(
-        key="solar_charging_enabled",
-        icon="mdi:solar-power",
-        authenticated=True,
-        service_name=SERVICE_NAME_ENODE_VEHICLES,
-        value_fn=lambda data: (
-            data.get("chargeSettings", {}).get("isSolarChargingEnabled")
-            if isinstance(
-                data.get("chargeSettings", {}).get("isSolarChargingEnabled"), bool
-            )
             else None
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
