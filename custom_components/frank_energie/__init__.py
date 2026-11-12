@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
@@ -190,6 +191,49 @@ async def async_remove_entry(
     await price_cache_store(hass, entry.entry_id).async_remove()
 
 
+def _is_unused_service_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Permit deletion only for an unreferenced, entry-owned service device."""
+    if (
+        entry.domain != DOMAIN
+        or device_entry.config_entry_id != entry.entry_id
+        or device_entry.entry_type is not dr.DeviceEntryType.SERVICE
+        or device_entry.connections
+        or len(device_entry.identifiers) != 1
+    ):
+        return False
+
+    domain, identifier = next(iter(device_entry.identifiers))
+    if domain != DOMAIN or not (
+        identifier == entry.entry_id or identifier.startswith(f"{entry.entry_id}_")
+    ):
+        return False
+
+    registry = dr.async_get(hass)
+    if (
+        registry.async_get(
+            device_entry.id,
+            include_child_devices=False,
+            include_composite_devices=False,
+        )
+        is not device_entry
+    ):
+        return False
+
+    if er.async_entries_for_device(
+        er.async_get(hass), device_entry.id, include_disabled_entities=True
+    ):
+        return False
+
+    return not (
+        any(device.via_device_id == device_entry.id for device in registry.devices)
+        or dr.async_entries_for_parent_device(registry, device_entry.id)
+    )
+
+
 def _is_device_removal_safe(
     hass: HomeAssistant,
     entry: ConfigEntry[FrankEnergieEntryData],
@@ -223,12 +267,15 @@ async def async_remove_config_entry_device(
     entry: ConfigEntry[FrankEnergieEntryData],
     device_entry: dr.DeviceEntry,
 ) -> bool:
-    """Require a fresh successful API inventory before manual device removal.
+    """Allow empty service groups and require live evidence for hardware removal.
 
-    The two-absence guard also protects Repairs confirmation. A skipped
-    maintenance poll, failed API call, changed site or replaced device must
-    never authorize removal. This hook does not delete devices itself.
+    Service devices are removable only without entities or dependent devices.
+    Physical hardware still needs two confirmed absences and a fresh inventory
+    before Home Assistant may delete it. This hook never deletes devices itself.
     """
+    if device_entry.entry_type is dr.DeviceEntryType.SERVICE:
+        return _is_unused_service_device(hass, entry, device_entry)
+
     if not _is_device_removal_safe(hass, entry, device_entry):
         return False
 
