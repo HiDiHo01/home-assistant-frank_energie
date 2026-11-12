@@ -1022,6 +1022,9 @@
       "battery_capacity": {
         "name": "Battery Capacity"
       },
+      "battery_current_capacity": {
+        "name": "Current capacity"
+      },
       "battery_level": {
         "name": "Battery Level"
       },
