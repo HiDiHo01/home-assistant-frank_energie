@@ -659,4 +659,3 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.hass.data[DOMAIN].pop(
             self.entry.entry_id, None
         )  # Ensure no KeyError if entry_id does not exist
-
