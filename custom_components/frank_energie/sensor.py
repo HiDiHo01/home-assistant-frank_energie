@@ -4940,7 +4940,7 @@ def _build_single_smart_battery_descriptions(
                     authenticated=True,
                     service_name=SERVICE_NAME_BATTERIES,
                     icon="mdi:battery",
-                    device_class=SensorDeviceClass.ENERGY,
+                    device_class=SensorDeviceClass.ENERGY_STORAGE,
                     state_class=SensorStateClass.MEASUREMENT,
                     native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
                     suggested_display_precision=2,
