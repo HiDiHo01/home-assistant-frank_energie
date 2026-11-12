@@ -72,10 +72,9 @@ def test_icon_translation_keys_and_mdi_values_are_valid() -> None:
             assert translation_key in strings[platform], (
                 f"Orphaned {platform} icon key: {translation_key}"
             )
-            assert (
-                isinstance(icon_options["default"], str)
-                and icon_options["default"].startswith("mdi:")
-            ), f"Invalid MDI icon for {platform}.{translation_key}"
+            assert isinstance(icon_options["default"], str) and icon_options[
+                "default"
+            ].startswith("mdi:"), f"Invalid MDI icon for {platform}.{translation_key}"
 
 
 def test_every_vehicle_and_charger_description_preserves_its_icon() -> None:
