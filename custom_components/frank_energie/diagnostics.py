@@ -19,6 +19,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 
 from . import FrankEnergieEntryData
+from .const import DATA_INVOICES
 
 # Security: Keys redacted to prevent leaking credentials, personal data, and identifiers
 # in exported diagnostics, fulfilling SPECS/redact_spec.md requirements.
@@ -202,7 +203,7 @@ async def async_get_config_entry_diagnostics(
     """Return redacted config-entry diagnostics, including optional HVAC counts."""
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
-    coordinator = runtime_data.coordinator
+    coordinator = getattr(runtime_data, "coordinator", None)
 
     diagnostics: dict[str, object] = {
         "entry": {
@@ -211,33 +212,52 @@ async def async_get_config_entry_diagnostics(
             "options": dict(entry.options),
             "data": dict(entry.data),
         },
-        "coordinator": {
-            "last_update_success": coordinator.last_update_success,
-            "update_interval": str(coordinator.update_interval),
-            "site_reference": coordinator.site_reference,
-            "country_code": coordinator.country_code,
-            "user_country": getattr(coordinator, "_user_country", None),
-            "resolution": coordinator.resolution,
-            "api_resolution": coordinator.api_resolution,
-            "user_electricity_enabled": coordinator.user_electricity_enabled,
-            "user_gas_enabled": coordinator.user_gas_enabled,
-            "last_fetch_today": coordinator.last_fetch_today,
-            "last_fetch_tomorrow": coordinator.last_fetch_tomorrow,
-            "has_cached_prices": coordinator.cached_prices is not None,
-            "has_cached_today": coordinator.cached_prices_today is not None,
-            "has_cached_tomorrow": coordinator.cached_prices_tomorrow is not None,
-            "resolution_change_pending": getattr(
-                coordinator,
-                "_resolution_change_pending",
-                False,
+        "coordinator": (
+            {
+                "last_update_success": coordinator.last_update_success,
+                "update_interval": str(coordinator.update_interval),
+                "site_reference": coordinator.site_reference,
+                "country_code": coordinator.country_code,
+                "user_country": getattr(coordinator, "_user_country", None),
+                "resolution": coordinator.resolution,
+                "api_resolution": coordinator.api_resolution,
+                "user_electricity_enabled": coordinator.user_electricity_enabled,
+                "user_gas_enabled": coordinator.user_gas_enabled,
+                "last_fetch_today": coordinator.last_fetch_today,
+                "last_fetch_tomorrow": coordinator.last_fetch_tomorrow,
+                "has_cached_prices": coordinator.cached_prices is not None,
+                "has_cached_today": coordinator.cached_prices_today is not None,
+                "has_cached_tomorrow": coordinator.cached_prices_tomorrow is not None,
+                "resolution_change_pending": getattr(
+                    coordinator, "_resolution_change_pending", False
+                ),
+            }
+            if coordinator is not None
+            else {}
+        ),
+        "data": _serialize(coordinator.data) if coordinator is not None else {},
+        "cached_prices": (
+            _serialize(coordinator.cached_prices) if coordinator is not None else None
+        ),
+        "battery_session_coordinators": len(
+            getattr(runtime_data, "battery_session_coordinators", {})
+        ),
+        "invoice_coordinator": {
+            "last_update_success": (
+                getattr(runtime_data.invoice_coordinator, "last_update_success", False)
+                if getattr(runtime_data, "invoice_coordinator", None) is not None
+                else False
+            ),
+            "has_cached_invoices": (
+                isinstance(getattr(runtime_data.invoice_coordinator, "data", None), dict)
+                and getattr(runtime_data.invoice_coordinator, "data", {}).get(DATA_INVOICES)
+                is not None
+                if getattr(runtime_data, "invoice_coordinator", None) is not None
+                else False
             ),
         },
-        "data": _serialize(coordinator.data),
-        "cached_prices": _serialize(coordinator.cached_prices),
-        "battery_session_coordinators": len(
-            runtime_data.battery_session_coordinators,
-        ),
     }
+
     if (smart_hvac := runtime_data.smart_hvac_coordinator) is not None:
         snapshot = smart_hvac.data
         diagnostics["smart_hvac"] = {
