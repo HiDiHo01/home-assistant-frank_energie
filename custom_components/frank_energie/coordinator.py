@@ -2219,9 +2219,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         """Execute an authenticated API call while redacting private response data."""
         operation = getattr(method, "__name__", type(method).__name__)
         if not self.api.is_authenticated:
-            _LOGGER.warning(
-                "API not authenticated, skipping call to %s", operation
-            )
+            _LOGGER.warning("API not authenticated, skipping call to %s", operation)
             return None
         try:
             result = await method(*args)
