@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from homeassistant.helpers.typing import UNDEFINED
+
 from custom_components.frank_energie import button as button_platform
 from custom_components.frank_energie.button import (
     FrankEnergieButtonEntityDescription,
@@ -28,7 +30,7 @@ async def test_refresh_button(mock_coordinator: MagicMock) -> None:
         ),
         entry=MagicMock(entry_id="test_entry"),
     )
-    assert button.entity_description.name is None
+    assert button.entity_description.name is UNDEFINED
     assert button.translation_key == "refresh_prices"
     assert button.unique_id == "test_entry_refresh_prices"
     assert button.has_entity_name is True
@@ -49,7 +51,7 @@ async def test_refresh_battery_sessions_button(mock_coordinator: MagicMock) -> N
         ),
         entry=MagicMock(entry_id="test_entry"),
     )
-    assert button.entity_description.name is None
+    assert button.entity_description.name is UNDEFINED
     assert button.translation_key == "refresh_battery_sessions"
     assert button.unique_id == "test_entry_refresh_battery_sessions"
     assert button.has_entity_name is True
@@ -115,7 +117,7 @@ async def test_setup_buttons_preserves_contract_routing(
         *(f"test_entry_{key}" for key, _ in expected_price_buttons),
         "test_entry_refresh_battery_sessions",
     ]
-    assert all(entity.entity_description.name is None for entity in entities)
+    assert all(entity.entity_description.name is UNDEFINED for entity in entities)
     assert all(entity.has_entity_name for entity in entities)
     assert [entity.translation_key for entity in entities] == [
         *("refresh_prices" for _ in expected_price_buttons),
