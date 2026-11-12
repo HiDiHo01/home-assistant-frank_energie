@@ -1097,9 +1097,6 @@
       "intervention_title": {
         "name": "Intervention Title"
       },
-      "device_id": {
-        "name": "Device ID"
-      },
       "period_start_date": {
         "name": "Period Start Date"
       },
