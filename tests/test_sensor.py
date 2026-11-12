@@ -995,6 +995,104 @@ async def test_async_setup_entry_with_vehicles_does_not_crash(
     }
 
 
+
+@pytest.mark.asyncio
+async def test_vehicle_charge_settings_id_disabled_by_default(
+    hass: HomeAssistant,
+) -> None:
+    """Disable new charge-setting IDs without overriding existing user choices."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+    from homeassistant.helpers.entity_registry import RegistryEntryDisabler
+    from pytest_homeassistant.common import MockEntityPlatform
+
+    from custom_components.frank_energie.const import DATA_ENODE_VEHICLES, DOMAIN
+    from custom_components.frank_energie.sensor import (
+        ENODE_VEHICLE_SENSOR_TYPES,
+        EnodeVehicleSensor,
+    )
+
+    config_entry = MockConfigEntry(domain=DOMAIN, unique_id="charging_settings_default")
+    config_entry.add_to_hass(hass)
+
+    vehicles = [
+        {
+            "id": "new_vehicle",
+            "information": {"brand": "Test", "model": "New"},
+            "chargeSettings": {"id": "new_settings"},
+            "chargeState": {"batteryLevel": 75},
+        },
+        {
+            "id": "existing_vehicle",
+            "information": {"brand": "Test", "model": "Existing"},
+            "chargeSettings": {"id": "existing_settings"},
+        },
+    ]
+    coordinator = MagicMock()
+    coordinator.config_entry = config_entry
+    coordinator.data = {
+        DATA_ENODE_VEHICLES: MagicMock(vehicles=vehicles),
+    }
+    coordinator.last_update_success = True
+    descriptions = {
+        description.key: description for description in ENODE_VEHICLE_SENSOR_TYPES
+    }
+    assert descriptions["charge_settings_id"].entity_registry_enabled_default is False
+    assert descriptions["battery_level"].entity_registry_enabled_default is True
+
+    new_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["charge_settings_id"], vehicles[0], 0
+    )
+    existing_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["charge_settings_id"], vehicles[1], 1
+    )
+    battery_sensor = EnodeVehicleSensor(
+        hass, coordinator, descriptions["battery_level"], vehicles[0], 0
+    )
+    assert new_sensor.entity_registry_enabled_default is False
+    assert existing_sensor.entity_registry_enabled_default is False
+    assert battery_sensor.entity_registry_enabled_default is True
+
+    registry = entity_registry.async_get(hass)
+    existing_entry = registry.async_get_or_create(
+        SENSOR_DOMAIN,
+        DOMAIN,
+        existing_sensor.unique_id,
+        config_entry=config_entry,
+    )
+    assert existing_entry.disabled_by is None
+
+    platform = MockEntityPlatform(hass, domain=SENSOR_DOMAIN, platform_name=DOMAIN)
+    platform.config_entry = config_entry
+    await platform.async_add_entities([new_sensor, existing_sensor, battery_sensor])
+    await hass.async_block_till_done()
+
+    new_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, new_sensor.unique_id
+    )
+    existing_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, existing_sensor.unique_id
+    )
+    battery_entity_id = registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, battery_sensor.unique_id
+    )
+    assert new_entity_id is not None
+    assert existing_entity_id is not None
+    assert battery_entity_id is not None
+
+    new_entry = registry.async_get(new_entity_id)
+    updated_existing_entry = registry.async_get(existing_entity_id)
+    battery_entry = registry.async_get(battery_entity_id)
+    assert new_entry is not None
+    assert updated_existing_entry is not None
+    assert battery_entry is not None
+    assert new_entry.disabled_by is RegistryEntryDisabler.INTEGRATION
+    assert updated_existing_entry.disabled_by is None
+    assert battery_entry.disabled_by is None
+    assert hass.states.get(new_entity_id) is None
+
+
 def _make_tesla_model_3(last_seen: datetime) -> object:
     """Build a real EnodeVehicle (Tesla Model 3), as returned by python-frank-energie."""
     from python_frank_energie.models import (
