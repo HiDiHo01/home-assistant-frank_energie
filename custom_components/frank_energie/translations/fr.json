@@ -7,6 +7,7 @@
       "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
     },
     "error": {
+      "rate_limited": "Frank Energie reçoit trop de requêtes. Veuillez patienter et réessayer plus tard.",
       "connection_error": "Erreur de connexion à l'API Frank Energie.",
       "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
       "no_delivery_sites": "Aucun site de livraison trouvé pour ce compte.",
@@ -1258,6 +1259,7 @@
       }
     },
     "error": {
+      "rate_limited": "Frank Energie reçoit trop de requêtes. Veuillez patienter et réessayer plus tard.",
       "connection_error": "Erreur de connexion à l'API Frank Energie.",
       "invalid_auth": "Identifiants refusés, veuillez vérifier votre nom d'utilisateur et votre mot de passe.",
       "unknown_error": "Une erreur inconnue s'est produite. Consultez les journaux pour plus de détails.",
