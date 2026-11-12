@@ -94,6 +94,10 @@ Development standards, testing, Home Assistant best practices, and contribution 
 
 Versioning, release workflow, validation, quality standards, and HACS release guidance.
 
+### Quality Readiness
+
+- [Quality Readiness](quality_readiness.md)
+
 ## Documentation Map
 
 | Document | Description |
@@ -107,6 +111,7 @@ Versioning, release workflow, validation, quality standards, and HACS release gu
 | examples.md | Automation examples |
 | faq.md | Frequently asked questions |
 | release_process.md | Release workflow |
+| quality_readiness.md | Historical quality evidence and remaining work |
 | smart_battery.md | Smart Battery functionality |
 | smart_charging.md | Smart Charging functionality |
 | smart_hvac_activation.md | Smart heating service-activation semantics and dependencies |
