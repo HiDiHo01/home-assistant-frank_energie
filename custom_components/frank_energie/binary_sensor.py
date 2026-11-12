@@ -57,6 +57,7 @@ from .helpers import (
     device_translation_key,
     known_site_contracts,
     service_device_info,
+    register_service_device,
 )
 from .smart_hvac import smart_hvac_activation, smart_hvac_site_attributes
 from .device_inventory import inventory_device_identifiers
@@ -590,6 +591,14 @@ def _strict_bool(value: object) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
+def _vehicle_nested_bool(
+    vehicle: EnodeVehicle, section: str, field: str
+) -> bool | None:
+    """Read a nested vehicle flag without treating malformed data as a state."""
+    data = vehicle.get(section)
+    return _strict_bool(data.get(field)) if hasattr(data, "get") else None
+
+
 @dataclass(frozen=True, kw_only=True)
 class EnodeVehicleBinarySensorDescription(BinarySensorEntityDescription):
     """Describe a read-only Enode vehicle status."""
@@ -931,39 +940,39 @@ ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS: tuple[
         key="is_charging",
         icon="mdi:ev-station",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda vehicle: _strict_bool(
-            (vehicle.get("chargeState") or {}).get("isCharging")
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeState", "isCharging"
         ),
     ),
     EnodeVehicleBinarySensorDescription(
         key="is_fully_charged",
         icon="mdi:battery-check",
-        value_fn=lambda vehicle: _strict_bool(
-            (vehicle.get("chargeState") or {}).get("isFullyCharged")
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeState", "isFullyCharged"
         ),
     ),
     EnodeVehicleBinarySensorDescription(
         key="is_plugged_in",
         icon="mdi:power-plug",
         device_class=BinarySensorDeviceClass.PLUG,
-        value_fn=lambda vehicle: _strict_bool(
-            (vehicle.get("chargeState") or {}).get("isPluggedIn")
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeState", "isPluggedIn"
         ),
     ),
     EnodeVehicleBinarySensorDescription(
         key="smart_charging_enabled",
         icon="mdi:car-electric",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda vehicle: _strict_bool(
-            (vehicle.get("chargeSettings") or {}).get("isSmartChargingEnabled")
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeSettings", "isSmartChargingEnabled"
         ),
     ),
     EnodeVehicleBinarySensorDescription(
         key="solar_charging_enabled",
         icon="mdi:solar-power",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda vehicle: _strict_bool(
-            (vehicle.get("chargeSettings") or {}).get("isSolarChargingEnabled")
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeSettings", "isSolarChargingEnabled"
         ),
     ),
 )
@@ -1140,6 +1149,9 @@ async def async_setup_entry(
     if charger_coordinator.api.is_authenticated:
         chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
         if chargers and chargers.chargers:
+            parent_id = register_service_device(
+                hass, config_entry, SERVICE_NAME_ENODE_CHARGERS
+            )
             for charger in chargers.chargers:
                 if not isinstance(charger.id, str) or not charger.id:
                     continue
@@ -1150,7 +1162,7 @@ async def async_setup_entry(
                     )
                     entities.append(
                         EnodeChargerBinarySensor(
-                            charger_coordinator, description, charger
+                            charger_coordinator, description, charger, parent_id
                         )
                     )
 
