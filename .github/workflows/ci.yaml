@@ -78,6 +78,25 @@ jobs:
         run: |
           python -m pip install --only-binary :all: "poetry==2.5.1"
 
+      # Temporary Poetry-generated lock export; removed after the refreshed
+      # lock is committed to this branch.
+      - name: Regenerate Python 3.15-compatible lock (temporary)
+        if: ${{ matrix.python-version == '3.14.10' }}
+        run: |
+          poetry update pydantic --lock
+          poetry check --lock
+          python - <<'PY'
+          """Print a transport-safe lock snapshot for applying the generated diff."""
+          import base64
+          from pathlib import Path
+
+          encoded = base64.b64encode(Path("poetry.lock").read_bytes()).decode("ascii")
+          print("LOCK_EXPORT_START")
+          for index in range(0, len(encoded), 4000):
+              print("LOCK_DATA:" + encoded[index : index + 4000])
+          print("LOCK_EXPORT_END")
+          PY
+
       - name: Validate lockfile
         run: poetry check --lock
 
