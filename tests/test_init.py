@@ -668,6 +668,9 @@ async def test_setup_entry_recovery_via_renew(
         api_instance = mock_api.return_value
         api_instance.__aenter__.return_value = api_instance
         api_instance.is_authenticated = True
+        # Smart HVAC is fetched during authenticated setup on current main.
+        api_instance.smart_hvacs = AsyncMock(return_value=[])
+        api_instance.smart_hvac_connect_requests = AsyncMock(return_value=[])
 
         # First call to UserSites fails, subsequent calls succeed
         mock_user_sites = MagicMock()
@@ -749,6 +752,9 @@ async def test_setup_entry_recovery_via_login(
         api_instance = mock_api.return_value
         api_instance.__aenter__.return_value = api_instance
         api_instance.is_authenticated = True
+        # Smart HVAC is fetched during authenticated setup on current main.
+        api_instance.smart_hvacs = AsyncMock(return_value=[])
+        api_instance.smart_hvac_connect_requests = AsyncMock(return_value=[])
 
         # UserSites fails with AuthException on first call
         mock_user_sites = MagicMock()
@@ -833,6 +839,9 @@ async def test_setup_entry_restores_title(
         api_instance = mock_api.return_value
         api_instance.__aenter__.return_value = api_instance
         api_instance.is_authenticated = True
+        # Smart HVAC is fetched during authenticated setup on current main.
+        api_instance.smart_hvacs = AsyncMock(return_value=[])
+        api_instance.smart_hvac_connect_requests = AsyncMock(return_value=[])
 
         mock_user_sites = MagicMock()
         mock_address = MagicMock()
