@@ -184,6 +184,36 @@
             "name": "Utilisateur créé le"
           }
         }
+      },
+      "can_smart_charge": {
+        "name": "Peut recharger intelligemment"
+      },
+      "is_reachable": {
+        "name": "Véhicule joignable"
+      },
+      "charger_is_reachable": {
+        "name": "Chargeur joignable"
+      },
+      "is_plugged_in": {
+        "name": "Branché"
+      },
+      "is_charging": {
+        "name": "En charge"
+      },
+      "is_fully_charged": {
+        "name": "Complètement chargé"
+      },
+      "smart_charging_enabled": {
+        "name": "Recharge intelligente activée"
+      },
+      "solar_charging_enabled": {
+        "name": "Recharge solaire activée"
+      },
+      "is_smart_charging_enabled": {
+        "name": "Recharge intelligente activée"
+      },
+      "is_solar_charging_enabled": {
+        "name": "Recharge solaire activée"
       }
     },
     "button": {
@@ -974,14 +1004,8 @@
       "charger_model": {
         "name": "Modèle"
       },
-      "can_smart_charge": {
-        "name": "Peut recharger intelligemment"
-      },
       "charge_capacity": {
         "name": "Capacité de charge"
-      },
-      "is_plugged_in": {
-        "name": "Branché"
       },
       "power_delivery_state": {
         "name": "État d'alimentation",
@@ -998,23 +1022,8 @@
           "error": "Erreur"
         }
       },
-      "charger_is_reachable": {
-        "name": "Chargeur joignable"
-      },
-      "is_reachable": {
-        "name": "Véhicule joignable"
-      },
-      "is_charging": {
-        "name": "En charge"
-      },
       "charge_rate": {
         "name": "Vitesse de charge"
-      },
-      "is_smart_charging_enabled": {
-        "name": "Recharge intelligente activée"
-      },
-      "is_solar_charging_enabled": {
-        "name": "Recharge solaire activée"
       },
       "total_batteries": {
         "name": "Nombre total de batteries"
@@ -1039,15 +1048,6 @@
       },
       "charge_last_updated": {
         "name": "Charge mise à jour le"
-      },
-      "is_fully_charged": {
-        "name": "Complètement chargé"
-      },
-      "smart_charging_enabled": {
-        "name": "Recharge intelligente activée"
-      },
-      "solar_charging_enabled": {
-        "name": "Recharge solaire activée"
       },
       "last_seen": {
         "name": "Vu pour la dernière fois"
