@@ -64,17 +64,20 @@ A sanitized, read-only API observation returned one `SmartPvSystem` with
   `SmartPvSystem` representations: they may include EANs, external
   references, device IDs, or inverter serial numbers. Use synthetic or
   redacted values for examples and regression tests.
-- **Upstream release blocker:** `python-frank-energie==2026.11.9` has a
-  `SmartPvSystems.from_dict()` parser that can turn missing, null, or
-  malformed GraphQL PV inventories into `systems=[]`. This is tracked in
-  [library issue #243](https://github.com/HiDiHo01/python-frank-energie/issues/243)
-  and [integration follow-up #455](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/455).
-  Do not treat these fabricated empties as verified absences or merge the
-  affected [Repairs PR #454](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/454)
-  before the fixed published library release is adopted and tested.
-  Exercise malformed **raw GraphQL responses through the real pinned
-  parser**, then the coordinator and Repairs confirmation path; a mocked
+- **Published Smart PV inventory contract:** `python-frank-energie==2026.11.12`
+  includes the fix for [library issue #243](https://github.com/HiDiHo01/python-frank-energie/issues/243)
+  ([PR #245](https://github.com/HiDiHo01/python-frank-energie/pull/245)).
+  The merged [Repairs PR #454](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/454)
+  depends on the fix. A successful explicit `smartPvSystems: []` is
+  verified absence; missing, null, malformed, duplicate or feature-disabled
+  responses must fail closed, and `SmartFeedInNotEnabledException` must not
+  advance absent-device evidence. For [integration issue #455](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/455),
+  exercise **raw GraphQL responses through the real pinned client's public
+  `smart_pv_systems()` parser**, then coordinator refresh, Repairs
+  confirmation, manual removal and recovery. A mocked
   `SmartPvSystems(systems=[])` alone cannot detect parser data loss.
+  Preserve registered and disabled panel-group entities when the service
+  is disabled.
 
 ## Smart HVAC status and optional-request isolation
 
