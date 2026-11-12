@@ -448,9 +448,15 @@ class ConfigFlow(config_entries.ConfigFlow):
             reason = "no_delivery_sites"
         else:
             reason = "no_suitable_sites"
+        # Retry with the saved tokens instead of prompting for credentials.
+        schema = (
+            vol.Schema({})
+            if isinstance(err, RateLimitException)
+            else self._site_error_schema()
+        )
         return self.async_show_form(
             step_id="site",
-            data_schema=self._site_error_schema(),
+            data_schema=schema,
             errors={"base": reason},
         )
 
