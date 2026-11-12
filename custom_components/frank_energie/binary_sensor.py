@@ -676,7 +676,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     FrankEnergieBinarySensorDescription(
         key="electricity_price_lowest_today",
         translation_key="electricity_price_lowest_today",
-        icon=ICON,
+        icon="mdi:arrow-down-bold",
         service_name=SERVICE_NAME_PRICES,
         value_fn=_electricity_price_lowest_today,
     ),
