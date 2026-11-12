@@ -2104,6 +2104,112 @@ def test_smart_battery_current_capacity_uses_its_own_battery() -> None:
         assert description.value_fn(data) == pytest.approx(expected)
 
 
+@pytest.mark.parametrize(
+    ("battery_values", "expected"),
+    [
+        ([(10.0, 50.0, "status_idle")], 5.0),
+        (
+            [(10.0, 50.0, "status_idle"), (8.0, 75.0, "status_charging")],
+            11.0,
+        ),
+        ([(9.3, 72.6, "status_idle"), (5.0, 20.0, "status_idle")], 7.789),
+        ([(10.0, 0.0, "status_idle"), (8.0, 0.0, "status_idle")], 0.0),
+        ([(10.0, 100.0, "status_idle"), (8.0, 100.0, "status_idle")], 18.0),
+        ([], None),
+        ([(10.0, 50.0, "status_idle"), (8.0, None, "status_idle")], None),
+        ([(10.0, 50.0, "status_idle"), (None, 75.0, "status_idle")], None),
+        (
+            [(10.0, 50.0, "status_idle"), (8.0, 75.0, "status_unreliable_data")],
+            None,
+        ),
+        ([(10.0, 50.0, "status_idle"), (8.0, -1.0, "status_idle")], None),
+        ([(10.0, 50.0, "status_idle"), (8.0, float("nan"), "status_idle")], None),
+    ],
+)
+def test_batteries_service_current_capacity(
+    battery_values: list[tuple[float | None, float | None, str]],
+    expected: float | None,
+) -> None:
+    """Sum individual battery stored energy, never reporting a partial total."""
+    from types import SimpleNamespace
+
+    from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+    from homeassistant.const import UnitOfEnergy
+
+    from custom_components.frank_energie.const import (
+        DATA_BATTERIES,
+        SERVICE_NAME_BATTERIES,
+    )
+    from custom_components.frank_energie.sensor import (
+        _build_aggregated_smart_batteries_descriptions,
+        _build_single_smart_battery_descriptions,
+    )
+
+    batteries = [
+        SimpleNamespace(
+            id=f"battery_{index}",
+            brand="Test",
+            capacity=capacity,
+            external_reference=None,
+            max_charge_power=5.0,
+            max_discharge_power=5.0,
+            provider="Test",
+            created_at=None,
+            updated_at=None,
+            settings=None,
+            summary=SimpleNamespace(
+                last_known_state_of_charge=charge_level,
+                last_known_status=status,
+            ),
+        )
+        for index, (capacity, charge_level, status) in enumerate(battery_values)
+    ]
+    data = {DATA_BATTERIES: SimpleNamespace(batteries=batteries)}
+    description = next(
+        item
+        for item in _build_aggregated_smart_batteries_descriptions()
+        if item.key == "total_current_capacity"
+    )
+    assert description.translation_key == "total_current_capacity"
+    assert description.service_name == SERVICE_NAME_BATTERIES
+    assert description.device_class is SensorDeviceClass.ENERGY_STORAGE
+    assert description.state_class is SensorStateClass.MEASUREMENT
+    assert description.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
+    assert description.suggested_display_precision == 2
+    assert description.entity_category is None
+    assert description.icon == "mdi:battery"
+    assert description.entity_registry_enabled_default is True
+
+    actual = description.value_fn(data)
+    if expected is None:
+        assert actual is None
+    else:
+        assert actual == pytest.approx(expected)
+        individual_total = sum(
+            next(
+                item
+                for item in _build_single_smart_battery_descriptions(battery, index)
+                if item.translation_key == "battery_current_capacity"
+            ).value_fn(data)
+            for index, battery in enumerate(batteries)
+        )
+        assert actual == pytest.approx(individual_total)
+
+
+def test_batteries_service_current_capacity_without_inventory() -> None:
+    """A missing battery resource must not report a fabricated zero total."""
+    from custom_components.frank_energie.sensor import (
+        _build_aggregated_smart_batteries_descriptions,
+    )
+
+    current = next(
+        item
+        for item in _build_aggregated_smart_batteries_descriptions()
+        if item.key == "total_current_capacity"
+    )
+    assert current.value_fn({}) is None
+
+
 def _battery_strategy_sensor_description() -> object:
     """Return the smart_battery_0 imbalance_trading_strategy entity description
     built by ``_build_single_smart_battery_descriptions``."""
