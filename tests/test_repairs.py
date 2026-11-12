@@ -334,9 +334,9 @@ async def test_repair_flow_revalidates_before_removing_device(
         result = await manager.async_configure(start["flow_id"], user_input={})
     await hass.async_block_till_done()
 
-    expected_deleted = current_state in {"missing", "renamed"}
-    expected_query_count = 2 if current_state == "marker_removed" else 3
-    assert query.await_count == expected_query_count
+    expected_deleted = current_state in {"missing", "renamed", "marker_removed"}
+    # A removed sensor no longer makes the device identity unverifiable.
+    assert query.await_count == 3
     assert (dr.async_get(hass).async_get(device.id) is None) is expected_deleted
     assert (er.async_get(hass).async_get(entity.entity_id) is None) is (
         expected_deleted or current_state == "marker_removed"
@@ -387,6 +387,12 @@ async def test_provider_failure_does_not_authorize_device_removal(
     await coordinator.async_refresh()
     assert _repair_exists(hass, issue_id)
     verified_data = coordinator.data[data_key]
+    verified_device = device_registry.async_get(device.id)
+    assert verified_device is not None
+    assert verified_device.name_by_user == "Keep me"
+    assert verified_device.identifiers == inventory_device_identifiers(
+        entry.entry_id, kind, f"stale-{kind}"
+    )
 
     if failure == "timeout":
         query.side_effect = TimeoutError
@@ -410,7 +416,7 @@ async def test_provider_failure_does_not_authorize_device_removal(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "cannot_verify"
     assert _repair_exists(hass, issue_id)
-    assert device_registry.async_get(device.id) == saved_device
+    assert device_registry.async_get(device.id) == verified_device
     assert entity_registry.async_get(entity.entity_id) == saved_entity
 
 

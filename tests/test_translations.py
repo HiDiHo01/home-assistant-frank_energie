@@ -183,6 +183,9 @@ async def test_vehicle_weekday_departure_translations(
 ) -> None:
     """Resolve all seven vehicle departure-time names through Home Assistant."""
     from custom_components.frank_energie.const import DOMAIN
+    from custom_components.frank_energie.device_inventory import (
+        inventory_device_identifiers,
+    )
     from custom_components.frank_energie.sensor import (
         ENODE_VEHICLE_SENSOR_TYPES,
         EnodeVehicleSensor,
@@ -197,6 +200,8 @@ async def test_vehicle_weekday_departure_translations(
     }
     assert set(weekday_descriptions) == {f"charging_hour_{day}" for day in WEEKDAYS}
 
+    coordinator = MagicMock()
+    coordinator.config_entry.entry_id = "test_entry_id"
     for weekday, localized_day in zip(WEEKDAYS, localized_days, strict=True):
         key = f"charging_hour_{weekday}"
         description = weekday_descriptions[key]
@@ -211,13 +216,15 @@ async def test_vehicle_weekday_departure_translations(
         # not retain the optional unique_id_fn passed by its factory.
         sensor = EnodeVehicleSensor(
             hass=hass,
-            coordinator=MagicMock(),
+            coordinator=coordinator,
             description=description,
             vehicle_data={"id": "fixture-vehicle"},
             vehicle_index=0,
         )
         assert sensor.unique_id == f"{DOMAIN}_fixture-vehicle_{key}"
-        assert sensor.device_info["identifiers"] == {(DOMAIN, "fixture-vehicle")}
+        assert sensor.device_info["identifiers"] == inventory_device_identifiers(
+            "test_entry_id", "vehicle", "fixture-vehicle"
+        )
 
 
 def test_reconfigure_success_abort_translation() -> None:
