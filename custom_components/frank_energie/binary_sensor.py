@@ -1152,8 +1152,16 @@ async def async_setup_entry(
     if charger_coordinator.api.is_authenticated:
         chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
         if chargers and chargers.chargers:
+            user_data = (
+                settings_coordinator.data.get(DATA_USER)
+                if settings_coordinator.api.is_authenticated
+                else None
+            )
             parent_id = register_service_device(
-                hass, config_entry, SERVICE_NAME_ENODE_CHARGERS
+                hass,
+                config_entry,
+                SERVICE_NAME_ENODE_CHARGERS,
+                configuration_url=getattr(user_data, "websiteUrl", None),
             )
             for charger in chargers.chargers:
                 if not isinstance(charger.id, str) or not charger.id:
