@@ -779,6 +779,9 @@
       "battery_capacity": {
         "name": "Batterijcapaciteit"
       },
+      "battery_current_capacity": {
+        "name": "Huidige capaciteit"
+      },
       "battery_level": {
         "name": "Batterijniveau"
       },
