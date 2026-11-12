@@ -417,9 +417,9 @@ Use the testing framework and conventions already established in the repository,
 
 ### Reproducible Home Assistant test environment
 
-* Use the committed dev container or Python 3.14.2 or a newer 3.14 patch. `.python-version` selects the 3.14 series; the CI matrix covers the minimum and the latest patch.
-* If Python 3.14 is absent, provision it with an available interpreter manager (for example, `uv python install 3.14`) or the committed dev container before declaring the full suite unavailable.
-* Use Poetry 2.5.1. Select the interpreter with `poetry env use python3.14` and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
+* Use the committed dev container or Python 3.14.10 or 3.15.2. `.python-version` selects 3.14.10 for local development; the CI matrix explicitly tests both requested patch releases.
+* If the required interpreter is absent, provision it with an available interpreter manager (for example, `uv python install 3.14.10 3.15.2`) or use the committed dev container before declaring the full suite unavailable.
+* Use Poetry 2.5.1. Select the appropriate interpreter (`poetry env use python3.14` or `poetry env use python3.15`, verifying its exact patch version) and install the locked runtime and development dependencies with `poetry sync --with dev --no-root`.
 * Run `poetry check --lock` and `poetry run python -m pip check` to verify lockfile consistency and installed dependency compatibility.
 * Run the full Home Assistant suite with `poetry run python -m pytest tests -ra --junitxml=pytest-results.xml`.
 * Keep the official `pytest-homeassistant` plugin required in pytest configuration and pin it to the same release as Home Assistant Core (currently `2026.11.0`). Do not co-install the deprecated `pytest-homeassistant-custom-component` package; their fixtures overlap. Use real Home Assistant fixtures; lightweight substitutes do not verify the full integration lifecycle.
