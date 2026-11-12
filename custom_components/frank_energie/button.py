@@ -83,11 +83,7 @@ async def async_setup_entry(
     entities: list[ButtonEntity] = [
         FrankEnergieRefreshButton(
             coordinator=runtime_data.coordinator,
-            description=FrankEnergieButtonEntityDescription(
-                key="refresh_prices",
-                translation_key="refresh_prices",
-                service_name=SERVICE_NAME_PRICES,
-            ),
+            description=description,
             entry=entry,
         )
         for description in price_descriptions
