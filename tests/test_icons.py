@@ -119,7 +119,9 @@ def test_monetary_sensor_keeps_its_existing_icon(translation_key: str) -> None:
 
     from custom_components.frank_energie.const import ICON
 
-    descriptions = {description.translation_key: description for description in SENSOR_TYPES}
+    descriptions = {
+        description.translation_key: description for description in SENSOR_TYPES
+    }
     description = descriptions[translation_key]
 
     assert ICON == "mdi:currency-eur"
