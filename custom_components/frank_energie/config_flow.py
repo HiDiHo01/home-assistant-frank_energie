@@ -18,6 +18,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -64,6 +65,7 @@ from .const import (
     DATA_PV_SYSTEMS,
 )
 from .helpers import decrypt_password, encrypt_password, log_api_exception
+from .rate_limit import RateLimitState, get_rate_limit_state
 
 _LOGGER = logging.getLogger(__name__)
 INT_VERSION = "2026.3.22"
@@ -179,15 +181,52 @@ class ConfigFlow(config_entries.ConfigFlow):
             # Successful login
             return await self._handle_authentication_success(user_input, auth)
 
+        except RateLimitException:
+            return await self._handle_authentication_failure(reason="rate_limited")
         except AuthException:
             # Wrong username/password
             return await self._handle_authentication_failure(reason="invalid_auth")
         except ConnectionException:
             # Network/API issues
             return await self._handle_authentication_failure(reason="connection_error")
+        except AbortFlow:
+            raise
         except Exception as ex:
             log_api_exception(_LOGGER, "Unexpected error during login", ex)
             return await self._handle_authentication_failure(reason="unknown_error")
+
+    def _legacy_site_already_configured(
+        self, site_reference: str, *, single_site: bool = False
+    ) -> bool:
+        """Check legacy account entries for the same delivery site."""
+        username = self.sign_in_data.get(CONF_USERNAME)
+        if not username:
+            return False
+        return any(
+            entry.unique_id == username
+            and (
+                entry.data.get(CONF_SITE) == site_reference
+                or entry.options.get(CONF_SITE) == site_reference
+                or (
+                    not entry.data.get(CONF_SITE)
+                    and not entry.options.get(CONF_SITE)
+                    and (
+                        single_site
+                        or self._legacy_default_site_reference == site_reference
+                    )
+                )
+            )
+            for entry in self._async_current_entries()
+        )
+
+    async def _async_select_site(self, site_reference: str) -> ConfigFlowResult:
+        """Select a site without duplicating legacy account entries."""
+        if self._legacy_site_already_configured(site_reference):
+            return self.async_abort(reason="already_configured")
+        self.sign_in_data[CONF_SITE] = site_reference
+        site_titles = self.sign_in_data.get("site_titles", {})
+        self.sign_in_data["site_title"] = site_titles.get(site_reference)
+        return await self._async_create_entry(self.sign_in_data)
 
     async def async_step_site(
         self,
@@ -196,10 +235,7 @@ class ConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Handle possible multi site accounts."""
         if user_input and user_input.get(CONF_SITE) is not None:
-            self.sign_in_data[CONF_SITE] = user_input[CONF_SITE]
-            site_titles = self.sign_in_data.get("site_titles", {})
-            self.sign_in_data["site_title"] = site_titles.get(user_input[CONF_SITE])
-            return await self._async_create_entry(self.sign_in_data)
+            return await self._async_select_site(user_input[CONF_SITE])
 
         data_schema = vol.Schema(
             {
@@ -223,7 +259,9 @@ class ConfigFlow(config_entries.ConfigFlow):
                 auth_token=self.sign_in_data.get(CONF_ACCESS_TOKEN, None),
                 refresh_token=self.sign_in_data.get(CONF_TOKEN, None),
             ) as api:
-                user_sites = await api.UserSites()
+                user_sites = await self._get_rate_limits().async_call(
+                    "UserSites", api.UserSites
+                )
 
                 # Check if the user has any delivery sites
                 if not user_sites or not user_sites.deliverySites:
@@ -389,22 +427,10 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data_schema=data_schema,
                 errors={"base": "connection_error"},
             )
-        except NoDeliverySitesError as err:
-            _LOGGER.error("No delivery sites found: %s", err)
-            errors = {"base": "no_delivery_sites"}
-            return self.async_show_form(
-                step_id="site",
-                data_schema=self._site_error_schema(),
-                errors=errors,
-            )
-        except NoSitesFoundError as err:
-            _LOGGER.error("No suitable sites found: %s", err)
-            errors = {"base": "no_suitable_sites"}
-            return self.async_show_form(
-                step_id="site",
-                data_schema=self._site_error_schema(),
-                errors=errors,
-            )
+        except (RateLimitException, NoDeliverySitesError, NoSitesFoundError) as err:
+            return self._site_error_form(err)
+        except AbortFlow:
+            raise
         except Exception as err:
             log_api_exception(_LOGGER, "Failed to retrieve delivery sites", err)
             errors = {"base": "site_retrieval_failed"}
@@ -413,6 +439,20 @@ class ConfigFlow(config_entries.ConfigFlow):
                 data_schema=self._site_error_schema(),
                 errors=errors,
             )
+
+    def _site_error_form(self, err: Exception) -> ConfigFlowResult:
+        """Render typed site-fetch failures as localized form errors."""
+        if isinstance(err, RateLimitException):
+            reason = "rate_limited"
+        elif isinstance(err, NoDeliverySitesError):
+            reason = "no_delivery_sites"
+        else:
+            reason = "no_suitable_sites"
+        return self.async_show_form(
+            step_id="site",
+            data_schema=self._site_error_schema(),
+            errors={"base": reason},
+        )
 
     def _site_error_schema(self) -> vol.Schema:
         """Return schema used when site retrieval fails."""
@@ -500,6 +540,8 @@ class ConfigFlow(config_entries.ConfigFlow):
             )
             return []
 
+        except RateLimitException:
+            raise
         except Exception as err:  # noqa: BLE001
             log_api_exception(_LOGGER, "Unexpected error fetching delivery sites", err)
             return []
@@ -706,7 +748,11 @@ class ConfigFlow(config_entries.ConfigFlow):
         async with FrankEnergie(
             clientsession=async_get_clientsession(self.hass)
         ) as api:
-            return await api.login(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
+            return await self._get_rate_limits().async_call(
+                "login",
+                lambda: api.login(user_input[CONF_USERNAME], user_input[CONF_PASSWORD]),
+                authenticated=False,
+            )
 
     async def _handle_authentication_success(
         self, user_input: dict[str, Any], auth: Authentication
@@ -1041,8 +1087,12 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
                 async with FrankEnergie(
                     clientsession=async_get_clientsession(self.hass)
                 ) as api:
-                    auth = await api.login(
-                        user_input[CONF_USERNAME], password_to_validate
+                    auth = await get_rate_limit_state(self.hass, entry).async_call(
+                        "login",
+                        lambda: api.login(
+                            user_input[CONF_USERNAME], password_to_validate
+                        ),
+                        authenticated=False,
                     )
                 if not await _async_account_matches_entry(
                     self.hass, entry, auth, user_input[CONF_USERNAME]
