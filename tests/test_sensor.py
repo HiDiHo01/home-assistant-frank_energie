@@ -1856,6 +1856,96 @@ async def test_pv_steering_status_systems_fallback_passes_ha_enum_validation(
     assert state == "active"
 
 
+def test_removed_battery_session_device_id_stays_available_as_attribute() -> None:
+    """Remove the Device ID entity without losing session identification data."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import (
+        BATTERY_SESSION_SENSOR_DESCRIPTIONS,
+    )
+
+    descriptions = {
+        description.key: description
+        for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS
+    }
+    assert "device_id" not in descriptions
+    assert "period_total_result" in descriptions
+    assert "period_start_date" in descriptions
+
+    session_data = SimpleNamespace(
+        device_id="battery_example",
+        sessions=[],
+        period_start_date=None,
+        period_end_date=None,
+        period_trade_index=None,
+        period_trading_result=None,
+        period_total_result=None,
+        period_imbalance_result=None,
+        period_epex_result=None,
+        period_frank_slim=None,
+    )
+    attributes = descriptions["period_total_result"].attr_fn(session_data)
+    assert attributes["device_id"] == "battery_example"
+
+
+def test_legacy_battery_device_id_cleanup_is_entry_scoped(
+    hass: HomeAssistant,
+) -> None:
+    """Remove only legacy device ID entities from the configured batteries."""
+    from custom_components.frank_energie.sensor import (
+        _async_remove_legacy_battery_device_id_entities,
+    )
+
+    config_entry = MockConfigEntry(
+        domain=const.DOMAIN, unique_id="battery_device_id_cleanup"
+    )
+    config_entry.add_to_hass(hass)
+    other_entry = MockConfigEntry(
+        domain=const.DOMAIN, unique_id="other_battery_device_id_cleanup"
+    )
+    other_entry.add_to_hass(hass)
+
+    registry = entity_registry.async_get(hass)
+    deprecated = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        "battery_one_device_id",
+        config_entry=config_entry,
+    )
+    retained_session = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        "battery_one_period_total_result",
+        config_entry=config_entry,
+    )
+    retained_unlisted = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        "battery_extra_device_id",
+        config_entry=config_entry,
+    )
+    retained_other_entry = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        "battery_two_device_id",
+        config_entry=other_entry,
+    )
+
+    _async_remove_legacy_battery_device_id_entities(
+        hass, config_entry, {"battery_one", "battery_two"}
+    )
+
+    assert registry.async_get(deprecated.entity_id) is None
+    assert registry.async_get(retained_session.entity_id) is not None
+    assert registry.async_get(retained_unlisted.entity_id) is not None
+    assert registry.async_get(retained_other_entry.entity_id) is not None
+
+    # Repeat startup cleanup to verify the removal is idempotent.
+    _async_remove_legacy_battery_device_id_entities(
+        hass, config_entry, {"battery_one", "battery_two"}
+    )
+
+
 def test_smart_battery_id_is_diagnostic_and_disabled_by_default() -> None:
     """Classify battery IDs as diagnostic without altering other battery sensors."""
     from types import SimpleNamespace
