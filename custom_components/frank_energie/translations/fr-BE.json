@@ -1024,9 +1024,6 @@
       "intervention_title": {
         "name": "Titre de l'intervention"
       },
-      "device_id": {
-        "name": "ID de l'appareil"
-      },
       "period_start_date": {
         "name": "Date de début de période"
       },
