@@ -51,6 +51,7 @@ from .const import (
     MANUFACTURER_FRANK_ENERGIE,
 )
 from .coordinator import FrankEnergieBatteryCoordinator, FrankEnergieCoordinator
+from .device_inventory import inventory_device_identifiers
 from .helpers import (
     AdjustableBatterySetting,
     battery_adjustable_setting,
@@ -329,7 +330,9 @@ class FrankEnergieBatteryThresholdNumber(
         name = f"{brand} {model}".strip()
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, battery_id)},
+            identifiers=inventory_device_identifiers(
+                config_entry.entry_id, "battery", battery_id
+            ),
             manufacturer=brand,
             model=model,
             name=name,
@@ -606,7 +609,11 @@ class FrankEnergieEnodeChargeLimitNumber(
         name = f"{brand} {model}".strip() if (brand or model) else f"Device {device_id}"
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, device_id)},
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id,
+                "vehicle" if is_vehicle else "charger",
+                device_id,
+            ),
             manufacturer=brand,
             model=model,
             name=name,

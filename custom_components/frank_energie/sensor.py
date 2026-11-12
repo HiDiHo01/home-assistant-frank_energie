@@ -111,6 +111,7 @@ from .helpers import (
     resolve_gas_unit,
     service_device_info,
 )
+from .device_inventory import inventory_device_identifiers
 from .smart_hvac_sensor import async_setup_smart_hvac_sensors
 from .statistics import lowest_window
 
@@ -556,7 +557,9 @@ class EnodeVehicleSensor(CoordinatorEntity, SensorEntity):
             self._attr_unique_id = f"{DOMAIN}_{self._vehicle_id}_{description.key}"
         self._attr_translation_key = description.translation_key
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._vehicle_id)},
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id, "vehicle", self._vehicle_id
+            ),
             manufacturer=info.get("brand"),
             model=info.get("model"),
             serial_number=info.get("vin", None),
@@ -733,7 +736,9 @@ class FrankEnergiePvSensor(CoordinatorEntity[FrankEnergieCoordinator], SensorEnt
         metadata = coordinator.get_pv_system_metadata(system_id)
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, system_id)},
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id, "pv", system_id
+            ),
             manufacturer=metadata["brand"],
             model=metadata["model"],
             name=metadata["display_name"],
@@ -795,7 +800,9 @@ class FrankEnergiePvPanelGroupSensor(
         metadata = coordinator.get_pv_system_metadata(system_id)
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, system_id)},
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id, "pv", system_id
+            ),
             name=metadata["display_name"],
             manufacturer=metadata["brand"],
             model=metadata["model"],
@@ -4287,7 +4294,9 @@ class EnodeChargerSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_unique_id = f"{DOMAIN}_{self._charger_id}_{description.key}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._charger_id)},
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id, "charger", self._charger_id
+            ),
             manufacturer=brand,
             model=model,
             name=charger_name,
@@ -4558,7 +4567,9 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
     def device_info(self) -> DeviceInfo | None:
         """Return device info."""
         info = DeviceInfo(
-            identifiers={(DOMAIN, self._battery_id)},
+            identifiers=inventory_device_identifiers(
+                entry.entry_id, "battery", self._battery_id
+            ),
             name=self._battery_name,
             manufacturer=self._battery_brand,
             model="SmartBattery",

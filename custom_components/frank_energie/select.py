@@ -39,6 +39,7 @@ from .const import (
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieBatteryCoordinator, FrankEnergieCoordinator
+from .device_inventory import inventory_device_identifiers
 from .helpers import (
     AdjustableBatterySetting,
     async_sync_contract_entities,
@@ -345,7 +346,9 @@ class FrankEnergieBatteryBaseSelect(
         name = f"{brand} {model}".strip()
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, battery_id)},
+            identifiers=inventory_device_identifiers(
+                entry.entry_id, "battery", battery_id
+            ),
             manufacturer=brand,
             model=model,
             name=name,
@@ -623,7 +626,9 @@ class FrankEnergieEnodeChargingModeSelect(
         )
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, vehicle_id)},
+            identifiers=inventory_device_identifiers(
+                entry.entry_id, "vehicle", vehicle_id
+            ),
             manufacturer=brand,
             model=model,
             name=name,
@@ -726,7 +731,9 @@ class FrankEnergieEnodeChargerChargingModeSelect(
         )
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, charger_id)},
+            identifiers=inventory_device_identifiers(
+                entry.entry_id, "charger", charger_id
+            ),
             manufacturer=brand,
             model=model,
             name=name,
