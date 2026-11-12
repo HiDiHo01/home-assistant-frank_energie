@@ -96,9 +96,7 @@ async def test_setup_buttons_preserves_contract_routing(
         return contracts
 
     monkeypatch.setattr(button_platform, "known_site_contracts", _known_contracts)
-    monkeypatch.setattr(
-        button_platform, "async_sync_contract_entities", MagicMock()
-    )
+    monkeypatch.setattr(button_platform, "async_sync_contract_entities", MagicMock())
 
     added = MagicMock()
     await button_platform.async_setup_entry(MagicMock(), entry, added)
