@@ -153,7 +153,9 @@ def test_enode_binary_device_classes_and_icons() -> None:
     assert vehicle["smart_charging_enabled"].device_class is None
     assert vehicle["solar_charging_enabled"].device_class is None
     assert vehicle["can_smart_charge"].entity_category == EntityCategory.DIAGNOSTIC
-    assert vehicle["smart_charging_enabled"].entity_category == EntityCategory.DIAGNOSTIC
+    assert (
+        vehicle["smart_charging_enabled"].entity_category == EntityCategory.DIAGNOSTIC
+    )
     assert charger["can_smart_charge"].entity_category == EntityCategory.DIAGNOSTIC
 
     assert not set(vehicle).intersection({d.key for d in ENODE_VEHICLE_SENSOR_TYPES})
@@ -168,7 +170,14 @@ def test_all_enode_binary_names_are_localized() -> None:
         *ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS,
     )
     keys = {d.translation_key for d in descriptions}
-    for name in ("strings.json", "en.json", "nl.json", "nl-BE.json", "fr.json", "fr-BE.json"):
+    for name in (
+        "strings.json",
+        "en.json",
+        "nl.json",
+        "nl-BE.json",
+        "fr.json",
+        "fr-BE.json",
+    ):
         file_path = root / ("translations" if name != "strings.json" else "") / name
         data = json.loads(file_path.read_text(encoding="utf-8"))["entity"]
         for key in keys:
@@ -189,12 +198,20 @@ def test_missing_enode_devices_are_unavailable() -> None:
     )
     vehicle_sensor = EnodeVehicleBinarySensor(
         vehicle_coordinator,
-        next(d for d in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS if d.key == "is_charging"),
+        next(
+            d
+            for d in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS
+            if d.key == "is_charging"
+        ),
         vehicle,
     )
     charger_sensor = EnodeChargerBinarySensor(
         charger_coordinator,
-        next(d for d in ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS if d.key == "is_charging"),
+        next(
+            d
+            for d in ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS
+            if d.key == "is_charging"
+        ),
         charger,
     )
     assert vehicle_sensor.is_on is True
@@ -208,7 +225,9 @@ def test_missing_enode_devices_are_unavailable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_binary_vehicle_exposes_home_assistant_states(hass: HomeAssistant) -> None:
+async def test_binary_vehicle_exposes_home_assistant_states(
+    hass: HomeAssistant,
+) -> None:
     """A real HA entity platform translates booleans to on/off/unknown."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="test-binary-vehicle")
     entry.add_to_hass(hass)
@@ -221,9 +240,7 @@ async def test_binary_vehicle_exposes_home_assistant_states(hass: HomeAssistant)
         d for d in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS if d.key == "is_charging"
     )
     sensor = EnodeVehicleBinarySensor(coordinator, description, vehicle)
-    platform = MockEntityPlatform(
-        hass, domain="binary_sensor", platform_name=DOMAIN
-    )
+    platform = MockEntityPlatform(hass, domain="binary_sensor", platform_name=DOMAIN)
     platform.config_entry = entry
     await platform.async_add_entities([sensor])
     await hass.async_block_till_done()
@@ -286,9 +303,7 @@ async def test_migration_never_removes_another_entry(hass: HomeAssistant) -> Non
     foreign.add_to_hass(hass)
     registry = er.async_get(hass)
     unique_id = f"{DOMAIN}_vehicle-test_is_charging"
-    old = registry.async_get_or_create(
-        "sensor", DOMAIN, unique_id, config_entry=owner
-    )
+    old = registry.async_get_or_create("sensor", DOMAIN, unique_id, config_entry=owner)
     description = next(
         d for d in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS if d.key == "is_charging"
     )
