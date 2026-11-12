@@ -731,14 +731,8 @@
       "charger_model": {
         "name": "Model"
       },
-      "can_smart_charge": {
-        "name": "Kan slim laden"
-      },
       "charge_capacity": {
         "name": "Laadcapaciteit"
-      },
-      "is_plugged_in": {
-        "name": "Is ingeplugd"
       },
       "power_delivery_state": {
         "name": "Stroomvoorziening status",
@@ -755,23 +749,8 @@
           "error": "Fout"
         }
       },
-      "charger_is_reachable": {
-        "name": "Lader bereikbaar"
-      },
-      "is_reachable": {
-        "name": "Voertuig bereikbaar"
-      },
-      "is_charging": {
-        "name": "Is aan het laden"
-      },
       "charge_rate": {
         "name": "Laadsnelheid"
-      },
-      "is_smart_charging_enabled": {
-        "name": "Is slim laden ingeschakeld"
-      },
-      "is_solar_charging_enabled": {
-        "name": "Is laden op zon ingeschakeld"
       },
       "total_batteries": {
         "name": "Totaal aantal batterijen"
@@ -796,15 +775,6 @@
       },
       "charge_last_updated": {
         "name": "Laden laatst bijgewerkt"
-      },
-      "is_fully_charged": {
-        "name": "Volledig opgeladen"
-      },
-      "smart_charging_enabled": {
-        "name": "Slim laden ingeschakeld"
-      },
-      "solar_charging_enabled": {
-        "name": "Laden op zon ingeschakeld"
       },
       "last_seen": {
         "name": "Laatst gezien"
@@ -1075,6 +1045,36 @@
       },
       "smart_push_notification_price_alerts": {
         "name": "Slimme pushmeldingen prijsalerts"
+      },
+      "can_smart_charge": {
+        "name": "Kan slim laden"
+      },
+      "is_reachable": {
+        "name": "Voertuig bereikbaar"
+      },
+      "charger_is_reachable": {
+        "name": "Lader bereikbaar"
+      },
+      "is_plugged_in": {
+        "name": "Is ingeplugd"
+      },
+      "is_charging": {
+        "name": "Is aan het laden"
+      },
+      "is_fully_charged": {
+        "name": "Volledig opgeladen"
+      },
+      "smart_charging_enabled": {
+        "name": "Slim laden ingeschakeld"
+      },
+      "solar_charging_enabled": {
+        "name": "Laden op zon ingeschakeld"
+      },
+      "is_smart_charging_enabled": {
+        "name": "Is slim laden ingeschakeld"
+      },
+      "is_solar_charging_enabled": {
+        "name": "Is laden op zon ingeschakeld"
       }
     },
     "select": {
