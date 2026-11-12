@@ -364,10 +364,14 @@ class _TranslationKeyExtractor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         """Keep Repairs issue keys separate from entity and button keys."""
-        if (
+        is_issue_call = (
             isinstance(node.func, ast.Attribute)
             and node.func.attr == "async_create_issue"
-        ):
+        ) or (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "async_create_issue"
+        )
+        if is_issue_call:
             self.generic_visit(node)
             return
         for keyword in node.keywords:
@@ -385,6 +389,7 @@ class _TranslationKeyExtractor(ast.NodeVisitor):
 def test_translation_key_extractor_separates_repairs_and_entities() -> None:
     """A Repairs key must never satisfy an entity translation requirement."""
     source = """
+ir.async_create_issue(translation_key="stale_device")
 async_create_issue(translation_key="stale_device")
 SensorEntityDescription(translation_key="current_price", key="current_price")
 """
