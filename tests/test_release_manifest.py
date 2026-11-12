@@ -58,6 +58,9 @@ def _run_release_command(
         ("--version", "v2026.11.2", "2026.11.2"),
         ("-V", "2026.11.2", "2026.11.2"),
         ("--version", "v2026.11.2b1", "2026.11.2b1"),
+        ("--version", "v2026.9.9r2", "2026.9.9r2"),
+        ("--version", "v2026.8.1-beta.4", "2026.8.1-beta.4"),
+        ("--version", "v2026.6.29-b2", "2026.6.29-b2"),
     ),
 )
 def test_release_manifest_updates_only_the_version(
@@ -128,6 +131,30 @@ def test_empty_release_versions_leave_the_manifest_unchanged(
     assert result.returncode == 1
     assert "release version must not be empty" in result.stderr
     assert manifest_path.read_text(encoding="utf-8") == original_contents
+
+
+@pytest.mark.parametrize(
+    "requested_version",
+    (
+        "unversioned",
+        "2026.11.2; echo unexpected",
+        "2026.11.2\nmalformed",
+        "2026.11.2/../../",
+        "2026.11.2$(touch /tmp/unsafe)",
+    ),
+)
+def test_invalid_release_tags_do_not_modify_manifest(
+    tmp_path: Path, requested_version: str
+) -> None:
+    """Reject malformed tags without writing an invalid release manifest."""
+    original = '{"version": "2026.1.1"}'
+    manifest_path = _write_manifest(tmp_path, original)
+
+    result = _run_release_command(tmp_path, ["--version", requested_version])
+
+    assert result.returncode == 1
+    assert "Invalid release version" in result.stderr
+    assert manifest_path.read_text(encoding="utf-8") == original
 
 
 @pytest.mark.parametrize("version_flag", ("--version", "-V"))

@@ -5,6 +5,9 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .ruff_cache/
+.venv/
+pytest-results.xml
+/sonar-open-issues.json
 .coverage
 coverage.xml
 htmlcov/

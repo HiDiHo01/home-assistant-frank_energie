@@ -33,6 +33,47 @@ The integration exposes status information including:
 
 These entities can be used in dashboards, automations, and troubleshooting.
 
+## Vehicle and charger binary statuses
+
+For each connected Enode vehicle, the following **read-only** statuses use
+`binary_sensor` rather than `sensor`:
+
+- Can smart charge (`can_smart_charge`)
+- Vehicle reachable (`is_reachable`)
+- Charging (`is_charging`)
+- Fully charged (`is_fully_charged`)
+- Plugged in (`is_plugged_in`)
+- Smart charging enabled (`smart_charging_enabled`)
+- Solar charging enabled (`solar_charging_enabled`)
+
+For each Enode charger, the six `binary_sensor` status keys are
+`can_smart_charge`, `is_plugged_in`, `is_reachable`, `is_charging`,
+`is_smart_charging_enabled`, and `is_solar_charging_enabled`.
+
+A genuine `True` API value means **on**, and `False` means **off**. A missing
+or malformed boolean is **unknown**, not off. If the hardware disappears from
+a successful inventory refresh, its binary entities become unavailable.
+
+### Entity migration for existing installations
+
+On the first authenticated setup after upgrading, the integration migrates
+legacy Enode boolean `sensor.*` registry entries for **currently discovered**
+vehicles and chargers into `binary_sensor.*`. It retains the underlying
+provider-based unique ID, physical device association, user-disabled state,
+and user-defined name or icon where possible. Cleanup is scoped to the
+correct Frank Energie config entry and will not remove other accounts'
+entities. For devices that are not currently discovered, legacy registry
+entries are left intact until a later discovery.
+
+**The domain change is not an automatic automation migration.** Review
+dashboards, scripts, template entities and automations that refer to the
+former `sensor.*` IDs, and replace those references with the corresponding
+`binary_sensor.*` IDs. Home Assistant may also choose a new object-ID suffix
+if the preferred new ID is already occupied. Confirm the actual new entity
+IDs in **Settings → Devices & Services → Entities** before changing
+automations. Old `sensor.*` statistics/history are not automatically
+rewritten as binary-sensor history.
+
 ## Provider Information
 
 Frank Energie may use external providers to manage Smart Charging functionality.

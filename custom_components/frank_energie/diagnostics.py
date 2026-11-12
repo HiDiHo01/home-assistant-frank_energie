@@ -20,30 +20,74 @@ from homeassistant.core import HomeAssistant
 
 from . import FrankEnergieEntryData
 
+# Security: Keys redacted to prevent leaking credentials, personal data, and identifiers
+# in exported diagnostics, fulfilling SPECS/redact_spec.md requirements.
 TO_REDACT: set[str] = {
     CONF_ACCESS_TOKEN,
     CONF_TOKEN,
     CONF_USERNAME,
     CONF_PASSWORD,
+    "Authorization",
+    "authorization",
     "authToken",
+    "bearer",
+    "jwt",
     "refreshToken",
+    "auth_token",
+    "accessToken",
     "access_token",
     "refresh_token",
     "password",
+    "passwd",
+    "secret",
+    "otp",
+    "mfa_code",
     "username",
     "email",
     "phone",
+    "mobile",
+    "telephone",
     "address",
+    "addressFormatted",
+    "address_formatted",
+    "street",
+    "houseNumber",
+    "houseNumberAddition",
+    "postalCode",
+    "postal_code",
+    "zipCode",
+    "city",
+    "connectionAddress",
+    "connection_address",
+    "deliveryAddress",
+    "delivery_address",
+    "latitude",
+    "longitude",
     "customer_id",
     "customerId",
+    "customer_number",
+    "customerNumber",
     "account_id",
     "accountId",
+    "userId",
+    "user_id",
+    # Generic IDs are used by nested user, battery, vehicle, HVAC, and PV models.
+    "id",
+    "userCreatedAt",
+    "personId",
     "title",
     "contract_id",
     "contractId",
+    "contractReference",
+    "contractNumber",
+    "agreementId",
+    "productName",
+    "contractProductName",
     "site_reference",
     "siteReference",
     "reference",
+    "externalReference",
+    "external_reference",
     "TotalAmount",
     "Total amount",
     "Total_amount",
@@ -55,48 +99,51 @@ TO_REDACT: set[str] = {
     "connection_id",
     "connectionId",
     "bankAccountNumber",
+    "mandateId",
     "EAN",
+    "ean",
+    "connectionEAN",
+    "connection_ean",
+    "electricityEAN",
+    "electricity_ean",
+    "gasEAN",
+    "gas_ean",
+    "meteringPoint",
     "cluster",
     "firstName",
     "lastName",
+    "fullName",
+    "displayName",
     "emailAddress",
     "phoneNumber",
     "mobileNumber",
-    "ean",
-    "electricity_ean",
-    "gas_ean",
     "serial_number",
     "serialNumber",
+    "deviceSerialNumber",
+    "batterySerialNumber",
     "battery_id",
     "batteryId",
-    "battery_serial_number",
-    "batterySerialNumber",
     "charger_id",
     "chargerId",
     "vehicle_id",
     "vehicleId",
+    "vehicleIdentificationNumber",
     "device_id",
     "deviceId",
+    "hardwareId",
     "installation_id",
     "installationId",
-    "pv_system_id",
     "pvSystemId",
-    # Vehicle identification numbers (VINs) are sensitive hardware identifiers
+    "providerAccountId",
+    "providerUserId",
     "vin",
-    "vehicleIdentificationNumber",
-    # Contract references and agreements
-    "contract_reference",
-    "contractReference",
-    "contract_number",
-    "contractNumber",
-    "agreement_id",
-    "agreementId",
-    # Structured delivery address elements
-    "street",
-    "houseNumber",
-    "houseNumberAddition",
-    "postalCode",
-    "city",
+    "inverter_serial_numbers",
+    "ip",
+    "ipv4",
+    "ipv6",
+    "mac",
+    "macAddress",
+    "hostname",
 }
 
 
@@ -152,7 +199,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> dict[str, object]:
-    """Return diagnostics for a config entry."""
+    """Return redacted config-entry diagnostics, including optional HVAC counts."""
 
     runtime_data: FrankEnergieEntryData = entry.runtime_data
     coordinator = runtime_data.coordinator
@@ -191,5 +238,16 @@ async def async_get_config_entry_diagnostics(
             runtime_data.battery_session_coordinators,
         ),
     }
+    if (smart_hvac := runtime_data.smart_hvac_coordinator) is not None:
+        snapshot = smart_hvac.data
+        diagnostics["smart_hvac"] = {
+            "last_update_success": smart_hvac.last_update_success,
+            "device_count": len(snapshot.devices)
+            if snapshot.devices is not None
+            else None,
+            "connection_request_count": (
+                len(snapshot.requests) if snapshot.requests is not None else None
+            ),
+        }
 
     return async_redact_data(diagnostics, TO_REDACT)

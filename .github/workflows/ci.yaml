@@ -4,26 +4,45 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_NO_INTERACTION: "1"
+  POETRY_VIRTUALENVS_IN_PROJECT: "true"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
   run:
     permissions:
       contents: read
-    name: Run flake8/pytest (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: ${{ matrix.experimental && 'Python 3.15.2 upstream client smoke (experimental)' || 'Run flake8/pytest (Python 3.14.10)' }}
+    # Only the officially supported Python 3.14 job is mandatory.
+    # GitHub reports failures in the Python 3.15 compatibility job without
+    # blocking the stable Home Assistant test gate.
+    continue-on-error: ${{ matrix.experimental }}
+    # Both Python 3.14.10 and 3.15.2 have verified Ubuntu 24.04 x64 builds.
+    # Keep the runner pinned to the verified platform for both versions.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # 3.14.2 is the minimum Python version pyproject.toml declares
-        # support for; 3.14 tracks the latest 3.14.x patch release.
-        python-version: ["3.14.2", "3.14"]
+        include:
+          - python-version: "3.14.10"
+            experimental: false
+          - python-version: "3.15.2"
+            experimental: true
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # @v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -42,6 +61,8 @@ jobs:
             test.pypi.org:443
             codecov.io:443
             uploader.codecov.io:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # @v7
 
@@ -52,35 +73,180 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+          cache-dependency-path: poetry.lock
 
       - name: Set up Node.js for workflow script regression tests
+        if: ${{ !matrix.experimental }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # @v7.1.0
         with:
           node-version: "24"
           package-manager-cache: false
 
       - name: Install Poetry
+        if: ${{ !matrix.experimental }}
         run: |
-          set -o pipefail
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          python -m pip install --only-binary :all: "poetry==2.5.1"
+
+      - name: Validate lockfile
+        if: ${{ !matrix.experimental }}
+        run: poetry check --lock
+
+      - name: Install Python 3.15 upstream client for offline smoke tests
+        if: ${{ matrix.experimental }}
+        id: smoke_install
+        timeout-minutes: 5
+        run: |
+          client_requirement=$(python - <<'PY'
+          """Read the exact upstream client requirement from the integration."""
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(
+              Path("custom_components/frank_energie/manifest.json").read_text(encoding="utf-8")
+          )
+          requirements = [
+              value
+              for value in manifest["requirements"]
+              if value.startswith("python-frank-energie==")
+          ]
+          if len(requirements) != 1:
+              raise SystemExit("Expected exactly one pinned python-frank-energie requirement.")
+          print(requirements[0])
+          PY
+          )
+          # The released client models import dateutil but its package
+          # metadata does not yet declare python-dateutil as a dependency.
+          python -m pip install --only-binary=:all: \
+            "$client_requirement" "python-dateutil>=2.9,<3" "packaging>=24.2,<27"
+          python -m pip check
+
+      - name: Diagnose experimental Python wheel availability
+        if: ${{ matrix.experimental }}
+        run: |
+          python - <<'PY'
+          """Report locked packages without a wheel for the current runner."""
+          import tomllib
+          from pathlib import Path
+
+          from packaging.markers import Marker
+          from packaging.tags import sys_tags
+          from packaging.utils import parse_wheel_filename
+
+          lock = tomllib.loads(Path("poetry.lock").read_text(encoding="utf-8"))
+          supported_tags = set(sys_tags())
+          missing = []
+          for package in lock["package"]:
+              markers = package.get("markers")
+              if isinstance(markers, str) and not Marker(markers).evaluate():
+                  continue
+              if isinstance(markers, dict) and not any(
+                  Marker(expression).evaluate() for expression in markers.values()
+              ):
+                  continue
+              wheel_names = [
+                  item["file"]
+                  for item in package.get("files", [])
+                  if item["file"].endswith(".whl")
+              ]
+              if any(
+                  not parse_wheel_filename(filename)[3].isdisjoint(supported_tags)
+                  for filename in wheel_names
+              ):
+                  continue
+              missing.append(f"{package['name']}=={package['version']}")
+
+          if missing:
+              print("Locked packages without a compatible wheel on this runner:")
+              for package_name in sorted(missing):
+                  print(f"  {package_name}")
+              print(
+                  "::warning title=Python 3.15 wheel availability::"
+                  f"{len(missing)} locked packages lack a compatible wheel; "
+                  "a source build would be required."
+              )
+          else:
+              print("All applicable locked packages have compatible wheels.")
+          PY
 
       - name: Install dependencies with Poetry
+        if: ${{ !matrix.experimental }}
+        id: install
+        timeout-minutes: 10
         run: |
-          poetry install
-          if [ -f requirements.txt ]; then poetry run pip install -r requirements.txt; fi
+          poetry env use python
+          poetry sync --with dev --no-root --no-ansi -v
+          poetry run python -m pip check
+
+      - name: Verify Home Assistant test environment
+        if: ${{ !matrix.experimental }}
+        id: environment
+        run: |
+          poetry run python - <<'PY'
+          """Verify the supported interpreter and import the real test framework."""
+          import sys
+          from importlib import import_module
+          from importlib.metadata import version
+
+          if sys.version_info[:3] != (3, 14, 10):
+              raise SystemExit("Home Assistant CI requires Python 3.14.10.")
+
+          import_module("homeassistant.core")
+          import_module("pytest_homeassistant")
+          print(f"Python: {sys.version.split()[0]}")
+          for package_name in ("homeassistant", "pytest", "pytest-homeassistant"):
+              print(f"{package_name}: {version(package_name)}")
+          if version("homeassistant") != "2026.11.0" or version("pytest-homeassistant") != "2026.11.0":
+              raise SystemExit("Home Assistant and pytest-homeassistant must both be 2026.11.0")
+          PY
 
       - name: Register flake8 problem matcher
+        if: ${{ !matrix.experimental }}
         run: echo "::add-matcher::.github/workflows/flake8-matchers.json"
 
       - name: Lint with flake8
+        if: ${{ !matrix.experimental }}
         run: |
-          poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Keep the existing full-report pass informational until the pre-existing
-          # E501/E203/C901 findings are resolved in a dedicated code-cleanup PR.
-          # The critical-error pass above remains blocking.
-          poetry run flake8 . --count --max-complexity=10 --max-line-length=120 --statistics || true
+          poetry run flake8 . --jobs=1 --extend-exclude=.venv --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      # The full check is blocking for new violations. Existing C901/E501
+      # technical debt is explicitly recorded in .github/flake8-baseline.json;
+      # E203 is excluded only to match Ruff-compatible slice formatting.
+      - name: Enforce no new Flake8 violations
+        if: ${{ !matrix.experimental }}
+        run: poetry run python .github/helpers/check_flake8_baseline.py
 
       - name: Test with pytest
+        id: pytest
+        if: ${{ !cancelled() && !matrix.experimental && steps.environment.outcome == 'success' }}
         run: |
-          poetry run pytest -v --capture=no
+          poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
+
+      - name: Run Python 3.15 upstream client smoke tests
+        if: ${{ matrix.experimental }}
+        id: smoke
+        run: |
+          python -m unittest discover -s .github/helpers -p test_python315_smoke.py -v
+
+      - name: Upload pytest report
+        if: ${{ !cancelled() && !matrix.experimental && steps.pytest.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pytest-python-${{ matrix.python-version }}
+          path: pytest-results.xml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summarize experimental Python compatibility
+        if: ${{ always() && matrix.experimental }}
+        env:
+          CLIENT_INSTALL_OUTCOME: ${{ steps.smoke_install.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: |
+          {
+            echo "### Python 3.15.2 (experimental; non-blocking)"
+            echo "Upstream client binary-wheel installation: ${CLIENT_INSTALL_OUTCOME}"
+            echo "Offline client/model and integration syntax smoke tests: ${SMOKE_OUTCOME}"
+            echo "Home Assistant dependencies and pytest: not run on Python 3.15."
+            echo "The wheel availability audit above lists blockers for the full Home Assistant environment."
+            echo "This job does not establish official Home Assistant Python 3.15 support."
+          } >> "$GITHUB_STEP_SUMMARY"

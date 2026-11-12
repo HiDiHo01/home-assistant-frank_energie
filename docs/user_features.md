@@ -18,6 +18,10 @@ The following functionality is available without authentication:
 - Frank Energie events
 - Manual price refresh controls
 
+The enabled-by-default **Tomorrow electricity prices available** binary sensor
+reports publication through its `on`/`off` state, for public market-data setups and authenticated sites with electricity
+contracts. Authenticated gas-only sites do not create the electricity sensor. See [Tomorrow Price Availability](entities.md#tomorrow-price-availability)
+for missing-data, failure, and local-midnight behavior.
 ### Electricity Price Resolution
 
 The integration supports multiple electricity market resolutions:
@@ -116,12 +120,26 @@ Features include:
 
 ## Smart HVAC
 
-Supported accounts may expose Smart HVAC information.
+Supported accounts may expose the authenticated **Smart heating** binary sensor
+(**Slim verwarmen** in Dutch, **Chauffage intelligent** in French). Its state
+reflects `UserSmartHvac.isActivated` for the selected delivery site:
 
-Features include:
+- `on`: the Smart HVAC **service** is activated.
+- `off`: the service is not activated.
+- `unavailable`: the activation value is missing/invalid or the settings
+  coordinator is unavailable.
 
-- Smart HVAC status
-- Heat pump optimization participation status
+The sensor uses the `RUNNING` device class for the requested localized
+active/inactive labels. **It does not mean the heat pump is currently running.**
+The separate `available_on_site` attribute indicates service eligibility,
+not activation. No device operating or steering status is exposed by this
+binary sensor.
+
+When Frank confirms activation for the delivery site, the **Smart heating**
+service shows the number of linked devices and the site's profile information.
+Each linked device, such as a heat pump, appears separately with its own
+statuses, session dates, and total result. The **User** service shows the
+account-level connection request count for activated sites. [Smart heating activation and equipment data](smart_hvac_activation.md)
 
 ## PV Systems
 

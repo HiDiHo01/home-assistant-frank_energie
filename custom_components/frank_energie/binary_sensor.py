@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
-from enum import Enum
 from math import isfinite
 from typing import Callable
+
+from python_frank_energie.models import EnodeCharger, EnodeVehicle
 from zoneinfo import ZoneInfo
 
 from homeassistant.components.binary_sensor import (
@@ -19,7 +21,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -28,13 +33,19 @@ from .const import (
     API_CONF_URL,
     COMPONENT_TITLE,
     DATA_BATTERY_DETAILS,
+    DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
+    DATA_ENODE_CHARGERS,
+    DATA_ENODE_VEHICLES,
     DATA_PV_SYSTEMS,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
+    DATA_USER_SMART_FEED_IN_FETCHED,
     DOMAIN,
+    ATTRIBUTION,
     ICON,
     SERVICE_NAME_BATTERIES,
+    SERVICE_NAME_ENODE_CHARGERS,
     SERVICE_NAME_PRICES,
     SERVICE_NAME_USER,
     TIMEZONE_AMSTERDAM,
@@ -46,13 +57,12 @@ from .helpers import (
     device_translation_key,
     known_site_contracts,
     service_device_info,
+    register_service_device,
 )
+from .smart_hvac import smart_hvac_activation, smart_hvac_site_attributes
+from .device_inventory import inventory_device_identifiers
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class UserFeatureKey(str, Enum):
-    SMART_HVAC = "smartHvac"
 
 
 @dataclass(slots=True, frozen=True)
@@ -121,6 +131,14 @@ def _extract_activation_state(
             ),
         )
     )
+
+
+def _smart_feed_in_state(data: FrankEnergieData) -> bool | None:
+    """Distinguish a confirmed missing contract from an unsuccessful API fetch."""
+    status = data.get(DATA_USER_SMART_FEED_IN)
+    if status is None:
+        return False if data.get(DATA_USER_SMART_FEED_IN_FETCHED) is True else None
+    return _extract_activation_state(status)
 
 
 def _user_feature_state(
@@ -215,25 +233,9 @@ def _user_feature_attributes(
     return attr_fn
 
 
-def _smart_hvac_state(data: FrankEnergieData) -> bool | None:
-    """Return smart HVAC active state."""
-    return _user_feature_state(data, UserFeatureKey.SMART_HVAC)
-
-
 def _smart_hvac_available(data: FrankEnergieData) -> bool:
-    """Return smart HVAC availability."""
-    user = data.get(DATA_USER)
-    if user is None:
-        return False
-
-    feature = getattr(user, "smartHvac", None)
-    if feature is None:
-        return False
-
-    if isinstance(feature, dict):
-        return feature.get("isActivated") is not None
-
-    return getattr(feature, "isActivated", None) is not None
+    """Return whether a known Smart HVAC activation value is available."""
+    return smart_hvac_activation(data) is not None
 
 
 def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
@@ -274,6 +276,18 @@ def _electricity_price_lowest_today(data: FrankEnergieData) -> bool | None:
         return None
 
     return current_price.total == min(totals)
+
+
+def _tomorrow_prices_available(data: FrankEnergieData | None) -> bool | None:
+    """Return whether electricity prices exist for tomorrow in Amsterdam."""
+    if data is None:
+        return None
+
+    electricity = data.get(DATA_ELECTRICITY)
+    if electricity is None:
+        return None
+
+    return bool(electricity.tomorrow)
 
 
 def _disabled_haptic_feedback(
@@ -534,7 +548,7 @@ class FrankEnergieBinarySensor(
         if available_fn is None:
             return super().available
 
-        return available_fn(
+        return super().available and available_fn(
             self.coordinator.data,
         )
 
@@ -565,6 +579,227 @@ class FrankEnergieBinarySensor(
         return attr_fn(
             self.coordinator.data,
         )
+
+
+_HAS_VIA_DEVICE_ID = (
+    "via_device_id"
+    in inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
+)
+
+
+def _strict_bool(value: object) -> bool | None:
+    """Return only confirmed provider boolean values, never a truthy fallback."""
+    return value if isinstance(value, bool) else None
+
+
+def _vehicle_nested_bool(
+    vehicle: EnodeVehicle, section: str, field: str
+) -> bool | None:
+    """Read a nested vehicle flag without treating malformed data as a state."""
+    data = vehicle.get(section)
+    return _strict_bool(data.get(field)) if hasattr(data, "get") else None
+
+
+@dataclass(frozen=True, kw_only=True)
+class EnodeVehicleBinarySensorDescription(BinarySensorEntityDescription):
+    """Describe a read-only Enode vehicle status."""
+
+    value_fn: Callable[[EnodeVehicle], bool | None]
+    authenticated: bool = True
+
+    def __post_init__(self) -> None:
+        """Use the original translation key when none is explicitly provided."""
+        if self.translation_key is None:
+            object.__setattr__(self, "translation_key", self.key)
+
+
+@dataclass(frozen=True, kw_only=True)
+class EnodeChargerBinarySensorDescription(BinarySensorEntityDescription):
+    """Describe a read-only Enode charger status."""
+
+    value_fn: Callable[[EnodeCharger], bool | None]
+    authenticated: bool = True
+
+    def __post_init__(self) -> None:
+        """Use the original translation key when none is explicitly provided."""
+        if self.translation_key is None:
+            object.__setattr__(self, "translation_key", self.key)
+
+
+class EnodeVehicleBinarySensor(
+    CoordinatorEntity[FrankEnergieCoordinator], BinarySensorEntity
+):
+    """A live boolean status on an Enode vehicle device."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    entity_description: EnodeVehicleBinarySensorDescription
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        description: EnodeVehicleBinarySensorDescription,
+        vehicle: EnodeVehicle,
+    ) -> None:
+        """Bind a vehicle status to the same device and unique ID as its old sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._vehicle_id = vehicle["id"]
+        self._attr_unique_id = f"{DOMAIN}_{self._vehicle_id}_{description.key}"
+        self._attr_entity_registry_enabled_default = (
+            description.entity_registry_enabled_default
+        )
+        info = vehicle.get("information") or {}
+        self._attr_device_info = DeviceInfo(
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id, "vehicle", self._vehicle_id
+            ),
+            manufacturer=info.get("brand"),
+            model=info.get("model"),
+            serial_number=info.get("vin"),
+            name=f"{info.get('brand', '')} {info.get('model', '')}".strip() or None,
+            hw_version=str(info.get("year")),
+        )
+
+    def _current_vehicle(self) -> EnodeVehicle | None:
+        """Find this vehicle in the latest vehicle inventory by its stable ID."""
+        if not self.coordinator.data:
+            return None
+        inventory = self.coordinator.data.get(DATA_ENODE_VEHICLES)
+        for vehicle in getattr(inventory, "vehicles", ()) or ():
+            if vehicle.get("id") == self._vehicle_id:
+                return vehicle
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Report unavailable when the vehicle is absent from the latest inventory."""
+        return super().available and self._current_vehicle() is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Expose only an actual boolean; null and malformed data remain unknown."""
+        vehicle = self._current_vehicle()
+        if vehicle is None:
+            return None
+        return _strict_bool(self.entity_description.value_fn(vehicle))
+
+
+class EnodeChargerBinarySensor(
+    CoordinatorEntity[FrankEnergieCoordinator], BinarySensorEntity
+):
+    """A live boolean status on an Enode charger device."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_attribution = ATTRIBUTION
+    entity_description: EnodeChargerBinarySensorDescription
+
+    def __init__(
+        self,
+        coordinator: FrankEnergieCoordinator,
+        description: EnodeChargerBinarySensorDescription,
+        charger: EnodeCharger,
+        via_device_id: str | None = None,
+    ) -> None:
+        """Associate the status with its charger and existing service parent."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._charger_id = charger.id
+        self._attr_unique_id = f"{DOMAIN}_{self._charger_id}_{description.key}"
+        self._attr_entity_registry_enabled_default = (
+            description.entity_registry_enabled_default
+        )
+        info = charger.information or {}
+        brand = info.get("brand", "Frank Energie")
+        model = info.get("model", "Charger")
+        self._attr_device_info = DeviceInfo(
+            identifiers=inventory_device_identifiers(
+                coordinator.config_entry.entry_id, "charger", self._charger_id
+            ),
+            manufacturer=brand,
+            model=model,
+            name=f"{brand} {model}".strip() or f"Charger {self._charger_id}",
+        )
+        if via_device_id:
+            if _HAS_VIA_DEVICE_ID:
+                self._attr_device_info["via_device_id"] = via_device_id
+            else:
+                self._attr_device_info["via_device"] = (
+                    DOMAIN,
+                    f"{coordinator.config_entry.entry_id}_{SERVICE_NAME_ENODE_CHARGERS}",
+                )
+
+    def _current_charger(self) -> EnodeCharger | None:
+        """Find this charger in the latest charger inventory by its stable ID."""
+        if not self.coordinator.data:
+            return None
+        inventory = self.coordinator.data.get(DATA_ENODE_CHARGERS)
+        for charger in getattr(inventory, "chargers", ()) or ():
+            if charger.id == self._charger_id:
+                return charger
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Report unavailable when the charger is absent from the latest inventory."""
+        return super().available and self._current_charger() is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Expose the latest confirmed boolean state of the charger."""
+        charger = self._current_charger()
+        if charger is None:
+            return None
+        return _strict_bool(self.entity_description.value_fn(charger))
+
+
+def _migrate_legacy_enode_sensor(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    unique_id: str,
+    description: BinarySensorEntityDescription,
+) -> None:
+    """Move one registered sensor to the binary platform, preserving user choices.
+
+    The entity domain changes; a custom entity_id suffix is retained where possible.
+    Only registry entries belonging to this config entry may be removed.
+    """
+    registry = er.async_get(hass)
+    old_entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+    if old_entity_id is None:
+        return
+    old_entry = registry.async_get(old_entity_id)
+    if old_entry is None or old_entry.config_entry_id != config_entry.entry_id:
+        return
+
+    new_entity_id = registry.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
+    if new_entity_id is not None:
+        new_entry = registry.async_get(new_entity_id)
+        if new_entry is None or new_entry.config_entry_id != config_entry.entry_id:
+            _LOGGER.warning(
+                "Skipped cross-entry Enode entity migration for %s", description.key
+            )
+            return
+    else:
+        new_entry = registry.async_get_or_create(
+            "binary_sensor",
+            DOMAIN,
+            unique_id,
+            config_entry=config_entry,
+            device_id=old_entry.device_id,
+            has_entity_name=True,
+            original_icon=description.icon,
+            translation_key=description.translation_key,
+            entity_category=description.entity_category,
+            disabled_by=old_entry.disabled_by,
+            suggested_object_id=old_entity_id.partition(".")[2],
+        )
+        if old_entry.name is not None or old_entry.icon is not None:
+            registry.async_update_entity(
+                new_entry.entity_id, name=old_entry.name, icon=old_entry.icon
+            )
+    registry.async_remove(old_entity_id)
 
 
 BINARY_SENSOR_DESCRIPTIONS: tuple[
@@ -608,9 +843,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=lambda data: _extract_activation_state(
-            data.get(DATA_USER_SMART_FEED_IN),
-        ),
+        value_fn=_smart_feed_in_state,
         attr_fn=lambda data: _extract_activation_attributes(
             data.get(DATA_USER_SMART_FEED_IN),
         ),
@@ -618,15 +851,12 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     FrankEnergieBinarySensorDescription(
         key="smart_hvac",
         translation_key="smart_hvac",
-        icon="mdi:heat-pump",
         authenticated=True,
         device_class=BinarySensorDeviceClass.RUNNING,
         service_name=SERVICE_NAME_USER,
-        value_fn=_smart_hvac_state,
+        value_fn=smart_hvac_activation,
         available_fn=_smart_hvac_available,
-        attr_fn=_user_feature_attributes(
-            "smartHvac",
-        ),
+        attr_fn=smart_hvac_site_attributes,
     ),
     FrankEnergieBinarySensorDescription(
         key="disabled_haptic_feedback",
@@ -679,9 +909,122 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[
     FrankEnergieBinarySensorDescription(
         key="electricity_price_lowest_today",
         translation_key="electricity_price_lowest_today",
-        icon=ICON,
+        icon="mdi:arrow-down-bold",
         service_name=SERVICE_NAME_PRICES,
         value_fn=_electricity_price_lowest_today,
+    ),
+    FrankEnergieBinarySensorDescription(
+        key="tomorrow_prices_available",
+        translation_key="tomorrow_prices_available",
+        icon=ICON,
+        service_name=SERVICE_NAME_PRICES,
+        value_fn=_tomorrow_prices_available,
+    ),
+)
+
+
+ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS: tuple[
+    EnodeVehicleBinarySensorDescription, ...
+] = (
+    EnodeVehicleBinarySensorDescription(
+        key="can_smart_charge",
+        icon="mdi:car-electric",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda vehicle: _strict_bool(vehicle.get("canSmartCharge")),
+    ),
+    EnodeVehicleBinarySensorDescription(
+        key="is_reachable",
+        translation_key="is_reachable",
+        icon="mdi:car-connected",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        value_fn=lambda vehicle: _strict_bool(vehicle.get("isReachable")),
+    ),
+    EnodeVehicleBinarySensorDescription(
+        key="is_charging",
+        icon="mdi:ev-station",
+        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeState", "isCharging"
+        ),
+    ),
+    EnodeVehicleBinarySensorDescription(
+        key="is_fully_charged",
+        icon="mdi:battery-check",
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeState", "isFullyCharged"
+        ),
+    ),
+    EnodeVehicleBinarySensorDescription(
+        key="is_plugged_in",
+        icon="mdi:power-plug",
+        device_class=BinarySensorDeviceClass.PLUG,
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeState", "isPluggedIn"
+        ),
+    ),
+    EnodeVehicleBinarySensorDescription(
+        key="smart_charging_enabled",
+        icon="mdi:car-electric",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeSettings", "isSmartChargingEnabled"
+        ),
+    ),
+    EnodeVehicleBinarySensorDescription(
+        key="solar_charging_enabled",
+        icon="mdi:solar-power",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda vehicle: _vehicle_nested_bool(
+            vehicle, "chargeSettings", "isSolarChargingEnabled"
+        ),
+    ),
+)
+
+ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS: tuple[
+    EnodeChargerBinarySensorDescription, ...
+] = (
+    EnodeChargerBinarySensorDescription(
+        key="can_smart_charge",
+        icon="mdi:flash",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda charger: _strict_bool(charger.can_smart_charge),
+    ),
+    EnodeChargerBinarySensorDescription(
+        key="is_plugged_in",
+        icon="mdi:flash",
+        device_class=BinarySensorDeviceClass.PLUG,
+        value_fn=lambda charger: _strict_bool(
+            getattr(charger.charge_state, "is_plugged_in", None)
+        ),
+    ),
+    EnodeChargerBinarySensorDescription(
+        key="is_reachable",
+        translation_key="charger_is_reachable",
+        icon="mdi:ev-station",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        value_fn=lambda charger: _strict_bool(charger.is_reachable),
+    ),
+    EnodeChargerBinarySensorDescription(
+        key="is_charging",
+        icon="mdi:ev-station",
+        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+        value_fn=lambda charger: _strict_bool(
+            getattr(charger.charge_state, "is_charging", None)
+        ),
+    ),
+    EnodeChargerBinarySensorDescription(
+        key="is_smart_charging_enabled",
+        icon="mdi:flash",
+        value_fn=lambda charger: _strict_bool(
+            getattr(charger.charge_settings, "is_smart_charging_enabled", None)
+        ),
+    ),
+    EnodeChargerBinarySensorDescription(
+        key="is_solar_charging_enabled",
+        icon="mdi:flash",
+        value_fn=lambda charger: _strict_bool(
+            getattr(charger.charge_settings, "is_solar_charging_enabled", None)
+        ),
     ),
 )
 
@@ -731,7 +1074,7 @@ def _sync_price_contract_entities(
 ) -> bool:
     """Sync price-entity registry state and return electricity support."""
     contracts = (
-        known_site_contracts(settings_coordinator.data.get(DATA_USER))
+        known_site_contracts(settings_coordinator.data.get(DATA_DELIVERY_SITE))
         if settings_coordinator.api.is_authenticated
         else None
     )
@@ -756,6 +1099,79 @@ def _sync_price_contract_entities(
     return electricity_supported
 
 
+def _build_enode_charger_binary_sensors(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    settings_coordinator: FrankEnergieCoordinator,
+    charger_coordinator: FrankEnergieCoordinator | None,
+) -> list[EnodeChargerBinarySensor]:
+    """Build authenticated charger statuses and migrate matching legacy entries."""
+    if charger_coordinator is None or not charger_coordinator.api.is_authenticated:
+        return []
+    chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+    if not chargers or not chargers.chargers:
+        return []
+
+    user_data = (
+        settings_coordinator.data.get(DATA_USER)
+        if settings_coordinator.api.is_authenticated
+        else None
+    )
+    parent_id = register_service_device(
+        hass,
+        config_entry,
+        SERVICE_NAME_ENODE_CHARGERS,
+        configuration_url=getattr(user_data, "websiteUrl", None),
+    )
+    entities: list[EnodeChargerBinarySensor] = []
+    for charger in chargers.chargers:
+        if not isinstance(charger.id, str) or not charger.id:
+            continue
+        for description in ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS:
+            _migrate_legacy_enode_sensor(
+                hass,
+                config_entry,
+                f"{DOMAIN}_{charger.id}_{description.key}",
+                description,
+            )
+            entities.append(
+                EnodeChargerBinarySensor(
+                    charger_coordinator, description, charger, parent_id
+                )
+            )
+    return entities
+
+
+def _build_enode_vehicle_binary_sensors(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    vehicle_coordinator: FrankEnergieCoordinator | None,
+) -> list[EnodeVehicleBinarySensor]:
+    """Build authenticated vehicle statuses and migrate matching legacy entries."""
+    if vehicle_coordinator is None or not vehicle_coordinator.api.is_authenticated:
+        return []
+    vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+    if not vehicles or not vehicles.vehicles:
+        return []
+
+    entities: list[EnodeVehicleBinarySensor] = []
+    for vehicle in vehicles.vehicles:
+        vehicle_id = vehicle.get("id")
+        if not isinstance(vehicle_id, str) or not vehicle_id:
+            continue
+        for description in ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS:
+            _migrate_legacy_enode_sensor(
+                hass,
+                config_entry,
+                f"{DOMAIN}_{vehicle_id}_{description.key}",
+                description,
+            )
+            entities.append(
+                EnodeVehicleBinarySensor(vehicle_coordinator, description, vehicle)
+            )
+    return entities
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -768,8 +1184,10 @@ async def async_setup_entry(
     price_coordinator = runtime_data.price_coordinator
     pv_coordinator = runtime_data.pv_coordinator
     battery_coordinator = runtime_data.battery_coordinator
+    charger_coordinator = getattr(runtime_data, "charger_coordinator", None)
+    vehicle_coordinator = getattr(runtime_data, "vehicle_coordinator", None)
 
-    entities: list[FrankEnergieBinarySensor] = []
+    entities: list[BinarySensorEntity] = []
     electricity_supported = _sync_price_contract_entities(
         hass, config_entry, settings_coordinator
     )
@@ -803,6 +1221,15 @@ async def async_setup_entry(
                 battery_coordinator.data,
             )
         )
+
+    entities.extend(
+        _build_enode_charger_binary_sensors(
+            hass, config_entry, settings_coordinator, charger_coordinator
+        )
+    )
+    entities.extend(
+        _build_enode_vehicle_binary_sensors(hass, config_entry, vehicle_coordinator)
+    )
 
     _LOGGER.debug(
         "Created %s binary sensors",

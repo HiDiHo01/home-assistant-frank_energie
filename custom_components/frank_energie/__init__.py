@@ -10,12 +10,13 @@ from datetime import datetime, time
 from typing import Any, Final
 from zoneinfo import ZoneInfo
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.util import dt as dt_util
@@ -24,7 +25,11 @@ from python_frank_energie.exceptions import AuthException
 from python_frank_energie.models import UserSites
 
 from .const import (
+    CONFIG_ENTRY_MINOR_VERSION,
+    CONFIG_ENTRY_VERSION,
     CONF_COORDINATOR,
+    CONF_RESOLUTION,
+    DEFAULT_RESOLUTION,
     DOMAIN,
     SERVICE_NAME_BATTERY_SESSIONS,
     TIMEZONE_AMSTERDAM,
@@ -40,8 +45,10 @@ from .coordinator import (
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
+from .device_inventory import INVENTORY_SPECS, async_identify_inventory_device
 from .exceptions import NoSuitableSitesFoundError
 from .helpers import price_cache_store
+from .smart_hvac import FrankEnergieSmartHvacCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
@@ -65,6 +72,8 @@ class FrankEnergieEntryData:
     vehicle_coordinator: FrankEnergieVehicleCoordinator
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     battery_session_coordinators: dict[str, object] = field(default_factory=dict)
+    smart_hvac_coordinator: FrankEnergieSmartHvacCoordinator | None = None
+    stale_device_absences: dict[str, int] = field(default_factory=dict)
 
 
 # Sensor must be listed separately — see _async_forward_entry_setups below.
@@ -76,6 +85,34 @@ _DEPENDENT_PLATFORMS: list[str] = [
     Platform.SELECT,
 ]
 PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
+
+
+# Home Assistant awaits this hook; config-entry updates are synchronous callbacks.
+async def async_migrate_entry(  # NOSONAR(S7503)
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+) -> bool:
+    """Upgrade stored options without changing credentials or entry identity."""
+    if entry.version > CONFIG_ENTRY_VERSION:
+        return False
+
+    if (
+        entry.version == CONFIG_ENTRY_VERSION
+        and entry.minor_version >= CONFIG_ENTRY_MINOR_VERSION
+    ):
+        return True
+
+    migrated_options = dict(entry.options)
+    if entry.version < CONFIG_ENTRY_VERSION:
+        migrated_options.setdefault(CONF_RESOLUTION, DEFAULT_RESOLUTION)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options=migrated_options,
+        version=CONFIG_ENTRY_VERSION,
+        minor_version=CONFIG_ENTRY_MINOR_VERSION,
+    )
+    return True
 
 
 async def async_setup_entry(
@@ -154,6 +191,125 @@ async def async_remove_entry(
     await price_cache_store(hass, entry.entry_id).async_remove()
 
 
+def _is_unused_service_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Permit deletion only for an unreferenced, entry-owned service device."""
+    if (
+        entry.domain != DOMAIN
+        or device_entry.config_entry_id != entry.entry_id
+        or device_entry.entry_type is not dr.DeviceEntryType.SERVICE
+        or device_entry.connections
+        or len(device_entry.identifiers) != 1
+    ):
+        return False
+
+    domain, identifier = next(iter(device_entry.identifiers))
+    if domain != DOMAIN or not (
+        identifier == entry.entry_id or identifier.startswith(f"{entry.entry_id}_")
+    ):
+        return False
+
+    registry = dr.async_get(hass)
+    if (
+        registry.async_get(
+            device_entry.id,
+            include_child_devices=False,
+            include_composite_devices=False,
+        )
+        is not device_entry
+    ):
+        return False
+
+    if er.async_entries_for_device(
+        er.async_get(hass), device_entry.id, include_disabled_entities=True
+    ):
+        return False
+
+    return not (
+        any(device.via_device_id == device_entry.id for device in registry.devices)
+        or dr.async_entries_for_parent_device(registry, device_entry.id)
+    )
+
+
+def _is_device_removal_safe(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Validate two absences using owned provider identities and device kinds."""
+    if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
+        return False
+
+    identified = async_identify_inventory_device(hass, entry, device_entry)
+    if identified is None:
+        return False
+
+    kind, identifier = identified
+    runtime_data = entry.runtime_data
+    coordinator = getattr(
+        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute, None
+    )
+    if coordinator is None:
+        return False
+    return (
+        coordinator.last_update_success
+        and coordinator.verified_inventory_ids is not None
+        and identifier not in coordinator.verified_inventory_ids
+        and runtime_data.stale_device_absences.get(f"{kind}:{device_entry.id}", 0) >= 2
+    )
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry[FrankEnergieEntryData],
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Allow empty service groups and require live evidence for hardware removal.
+
+    Service devices are removable only without entities or dependent devices.
+    Physical hardware still needs two confirmed absences and a fresh inventory
+    before Home Assistant may delete it. This hook never deletes devices itself.
+    """
+    if device_entry.entry_type is dr.DeviceEntryType.SERVICE:
+        return _is_unused_service_device(hass, entry, device_entry)
+
+    if not _is_device_removal_safe(hass, entry, device_entry):
+        return False
+
+    identified = async_identify_inventory_device(hass, entry, device_entry)
+    if identified is None or entry.runtime_data is None:
+        return False
+    kind, _ = identified
+    runtime_data = entry.runtime_data
+    coordinator = getattr(
+        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute, None
+    )
+    if coordinator is None:
+        return False
+    previous_inventory = coordinator.verified_inventory_ids
+    previous_site_reference = coordinator.site_reference
+    try:
+        await coordinator.async_refresh()
+    except Exception:  # noqa: BLE001 - a failed refresh must deny removal
+        _LOGGER.warning("Unable to revalidate hardware inventory for removal")
+        return False
+
+    current_device = dr.async_get(hass).async_get(device_entry.id)
+    if (
+        current_device is None
+        or async_identify_inventory_device(hass, entry, current_device) != identified
+        or current_device.config_entry_id != device_entry.config_entry_id
+        or entry.runtime_data is not runtime_data
+        or coordinator.site_reference != previous_site_reference
+        or coordinator.verified_inventory_ids is previous_inventory
+    ):
+        return False
+    return _is_device_removal_safe(hass, entry, current_device)
+
+
 class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
     """Core setup handler for the Frank Energie component."""
 
@@ -221,7 +377,11 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         self.entry.async_on_unload(unsub)
 
     async def setup(self) -> bool:
-        """Set up the Frank Energie component from a config entry."""
+        """Initialize coordinators and load the platforms for this config entry.
+
+        Refresh settings first. Start Smart Heating polling for authenticated
+        entries with a selected delivery site.
+        """
         _LOGGER.debug("Setting up Frank Energie component")
 
         # For backwards compatibility, update the unique ID
@@ -294,18 +454,28 @@ class FrankEnergieComponent:  # pylint: disable=too-few-public-methods
         )
 
         try:
-            # settings_coordinator refreshes first; the other six only read its
-            # data and not each other's, so they refresh concurrently.
+            # The other coordinators can refresh concurrently once settings are ready.
             _LOGGER.debug("Performing initial refresh for sub-coordinators")
             await settings_coordinator.async_config_entry_first_refresh()
-            await asyncio.gather(
+            refreshes = [
                 price_coordinator.async_config_entry_first_refresh(),
                 statistics_coordinator.async_config_entry_first_refresh(),
                 battery_coordinator.async_config_entry_first_refresh(),
                 charger_coordinator.async_config_entry_first_refresh(),
                 pv_coordinator.async_config_entry_first_refresh(),
                 vehicle_coordinator.async_config_entry_first_refresh(),
-            )
+            ]
+            if api.is_authenticated and (
+                site_reference := settings_coordinator.site_reference
+            ):
+                smart_hvac_coordinator = FrankEnergieSmartHvacCoordinator(
+                    self.hass, self.entry, api, site_reference
+                )
+                self.entry.runtime_data.smart_hvac_coordinator = smart_hvac_coordinator
+                refreshes.append(
+                    smart_hvac_coordinator.async_config_entry_first_refresh()
+                )
+            await asyncio.gather(*refreshes)
 
             # Forward entry setups to platforms
             _LOGGER.debug("Forwarding entry setups to platforms")
