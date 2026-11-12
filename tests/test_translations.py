@@ -394,7 +394,13 @@ def test_no_unused_or_missing_translation_keys():
             self.generic_visit(node)
 
         def visit_Call(self, node):
-            """Extract entity and button translation keys from calls."""
+            """Extract entity keys, excluding the separate Repairs issue namespace."""
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "async_create_issue"
+            ):
+                self.generic_visit(node)
+                return
             for keyword in node.keywords:
                 if keyword.arg == "translation_key":
                     if isinstance(keyword.value, ast.Constant) and isinstance(
@@ -428,7 +434,6 @@ def test_no_unused_or_missing_translation_keys():
 
     # Extract device translation keys from strings.json
     strings_device_keys = set(strings_content.get("device", {}).keys())
-    strings_issue_keys = set(strings_content.get("issues", {}).keys())
 
     # Map service names to expected device keys
     codebase_device_keys = set()
@@ -479,7 +484,7 @@ def test_no_unused_or_missing_translation_keys():
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
     missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys) - (
-        strings_entity_keys | strings_issue_keys
+        strings_entity_keys
     )
     assert not missing_entity_keys, (
         f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"

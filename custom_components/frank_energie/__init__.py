@@ -205,9 +205,11 @@ def _is_device_removal_safe(
 
     kind, identifier = identified
     runtime_data = entry.runtime_data
-    coordinator: FrankEnergieCoordinator = getattr(
-        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+    coordinator = getattr(
+        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute, None
     )
+    if coordinator is None:
+        return False
     return (
         coordinator.last_update_success
         and coordinator.verified_inventory_ids is not None
@@ -235,9 +237,11 @@ async def async_remove_config_entry_device(
         return False
     kind, _ = identified
     runtime_data = entry.runtime_data
-    coordinator: FrankEnergieCoordinator = getattr(
-        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute
+    coordinator = getattr(
+        runtime_data, INVENTORY_SPECS[kind].coordinator_attribute, None
     )
+    if coordinator is None:
+        return False
     previous_inventory = coordinator.verified_inventory_ids
     previous_site_reference = coordinator.site_reference
     try:
