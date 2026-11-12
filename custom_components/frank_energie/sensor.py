@@ -4568,7 +4568,7 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
         """Return device info."""
         info = DeviceInfo(
             identifiers=inventory_device_identifiers(
-                entry.entry_id, "battery", self._battery_id
+                self._entry.entry_id, "battery", self._battery_id
             ),
             name=self._battery_name,
             manufacturer=self._battery_brand,
