@@ -1424,7 +1424,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             _LOGGER.warning("Site reference is missing, cannot fetch Enode vehicles.")
             return None
         try:
-            vehicles = await self.async_api_call("enode_vehicles", self.api.enode_vehicles)
+            vehicles = await self.async_api_call(
+                "enode_vehicles", self.api.enode_vehicles
+            )
             _LOGGER.debug("Fetched Enode vehicles")
             return vehicles
         except Exception as err:
