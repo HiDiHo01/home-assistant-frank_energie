@@ -1856,6 +1856,42 @@ async def test_pv_steering_status_systems_fallback_passes_ha_enum_validation(
     assert state == "active"
 
 
+def test_smart_battery_id_is_diagnostic_and_disabled_by_default() -> None:
+    """Classify battery IDs as diagnostic without altering other battery sensors."""
+    from types import SimpleNamespace
+
+    from homeassistant.helpers.entity import EntityCategory
+
+    from custom_components.frank_energie.sensor import (
+        _build_single_smart_battery_descriptions,
+    )
+
+    battery = SimpleNamespace(
+        id="battery_1",
+        brand="Test",
+        capacity=10.0,
+        external_reference=None,
+        max_charge_power=5.0,
+        max_discharge_power=5.0,
+        provider="Test",
+        created_at=None,
+        updated_at=None,
+        settings=None,
+        summary=None,
+    )
+    descriptions = {
+        description.translation_key: description
+        for description in _build_single_smart_battery_descriptions(battery, 0)
+    }
+
+    battery_id_description = descriptions["battery_id"]
+    assert battery_id_description.key == "smart_battery_0_id"
+    assert battery_id_description.entity_category is EntityCategory.DIAGNOSTIC
+    assert battery_id_description.entity_registry_enabled_default is False
+    assert battery_id_description.icon == "mdi:fingerprint"
+    assert descriptions["battery_brand"].entity_category is None
+
+
 def _battery_strategy_sensor_description() -> object:
     """Return the smart_battery_0 imbalance_trading_strategy entity description
     built by ``_build_single_smart_battery_descriptions``."""
