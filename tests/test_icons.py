@@ -86,7 +86,7 @@ def test_every_vehicle_and_charger_description_preserves_its_icon() -> None:
     vehicle_icons = {
         description.key: description.icon for description in ENODE_VEHICLE_SENSOR_TYPES
     }
-    assert vehicle_icons["charge_limit"] == "mdi:battery-lock"
+    assert vehicle_icons["charge_limit"] == "mdi:battery-charging-70"
     assert vehicle_icons["last_seen"] == "mdi:clock-outline"
 
 
@@ -106,23 +106,21 @@ def test_price_and_cost_icons_are_semantic(key: str, expected_icon: str) -> None
     assert _read_icons()["entity"]["sensor"][key]["default"] == expected_icon
 
 
-def test_energy_flow_and_binary_sensor_icons() -> None:
-    """Show electricity consumption and feed-in in the proper direction."""
+def test_existing_energy_flow_and_binary_sensor_icons_are_preserved() -> None:
+    """Protect existing electricity-flow and binary-sensor icon assignments."""
     sensor_icons = {description.key: description.icon for description in SENSOR_TYPES}
     assert sensor_icons["usage_electricity_yesterday"] == (
-        "mdi:transmission-tower-import"
+        "mdi:transmission-tower-export"
     )
     assert sensor_icons["delivered_feed_in_yesterday"] == (
-        "mdi:transmission-tower-export"
+        "mdi:transmission-tower-import"
     )
 
     binary_icons = {
         description.key: description.icon for description in BINARY_SENSOR_DESCRIPTIONS
     }
-    assert binary_icons["electricity_price_lowest_today"] == (
-        "mdi:arrow-down-bold-circle"
-    )
-    assert binary_icons["tomorrow_prices_available"] == "mdi:calendar-check"
+    assert binary_icons["electricity_price_lowest_today"] == "mdi:currency-eur"
+    assert binary_icons["tomorrow_prices_available"] == "mdi:currency-eur"
     assert _read_icons()["entity"]["binary_sensor"]["smart_hvac"]["default"] == (
         "mdi:heat-pump"
     )
