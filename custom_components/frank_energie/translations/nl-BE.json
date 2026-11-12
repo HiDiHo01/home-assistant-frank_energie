@@ -854,9 +854,6 @@
       "intervention_title": {
         "name": "Interventie titel"
       },
-      "device_id": {
-        "name": "Apparaat ID"
-      },
       "period_start_date": {
         "name": "Periode startdatum"
       },
