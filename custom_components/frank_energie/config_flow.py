@@ -36,6 +36,7 @@ from python_frank_energie.exceptions import (
     AuthRequiredException,
     ConnectionException,
     NetworkError,
+    RateLimitException,
 )
 
 from .const import (
@@ -95,7 +96,9 @@ async def _async_account_matches_entry(
             auth_token=auth.authToken,
             refresh_token=auth.refreshToken,
         ) as api:
-            user_sites = await api.UserSites()
+            user_sites = await get_rate_limit_state(hass, entry).async_call(
+                "UserSites", api.UserSites
+            )
     except AuthRequiredException as err:
         raise AuthException("Site verification requires valid credentials") from err
     except (ClientError, NetworkError, TimeoutError) as err:
@@ -142,6 +145,14 @@ class ConfigFlow(config_entries.ConfigFlow):
         """Initialize the config flow."""
         self._reauth_entry: Optional[ConfigEntry] = None
         self.sign_in_data: dict[str, Any] = {}
+        self._rate_limits = RateLimitState()
+        self._legacy_default_site_reference: str | None = None
+
+    def _get_rate_limits(self) -> RateLimitState:
+        """Share an existing entry's cooldowns during reauth and reconfigure."""
+        if self._reauth_entry is not None:
+            return get_rate_limit_state(self.hass, self._reauth_entry)
+        return self._rate_limits
 
     async def async_step_login(
         self,
@@ -320,14 +331,18 @@ class ConfigFlow(config_entries.ConfigFlow):
                 first_site = suitable_sites[
                     0
                 ]  # We know suitable_sites is not empty at this point
+                # Legacy username-keyed entries implicitly used the first selected site.
+                # Keep that identity when the site picker exposes multiple sites.
+                self._legacy_default_site_reference = first_site.reference
 
                 if number_of_sites == 1:
                     # for backward compatibility (do nothing)
                     # Check if entry with CONF_USERNAME exists, then abort
                     # if CONF_USERNAME in user_input:
-                    if user_input and CONF_USERNAME in user_input:
-                        await self.async_set_unique_id(user_input[CONF_USERNAME])
-                        self._abort_if_unique_id_configured()
+                    if self._legacy_site_already_configured(
+                        first_site.reference, single_site=True
+                    ):
+                        return self.async_abort(reason="already_configured")
 
                     # Create entry with unique_id as user_sites.deliverySites[0].reference
                     self.sign_in_data[CONF_SITE] = first_site.reference
@@ -500,7 +515,9 @@ class ConfigFlow(config_entries.ConfigFlow):
 
             for attempt in range(2):
                 try:
-                    return await api.UserSites()
+                    return await self._get_rate_limits().async_call(
+                        "UserSites", api.UserSites
+                    )
                 except ConnectionException as err:
                     last_err = err
                     _LOGGER.warning(
@@ -881,10 +898,20 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
         )
         return options
 
+    @staticmethod
+    def _login_failure_reason(error: Exception) -> str:
+        """Map typed login throttles and authentication failures to form errors."""
+        return (
+            "rate_limited" if isinstance(error, RateLimitException) else "invalid_auth"
+        )
+
     def _resource_features(self) -> tuple[bool, bool, bool, bool]:
         """Determine optional resource visibility from coordinator data."""
         runtime_data = getattr(self.config_entry, "runtime_data", None)
-        if not runtime_data:
+        if (
+            runtime_data is None
+            or getattr(runtime_data, "battery_coordinator", None) is None
+        ):
             return True, True, True, True
 
         battery_data = (
@@ -1042,8 +1069,8 @@ class FrankEnergieOptionsFlowHandler(config_entries.OptionsFlow):
 
                 return self.async_create_entry(title=entry.title, data=options)
 
-            except AuthException:
-                errors = {"base": "invalid_auth"}
+            except (RateLimitException, AuthException) as err:
+                errors = {"base": self._login_failure_reason(err)}
             except ConnectionException:
                 errors = {"base": "connection_error"}
             except Exception as ex:
