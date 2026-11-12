@@ -995,7 +995,6 @@ async def test_async_setup_entry_with_vehicles_does_not_crash(
     }
 
 
-
 @pytest.mark.asyncio
 async def test_vehicle_charge_settings_id_disabled_by_default(
     hass: HomeAssistant,
