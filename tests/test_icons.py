@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.frank_energie.binary_sensor import BINARY_SENSOR_DESCRIPTIONS
+from custom_components.frank_energie.binary_sensor import (
+    BINARY_SENSOR_DESCRIPTIONS,
+    ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS,
+    ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS,
+)
 from custom_components.frank_energie.sensor import (
     ENODE_CHARGER_SENSOR_TYPES,
     ENODE_VEHICLE_SENSOR_TYPES,
@@ -26,6 +30,8 @@ _DESCRIPTION_PLATFORM = {
     "EnodeVehicleEntityDescription": "sensor",
     "_DeviceSensorDescription": "sensor",
     "FrankEnergieBinarySensorDescription": "binary_sensor",
+    "EnodeVehicleBinarySensorDescription": "binary_sensor",
+    "EnodeChargerBinarySensorDescription": "binary_sensor",
 }
 
 
@@ -98,12 +104,21 @@ def test_icon_translation_keys_and_mdi_values_are_valid() -> None:
 
 def test_every_vehicle_and_charger_description_preserves_its_icon() -> None:
     """Reject constructors that silently discard the icon they receive."""
-    for description in (*ENODE_VEHICLE_SENSOR_TYPES, *ENODE_CHARGER_SENSOR_TYPES):
+    for description in (
+        *ENODE_VEHICLE_SENSOR_TYPES,
+        *ENODE_CHARGER_SENSOR_TYPES,
+        *ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS,
+        *ENODE_CHARGER_BINARY_SENSOR_DESCRIPTIONS,
+    ):
         assert description.icon is not None, description.key
         assert description.icon.startswith("mdi:"), description.key
 
     vehicle_icons = {
-        description.key: description.icon for description in ENODE_VEHICLE_SENSOR_TYPES
+        description.key: description.icon
+        for description in (
+            *ENODE_VEHICLE_SENSOR_TYPES,
+            *ENODE_VEHICLE_BINARY_SENSOR_DESCRIPTIONS,
+        )
     }
     assert vehicle_icons["charge_limit"] == "mdi:battery-charging-70"
     assert vehicle_icons["last_seen"] == "mdi:clock-outline"
