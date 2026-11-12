@@ -48,7 +48,6 @@ from custom_components.frank_energie.coordinator import (
     FrankEnergieStatisticsCoordinator,
 )
 from custom_components.frank_energie.rate_limit import (
-    FrankEnergieSetupData,
     RateLimitState,
     get_rate_limit_state,
 )
