@@ -15,6 +15,7 @@ from .const import DOMAIN
 from .device_inventory import (
     INVENTORY_SPECS,
     async_identify_inventory_device,
+    async_persist_inventory_device,
     validated_inventory_ids,
 )
 
@@ -63,8 +64,8 @@ def async_process_device_inventory(
         for device in dr.async_entries_for_config_entry(
             dr.async_get(hass), entry.entry_id
         ):
-            candidate = async_identify_inventory_device(
-                hass, entry, device, expected_kind=kind
+            candidate = async_persist_inventory_device(
+                hass, entry, device, kind, inventory_ids
             )
             if candidate is None:
                 # The scoped refresh retires issues for unidentifiable devices.
