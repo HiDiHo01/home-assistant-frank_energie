@@ -890,6 +890,9 @@
       "total_capacity": {
         "name": "Totale batterijcapaciteit"
       },
+      "total_current_capacity": {
+        "name": "Huidige capaciteit"
+      },
       "total_max_charge_power": {
         "name": "Totaal max laadvermogen"
       },
