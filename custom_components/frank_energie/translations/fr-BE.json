@@ -1060,6 +1060,9 @@
       "total_capacity": {
         "name": "Capacité totale de la batterie"
       },
+      "total_current_capacity": {
+        "name": "Capacité actuelle"
+      },
       "total_max_charge_power": {
         "name": "Puissance de charge maximale totale"
       },
