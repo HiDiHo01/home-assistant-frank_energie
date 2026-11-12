@@ -1103,10 +1103,10 @@ def _build_enode_charger_binary_sensors(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     settings_coordinator: FrankEnergieCoordinator,
-    charger_coordinator: FrankEnergieCoordinator,
+    charger_coordinator: FrankEnergieCoordinator | None,
 ) -> list[EnodeChargerBinarySensor]:
     """Build authenticated charger statuses and migrate matching legacy entries."""
-    if not charger_coordinator.api.is_authenticated:
+    if charger_coordinator is None or not charger_coordinator.api.is_authenticated:
         return []
     chargers = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
     if not chargers or not chargers.chargers:
@@ -1142,10 +1142,10 @@ def _build_enode_charger_binary_sensors(
 def _build_enode_vehicle_binary_sensors(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    vehicle_coordinator: FrankEnergieCoordinator,
+    vehicle_coordinator: FrankEnergieCoordinator | None,
 ) -> list[EnodeVehicleBinarySensor]:
     """Build authenticated vehicle statuses and migrate matching legacy entries."""
-    if not vehicle_coordinator.api.is_authenticated:
+    if vehicle_coordinator is None or not vehicle_coordinator.api.is_authenticated:
         return []
     vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     if not vehicles or not vehicles.vehicles:
@@ -1178,8 +1178,8 @@ async def async_setup_entry(
     price_coordinator = runtime_data.price_coordinator
     pv_coordinator = runtime_data.pv_coordinator
     battery_coordinator = runtime_data.battery_coordinator
-    charger_coordinator = runtime_data.charger_coordinator
-    vehicle_coordinator = runtime_data.vehicle_coordinator
+    charger_coordinator = getattr(runtime_data, "charger_coordinator", None)
+    vehicle_coordinator = getattr(runtime_data, "vehicle_coordinator", None)
 
     entities: list[BinarySensorEntity] = []
     electricity_supported = _sync_price_contract_entities(
