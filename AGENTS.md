@@ -249,6 +249,15 @@ Use `DataUpdateCoordinator` when entities share a common data source or polling 
 
 For push-based integrations, manage subscriptions through the appropriate lifecycle and avoid mixing push updates with unnecessary polling.
 
+### Frank Energie price-cache invariants
+
+* The **unauthenticated public price feed requires both electricity and gas**; authenticated price completeness follows the verified contracts of the selected delivery site. Do not infer required contracts from cached historical price series.
+* Treat API responses containing only one required commodity as **partial**, even when electricity and gas were requested together. Preserve valid partial price data and retry the missing commodity on the next eligible refresh, respecting the maintenance window, rate limits, and publication schedule.
+* A saved `last_fetch_tomorrow` timestamp does not establish completeness. Verify dates and every required commodity; clear a stale success marker **before** retrying an incomplete cache, including when the subsequent request returns no new data. Keep valid partial cache entries.
+* At **Europe/Amsterdam local midnight**, promote applicable prices to today's combined history, then clear both the dedicated tomorrow cache and `last_fetch_tomorrow`. Test CET/CEST boundaries and avoid deleting valid historical or multi-day prices.
+
+For the detailed failure scenarios and regression matrix, follow [Frank Energie API and coordinator reliability](.agents/skills/frank-energie-api-reliability/SKILL.md). The confirmed regression is tracked in [issue #473](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/473) and [PR #474](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/474).
+
 ## 8. Entity implementation
 
 Follow the current entity architecture and entity platform conventions.
