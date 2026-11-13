@@ -950,6 +950,39 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         return self.cached_prices_tomorrow
 
+    def _merge_tomorrow_price_data(
+        self, previous: PriceData | None, incoming: PriceData | None
+    ) -> PriceData | None:
+        """Replace overlapping cached tomorrow intervals with newer API entries.
+
+        This merge is exclusive to the tomorrow cache. The regular historical
+        merge must retain today's active intervals during resolution changes.
+        """
+        if incoming is None or not incoming.all:
+            return previous
+        if previous is None or not previous.all:
+            return incoming
+
+        incoming_windows = [
+            (price.date_from.astimezone(UTC), price.date_till.astimezone(UTC))
+            for price in incoming.all
+        ]
+        retained = [
+            price
+            for price in previous.all
+            if not any(
+                price.date_from.astimezone(UTC) < end
+                and start < price.date_till.astimezone(UTC)
+                for start, end in incoming_windows
+            )
+        ]
+        if not retained:
+            return incoming
+
+        preserved = copy.copy(previous)
+        preserved.price_data = retained
+        return self._combine_price_data(preserved, incoming)
+
     def _cache_tomorrow_prices(
         self, prices: MarketPrices, tomorrow: date, fetched_at: datetime
     ) -> None:
@@ -957,14 +990,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         resolved = prices
         previous = self.cached_prices_tomorrow
         if previous is not None:
-            # Successive partial responses can cover different intervals of
-            # the same commodity. Retain both instead of replacing the first.
+            # Keep non-overlapping cached intervals, but let fresh API
+            # intervals supersede overlapping records at any resolution.
             resolved = replace(
                 prices,
-                electricity=self._combine_price_data(
+                electricity=self._merge_tomorrow_price_data(
                     previous.electricity, prices.electricity
                 ),
-                gas=self._combine_price_data(previous.gas, prices.gas),
+                gas=self._merge_tomorrow_price_data(previous.gas, prices.gas),
             )
         self.cached_prices_tomorrow = resolved
         if not self._tomorrow_prices_complete(resolved, tomorrow):
