@@ -2560,25 +2560,32 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
 
 
 @pytest.mark.parametrize(
-    ("entry_isos", "expected"),
-    [
-        (("2026-07-20T10:00:00.000Z",), True),  # today (local)
-        (("2026-07-19T10:00:00.000Z",), False),  # yesterday
-        (("2026-07-19T21:45:00.000Z",), False),  # 23:45 local yesterday
-        (("2026-07-19T22:00:00.000Z",), True),  # 00:00 local today
-        (("2026-07-19T10:00:00.000Z", "2026-07-20T10:00:00.000Z"), True),
-        ((), False),
-    ],
+    ("scenario", "expected"),
+    (
+        ("complete", True),
+        ("gap", False),
+        ("yesterday", False),
+        ("multi-day", True),
+    ),
 )
-def test_prices_cover_date(entry_isos: tuple[str, ...], expected: bool) -> None:
-    """_prices_cover_date matches on the Amsterdam-local date of any entry."""
-    from datetime import date
-
-    prices = _make_market_prices(*entry_isos)
+def test_prices_cover_date(scenario: str, expected: bool) -> None:
+    """Accept only an uninterrupted full Amsterdam-local day, ignoring history."""
+    day = date(2026, 7, 20)
+    prices = _full_day_market_prices(day)
+    if scenario == "gap":
+        prices.electricity.price_data.pop(10)
+    elif scenario == "yesterday":
+        prices = _full_day_market_prices(day - timedelta(days=1))
+    elif scenario == "multi-day":
+        yesterday = _full_day_market_prices(day - timedelta(days=1))
+        tomorrow = _full_day_market_prices(day + timedelta(days=1))
+        prices.electricity.price_data = (
+            yesterday.electricity.all + prices.electricity.all + tomorrow.electricity.all
+        )
+        prices.gas.price_data = yesterday.gas.all + prices.gas.all + tomorrow.gas.all
 
     assert (
-        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
-        is expected
+        FrankEnergiePriceCoordinator._prices_cover_date(prices, day) is expected
     )
 
 
@@ -2616,29 +2623,30 @@ def _make_gas_price_data(*entry_date_isos: str):
 
 
 @pytest.mark.parametrize(
-    ("gas_isos", "expected"),
-    [
-        (("2026-07-20T10:00:00.000Z",), True),  # both series cover today
-        (("2026-07-19T10:00:00.000Z",), False),  # gas is still yesterday's
-        ((), True),  # no gas contract: electricity alone decides
-    ],
+    ("gas_case", "expected"),
+    (
+        ("complete", True),
+        ("stale", False),
+        ("missing", False),
+    ),
 )
 def test_prices_cover_date_checks_each_series(
-    gas_isos: tuple[str, ...], expected: bool
+    gas_case: str, expected: bool
 ) -> None:
-    """Fresh electricity must not hide a stale gas series."""
-    from datetime import date
-
-    from python_frank_energie.models import MarketPrices
-
-    prices = MarketPrices(
-        electricity=_make_market_prices("2026-07-20T10:00:00.000Z").electricity,
-        gas=_make_gas_price_data(*gas_isos),
-        energy_country="NL",
-    )
+    """A complete electricity day cannot hide missing or old gas prices."""
+    day = date(2026, 7, 20)
+    prices = _full_day_market_prices(day)
+    if gas_case == "stale":
+        prices.gas = _full_day_price_data(
+            day - timedelta(days=1), "gas", 60
+        )
+    elif gas_case == "missing":
+        prices.gas = PriceData([], energy_type="gas")
 
     assert (
-        FrankEnergiePriceCoordinator._prices_cover_date(prices, date(2026, 7, 20))
+        FrankEnergiePriceCoordinator._prices_cover_date(
+            prices, day, required_contracts={"ELECTRICITY", "GAS"}
+        )
         is expected
     )
 
@@ -2985,9 +2993,10 @@ async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
         today_start, today_start
     )
     coordinator.last_fetch_today = now_utc
-    incomplete = _market_prices_for_cache_test(
-        None if missing_commodity == "electricity" else tomorrow_start,
-        None if missing_commodity == "gas" else tomorrow_start,
+    incomplete = _full_day_market_prices(
+        tomorrow,
+        electricity=missing_commodity != "electricity",
+        gas=missing_commodity != "gas",
     )
     coordinator.cached_prices_tomorrow = incomplete
     coordinator.last_fetch_tomorrow = now_utc - timedelta(minutes=43)
@@ -3000,9 +3009,10 @@ async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
 
     # The next refresh recovers the missing commodity without discarding the
     # series restored from disk for the other commodity.
-    recovered = _market_prices_for_cache_test(
-        tomorrow_start if missing_commodity == "electricity" else None,
-        tomorrow_start if missing_commodity == "gas" else None,
+    recovered = _full_day_market_prices(
+        tomorrow,
+        electricity=missing_commodity == "electricity",
+        gas=missing_commodity == "gas",
     )
     coordinator._fetch_tomorrow_data = AsyncMock(return_value=recovered)
 
@@ -3011,8 +3021,8 @@ async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
     coordinator._fetch_tomorrow_data.assert_awaited_once_with(tomorrow)
     assert result is coordinator.cached_prices_tomorrow
     assert result is not None
-    assert len(result.electricity.all) == 1
-    assert len(result.gas.all) == 1
+    assert len(result.electricity.all) == 96
+    assert len(result.gas.all) == 24
     assert coordinator.last_fetch_tomorrow == now_utc
 
 
@@ -3042,8 +3052,10 @@ def test_unauthenticated_public_prices_require_both_commodities(
             yesterday_start, today_start
         )
 
-    gas_only_tomorrow = _market_prices_for_cache_test(None, tomorrow_start)
-    both_tomorrow = _market_prices_for_cache_test(tomorrow_start, tomorrow_start)
+    gas_only_tomorrow = _full_day_market_prices(
+        date(2026, 11, 14), electricity=False
+    )
+    both_tomorrow = _full_day_market_prices(date(2026, 11, 14))
 
     assert coordinator._price_contracts() == {"ELECTRICITY", "GAS"}
     assert (
@@ -3111,9 +3123,10 @@ def test_known_single_contract_does_not_require_second_commodity_from_disk(
     coordinator._static_prices_today = _market_prices_for_cache_test(
         today_start, today_start
     )
-    single_contract_prices = _market_prices_for_cache_test(
-        tomorrow_start if contract == "ELECTRICITY" else None,
-        tomorrow_start if contract == "GAS" else None,
+    single_contract_prices = _full_day_market_prices(
+        date(2026, 11, 14),
+        electricity=contract == "ELECTRICITY",
+        gas=contract == "GAS",
     )
 
     assert coordinator._price_contracts() == {contract}
@@ -3142,13 +3155,15 @@ async def test_partial_tomorrow_prices_retry_missing_commodity_next_refresh(
     fetched_at = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
     tomorrow_start = "2026-07-20T22:00:00Z"
 
-    first_prices = _market_prices_for_cache_test(
-        tomorrow_start if first_commodity == "electricity" else None,
-        tomorrow_start if first_commodity == "gas" else None,
+    first_prices = _full_day_market_prices(
+        tomorrow,
+        electricity=first_commodity == "electricity",
+        gas=first_commodity == "gas",
     )
-    second_prices = _market_prices_for_cache_test(
-        tomorrow_start if first_commodity == "gas" else None,
-        tomorrow_start if first_commodity == "electricity" else None,
+    second_prices = _full_day_market_prices(
+        tomorrow,
+        electricity=first_commodity == "gas",
+        gas=first_commodity == "electricity",
     )
     coordinator._fetch_tomorrow_data = AsyncMock(
         side_effect=(first_prices, second_prices)
@@ -3174,11 +3189,13 @@ async def test_partial_tomorrow_prices_retry_missing_commodity_next_refresh(
 
     assert second_result is coordinator.cached_prices_tomorrow
     assert second_result is not None
-    assert len(second_result.electricity.all) == 1
-    assert len(second_result.gas.all) == 1
-    assert getattr(second_result, first_commodity) is getattr(
-        first_prices, first_commodity
-    )
+    assert len(second_result.electricity.all) == 96
+    assert len(second_result.gas.all) == 24
+    assert [
+        item.date_from for item in getattr(second_result, first_commodity).all
+    ] == [
+        item.date_from for item in getattr(first_prices, first_commodity).all
+    ]
     assert coordinator.last_fetch_tomorrow == next_fetch
     assert coordinator._fetch_tomorrow_data.await_count == 2
     coordinator._adjust_update_interval(next_fetch)
@@ -3221,9 +3238,7 @@ async def test_partial_today_prices_preserve_contract_cache_and_retry(
         None if missing_commodity == "electricity" else "2026-07-20T08:00:00Z",
         None if missing_commodity == "gas" else "2026-07-20T08:00:00Z",
     )
-    recovered = _market_prices_for_cache_test(
-        "2026-07-20T08:15:00Z", "2026-07-20T08:15:00Z"
-    )
+    recovered = _full_day_market_prices(date(2026, 7, 20))
     prices._fetch_public_prices_for_range = AsyncMock(side_effect=[partial, recovered])
     prices._fetch_user_prices_for_range = AsyncMock(side_effect=[partial, recovered])
 
@@ -3273,9 +3288,7 @@ async def test_cached_same_day_fallback_does_not_suppress_live_retry(
         "2026-07-19T22:00:00Z", "2026-07-19T22:00:00Z"
     )
     prices.last_fetch_today = now_utc - timedelta(hours=1)
-    recovered = _market_prices_for_cache_test(
-        "2026-07-20T08:15:00Z", "2026-07-20T08:15:00Z"
-    )
+    recovered = _full_day_market_prices(date(2026, 7, 20))
     prices._fetch_public_prices_for_range = AsyncMock(side_effect=[None, recovered])
     prices._fetch_user_prices_for_range = AsyncMock(
         side_effect=[None, recovered if authenticated else None]
@@ -3283,7 +3296,9 @@ async def test_cached_same_day_fallback_does_not_suppress_live_retry(
 
     await prices._async_update_data()
 
-    assert prices._prices_cover_date(prices._static_prices_today, now_utc.date())
+    assert not prices._prices_cover_date(
+        prices._static_prices_today, now_utc.date()
+    )
     assert prices._static_prices_today.electricity.current is None
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
@@ -3309,9 +3324,10 @@ async def test_live_prices_for_single_contract_are_accepted(
     prices = _price_coordinator_for_cache_test(
         mock_frank_energie, mock_config_entry, [contract]
     )
-    live = _market_prices_for_cache_test(
-        "2026-07-20T08:00:00Z" if contract == "ELECTRICITY" else None,
-        "2026-07-20T08:00:00Z" if contract == "GAS" else None,
+    live = _full_day_market_prices(
+        date(2026, 7, 20),
+        electricity=contract == "ELECTRICITY",
+        gas=contract == "GAS",
     )
     prices._fetch_public_prices_for_range = AsyncMock(return_value=live)
     prices._fetch_user_prices_for_range = AsyncMock(return_value=live)
@@ -3869,7 +3885,10 @@ async def test_api_resolution_change_invalidates_same_day_price_cache(
 
     now_utc = datetime.now(UTC)
     cached_prices = _make_market_prices_with_resolution(15, now_utc.isoformat())
-    refreshed_prices = _make_market_prices_with_resolution(60, now_utc.isoformat())
+    refreshed_prices = _full_day_market_prices(
+        now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date(),
+        electricity_minutes=60,
+    )
     price_coordinator._static_prices_today = cached_prices
     price_coordinator.last_fetch_today = now_utc
     price_coordinator.cached_prices_tomorrow = cached_prices
