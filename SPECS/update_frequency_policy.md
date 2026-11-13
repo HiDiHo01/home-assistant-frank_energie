@@ -154,6 +154,14 @@ Outside the discovery window:
 
 - Use cached gas price.
 
+### Tomorrow Gas Horizon
+
+The provider supplies tomorrow's gas prices only for **00:00–06:00
+Europe/Amsterdam**. The tomorrow-cache completeness check must require
+electricity throughout the next local day, but gas only through 06:00.
+Validate contiguous UTC price intervals rather than a fixed number of entries;
+the early gas window spans 5, 6, or 7 elapsed hours across DST transitions.
+
 ## Realtime Energy Data
 
 ### Configurable Refresh Intervals
