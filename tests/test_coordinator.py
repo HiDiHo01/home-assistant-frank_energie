@@ -35,6 +35,7 @@ from custom_components.frank_energie.coordinator import (
     FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
     FrankEnergieStatisticsCoordinator,
+    _market_prices_to_dict,
 )
 from custom_components.frank_energie import FrankEnergieComponent
 from pytest_homeassistant.common import MockConfigEntry
@@ -3088,6 +3089,122 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
         today, tomorrow, next_fetch + timedelta(minutes=5)
     )
     assert coordinator._fetch_tomorrow_data.await_count == 2
+
+
+@pytest.mark.parametrize(
+    ("cached_minutes", "incoming_minutes"), ((15, 60), (60, 15))
+)
+def test_tomorrow_cache_replaces_overlapping_resolution_intervals(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    cached_minutes: int,
+    incoming_minutes: int,
+) -> None:
+    """Keep earlier non-overlapping prices when a new resolution supersedes them."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    tomorrow = date(2026, 11, 14)
+    fetched_at = datetime(2026, 11, 13, 12, 15, tzinfo=UTC)
+    day_start = datetime.combine(
+        tomorrow, datetime.min.time(), ZoneInfo(TIMEZONE_AMSTERDAM)
+    ).astimezone(UTC)
+    incoming_start = day_start + timedelta(hours=2)
+
+    cached = _full_day_market_prices(tomorrow, electricity_minutes=cached_minutes)
+    cached.electricity.price_data = cached.electricity.price_data[
+        : 3 * 60 // cached_minutes
+    ]
+    cached.gas.price_data = _tomorrow_prices_for_gas_window(tomorrow).gas.all
+    cached_electricity = tuple(cached.electricity.all)
+    coordinator._cache_tomorrow_prices(cached, tomorrow, fetched_at)
+
+    assert coordinator.last_fetch_tomorrow is None
+
+    incoming = _full_day_market_prices(
+        tomorrow, electricity_minutes=incoming_minutes, gas=False
+    )
+    incoming.electricity.price_data = [
+        price
+        for price in incoming.electricity.all
+        if price.date_from.astimezone(UTC) >= incoming_start
+    ]
+    next_fetch = fetched_at + timedelta(minutes=5)
+    coordinator._cache_tomorrow_prices(incoming, tomorrow, next_fetch)
+
+    combined = coordinator.cached_prices_tomorrow
+    assert combined is not None
+    assert len(combined.electricity.all) == (
+        2 * 60 // cached_minutes + 22 * 60 // incoming_minutes
+    )
+    assert len(combined.gas.all) == 6
+    assert coordinator._tomorrow_prices_complete(combined, tomorrow)
+    assert coordinator.last_fetch_tomorrow == next_fetch
+    assert tuple(cached.electricity.all) == cached_electricity
+    # The API's replacement covers the third hour: stale entries are removed,
+    # but the first two hours and the existing gas window are retained.
+    assert all(
+        price.date_till.astimezone(UTC) <= incoming_start
+        for price in combined.electricity.all
+        if price.date_from.astimezone(UTC) < incoming_start
+    )
+
+
+@pytest.mark.parametrize("missing_commodity", ("electricity", "gas"))
+async def test_unauthed_restart_with_complete_today_retries_tomorrow(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    missing_commodity: str,
+) -> None:
+    """Refetch missing tomorrow prices on real coordinator startup after disk restore."""
+    mock_frank_energie.is_authenticated = False
+    now_utc = datetime(2026, 11, 13, 12, 58, tzinfo=UTC)
+    freezer.move_to(now_utc)
+    today = date(2026, 11, 13)
+    tomorrow = date(2026, 11, 14)
+    mock_config_entry.add_to_hass(hass)
+    settings = FrankEnergieSettingsCoordinator(
+        hass, mock_config_entry, mock_frank_energie
+    )
+    coordinator = FrankEnergiePriceCoordinator(
+        hass, mock_config_entry, mock_frank_energie, settings
+    )
+
+    cached_today = _full_day_market_prices(today)
+    cached_tomorrow = _tomorrow_prices_for_gas_window(tomorrow)
+    getattr(cached_tomorrow, missing_commodity).price_data.clear()
+    persisted = {
+        "prices_today": _market_prices_to_dict(cached_today),
+        "prices_tomorrow": _market_prices_to_dict(cached_tomorrow),
+        "last_fetch_today": now_utc.isoformat(),
+        "last_fetch_tomorrow": (now_utc - timedelta(minutes=43)).isoformat(),
+    }
+    coordinator.store.async_load = AsyncMock(return_value=persisted)
+    coordinator.store.async_save = AsyncMock()
+    coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
+    coordinator._fetch_prices_with_fallback = AsyncMock(
+        side_effect=AssertionError("Complete today's prices must be reused")
+    )
+
+    recovered = _tomorrow_prices_for_gas_window(tomorrow)
+    other_commodity = "gas" if missing_commodity == "electricity" else "electricity"
+    getattr(recovered, other_commodity).price_data.clear()
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=recovered)
+
+    await coordinator.async_config_entry_first_refresh()
+
+    coordinator.store.async_load.assert_awaited_once()
+    coordinator._fetch_prices_with_fallback.assert_not_awaited()
+    coordinator._fetch_tomorrow_data.assert_awaited_once_with(tomorrow)
+    assert coordinator.last_fetch_today == now_utc
+    assert coordinator.last_fetch_tomorrow == now_utc
+    assert coordinator._tomorrow_prices_complete(
+        coordinator.cached_prices_tomorrow, tomorrow
+    )
+    assert coordinator.last_update_success
 
 
 @pytest.mark.parametrize("missing_commodity", ("electricity", "gas"))
