@@ -1942,14 +1942,14 @@ async def test_full_day_cycle_recovers_when_first_attempt_is_poisoned(
     freezer.move_to(datetime(2026, 7, 20, 13, 0, tzinfo=tz))
     now_utc_1 = dt_util.utcnow()
 
-    day1_today_prices = _make_market_prices("2026-07-20T10:00:00.000Z")
+    day1_today_prices = _full_day_market_prices(day1)
     coordinator._static_prices_today = day1_today_prices
     coordinator.cached_prices = {
         DATA_ELECTRICITY: day1_today_prices.electricity,
         DATA_GAS: day1_today_prices.gas,
     }
 
-    day2_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+    day2_prices = _full_day_market_prices(day2)
     coordinator._fetch_tomorrow_data = AsyncMock(return_value=day2_prices)
     await coordinator._refresh_tomorrow_cache(day1, day2, now_utc_1)
     coordinator._adjust_update_interval(now_utc_1)
@@ -1987,7 +1987,7 @@ async def test_full_day_cycle_recovers_when_first_attempt_is_poisoned(
     freezer.move_to(datetime(2026, 7, 21, 13, 5, tzinfo=tz))
     now_utc_2_retry = dt_util.utcnow()
 
-    day3_prices = _make_market_prices("2026-07-21T22:00:00.000Z")
+    day3_prices = _full_day_market_prices(day3)
     coordinator._fetch_tomorrow_data = AsyncMock(return_value=day3_prices)
 
     result_retry = await coordinator._refresh_tomorrow_cache(
