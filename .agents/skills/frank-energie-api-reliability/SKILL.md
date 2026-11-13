@@ -20,6 +20,33 @@ Keep the API library responsible for GraphQL transport, authentication, parsing,
 5. Verify cache aging and response ordering; a fallback must not be labeled live/current, and an old request must not overwrite newer data.
 6. For price-related fixes, verify hourly/quarter-hour resolution, PT15M/PT60M effective dates, negative prices, UTC versus Amsterdam local dates, and DST days.
 
+## Public tomorrow-price cache and partial-response lessons (issue #473 / PR #474)
+
+[Issue #473](https://github.com/HiDiHo01/home-assistant-frank_energie/issues/473) exposed a real failure after reloading: the disk cache contained **24 electricity and 24 gas periods for today**, but **0 electricity and 6 gas periods for tomorrow**. A same-day `last_fetch_tomorrow` was present; the integration incorrectly reported the tomorrow cache as fresh, and even a manual refresh skipped the API. One API call can legitimately produce a partially populated result: receiving gas is **not** evidence that electricity was also received.
+
+### Contract requirements and cache validation
+
+- For the **unauthenticated public feed**, require **both electricity and gas** in the cached day being validated; the public feed exposes both commodities regardless of `DeliverySite.segments`. Do **not** use `_static_prices_today` (which may include historical carry-forward entries) to infer contract availability or decide that a public cache is complete.
+- For an **authenticated** account, rely on the selected site's verified energy segments: `ELECTRICITY`, `GAS`, or both. A legitimate known single-contract site must not wait for the other commodity. Preserve existing explicit handling of unknown site metadata; never silently treat a missing contract as a verified single-contract result.
+- Cache completeness is not the same as a non-null `MarketPrices` wrapper, a non-empty **single** series, a same-day fetch marker, or successful coordinator execution. Check the intended **Amsterdam-local date** and a usable price series for **each required commodity**. Verify the actual price entries and their resolution instead of trusting only the saved timestamp.
+- `has_cached_tomorrow` in diagnostics is derived from `cached_prices_tomorrow is not None`; it can be `true` for a **partial** cache. Never interpret this flag alone as proof that both tomorrow price series are available. Keep `last_fetch_tomorrow` for a successful **complete** tomorrow fetch only.
+
+### Refresh, persistence and midnight rollover
+
+- On a **partial** response, keep the already available commodity in `cached_prices_tomorrow`, retry the missing one on the **next eligible** price-coordinator refresh, and merge the new series with the retained one. Do not fabricate missing prices or substitute today's stale prices as tomorrow. Respect the configured release window, API rate limits, maintenance window and adaptive update interval; do not trigger extra requests from individual sensors.
+- If a disk-restored tomorrow cache has a success timestamp but fails the current completeness check, **clear `last_fetch_tomorrow` before attempting another request**. An empty/error response must not re-persist that old success marker, while the still-valid partial series remain available. The marker may only be set again after complete valid data has been assembled.
+- At **00:00 Europe/Amsterdam**, promote applicable tomorrow price entries to the combined today/history data, then clear both `cached_prices_tomorrow` and `last_fetch_tomorrow`, even for multi-day API windows. Historical/multi-day entries may remain in the combined price series; don't repopulate the separate tomorrow cache from old records. Keep this distinct from the API maintenance window expressed in UTC.
+
+### Required regressions for future price-cache changes
+
+1. An unauthenticated disk restore with **gas-only** tomorrow (and the inverse), a same-day saved marker, and today's prices both present, missing, partial, or containing **only yesterday's electricity**. Check that the cache is rejected as incomplete and the next eligible refresh actually calls the API.
+2. A partial initial response followed by a response with only the **missing** commodity. Assert that merging retains previously valid prices, `last_fetch_tomorrow` stays `None` until completion, and a complete cache suppresses unnecessary subsequent calls.
+3. A partial restored cache followed by an **empty/failed retry**. Assert the old marker is cleared before the API attempt, remains `None`, and valid partial prices are not deleted. Check the saved cache and retry cadence where applicable.
+4. Authenticated `GAS`-only, `ELECTRICITY`-only and dual-contract sites. Use the selected delivery site's typed segments rather than speculative model attributes.
+5. **CET and CEST** local-midnight rollover, incomplete or absent sources, multi-day prices, and diagnostics: the next-day cache and marker reset without destroying valid combined history. Verify `has_cached_tomorrow` reflects cache presence, not completion.
+
+Add these cases to the existing coordinator/diagnostics tests (e.g. `tests/test_coordinator.py`, `tests/test_diagnostics.py`), using synthetic values and deterministic `AsyncMock` sequences. Run focused tests and the current-head Ruff, Flake8/pytest and integration checks; do not claim CI green until the relevant runs finish. Avoid posting real API tokens, site references, entry IDs or unredacted diagnostic payloads.
+
 ## Smart Feed-In API outcome semantics
 
 `user_smart_feed_in()` returns `None` after a **successful** GraphQL
