@@ -75,6 +75,8 @@ Important notes:
 - Tomorrow's prices may appear at any point within or after the publication window.
 - The integration automatically retries when prices are not yet available.
 - Cached prices remain available while waiting.
+- A price day is complete only when **each required energy type** covers the full local calendar day without missing or overlapping intervals. The check uses actual interval start/end times, not just the number of price entries: Amsterdam market days can last 23, 24 or 25 hours across daylight-saving changes.
+- A partial tomorrow response remains cached, but the coordinator keeps retrying the missing intervals at the next eligible refresh. It only records a successful `last_fetch_tomorrow` when the complete day is validated.
 
 When tomorrow's prices become available, the integration fires the following Home Assistant event:
 
