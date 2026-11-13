@@ -27,7 +27,6 @@ from custom_components.frank_energie.device_inventory import (
 from tests.utils import ResponseMocks
 
 
-
 _MONTH_SUMMARY_COST_KEYS = (
     "actual_costs_until_last_meter_reading_date",
     "expected_costs_until_last_meter_reading_date",
@@ -103,8 +102,6 @@ def test_month_summary_cost_attributes_preserve_invoice_description() -> None:
     )
 
     assert attributes == {"Description": "November 2026"}
-
-
 
 
 @pytest.fixture
