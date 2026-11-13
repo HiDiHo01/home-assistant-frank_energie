@@ -880,6 +880,9 @@
       "last_meter_reading_date": {
         "name": "Last meter reading date"
       },
+      "meter_reading_day_completeness": {
+        "name": "Meter reading day completeness"
+      },
       "meter_type": {
         "name": "Meter Type",
         "state": {
