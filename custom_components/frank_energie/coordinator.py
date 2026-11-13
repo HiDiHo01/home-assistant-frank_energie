@@ -692,14 +692,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return False
 
         covered_until = day_start
-        for price in sorted(price_series.all, key=lambda item: item.date_from):
+        for price in sorted(
+            price_series.all, key=lambda item: item.date_from.astimezone(UTC)
+        ):
             start = price.date_from
             end = price.date_till
-            if start.tzinfo is None or end.tzinfo is None or end <= start:
+            if start.tzinfo is None or end.tzinfo is None:
                 return False
 
             start_utc = start.astimezone(UTC)
             end_utc = end.astimezone(UTC)
+            if end_utc <= start_utc:
+                return False
             if end_utc <= day_start or start_utc >= day_end:
                 continue
             if max(start_utc, day_start) != covered_until:
