@@ -663,9 +663,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         )
 
     def _price_contracts(self) -> set[str]:
-        """Return known energy contracts for the selected site's price fetch."""
+        """Require both public commodities, or the authenticated site's contracts."""
         if not self.api.is_authenticated:
-            return set()
+            # Public prices include electricity and gas, regardless of any
+            # partial or historical data already stored in the disk cache.
+            return {"ELECTRICITY", "GAS"}
         settings = getattr(self, "settings_coordinator", self)
         settings_data = settings.data
         site = settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
@@ -721,25 +723,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def _tomorrow_prices_complete(
         self, prices: MarketPrices | None, tomorrow: date
     ) -> bool:
-        """Check required contracts, including those inferred from cached today prices."""
-        required_contracts = self._price_contracts()
-        if not required_contracts and self._static_prices_today is not None:
-            # At startup, authentication and site discovery may not be ready.
-            # The restored today cache can still show which commodities were
-            # available; do not mistake a gas-only tomorrow cache for complete.
-            required_contracts = {
-                kind
-                for kind, series in (
-                    ("ELECTRICITY", self._static_prices_today.electricity),
-                    ("GAS", self._static_prices_today.gas),
-                )
-                if series is not None and series.all
-            }
-
+        """Require tomorrow's prices for the public feed or selected contracts."""
         return self._tomorrow_cache_matches_date(
             prices, tomorrow
         ) and self._prices_cover_date(
-            prices, tomorrow, required_contracts=required_contracts
+            prices, tomorrow, required_contracts=self._price_contracts()
         )
 
     @staticmethod
@@ -843,13 +831,21 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if (
             self.last_fetch_tomorrow is not None
             and _amsterdam_date(self.last_fetch_tomorrow) == today
-            and self._tomorrow_prices_complete(self.cached_prices_tomorrow, tomorrow)
         ):
+            if self._tomorrow_prices_complete(self.cached_prices_tomorrow, tomorrow):
+                _LOGGER.debug(
+                    "Tomorrow prices already cached (fetched %s), skipping API call",
+                    self.last_fetch_tomorrow,
+                )
+                return self.cached_prices_tomorrow
+
+            # A timestamp from disk is not proof of a complete fetch. Invalidate
+            # it before the retry, including when the API returns no new data.
             _LOGGER.debug(
-                "Tomorrow prices already cached (fetched %s), skipping API call",
-                self.last_fetch_tomorrow,
+                "Clearing tomorrow fetch marker: cached prices are incomplete for %s",
+                tomorrow,
             )
-            return self.cached_prices_tomorrow
+            self.last_fetch_tomorrow = None
 
         _LOGGER.debug(
             "Tomorrow cache status: cached=%s last_fetch=%s",
