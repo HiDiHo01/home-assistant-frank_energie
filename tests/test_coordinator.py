@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -3154,7 +3155,6 @@ async def test_unauthed_restart_with_complete_today_retries_tomorrow(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
     mock_frank_energie: AsyncMock,
-    mock_config_entry: MockConfigEntry,
     missing_commodity: str,
 ) -> None:
     """Refetch missing tomorrow prices on real coordinator startup after disk restore."""
@@ -3163,12 +3163,17 @@ async def test_unauthed_restart_with_complete_today_retries_tomorrow(
     freezer.move_to(now_utc)
     today = date(2026, 11, 13)
     tomorrow = date(2026, 11, 14)
-    mock_config_entry.add_to_hass(hass)
-    settings = FrankEnergieSettingsCoordinator(
-        hass, mock_config_entry, mock_frank_energie
+    setup_entry = MockConfigEntry(
+        domain="frank_energie",
+        title="Frank Energie",
+        data={},
+        options={"resolution": "PT15M"},
+        state=ConfigEntryState.SETUP_IN_PROGRESS,
     )
+    setup_entry.add_to_hass(hass)
+    settings = FrankEnergieSettingsCoordinator(hass, setup_entry, mock_frank_energie)
     coordinator = FrankEnergiePriceCoordinator(
-        hass, mock_config_entry, mock_frank_energie, settings
+        hass, setup_entry, mock_frank_energie, settings
     )
 
     cached_today = _full_day_market_prices(today)
