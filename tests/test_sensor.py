@@ -18,13 +18,93 @@ from python_frank_energie.domain import (
     SmartPvOperationalStatus,
     SmartPvSteeringStatus,
 )
-from python_frank_energie.models import PriceData
+from python_frank_energie.models import MonthSummary, PriceData
 
 from custom_components.frank_energie import const
 from custom_components.frank_energie.device_inventory import (
     inventory_device_identifiers,
 )
 from tests.utils import ResponseMocks
+
+
+
+_MONTH_SUMMARY_COST_KEYS = (
+    "actual_costs_until_last_meter_reading_date",
+    "expected_costs_until_last_meter_reading_date",
+    "difference_costs_until_last_meter_reading_date",
+    "difference_costs_per_day",
+    "expected_costs_this_month",
+    "expected_costs_per_day_this_month",
+    "costs_per_day_till_now_this_month",
+)
+
+
+@pytest.mark.parametrize("sensor_key", _MONTH_SUMMARY_COST_KEYS)
+@pytest.mark.parametrize("completeness", (0.0, 0.5, 1.0))
+def test_month_summary_cost_attributes_preserve_day_completeness(
+    sensor_key: str, completeness: float
+) -> None:
+    """Expose the exact provider day-completeness value on monthly cost sensors."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    summary = MonthSummary.from_dict(
+        {
+            "data": {
+                "monthSummary": {
+                    "_id": "synthetic-summary",
+                    "actualCostsUntilLastMeterReadingDate": 50.79,
+                    "expectedCostsUntilLastMeterReadingDate": 43.4,
+                    "expectedCosts": 108.51,
+                    "lastMeterReadingDate": "2026-11-12",
+                    "meterReadingDayCompleteness": completeness,
+                    "gasExcluded": False,
+                    "__typename": "MonthSummaryPayload",
+                }
+            }
+        }
+    )
+    assert summary is not None
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    data = {const.DATA_MONTH_SUMMARY: summary, const.DATA_INVOICES: None}
+
+    attributes = description.attr_fn(data)
+
+    assert attributes[const.ATTR_LAST_UPDATE] == "2026-11-12"
+    assert attributes["meter_reading_day_completeness"] == completeness
+
+
+@pytest.mark.parametrize("sensor_key", _MONTH_SUMMARY_COST_KEYS)
+def test_month_summary_cost_attributes_when_summary_missing(sensor_key: str) -> None:
+    """Do not fabricate meter-reading attributes when the summary is absent."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+
+    assert description.attr_fn(
+        {const.DATA_MONTH_SUMMARY: None, const.DATA_INVOICES: None}
+    ) == {}
+
+
+def test_month_summary_cost_attributes_preserve_invoice_description() -> None:
+    """Keep invoice descriptions after the monthly attribute refactoring."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(
+        item for item in SENSOR_TYPES if item.key == "expected_costs_this_month"
+    )
+    invoices = SimpleNamespace(
+        current_period_invoice=SimpleNamespace(PeriodDescription="November 2026")
+    )
+
+    attributes = description.attr_fn(
+        {const.DATA_MONTH_SUMMARY: None, const.DATA_INVOICES: invoices}
+    )
+
+    assert attributes == {"Description": "November 2026"}
+
+
 
 
 @pytest.fixture
