@@ -429,4 +429,14 @@ async def test_diagnostics_coordinator_metadata() -> None:
     assert coordinator_data["has_cached_tomorrow"] is True
     assert coordinator_data["resolution_change_pending"] is True
 
+    # At midnight rollover, the coordinator clears this cache, not the
+    # diagnostic boolean: diagnostics must then immediately report False.
+    coordinator.cached_prices_tomorrow = None
+    coordinator.last_fetch_tomorrow = None
+    cleared_diagnostics = await async_get_config_entry_diagnostics(
+        MagicMock(), entry
+    )
+    assert cleared_diagnostics["coordinator"]["has_cached_tomorrow"] is False
+    assert cleared_diagnostics["coordinator"]["has_cached_today"] is True
+
     assert diagnostics["battery_session_coordinators"] == 2
