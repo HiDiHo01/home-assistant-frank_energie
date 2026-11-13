@@ -73,6 +73,35 @@ def test_month_summary_cost_attributes_preserve_day_completeness(
 
 
 @pytest.mark.parametrize("sensor_key", _MONTH_SUMMARY_COST_KEYS)
+@pytest.mark.parametrize(
+    "summary_fields",
+    (
+        {"lastMeterReadingDate": "2026-11-12", "meterReadingDayCompleteness": None},
+        {"lastMeterReadingDate": "2026-11-12"},
+    ),
+    ids=("null-completeness", "missing-completeness"),
+)
+def test_month_summary_cost_attributes_when_completeness_unavailable(
+    sensor_key: str, summary_fields: dict[str, object]
+) -> None:
+    """Keep a known reading date when a present summary has no day completeness."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    # The SDK rejects null/missing completeness; model a sparse response at
+    # the sensor attribute boundary without changing the SDK's parser contract.
+    summary = SimpleNamespace(**summary_fields)
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    data = {const.DATA_MONTH_SUMMARY: summary, const.DATA_INVOICES: None}
+
+    attributes = description.attr_fn(data)
+
+    assert attributes[const.ATTR_LAST_UPDATE] == "2026-11-12"
+    assert "meter_reading_day_completeness" not in attributes
+
+
+@pytest.mark.parametrize("sensor_key", _MONTH_SUMMARY_COST_KEYS)
 def test_month_summary_cost_attributes_when_summary_missing(sensor_key: str) -> None:
     """Do not fabricate meter-reading attributes when the summary is absent."""
     from custom_components.frank_energie.sensor import SENSOR_TYPES
