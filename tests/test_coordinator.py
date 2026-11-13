@@ -2576,13 +2576,13 @@ def test_prices_cover_date(scenario: str, expected: bool) -> None:
         yesterday = _full_day_market_prices(day - timedelta(days=1))
         tomorrow = _full_day_market_prices(day + timedelta(days=1))
         prices.electricity.price_data = (
-            yesterday.electricity.all + prices.electricity.all + tomorrow.electricity.all
+            yesterday.electricity.all
+            + prices.electricity.all
+            + tomorrow.electricity.all
         )
         prices.gas.price_data = yesterday.gas.all + prices.gas.all + tomorrow.gas.all
 
-    assert (
-        FrankEnergiePriceCoordinator._prices_cover_date(prices, day) is expected
-    )
+    assert FrankEnergiePriceCoordinator._prices_cover_date(prices, day) is expected
 
 
 def test_prices_cover_date_handles_missing_prices() -> None:
@@ -2626,16 +2626,12 @@ def _make_gas_price_data(*entry_date_isos: str):
         ("missing", False),
     ),
 )
-def test_prices_cover_date_checks_each_series(
-    gas_case: str, expected: bool
-) -> None:
+def test_prices_cover_date_checks_each_series(gas_case: str, expected: bool) -> None:
     """A complete electricity day cannot hide missing or old gas prices."""
     day = date(2026, 7, 20)
     prices = _full_day_market_prices(day)
     if gas_case == "stale":
-        prices.gas = _full_day_price_data(
-            day - timedelta(days=1), "gas", 60
-        )
+        prices.gas = _full_day_price_data(day - timedelta(days=1), "gas", 60)
     elif gas_case == "missing":
         prices.gas = PriceData([], energy_type="gas")
 
@@ -3040,9 +3036,7 @@ def test_unauthenticated_public_prices_require_both_commodities(
             yesterday_start, today_start
         )
 
-    gas_only_tomorrow = _full_day_market_prices(
-        date(2026, 11, 14), electricity=False
-    )
+    gas_only_tomorrow = _full_day_market_prices(date(2026, 11, 14), electricity=False)
     both_tomorrow = _full_day_market_prices(date(2026, 11, 14))
 
     assert coordinator._price_contracts() == {"ELECTRICITY", "GAS"}
@@ -3177,9 +3171,7 @@ async def test_partial_tomorrow_prices_retry_missing_commodity_next_refresh(
     assert second_result is not None
     assert len(second_result.electricity.all) == 96
     assert len(second_result.gas.all) == 24
-    assert [
-        item.date_from for item in getattr(second_result, first_commodity).all
-    ] == [
+    assert [item.date_from for item in getattr(second_result, first_commodity).all] == [
         item.date_from for item in getattr(first_prices, first_commodity).all
     ]
     assert coordinator.last_fetch_tomorrow == next_fetch
@@ -3282,9 +3274,7 @@ async def test_cached_same_day_fallback_does_not_suppress_live_retry(
 
     await prices._async_update_data()
 
-    assert not prices._prices_cover_date(
-        prices._static_prices_today, now_utc.date()
-    )
+    assert not prices._prices_cover_date(prices._static_prices_today, now_utc.date())
     assert prices._static_prices_today.electricity.current is None
     assert prices.last_fetch_today is None
     assert prices.store.async_save.call_args.args[0]["last_fetch_today"] is None
