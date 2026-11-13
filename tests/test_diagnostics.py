@@ -433,9 +433,7 @@ async def test_diagnostics_coordinator_metadata() -> None:
     # diagnostic boolean: diagnostics must then immediately report False.
     coordinator.cached_prices_tomorrow = None
     coordinator.last_fetch_tomorrow = None
-    cleared_diagnostics = await async_get_config_entry_diagnostics(
-        MagicMock(), entry
-    )
+    cleared_diagnostics = await async_get_config_entry_diagnostics(MagicMock(), entry)
     assert cleared_diagnostics["coordinator"]["has_cached_tomorrow"] is False
     assert cleared_diagnostics["coordinator"]["has_cached_today"] is True
 
