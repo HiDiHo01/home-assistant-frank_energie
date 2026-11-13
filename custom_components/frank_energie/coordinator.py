@@ -734,9 +734,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             day + timedelta(days=1), time.min, tz_amsterdam
         ).astimezone(UTC)
         return all(
-            FrankEnergieCoordinator._price_series_covers_day(
-                series, day_start, day_end
-            )
+            FrankEnergieCoordinator._price_series_covers_day(series, day_start, day_end)
             for series in price_series_list
         )
 
