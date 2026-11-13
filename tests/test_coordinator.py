@@ -2903,6 +2903,23 @@ def test_prices_cover_date_rejects_incomplete_intervals(
     )
 
 
+def test_price_intervals_cover_repeated_dst_hour_in_local_timezone() -> None:
+    """Order and compare local ZoneInfo folds by UTC instant, not wall time."""
+    market_day = date(2026, 10, 25)
+    tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+    prices = _full_day_market_prices(market_day)
+
+    for series in (prices.electricity, prices.gas):
+        for price in series.all:
+            price.date_from = price.date_from.astimezone(tz_amsterdam)
+            price.date_till = price.date_till.astimezone(tz_amsterdam)
+        series.price_data.reverse()
+
+    assert FrankEnergiePriceCoordinator._prices_cover_date(
+        prices, market_day, required_contracts={"ELECTRICITY", "GAS"}
+    )
+
+
 @pytest.mark.parametrize("minutes", (15, 60))
 def test_prices_cover_date_accepts_mixed_interval_resolutions(
     minutes: int,
