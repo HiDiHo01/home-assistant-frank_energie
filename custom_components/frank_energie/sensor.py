@@ -3012,6 +3012,19 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
     ),
     FrankEnergieEntityDescription(
+        key="meter_reading_day_completeness",
+        translation_key="meter_reading_day_completeness",
+        icon="mdi:calendar-check",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=None,
+        authenticated=True,
+        service_name=SERVICE_NAME_COSTS,
+        value_fn=lambda data: getattr(
+            data.get(DATA_MONTH_SUMMARY), "meterReadingDayCompleteness", None
+        ),
+        attr_fn=_month_summary_meter_attributes,
+    ),
+    FrankEnergieEntityDescription(
         key="actual_costs_until_last_meter_reading_date",
         translation_key="actual_costs_until_last_meter_reading_date",
         device_class=SensorDeviceClass.MONETARY,
