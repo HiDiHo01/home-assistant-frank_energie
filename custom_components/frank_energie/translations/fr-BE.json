@@ -807,6 +807,9 @@
       "last_meter_reading_date": {
         "name": "Date du dernier relevé d’index"
       },
+      "meter_reading_day_completeness": {
+        "name": "Complétude du dernier jour de relevé d’index"
+      },
       "meter_type": {
         "name": "Type de compteur",
         "state": {
