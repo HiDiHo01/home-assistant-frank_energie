@@ -1635,13 +1635,26 @@ def _sensor_unique_id(
     return f"{entry.unique_id}.{legacy_key}"
 
 
-def _monthly_cost_attributes(data: FrankEnergieData) -> dict[str, object]:
-    """Preserve meter-reading metadata without invoice data."""
-    result: dict[str, object] = {}
+def _month_summary_meter_attributes(data: FrankEnergieData) -> dict[str, object]:
+    """Expose the last processed meter-reading date and day completeness."""
     summary = data.get(DATA_MONTH_SUMMARY)
+    if summary is None:
+        return {}
+
+    result: dict[str, object] = {}
     reading = getattr(summary, "lastMeterReadingDate", None)
     if reading is not None:
         result[ATTR_LAST_UPDATE] = reading
+
+    completeness = getattr(summary, "meterReadingDayCompleteness", None)
+    if completeness is not None:
+        result["meter_reading_day_completeness"] = completeness
+    return result
+
+
+def _monthly_cost_attributes(data: FrankEnergieData) -> dict[str, object]:
+    """Expose meter-reading metadata and preserve the invoice description."""
+    result = _month_summary_meter_attributes(data)
     invoices = data.get(DATA_INVOICES)
     invoice = getattr(invoices, "current_period_invoice", None)
     description = getattr(invoice, "PeriodDescription", None)
@@ -3013,12 +3026,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             and data[DATA_MONTH_SUMMARY].actualCostsUntilLastMeterReadingDate
             else None
         ),
-        attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-            else {}
-        ),
+        attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_until_last_meter_reading_date",
@@ -3035,12 +3043,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             and data[DATA_MONTH_SUMMARY].expectedCostsUntilLastMeterReadingDate
             else None
         ),
-        attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-            else {}
-        ),
+        attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
         key="difference_costs_until_last_meter_reading_date",
@@ -3057,12 +3060,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             and data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDate
             else None
         ),
-        attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-            else {}
-        ),
+        attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
         key="difference_costs_per_day",
@@ -3079,12 +3077,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             and data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDateAvg
             else None
         ),
-        attr_fn=lambda data: (
-            {ATTR_LAST_UPDATE: data[DATA_MONTH_SUMMARY].lastMeterReadingDate}
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].lastMeterReadingDate
-            else {}
-        ),
+        attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_this_month",
@@ -3100,17 +3093,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].expectedCosts
             else None
         ),
-        attr_fn=lambda data: (
-            {
-                "Description": data[
-                    DATA_INVOICES
-                ].current_period_invoice.PeriodDescription,
-            }
-            if data[DATA_INVOICES]
-            and data[DATA_INVOICES].current_period_invoice
-            and data[DATA_INVOICES].current_period_invoice.PeriodDescription
-            else {}
-        ),
+        attr_fn=_monthly_cost_attributes,
     ),
     FrankEnergieEntityDescription(
         key="expected_costs_per_day_this_month",
