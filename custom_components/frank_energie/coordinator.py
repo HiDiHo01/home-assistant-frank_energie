@@ -684,40 +684,60 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         }
 
     @staticmethod
+    def _price_series_covers_day(
+        price_series: PriceData | None, day_start: datetime, day_end: datetime
+    ) -> bool:
+        """Require uninterrupted, non-overlapping UTC price-interval coverage."""
+        if price_series is None or not price_series.all:
+            return False
+
+        covered_until = day_start
+        for price in sorted(price_series.all, key=lambda item: item.date_from):
+            start = price.date_from
+            end = price.date_till
+            if start.tzinfo is None or end.tzinfo is None or end <= start:
+                return False
+
+            start_utc = start.astimezone(UTC)
+            end_utc = end.astimezone(UTC)
+            if end_utc <= day_start or start_utc >= day_end:
+                continue
+            if max(start_utc, day_start) != covered_until:
+                # A gap or overlapping interval makes the day incomplete.
+                return False
+            covered_until = min(end_utc, day_end)
+
+        return covered_until == day_end
+
+    @staticmethod
     def _prices_cover_date(
         prices: MarketPrices | None,
         day: date,
         *,
         required_contracts: set[str] | None = None,
     ) -> bool:
-        """Check that `prices` holds at least one entry dated `day` (Amsterdam-local).
+        """Require full local-day coverage for every selected price commodity.
 
-        The today-side counterpart of `_tomorrow_cache_matches_date`:
-        `last_fetch_today` only records *when* a fetch happened, not *which
-        day* it returned. When both the user and public price fetches fail,
-        `_fetch_prices_with_fallback` returns `_cached_prices`, which at
-        startup is the previous day's disk cache. Trusting the timestamp
-        alone would stamp that as today's fetch and keep every price sensor
-        unavailable until the midnight promotion.
-
-        Known site contracts require a non-empty series for each commodity.
-        Without contract metadata, validate every non-empty series so public
-        prices and single-contract sites remain supported.
+        Compare actual price intervals in UTC between Amsterdam-local
+        midnights. This handles hourly/quarter-hourly data and DST days
+        lasting 23, 24 or 25 hours without assuming a fixed entry count.
         """
-        if prices is None:
-            return False
-
         price_series_list = FrankEnergieCoordinator._price_series_for_contracts(
             prices, required_contracts
         )
+        if not price_series_list:
+            return False
+
         tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
-        return bool(price_series_list) and all(
-            price_series is not None
-            and any(
-                price.date_from.astimezone(tz_amsterdam).date() == day
-                for price in price_series.all
+        day_start = datetime.combine(day, time.min, tz_amsterdam).astimezone(UTC)
+        day_end = datetime.combine(
+            day + timedelta(days=1), time.min, tz_amsterdam
+        ).astimezone(UTC)
+        return all(
+            FrankEnergieCoordinator._price_series_covers_day(
+                series, day_start, day_end
             )
-            for price_series in price_series_list
+            for series in price_series_list
         )
 
     def _tomorrow_prices_complete(
@@ -918,18 +938,14 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         resolved = prices
         previous = self.cached_prices_tomorrow
         if previous is not None:
+            # Successive partial responses can cover different intervals of
+            # the same commodity. Retain both instead of replacing the first.
             resolved = replace(
                 prices,
-                electricity=(
-                    prices.electricity
-                    if prices.electricity is not None and prices.electricity.all
-                    else previous.electricity
+                electricity=self._combine_price_data(
+                    previous.electricity, prices.electricity
                 ),
-                gas=(
-                    prices.gas
-                    if prices.gas is not None and prices.gas.all
-                    else previous.gas
-                ),
+                gas=self._combine_price_data(previous.gas, prices.gas),
             )
         self.cached_prices_tomorrow = resolved
         if not self._tomorrow_prices_complete(resolved, tomorrow):
