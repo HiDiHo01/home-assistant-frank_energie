@@ -2887,20 +2887,14 @@ def test_unauthenticated_public_prices_require_both_commodities(
         )
 
     gas_only_tomorrow = _market_prices_for_cache_test(None, tomorrow_start)
-    both_tomorrow = _market_prices_for_cache_test(
-        tomorrow_start, tomorrow_start
-    )
+    both_tomorrow = _market_prices_for_cache_test(tomorrow_start, tomorrow_start)
 
     assert coordinator._price_contracts() == {"ELECTRICITY", "GAS"}
     assert (
-        coordinator._tomorrow_prices_complete(
-            gas_only_tomorrow, date(2026, 11, 14)
-        )
+        coordinator._tomorrow_prices_complete(gas_only_tomorrow, date(2026, 11, 14))
         is False
     )
-    assert coordinator._tomorrow_prices_complete(
-        both_tomorrow, date(2026, 11, 14)
-    )
+    assert coordinator._tomorrow_prices_complete(both_tomorrow, date(2026, 11, 14))
 
 
 async def test_partial_disk_cache_clears_fetch_marker_before_empty_retry(
