@@ -38,6 +38,68 @@ _MONTH_SUMMARY_COST_KEYS = (
 )
 
 
+@pytest.mark.parametrize("completeness", (0, 0.5, 1))
+def test_meter_reading_day_completeness_sensor_uses_raw_provider_value(
+    completeness: int | float,
+) -> None:
+    """Preserve numeric source completeness, including zero, without percent conversion."""
+    from homeassistant.const import EntityCategory
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    summary = MonthSummary.from_dict(
+        {
+            "data": {
+                "monthSummary": {
+                    "_id": "synthetic-summary",
+                    "actualCostsUntilLastMeterReadingDate": 50.79,
+                    "expectedCostsUntilLastMeterReadingDate": 43.4,
+                    "expectedCosts": 108.51,
+                    "lastMeterReadingDate": "2026-11-12",
+                    "meterReadingDayCompleteness": completeness,
+                    "gasExcluded": False,
+                    "__typename": "MonthSummaryPayload",
+                }
+            }
+        }
+    )
+    assert summary is not None
+    description = next(
+        item for item in SENSOR_TYPES if item.key == "meter_reading_day_completeness"
+    )
+    data = {const.DATA_MONTH_SUMMARY: summary, const.DATA_INVOICES: None}
+
+    assert description.service_name == const.SERVICE_NAME_COSTS
+    assert description.entity_category == EntityCategory.DIAGNOSTIC
+    assert description.state_class is None
+    assert description.native_unit_of_measurement is None
+    assert description.value_fn(data) == completeness
+    assert type(description.value_fn(data)) is type(completeness)
+    assert description.attr_fn(data)[const.ATTR_LAST_UPDATE] == "2026-11-12"
+
+
+@pytest.mark.parametrize("completeness", (None, "missing"))
+def test_meter_reading_day_completeness_sensor_handles_unavailable_values(
+    completeness: float | str | None,
+) -> None:
+    """Return an unknown state for null, absent, or missing-summary values."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    description = next(
+        item for item in SENSOR_TYPES if item.key == "meter_reading_day_completeness"
+    )
+    summary_fields = {"lastMeterReadingDate": "2026-11-12"}
+    if completeness != "missing":
+        summary_fields["meterReadingDayCompleteness"] = completeness
+
+    summary = SimpleNamespace(**summary_fields)
+    assert description.value_fn({const.DATA_MONTH_SUMMARY: summary}) is None
+    assert description.value_fn({const.DATA_MONTH_SUMMARY: None}) is None
+    assert description.value_fn({}) is None
+
+
 @pytest.mark.parametrize("sensor_key", _MONTH_SUMMARY_COST_KEYS)
 @pytest.mark.parametrize("completeness", (0.0, 0.5, 1.0))
 def test_month_summary_cost_attributes_preserve_day_completeness(
