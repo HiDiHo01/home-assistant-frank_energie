@@ -2780,6 +2780,54 @@ async def test_async_update_data_refetches_stale_today_cache(
     assert coordinator.last_fetch_today == now_utc
 
 
+def _full_day_price_data(
+    day: date, energy_type: str, resolution_minutes: int
+) -> PriceData:
+    """Build a real full-day interval series across Amsterdam DST boundaries."""
+    local_tz = ZoneInfo(TIMEZONE_AMSTERDAM)
+    start_utc = datetime.combine(day, datetime.min.time(), local_tz).astimezone(UTC)
+    end_utc = datetime.combine(
+        day + timedelta(days=1), datetime.min.time(), local_tz
+    ).astimezone(UTC)
+    prices: list[dict[str, object]] = []
+    current = start_utc
+    while current < end_utc:
+        next_start = min(current + timedelta(minutes=resolution_minutes), end_utc)
+        prices.append(
+            {
+                "from": current.isoformat(),
+                "till": next_start.isoformat(),
+                "marketPrice": 0.1,
+                "marketPriceTax": 0.02,
+                "sourcingMarkupPrice": 0.01,
+                "energyTaxPrice": 0.1,
+            }
+        )
+        current = next_start
+
+    return PriceData(prices, energy_type=energy_type)
+
+
+def _full_day_market_prices(
+    day: date,
+    *,
+    electricity: bool = True,
+    gas: bool = True,
+    electricity_minutes: int = 15,
+    gas_minutes: int = 60,
+) -> MarketPrices:
+    """Build complete or absent commodity series for a whole Amsterdam market day."""
+    return MarketPrices(
+        electricity=_full_day_price_data(day, "electricity", electricity_minutes)
+        if electricity
+        else PriceData([], energy_type="electricity"),
+        gas=_full_day_price_data(day, "gas", gas_minutes)
+        if gas
+        else PriceData([], energy_type="gas"),
+        energy_country="NL",
+    )
+
+
 def _market_prices_for_cache_test(
     electricity_start: str | None, gas_start: str | None
 ) -> MarketPrices:
@@ -2807,6 +2855,112 @@ def _price_coordinator_for_cache_test(
     prices._fetch_tomorrow_data = AsyncMock(return_value=None)
     prices.store.async_save = AsyncMock()
     return prices
+
+
+@pytest.mark.parametrize(
+    ("market_day", "quarter_hours", "hours"),
+    [
+        (date(2026, 3, 29), 92, 23),
+        (date(2026, 7, 20), 96, 24),
+        (date(2026, 10, 25), 100, 25),
+    ],
+)
+def test_prices_cover_full_dst_market_day(
+    market_day: date, quarter_hours: int, hours: int
+) -> None:
+    """Verify full day coverage through spring and autumn DST changes."""
+    prices = _full_day_market_prices(market_day)
+    assert len(prices.electricity.all) == quarter_hours
+    assert len(prices.gas.all) == hours
+    assert FrankEnergiePriceCoordinator._prices_cover_date(
+        prices, market_day, required_contracts={"ELECTRICITY", "GAS"}
+    )
+
+
+@pytest.mark.parametrize("invalidity", ("gap", "overlap", "truncated"))
+@pytest.mark.parametrize("commodity", ("electricity", "gas"))
+def test_prices_cover_date_rejects_incomplete_intervals(
+    invalidity: str, commodity: str
+) -> None:
+    """Reject missing, duplicate or truncated intervals for either commodity."""
+    market_day = date(2026, 11, 14)
+    prices = _full_day_market_prices(
+        market_day, electricity_minutes=15, gas_minutes=15
+    )
+    series = getattr(prices, commodity)
+    if invalidity == "gap":
+        series.price_data.pop(10)
+    elif invalidity == "overlap":
+        series.price_data.insert(10, series.price_data[9])
+    else:
+        del series.price_data[24:]
+
+    assert (
+        FrankEnergiePriceCoordinator._prices_cover_date(
+            prices, market_day, required_contracts={"ELECTRICITY", "GAS"}
+        )
+        is False
+    )
+
+
+@pytest.mark.parametrize("minutes", (15, 60))
+def test_prices_cover_date_accepts_mixed_interval_resolutions(
+    minutes: int,
+) -> None:
+    """Use each entry's actual duration rather than a hard-coded entry count."""
+    market_day = date(2026, 10, 25)
+    prices = _full_day_market_prices(
+        market_day, electricity_minutes=minutes, gas_minutes=60
+    )
+    assert FrankEnergiePriceCoordinator._prices_cover_date(
+        prices, market_day, required_contracts={"ELECTRICITY", "GAS"}
+    )
+
+
+async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
+    mock_frank_energie: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A six-hour gas response cannot mark tomorrow complete; merge later prices."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    today = date(2026, 11, 13)
+    tomorrow = date(2026, 11, 14)
+    fetched_at = datetime(2026, 11, 13, 12, 15, tzinfo=UTC)
+    first = _full_day_market_prices(tomorrow, gas_minutes=15)
+    remaining = _full_day_market_prices(
+        tomorrow, electricity=False, gas_minutes=15
+    )
+    first.gas.price_data = first.gas.price_data[:24]
+    remaining.gas.price_data = remaining.gas.price_data[24:]
+    coordinator._fetch_tomorrow_data = AsyncMock(side_effect=(first, remaining))
+
+    first_result = await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, fetched_at
+    )
+    assert first_result is first
+    assert len(first_result.electricity.all) == 96
+    assert len(first_result.gas.all) == 24
+    assert coordinator.last_fetch_tomorrow is None
+    coordinator._adjust_update_interval(fetched_at)
+    assert coordinator.update_interval == timedelta(minutes=5)
+
+    next_fetch = fetched_at + timedelta(minutes=5)
+    completed = await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, next_fetch
+    )
+    assert completed is coordinator.cached_prices_tomorrow
+    assert completed is not None
+    assert len(completed.electricity.all) == 96
+    assert len(completed.gas.all) == 96
+    assert coordinator.last_fetch_tomorrow == next_fetch
+    assert coordinator._fetch_tomorrow_data.await_count == 2
+
+    await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, next_fetch + timedelta(minutes=5)
+    )
+    assert coordinator._fetch_tomorrow_data.await_count == 2
 
 
 @pytest.mark.parametrize("missing_commodity", ("electricity", "gas"))
