@@ -3091,9 +3091,7 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     assert coordinator._fetch_tomorrow_data.await_count == 2
 
 
-@pytest.mark.parametrize(
-    ("cached_minutes", "incoming_minutes"), ((15, 60), (60, 15))
-)
+@pytest.mark.parametrize(("cached_minutes", "incoming_minutes"), ((15, 60), (60, 15)))
 def test_tomorrow_cache_replaces_overlapping_resolution_intervals(
     mock_frank_energie: AsyncMock,
     mock_config_entry: MockConfigEntry,
