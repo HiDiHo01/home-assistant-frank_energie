@@ -1422,6 +1422,91 @@ async def test_price_coordinator_midnight_rollover(
     assert price_coordinator._static_prices_today.gas == expected_gas
 
 
+@pytest.mark.parametrize(
+    ("local_midnight", "old_day", "new_day", "following_day"),
+    (
+        (
+            "2026-01-01",
+            "2025-12-30T23:00:00.000Z",
+            "2025-12-31T23:00:00.000Z",
+            "2026-01-01T23:00:00.000Z",
+        ),
+        (
+            "2026-07-21",
+            "2026-07-19T22:00:00.000Z",
+            "2026-07-20T22:00:00.000Z",
+            "2026-07-21T22:00:00.000Z",
+        ),
+    ),
+    ids=("winter-cet", "summer-cest"),
+)
+def test_midnight_rollover_clears_tomorrow_cache_for_multi_day_prices(
+    mock_frank_energie,
+    mock_config_entry,
+    freezer,
+    local_midnight: str,
+    old_day: str,
+    new_day: str,
+    following_day: str,
+) -> None:
+    """Always invalidate the former tomorrow cache at Amsterdam midnight."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    previous_prices = _make_market_prices(old_day)
+    future_prices = _make_market_prices(new_day, following_day)
+    coordinator.cached_prices = {
+        DATA_ELECTRICITY: previous_prices.electricity,
+        DATA_GAS: previous_prices.gas,
+    }
+    coordinator.cached_prices_tomorrow = future_prices
+    coordinator.last_fetch_tomorrow = datetime(2026, 1, 1, tzinfo=UTC)
+
+    freezer.move_to(
+        datetime.fromisoformat(local_midnight).replace(
+            tzinfo=ZoneInfo(TIMEZONE_AMSTERDAM)
+        )
+    )
+    coordinator.promote_tomorrow_prices()
+
+    assert coordinator.cached_prices_tomorrow is None
+    assert coordinator.last_fetch_tomorrow is None
+    assert coordinator._static_prices_today is not None
+    assert {
+        price.date_from
+        for price in coordinator._static_prices_today.electricity.all
+    } >= {
+        datetime.fromisoformat(new_day.replace("Z", "+00:00")),
+        datetime.fromisoformat(following_day.replace("Z", "+00:00")),
+    }
+
+
+@pytest.mark.parametrize("cache_loaded", (False, True))
+def test_midnight_rollover_clears_fetch_marker_without_promotable_data(
+    mock_frank_energie, mock_config_entry, freezer, cache_loaded: bool
+) -> None:
+    """Clear yesterday's tomorrow status even when promotion cannot proceed."""
+    settings_coordinator = FrankEnergieSettingsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie
+    )
+    coordinator = FrankEnergiePriceCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator.cached_prices_tomorrow = (
+        _make_market_prices("2026-07-20T22:00:00.000Z") if cache_loaded else None
+    )
+    coordinator.last_fetch_tomorrow = datetime(2026, 7, 20, 12, tzinfo=UTC)
+    freezer.move_to(datetime(2026, 7, 21, tzinfo=ZoneInfo(TIMEZONE_AMSTERDAM)))
+
+    coordinator.promote_tomorrow_prices()
+
+    assert coordinator.cached_prices_tomorrow is None
+    assert coordinator.last_fetch_tomorrow is None
+
+
 @pytest.mark.asyncio
 async def test_price_coordinator_midnight_rollover_resolution_mismatch(
     mock_frank_energie, mock_config_entry
@@ -1626,9 +1711,8 @@ async def test_full_day_cycle_fetch_promote_refetch(
             .date()
             == tomorrow
         )
-        # promote_tomorrow_prices deliberately never touches last_fetch_tomorrow —
-        # it's still stale for the new today until the next _async_update_data run.
-        assert coordinator.last_fetch_tomorrow == now_utc_first
+        # The old day's fetch marker must be cleared with its tomorrow cache.
+        assert coordinator.last_fetch_tomorrow is None
 
 
 @pytest.mark.asyncio
@@ -2160,48 +2244,9 @@ async def test_coordinator_helpers() -> None:
     assert FrankEnergiePriceCoordinator._merge_prices(base, new_prices) == "merged"
     base.__add__.assert_called_once_with(new_prices)
 
-    # Test _build_tomorrow_cache
-    tomorrow = MagicMock()
-    tomorrow.energy_country = "NL"
-    tomorrow.energy_type = "electricity"
-    tomorrow.electricity = MagicMock()
-    tomorrow.gas = MagicMock()
-
-    elec_rem = MagicMock()
-    gas_rem = MagicMock()
-
-    res = FrankEnergiePriceCoordinator._build_tomorrow_cache(
-        tomorrow, elec_rem, gas_rem
-    )
-    assert res.electricity is elec_rem
-    assert res.gas is gas_rem
-    assert res.energy_country == "NL"
-    assert res.energy_type == "electricity"
-
-    # Test when remaining is None but tomorrow had prices (should replace with empty price_data)
-    with patch("custom_components.frank_energie.coordinator.replace") as mock_replace:
-        mock_replace.return_value = "empty"
-        res2 = FrankEnergiePriceCoordinator._build_tomorrow_cache(tomorrow, None, None)
-        assert res2 is None
-
-        res3 = FrankEnergiePriceCoordinator._build_tomorrow_cache(
-            tomorrow, elec_rem, None
-        )
-        assert res3.electricity is elec_rem
-        assert res3.gas == "empty"
-
-
 @pytest.mark.asyncio
-async def test_price_data_after_and_build_tomorrow_cache_with_real_pricedata() -> None:
-    """_price_data_after/_build_tomorrow_cache must not crash on a real multi-day window.
-
-    Regression test: both methods called `dataclasses.replace(price_data, price_data=...)`,
-    but `price_data` is an instance attribute set in `PriceData.__post_init__`, not a
-    declared dataclass field. `replace()` always raised TypeError for any real PriceData
-    object, so a genuine multi-day API response would silently crash midnight promotion.
-    The previous test only exercised this with MagicMocks, which masked the bug since
-    mocked `replace()` never touches the real dataclass machinery.
-    """
+async def test_price_data_after_with_real_pricedata() -> None:
+    """Filter a real multi-day PriceData without losing resolution metadata."""
     from datetime import date, timezone
     from python_frank_energie.models import PriceData
 
@@ -2242,20 +2287,6 @@ async def test_price_data_after_and_build_tomorrow_cache_with_real_pricedata() -
     assert remaining_electricity.resolution_minutes == 15
     assert remaining_gas is None
 
-    tomorrow_prices = MagicMock()
-    tomorrow_prices.electricity = multi_day_electricity
-    tomorrow_prices.gas = empty_gas
-    tomorrow_prices.energy_country = "NL"
-    tomorrow_prices.energy_type = "electricity"
-
-    built = FrankEnergiePriceCoordinator._build_tomorrow_cache(
-        tomorrow_prices, remaining_electricity, remaining_gas
-    )
-
-    assert built is not None
-    assert built.electricity is remaining_electricity
-    assert built.gas is not None
-    assert built.gas.all == []
 
 
 def _make_market_prices(*entry_date_isos: str):
