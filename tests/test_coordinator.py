@@ -2804,6 +2804,84 @@ def _price_coordinator_for_cache_test(
     return prices
 
 
+@pytest.mark.parametrize("missing_commodity", ("electricity", "gas"))
+async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    missing_commodity: str,
+) -> None:
+    """Reject a gas-only/electricity-only tomorrow disk cache without site metadata."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    now_utc = datetime(2026, 11, 13, 12, 58, tzinfo=UTC)
+    today = date(2026, 11, 13)
+    tomorrow = date(2026, 11, 14)
+    today_start = "2026-11-12T23:00:00Z"
+    tomorrow_start = "2026-11-13T23:00:00Z"
+    coordinator._static_prices_today = _market_prices_for_cache_test(
+        today_start, today_start
+    )
+    coordinator.last_fetch_today = now_utc
+    incomplete = _market_prices_for_cache_test(
+        None if missing_commodity == "electricity" else tomorrow_start,
+        None if missing_commodity == "gas" else tomorrow_start,
+    )
+    coordinator.cached_prices_tomorrow = incomplete
+    coordinator.last_fetch_tomorrow = now_utc - timedelta(minutes=43)
+
+    assert coordinator._price_contracts() == set()
+    assert coordinator._tomorrow_prices_complete(incomplete, tomorrow) is False
+    assert coordinator._is_cache_fresh(now_utc) is False
+    coordinator._adjust_update_interval(now_utc)
+    assert coordinator.update_interval == timedelta(minutes=5)
+
+    # The next refresh recovers the missing commodity without discarding the
+    # series restored from disk for the other commodity.
+    recovered = _market_prices_for_cache_test(
+        tomorrow_start if missing_commodity == "electricity" else None,
+        tomorrow_start if missing_commodity == "gas" else None,
+    )
+    coordinator._fetch_tomorrow_data = AsyncMock(return_value=recovered)
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    coordinator._fetch_tomorrow_data.assert_awaited_once_with(tomorrow)
+    assert result is coordinator.cached_prices_tomorrow
+    assert result is not None
+    assert len(result.electricity.all) == 1
+    assert len(result.gas.all) == 1
+    assert coordinator.last_fetch_tomorrow == now_utc
+
+
+@pytest.mark.parametrize("contract", ("ELECTRICITY", "GAS"))
+def test_known_single_contract_does_not_require_second_commodity_from_disk(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    contract: str,
+) -> None:
+    """Known single-contract sites remain complete with one tomorrow price series."""
+    mock_frank_energie.is_authenticated = True
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, [contract]
+    )
+    today_start = "2026-11-12T23:00:00Z"
+    tomorrow_start = "2026-11-13T23:00:00Z"
+    coordinator._static_prices_today = _market_prices_for_cache_test(
+        today_start, today_start
+    )
+    single_contract_prices = _market_prices_for_cache_test(
+        tomorrow_start if contract == "ELECTRICITY" else None,
+        tomorrow_start if contract == "GAS" else None,
+    )
+
+    assert coordinator._price_contracts() == {contract}
+    assert coordinator._tomorrow_prices_complete(
+        single_contract_prices, date(2026, 11, 14)
+    ) is True
+
+
 @pytest.mark.parametrize("first_commodity", ("gas", "electricity"))
 async def test_partial_tomorrow_prices_retry_missing_commodity_next_refresh(
     mock_frank_energie: AsyncMock,
