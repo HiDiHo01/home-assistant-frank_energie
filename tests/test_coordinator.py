@@ -1498,6 +1498,11 @@ def test_midnight_rollover_clears_fetch_marker_without_promotable_data(
         _make_market_prices("2026-07-20T22:00:00.000Z") if cache_loaded else None
     )
     coordinator.last_fetch_tomorrow = datetime(2026, 7, 20, 12, tzinfo=UTC)
+    if cache_loaded:
+        # A populated tomorrow cache but no today source must exercise the
+        # explicit no-source cleanup path, not the normal promotion.
+        coordinator.cached_prices = None
+        coordinator.data = None
     freezer.move_to(datetime(2026, 7, 21, tzinfo=ZoneInfo(TIMEZONE_AMSTERDAM)))
 
     coordinator.promote_tomorrow_prices()
