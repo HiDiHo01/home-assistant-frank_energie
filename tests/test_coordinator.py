@@ -2951,8 +2951,9 @@ def test_prices_cover_date_accepts_mixed_interval_resolutions(
     )
 
 
+@pytest.mark.parametrize("gas_minutes", (15, 60))
 @pytest.mark.parametrize(
-    ("market_day", "electricity_periods", "gas_periods"),
+    ("market_day", "electricity_periods", "gas_quarters"),
     (
         (date(2026, 3, 29), 92, 20),
         (date(2026, 7, 20), 96, 24),
@@ -2964,17 +2965,18 @@ def test_tomorrow_gas_prices_end_at_six_local_on_dst_days(
     mock_config_entry: MockConfigEntry,
     market_day: date,
     electricity_periods: int,
-    gas_periods: int,
+    gas_quarters: int,
+    gas_minutes: int,
 ) -> None:
-    """Accept only published gas through local 06:00 on all DST day lengths."""
+    """Accept hourly and quarterly gas until 06:00 on every DST day length."""
     mock_frank_energie.is_authenticated = False
     coordinator = _price_coordinator_for_cache_test(
         mock_frank_energie, mock_config_entry, None
     )
-    prices = _tomorrow_prices_for_gas_window(market_day, gas_minutes=15)
+    prices = _tomorrow_prices_for_gas_window(market_day, gas_minutes=gas_minutes)
 
     assert len(prices.electricity.all) == electricity_periods
-    assert len(prices.gas.all) == gas_periods
+    assert len(prices.gas.all) == gas_quarters * 15 // gas_minutes
     assert coordinator._tomorrow_prices_complete(prices, market_day)
     # A full gas calendar day is still required by today's cache validation.
     assert (
