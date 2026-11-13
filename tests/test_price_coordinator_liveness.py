@@ -1,6 +1,7 @@
 """Regression tests for price coordinator refresh scheduling."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,22 +10,36 @@ from python_frank_energie.models import MarketPrices, PriceData
 from custom_components.frank_energie.coordinator import FrankEnergiePriceCoordinator
 
 
-def _market_prices_dated(*iso_starts: str) -> MarketPrices:
-    """Minimal real MarketPrices with one electricity entry per ISO start."""
-    raw = [
-        {
-            "from": iso,
-            "till": iso,
-            "marketPrice": 0.1,
-            "marketPriceTax": 0.02,
-            "sourcingMarkupPrice": 0.01,
-            "energyTaxPrice": 0.1,
-        }
-        for iso in iso_starts
-    ]
+def _market_prices_dated(day: date) -> MarketPrices:
+    """Create complete synthetic electricity and gas intervals for one local day."""
+    local_tz = ZoneInfo("Europe/Amsterdam")
+    day_start = datetime.combine(day, time.min, local_tz).astimezone(UTC)
+    day_end = datetime.combine(
+        day + timedelta(days=1), time.min, local_tz
+    ).astimezone(UTC)
+
+    def _build_series(energy_type: str, minutes: int) -> PriceData:
+        """Build real provider-style intervals without relying on entry counts."""
+        price_rows: list[dict[str, object]] = []
+        current = day_start
+        while current < day_end:
+            following = min(current + timedelta(minutes=minutes), day_end)
+            price_rows.append(
+                {
+                    "from": current.isoformat(),
+                    "till": following.isoformat(),
+                    "marketPrice": 0.1,
+                    "marketPriceTax": 0.02,
+                    "sourcingMarkupPrice": 0.01,
+                    "energyTaxPrice": 0.1,
+                }
+            )
+            current = following
+        return PriceData(price_rows, energy_type=energy_type)
+
     return MarketPrices(
-        electricity=PriceData(raw, energy_type="electricity"),
-        gas=PriceData([], energy_type="gas"),
+        electricity=_build_series("electricity", 15),
+        gas=_build_series("gas", 60),
         energy_country="NL",
     )
 
@@ -37,9 +52,7 @@ def price_coordinator() -> FrankEnergiePriceCoordinator:
     coordinator = FrankEnergiePriceCoordinator(
         MagicMock(), config_entry, MagicMock(), MagicMock()
     )
-    coordinator.cached_prices_tomorrow = _market_prices_dated(
-        "2026-08-31T22:00:00.000Z"
-    )
+    coordinator.cached_prices_tomorrow = _market_prices_dated(date(2026, 9, 1))
     coordinator.last_fetch_tomorrow = datetime(2026, 8, 31, 11, tzinfo=UTC)
     coordinator.update_interval = None
     return coordinator
@@ -91,9 +104,7 @@ def test_fetch_just_after_local_midnight_counts_as_today(
     now_utc = datetime(2026, 8, 31, 22, 30, tzinfo=UTC)
     price_coordinator.last_fetch_tomorrow = now_utc
     # Cache holds prices for the new "tomorrow", Amsterdam 2026-09-02.
-    price_coordinator.cached_prices_tomorrow = _market_prices_dated(
-        "2026-09-01T22:00:00.000Z"
-    )
+    price_coordinator.cached_prices_tomorrow = _market_prices_dated(date(2026, 9, 2))
 
     price_coordinator._adjust_update_interval(now_utc)
 
