@@ -2830,6 +2830,23 @@ def _full_day_market_prices(
     )
 
 
+def _tomorrow_prices_for_gas_window(
+    day: date, *, gas_minutes: int = 60
+) -> MarketPrices:
+    """Build a complete electricity day and gas prices through 06:00 local."""
+    prices = _full_day_market_prices(day, gas_minutes=gas_minutes)
+    tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
+    gas_cutoff = datetime.combine(
+        day, datetime.min.time().replace(hour=6), tz_amsterdam
+    ).astimezone(UTC)
+    prices.gas.price_data = [
+        price
+        for price in prices.gas.all
+        if price.date_till.astimezone(UTC) <= gas_cutoff
+    ]
+    return prices
+
+
 def _market_prices_for_cache_test(
     electricity_start: str | None, gas_start: str | None
 ) -> MarketPrices:
@@ -2934,10 +2951,104 @@ def test_prices_cover_date_accepts_mixed_interval_resolutions(
     )
 
 
+@pytest.mark.parametrize(
+    ("market_day", "electricity_periods", "gas_periods"),
+    (
+        (date(2026, 3, 29), 92, 20),
+        (date(2026, 7, 20), 96, 24),
+        (date(2026, 10, 25), 100, 28),
+    ),
+)
+def test_tomorrow_gas_prices_end_at_six_local_on_dst_days(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    market_day: date,
+    electricity_periods: int,
+    gas_periods: int,
+) -> None:
+    """Accept only published gas through local 06:00 on all DST day lengths."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    prices = _tomorrow_prices_for_gas_window(market_day, gas_minutes=15)
+
+    assert len(prices.electricity.all) == electricity_periods
+    assert len(prices.gas.all) == gas_periods
+    assert coordinator._tomorrow_prices_complete(prices, market_day)
+    # A full gas calendar day is still required by today's cache validation.
+    assert (
+        coordinator._prices_cover_date(
+            prices, market_day, required_contracts={"ELECTRICITY", "GAS"}
+        )
+        is False
+    )
+
+
+@pytest.mark.parametrize("invalidity", ("gap", "overlap", "truncated"))
+def test_tomorrow_gas_window_rejects_missing_price_intervals(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    invalidity: str,
+) -> None:
+    """Keep retrying when gas intervals are missing before 06:00 local."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    tomorrow = date(2026, 11, 14)
+    prices = _tomorrow_prices_for_gas_window(tomorrow, gas_minutes=15)
+    if invalidity == "gap":
+        prices.gas.price_data.pop(6)
+    elif invalidity == "overlap":
+        prices.gas.price_data.insert(6, prices.gas.price_data[5])
+    else:
+        del prices.gas.price_data[12:]
+
+    assert coordinator._tomorrow_prices_complete(prices, tomorrow) is False
+
+
+@pytest.mark.parametrize("contract", ("GAS", "ELECTRICITY"))
+def test_tomorrow_price_window_preserves_single_contract_sites(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    contract: str,
+) -> None:
+    """Require 00:00–06:00 gas only for GAS sites, whole day for electricity."""
+    mock_frank_energie.is_authenticated = True
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, [contract]
+    )
+    tomorrow = date(2026, 11, 14)
+    prices = _tomorrow_prices_for_gas_window(tomorrow)
+    if contract == "GAS":
+        prices.electricity.price_data.clear()
+    else:
+        prices.gas.price_data.clear()
+
+    assert coordinator._tomorrow_prices_complete(prices, tomorrow)
+
+
+def test_tomorrow_full_electricity_required_with_six_hour_gas(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Missing electricity intervals still invalidate complete early gas."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    tomorrow = date(2026, 11, 14)
+    prices = _tomorrow_prices_for_gas_window(tomorrow)
+    prices.electricity.price_data.pop(40)
+
+    assert coordinator._tomorrow_prices_complete(prices, tomorrow) is False
+
+
 async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     mock_frank_energie: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
-    """A six-hour gas response cannot mark tomorrow complete; merge later prices."""
+    """Retry three hours of missing gas within the published six-hour window."""
     mock_frank_energie.is_authenticated = False
     coordinator = _price_coordinator_for_cache_test(
         mock_frank_energie, mock_config_entry, None
@@ -2945,10 +3056,11 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     today = date(2026, 11, 13)
     tomorrow = date(2026, 11, 14)
     fetched_at = datetime(2026, 11, 13, 12, 15, tzinfo=UTC)
-    first = _full_day_market_prices(tomorrow, gas_minutes=15)
-    remaining = _full_day_market_prices(tomorrow, electricity=False, gas_minutes=15)
-    first.gas.price_data = first.gas.price_data[:24]
-    remaining.gas.price_data = remaining.gas.price_data[24:]
+    first = _tomorrow_prices_for_gas_window(tomorrow, gas_minutes=15)
+    remaining = _tomorrow_prices_for_gas_window(tomorrow, gas_minutes=15)
+    remaining.electricity.price_data.clear()
+    first.gas.price_data = first.gas.price_data[:12]
+    remaining.gas.price_data = remaining.gas.price_data[12:]
     coordinator._fetch_tomorrow_data = AsyncMock(side_effect=(first, remaining))
 
     first_result = await coordinator._refresh_tomorrow_cache(
@@ -2956,7 +3068,7 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     )
     assert first_result is first
     assert len(first_result.electricity.all) == 96
-    assert len(first_result.gas.all) == 24
+    assert len(first_result.gas.all) == 12
     assert coordinator.last_fetch_tomorrow is None
     coordinator._adjust_update_interval(fetched_at)
     assert coordinator.update_interval == timedelta(minutes=5)
@@ -2966,7 +3078,7 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     assert completed is coordinator.cached_prices_tomorrow
     assert completed is not None
     assert len(completed.electricity.all) == 96
-    assert len(completed.gas.all) == 96
+    assert len(completed.gas.all) == 24
     assert coordinator.last_fetch_tomorrow == next_fetch
     assert coordinator._fetch_tomorrow_data.await_count == 2
 
