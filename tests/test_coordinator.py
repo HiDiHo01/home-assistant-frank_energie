@@ -2433,9 +2433,7 @@ async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
 
     multi_day_prices = _full_day_market_prices(tomorrow)
     following_day_prices = _full_day_market_prices(tomorrow + timedelta(days=1))
-    multi_day_prices.electricity.price_data.extend(
-        following_day_prices.electricity.all
-    )
+    multi_day_prices.electricity.price_data.extend(following_day_prices.electricity.all)
     multi_day_prices.gas.price_data.extend(following_day_prices.gas.all)
     coordinator.cached_prices_tomorrow = multi_day_prices
     coordinator.last_fetch_tomorrow = now_utc
@@ -2547,9 +2545,7 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
         mock_config_entry, options={"resolution": "PT15M"}
     )
     price_coordinator.last_fetch_today = now_utc
-    price_coordinator._static_prices_today = _full_day_market_prices(
-        date(2026, 7, 20)
-    )
+    price_coordinator._static_prices_today = _full_day_market_prices(date(2026, 7, 20))
 
     price_coordinator.last_fetch_tomorrow = now_utc
     price_coordinator.cached_prices_tomorrow = _full_day_market_prices(
@@ -2894,9 +2890,7 @@ def test_prices_cover_date_rejects_incomplete_intervals(
 ) -> None:
     """Reject missing, duplicate or truncated intervals for either commodity."""
     market_day = date(2026, 11, 14)
-    prices = _full_day_market_prices(
-        market_day, electricity_minutes=15, gas_minutes=15
-    )
+    prices = _full_day_market_prices(market_day, electricity_minutes=15, gas_minutes=15)
     series = getattr(prices, commodity)
     if invalidity == "gap":
         series.price_data.pop(10)
@@ -2939,9 +2933,7 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     tomorrow = date(2026, 11, 14)
     fetched_at = datetime(2026, 11, 13, 12, 15, tzinfo=UTC)
     first = _full_day_market_prices(tomorrow, gas_minutes=15)
-    remaining = _full_day_market_prices(
-        tomorrow, electricity=False, gas_minutes=15
-    )
+    remaining = _full_day_market_prices(tomorrow, electricity=False, gas_minutes=15)
     first.gas.price_data = first.gas.price_data[:24]
     remaining.gas.price_data = remaining.gas.price_data[24:]
     coordinator._fetch_tomorrow_data = AsyncMock(side_effect=(first, remaining))
@@ -2957,9 +2949,7 @@ async def test_partial_gas_day_requires_retry_and_merges_new_intervals(
     assert coordinator.update_interval == timedelta(minutes=5)
 
     next_fetch = fetched_at + timedelta(minutes=5)
-    completed = await coordinator._refresh_tomorrow_cache(
-        today, tomorrow, next_fetch
-    )
+    completed = await coordinator._refresh_tomorrow_cache(today, tomorrow, next_fetch)
     assert completed is coordinator.cached_prices_tomorrow
     assert completed is not None
     assert len(completed.electricity.all) == 96
@@ -2988,7 +2978,6 @@ async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
     today = date(2026, 11, 13)
     tomorrow = date(2026, 11, 14)
     today_start = "2026-11-12T23:00:00Z"
-    tomorrow_start = "2026-11-13T23:00:00Z"
     coordinator._static_prices_today = _market_prices_for_cache_test(
         today_start, today_start
     )
@@ -3042,7 +3031,6 @@ def test_unauthenticated_public_prices_require_both_commodities(
     )
     today_start = "2026-11-12T23:00:00Z"
     yesterday_start = "2026-11-11T23:00:00Z"
-    tomorrow_start = "2026-11-13T23:00:00Z"
     if today_prices == "gas-only":
         coordinator._static_prices_today = _market_prices_for_cache_test(
             None, today_start
@@ -3119,7 +3107,6 @@ def test_known_single_contract_does_not_require_second_commodity_from_disk(
         mock_frank_energie, mock_config_entry, [contract]
     )
     today_start = "2026-11-12T23:00:00Z"
-    tomorrow_start = "2026-11-13T23:00:00Z"
     coordinator._static_prices_today = _market_prices_for_cache_test(
         today_start, today_start
     )
@@ -3153,7 +3140,6 @@ async def test_partial_tomorrow_prices_retry_missing_commodity_next_refresh(
     today = date(2026, 7, 20)
     tomorrow = date(2026, 7, 21)
     fetched_at = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
-    tomorrow_start = "2026-07-20T22:00:00Z"
 
     first_prices = _full_day_market_prices(
         tomorrow,
