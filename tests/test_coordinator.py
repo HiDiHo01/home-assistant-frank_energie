@@ -2882,9 +2882,12 @@ def test_known_single_contract_does_not_require_second_commodity_from_disk(
     )
 
     assert coordinator._price_contracts() == {contract}
-    assert coordinator._tomorrow_prices_complete(
-        single_contract_prices, date(2026, 11, 14)
-    ) is True
+    assert (
+        coordinator._tomorrow_prices_complete(
+            single_contract_prices, date(2026, 11, 14)
+        )
+        is True
+    )
 
 
 @pytest.mark.parametrize("first_commodity", ("gas", "electricity"))
