@@ -1341,7 +1341,7 @@ async def test_price_coordinator_skipped_when_cached(
 
     # Mock cached tomorrow prices as available, genuinely dated tomorrow, and
     # fetched today.
-    tomorrow_prices = _make_market_prices("2026-05-27T22:00:00.000Z")
+    tomorrow_prices = _full_day_market_prices(date(2026, 5, 28))
     price_coordinator.cached_prices_tomorrow = tomorrow_prices
     price_coordinator.last_fetch_tomorrow = mock_now
 
@@ -1644,15 +1644,15 @@ async def test_full_day_cycle_fetch_promote_refetch(
 
     # "Today" fetches, keyed by the local date being fetched as of.
     today_fetches = {
-        day1: _make_market_prices("2026-07-20T10:00:00.000Z"),
-        day2: _make_market_prices("2026-07-21T10:00:00.000Z"),
-        day3: _make_market_prices("2026-07-22T10:00:00.000Z"),
+        day1: _full_day_market_prices(day1),
+        day2: _full_day_market_prices(day2),
+        day3: _full_day_market_prices(day3),
     }
     # "Tomorrow" fetches, keyed by the tomorrow date being fetched.
     tomorrow_fetches = {
-        day2: _make_market_prices("2026-07-20T22:00:00.000Z"),
-        day3: _make_market_prices("2026-07-21T22:00:00.000Z"),
-        day4: _make_market_prices("2026-07-22T22:00:00.000Z"),
+        day2: _full_day_market_prices(day2),
+        day3: _full_day_market_prices(day3),
+        day4: _full_day_market_prices(day4),
     }
 
     async def fake_fetch_prices_with_fallback(start_date, end_date, use_fallback=True):
@@ -1755,12 +1755,12 @@ async def test_full_day_cycle_survives_contract_resolution_change(
     coordinator._fetch_contract_price_resolution_state = AsyncMock(return_value=None)
     coordinator.store.async_save = AsyncMock()
 
-    day1_today = _make_market_prices_with_resolution(15, "2026-07-31T10:00:00.000Z")
-    day1_tomorrow = _make_market_prices_with_resolution(
-        60, "2026-07-31T22:00:00.000Z"
+    day1_today = _full_day_market_prices(day1, electricity_minutes=15)
+    day1_tomorrow = _full_day_market_prices(
+        day2, electricity_minutes=60
     )  # day2, already on the new resolution
-    day2_tomorrow = _make_market_prices_with_resolution(
-        60, "2026-08-01T22:00:00.000Z"
+    day2_tomorrow = _full_day_market_prices(
+        day3, electricity_minutes=60
     )  # day3, resolution has settled
 
     today_fetches = {day1: day1_today}
@@ -1782,9 +1782,9 @@ async def test_full_day_cycle_survives_contract_resolution_change(
     result = await coordinator._async_update_data()
 
     merged_electricity = result[DATA_ELECTRICITY]
-    assert len(merged_electricity.today) == 1
+    assert len(merged_electricity.today) == 96
     assert merged_electricity.today[0].date_from.astimezone(tz).date() == day1
-    assert len(merged_electricity.tomorrow) == 1
+    assert len(merged_electricity.tomorrow) == 24
     assert merged_electricity.tomorrow[0].date_from.astimezone(tz).date() == day2
 
     # --- Midnight day1 -> day2: promote tomorrow's (60min) cache ---
@@ -1811,7 +1811,7 @@ async def test_full_day_cycle_survives_contract_resolution_change(
     result_day2 = await coordinator._async_update_data()
 
     assert coordinator.cached_prices_tomorrow is day2_tomorrow
-    assert len(result_day2[DATA_ELECTRICITY].tomorrow) == 1
+    assert len(result_day2[DATA_ELECTRICITY].tomorrow) == 24
     assert (
         result_day2[DATA_ELECTRICITY].tomorrow[0].date_from.astimezone(tz).date()
         == day3
@@ -2369,7 +2369,7 @@ async def test_refresh_tomorrow_cache_returns_valid_same_day_cache(
     tomorrow = date(2026, 7, 21)
     now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
 
-    valid_tomorrow_prices = _make_market_prices("2026-07-20T22:00:00.000Z")
+    valid_tomorrow_prices = _full_day_market_prices(date(2026, 7, 21))
     coordinator.cached_prices_tomorrow = valid_tomorrow_prices
     coordinator.last_fetch_tomorrow = now_utc
 
@@ -2431,10 +2431,12 @@ async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
     tomorrow = date(2026, 7, 21)
     now_utc = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
 
-    multi_day_prices = _make_market_prices(
-        "2026-07-20T22:00:00.000Z",  # tomorrow (local)
-        "2026-07-21T22:00:00.000Z",  # day after tomorrow (local)
+    multi_day_prices = _full_day_market_prices(tomorrow)
+    following_day_prices = _full_day_market_prices(tomorrow + timedelta(days=1))
+    multi_day_prices.electricity.price_data.extend(
+        following_day_prices.electricity.all
     )
+    multi_day_prices.gas.price_data.extend(following_day_prices.gas.all)
     coordinator.cached_prices_tomorrow = multi_day_prices
     coordinator.last_fetch_tomorrow = now_utc
 
@@ -2545,13 +2547,13 @@ async def test_is_cache_fresh_accepts_valid_same_day_tomorrow_cache(
         mock_config_entry, options={"resolution": "PT15M"}
     )
     price_coordinator.last_fetch_today = now_utc
-    price_coordinator._static_prices_today = _make_market_prices(
-        "2026-07-20T10:00:00.000Z"
+    price_coordinator._static_prices_today = _full_day_market_prices(
+        date(2026, 7, 20)
     )
 
     price_coordinator.last_fetch_tomorrow = now_utc
-    price_coordinator.cached_prices_tomorrow = _make_market_prices(
-        "2026-07-20T22:00:00.000Z"  # genuinely tomorrow (local)
+    price_coordinator.cached_prices_tomorrow = _full_day_market_prices(
+        date(2026, 7, 21)
     )
 
     assert price_coordinator._is_cache_fresh(now_utc) is True
@@ -2649,7 +2651,7 @@ def test_prices_cover_date_gas_only_site() -> None:
 
     prices = MarketPrices(
         electricity=PriceData([], energy_type="electricity"),
-        gas=_make_gas_price_data("2026-07-20T10:00:00.000Z"),
+        gas=_full_day_price_data(date(2026, 7, 20), "gas", 60),
         energy_country="NL",
     )
 
@@ -2733,7 +2735,7 @@ async def test_async_update_data_does_not_stamp_stale_today_fallback(
     freezer.move_to(datetime(2026, 7, 20, 10, 0, tzinfo=tz))
     now_utc = dt_util.utcnow()
 
-    today_prices = _make_market_prices("2026-07-20T08:00:00.000Z")
+    today_prices = _full_day_market_prices(date(2026, 7, 20))
     coordinator._fetch_prices_with_fallback = AsyncMock(return_value=today_prices)
 
     await coordinator._async_update_data()
@@ -2771,7 +2773,7 @@ async def test_async_update_data_refetches_stale_today_cache(
     coordinator._static_prices_today = _make_market_prices("2026-07-19T10:00:00.000Z")
     coordinator.last_fetch_today = now_utc - timedelta(hours=2)
 
-    today_prices = _make_market_prices("2026-07-20T08:00:00.000Z")
+    today_prices = _full_day_market_prices(date(2026, 7, 20))
     coordinator._fetch_prices_with_fallback = AsyncMock(return_value=today_prices)
 
     await coordinator._async_update_data()
