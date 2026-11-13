@@ -2418,7 +2418,7 @@ async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
     Regression test raised in code review: tightening the date check to
     require every entry to match tomorrow exactly (rather than tomorrow or
     later) would incorrectly discard legitimately-cached multi-day API
-    windows, which _price_data_after/_build_tomorrow_cache/
+    windows, which _price_data_after/
     promote_tomorrow_prices are specifically designed to preserve.
     """
     from datetime import date
