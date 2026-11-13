@@ -2804,6 +2804,73 @@ def _price_coordinator_for_cache_test(
     return prices
 
 
+@pytest.mark.parametrize("first_commodity", ("gas", "electricity"))
+async def test_partial_tomorrow_prices_retry_missing_commodity_next_refresh(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    first_commodity: str,
+) -> None:
+    """Retry a missing contract's tomorrow prices without discarding the first."""
+
+    mock_frank_energie.is_authenticated = True
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, ["ELECTRICITY", "GAS"]
+    )
+    today = date(2026, 7, 20)
+    tomorrow = date(2026, 7, 21)
+    fetched_at = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+    tomorrow_start = "2026-07-20T22:00:00Z"
+
+    first_prices = _market_prices_for_cache_test(
+        tomorrow_start if first_commodity == "electricity" else None,
+        tomorrow_start if first_commodity == "gas" else None,
+    )
+    second_prices = _market_prices_for_cache_test(
+        tomorrow_start if first_commodity == "gas" else None,
+        tomorrow_start if first_commodity == "electricity" else None,
+    )
+    coordinator._fetch_tomorrow_data = AsyncMock(
+        side_effect=(first_prices, second_prices)
+    )
+
+    # A successful response for only one of the two contracts is incomplete.
+    first_result = await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, fetched_at
+    )
+
+    assert first_result is first_prices
+    assert coordinator.cached_prices_tomorrow is first_prices
+    assert coordinator.last_fetch_tomorrow is None
+    coordinator._adjust_update_interval(fetched_at)
+    assert coordinator.update_interval == timedelta(minutes=5)
+
+    # The next refresh retries the API, fills the missing contract and keeps
+    # the previously fetched commodity; only now is the cache marked complete.
+    next_fetch = fetched_at + timedelta(minutes=5)
+    second_result = await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, next_fetch
+    )
+
+    assert second_result is coordinator.cached_prices_tomorrow
+    assert second_result is not None
+    assert len(second_result.electricity.all) == 1
+    assert len(second_result.gas.all) == 1
+    assert getattr(second_result, first_commodity) is getattr(
+        first_prices, first_commodity
+    )
+    assert coordinator.last_fetch_tomorrow == next_fetch
+    assert coordinator._fetch_tomorrow_data.await_count == 2
+    coordinator._adjust_update_interval(next_fetch)
+    assert coordinator.update_interval == timedelta(minutes=15)
+
+    # Once both commodities are complete, an additional refresh uses the cache.
+    again = await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, next_fetch + timedelta(minutes=5)
+    )
+    assert again is coordinator.cached_prices_tomorrow
+    assert coordinator._fetch_tomorrow_data.await_count == 2
+
+
 @pytest.mark.parametrize("missing_commodity", ["electricity", "gas"])
 async def test_partial_today_prices_preserve_contract_cache_and_retry(
     mock_frank_energie: AsyncMock,
