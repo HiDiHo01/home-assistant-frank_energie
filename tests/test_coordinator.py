@@ -2836,7 +2836,7 @@ async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
     coordinator.cached_prices_tomorrow = incomplete
     coordinator.last_fetch_tomorrow = now_utc - timedelta(minutes=43)
 
-    assert coordinator._price_contracts() == set()
+    assert coordinator._price_contracts() == {"ELECTRICITY", "GAS"}
     assert coordinator._tomorrow_prices_complete(incomplete, tomorrow) is False
     assert coordinator._is_cache_fresh(now_utc) is False
     coordinator._adjust_update_interval(now_utc)
@@ -2858,6 +2858,91 @@ async def test_unauthed_restart_retries_incomplete_tomorrow_disk_cache(
     assert len(result.electricity.all) == 1
     assert len(result.gas.all) == 1
     assert coordinator.last_fetch_tomorrow == now_utc
+
+
+@pytest.mark.parametrize(
+    "today_prices",
+    ("missing", "gas-only", "historical-electricity"),
+)
+def test_unauthenticated_public_prices_require_both_commodities(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    today_prices: str,
+) -> None:
+    """Check the public price feed without relying on incomplete or old history."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    today_start = "2026-11-12T23:00:00Z"
+    yesterday_start = "2026-11-11T23:00:00Z"
+    tomorrow_start = "2026-11-13T23:00:00Z"
+    if today_prices == "gas-only":
+        coordinator._static_prices_today = _market_prices_for_cache_test(
+            None, today_start
+        )
+    elif today_prices == "historical-electricity":
+        coordinator._static_prices_today = _market_prices_for_cache_test(
+            yesterday_start, today_start
+        )
+
+    gas_only_tomorrow = _market_prices_for_cache_test(None, tomorrow_start)
+    both_tomorrow = _market_prices_for_cache_test(
+        tomorrow_start, tomorrow_start
+    )
+
+    assert coordinator._price_contracts() == {"ELECTRICITY", "GAS"}
+    assert (
+        coordinator._tomorrow_prices_complete(
+            gas_only_tomorrow, date(2026, 11, 14)
+        )
+        is False
+    )
+    assert coordinator._tomorrow_prices_complete(
+        both_tomorrow, date(2026, 11, 14)
+    )
+
+
+async def test_partial_disk_cache_clears_fetch_marker_before_empty_retry(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Preserve valid gas prices but clear the old success timestamp on an empty retry."""
+    mock_frank_energie.is_authenticated = False
+    coordinator = _price_coordinator_for_cache_test(
+        mock_frank_energie, mock_config_entry, None
+    )
+    now_utc = datetime(2026, 11, 13, 12, 58, tzinfo=UTC)
+    today = date(2026, 11, 13)
+    tomorrow = date(2026, 11, 14)
+    tomorrow_start = "2026-11-13T23:00:00Z"
+    partial = _market_prices_for_cache_test(None, tomorrow_start)
+    coordinator.cached_prices_tomorrow = partial
+    coordinator.last_fetch_tomorrow = now_utc - timedelta(minutes=43)
+
+    # Verify the prior marker is cleared before the request, even when there
+    # are no new prices to merge with the disk-restored gas series.
+    async def _fetch_no_prices(requested_day: date) -> None:
+        """Simulate an empty public API response with the old marker already gone."""
+        assert requested_day == tomorrow
+        assert coordinator.last_fetch_tomorrow is None
+        return None
+
+    coordinator._fetch_tomorrow_data = AsyncMock(side_effect=_fetch_no_prices)
+
+    result = await coordinator._refresh_tomorrow_cache(today, tomorrow, now_utc)
+
+    assert result is partial
+    assert coordinator.cached_prices_tomorrow is partial
+    assert coordinator.cached_prices_tomorrow.gas.all
+    assert coordinator.last_fetch_tomorrow is None
+    assert coordinator._fetch_tomorrow_data.await_count == 1
+
+    await coordinator._refresh_tomorrow_cache(
+        today, tomorrow, now_utc + timedelta(minutes=5)
+    )
+    assert coordinator._fetch_tomorrow_data.await_count == 2
+    assert coordinator.last_fetch_tomorrow is None
 
 
 @pytest.mark.parametrize("contract", ("ELECTRICITY", "GAS"))
