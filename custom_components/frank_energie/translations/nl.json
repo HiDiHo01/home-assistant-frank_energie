@@ -646,6 +646,9 @@
           "trees": "Bomen"
         }
       },
+      "meter_reading_day_completeness": {
+        "name": "Volledigheid laatste meterstanddag"
+      },
       "meter_type": {
         "name": "Meter",
         "state": {
