@@ -14,9 +14,9 @@ def _market_prices_dated(day: date) -> MarketPrices:
     """Create complete synthetic electricity and gas intervals for one local day."""
     local_tz = ZoneInfo("Europe/Amsterdam")
     day_start = datetime.combine(day, time.min, local_tz).astimezone(UTC)
-    day_end = datetime.combine(
-        day + timedelta(days=1), time.min, local_tz
-    ).astimezone(UTC)
+    day_end = datetime.combine(day + timedelta(days=1), time.min, local_tz).astimezone(
+        UTC
+    )
 
     def _build_series(energy_type: str, minutes: int) -> PriceData:
         """Build real provider-style intervals without relying on entry counts."""
