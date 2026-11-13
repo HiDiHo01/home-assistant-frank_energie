@@ -79,9 +79,8 @@ def test_month_summary_cost_attributes_when_summary_missing(sensor_key: str) -> 
 
     description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
 
-    assert description.attr_fn(
-        {const.DATA_MONTH_SUMMARY: None, const.DATA_INVOICES: None}
-    ) == {}
+    data = {const.DATA_MONTH_SUMMARY: None, const.DATA_INVOICES: None}
+    assert description.attr_fn(data) == {}
 
 
 def test_month_summary_cost_attributes_preserve_invoice_description() -> None:
