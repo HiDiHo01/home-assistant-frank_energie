@@ -719,13 +719,18 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         day: date,
         *,
         required_contracts: set[str] | None = None,
+        tomorrow_gas_window: bool = False,
     ) -> bool:
-        """Require full local-day coverage for every selected price commodity.
+        """Check uninterrupted coverage for the selected Amsterdam-local day.
 
-        Compare actual price intervals in UTC between Amsterdam-local
-        midnights. This handles hourly/quarter-hourly data and DST days
-        lasting 23, 24 or 25 hours without assuming a fixed entry count.
+        Today's series cover the whole calendar day. For the tomorrow cache,
+        gas is published only through 06:00 local time, while electricity
+        must cover the entire day. Independent local-time boundaries ensure
+        that DST transitions use the actual UTC duration of each window.
         """
+        if prices is None:
+            return False
+
         price_series_list = FrankEnergieCoordinator._price_series_for_contracts(
             prices, required_contracts
         )
@@ -737,19 +742,31 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         day_end = datetime.combine(
             day + timedelta(days=1), time.min, tz_amsterdam
         ).astimezone(UTC)
+        gas_end = (
+            datetime.combine(day, time(hour=6), tz_amsterdam).astimezone(UTC)
+            if tomorrow_gas_window
+            else day_end
+        )
         return all(
-            FrankEnergieCoordinator._price_series_covers_day(series, day_start, day_end)
+            FrankEnergieCoordinator._price_series_covers_day(
+                series,
+                day_start,
+                gas_end if series is prices.gas else day_end,
+            )
             for series in price_series_list
         )
 
     def _tomorrow_prices_complete(
         self, prices: MarketPrices | None, tomorrow: date
     ) -> bool:
-        """Require tomorrow's prices for the public feed or selected contracts."""
+        """Require full electricity and gas through 06:00 for tomorrow."""
         return self._tomorrow_cache_matches_date(
             prices, tomorrow
         ) and self._prices_cover_date(
-            prices, tomorrow, required_contracts=self._price_contracts()
+            prices,
+            tomorrow,
+            required_contracts=self._price_contracts(),
+            tomorrow_gas_window=True,
         )
 
     @staticmethod
