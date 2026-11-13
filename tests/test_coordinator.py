@@ -1476,8 +1476,7 @@ def test_midnight_rollover_clears_tomorrow_cache_for_multi_day_prices(
     assert coordinator.last_fetch_tomorrow is None
     assert coordinator._static_prices_today is not None
     assert {
-        price.date_from
-        for price in coordinator._static_prices_today.electricity.all
+        price.date_from for price in coordinator._static_prices_today.electricity.all
     } >= {
         datetime.fromisoformat(new_day.replace("Z", "+00:00")),
         datetime.fromisoformat(following_day.replace("Z", "+00:00")),
@@ -2287,7 +2286,6 @@ async def test_price_data_after_with_real_pricedata() -> None:
     # Metadata (e.g. resolution) must survive the rebuild.
     assert remaining_electricity.resolution_minutes == 15
     assert remaining_gas is None
-
 
 
 def _make_market_prices(*entry_date_isos: str):
