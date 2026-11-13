@@ -2244,6 +2244,7 @@ async def test_coordinator_helpers() -> None:
     assert FrankEnergiePriceCoordinator._merge_prices(base, new_prices) == "merged"
     base.__add__.assert_called_once_with(new_prices)
 
+
 @pytest.mark.asyncio
 async def test_price_data_after_with_real_pricedata() -> None:
     """Filter a real multi-day PriceData without losing resolution metadata."""
@@ -2418,8 +2419,8 @@ async def test_refresh_tomorrow_cache_accepts_legitimate_multi_day_window(
     Regression test raised in code review: tightening the date check to
     require every entry to match tomorrow exactly (rather than tomorrow or
     later) would incorrectly discard legitimately-cached multi-day API
-    windows, which _price_data_after/
-    promote_tomorrow_prices are specifically designed to preserve.
+    windows, whose future-dated entries remain in the combined price data
+    after promote_tomorrow_prices clears the dedicated tomorrow cache.
     """
     from datetime import date
 
