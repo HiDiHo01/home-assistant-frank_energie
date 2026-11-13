@@ -644,11 +644,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         unsorted series can't slip a today-dated entry past validation.
 
         Entries dated *after* tomorrow are accepted too (`>=`, not `==`): the
-        API can return multi-day windows, and _price_data_after/
-        _build_tomorrow_cache (see promote_tomorrow_prices) deliberately
-        preserve that leftover data as the next day's tomorrow cache. None of
-        that is stale, so rejecting anything past tomorrow would discard
-        legitimately-cached multi-day data.
+        API can return multi-day windows. Rollover preserves those entries in
+        combined price history while clearing the separate tomorrow cache.
+        Rejecting anything past tomorrow would discard valid multi-day data.
         """
         price_series = FrankEnergieCoordinator._price_series_for_contracts(
             cached_prices_tomorrow
@@ -1812,38 +1810,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return base + new_prices
         return base or new_prices
 
-    @staticmethod
-    def _build_tomorrow_cache(
-        prices_tomorrow: MarketPrices,
-        remaining_electricity: PriceData | None,
-        remaining_gas: PriceData | None,
-    ) -> MarketPrices | None:
-        """Build the new tomorrow cache using the remaining prices."""
-        if remaining_electricity is None and remaining_gas is None:
-            return None
-
-        return MarketPrices(
-            electricity=remaining_electricity
-            or (
-                replace(prices_tomorrow.electricity, prices=[])
-                if prices_tomorrow.electricity
-                else None
-            ),
-            gas=remaining_gas
-            or (
-                replace(prices_tomorrow.gas, prices=[]) if prices_tomorrow.gas else None
-            ),
-            energy_country=prices_tomorrow.energy_country,
-            energy_type=prices_tomorrow.energy_type,
-        )
-
     def promote_tomorrow_prices(self) -> None:
-        """Promote cached tomorrow prices to today's prices at local midnight.
+        """Promote tomorrow prices at Amsterdam midnight and clear tomorrow cache.
 
-        All cached price entries are promoted without any date filtering:
-        entries for the new today become today's prices, and entries dated
-        after the new today (the API may return multi-day windows) stay
-        available as the new tomorrow cache instead of being dropped.
+        Keep any multi-day entries in the combined price history, but clear the
+        dedicated tomorrow cache and fetch timestamp so the next day's cache
+        can only become valid after a new fetch.
         """
         prices_tomorrow = self.cached_prices_tomorrow
         if prices_tomorrow is None:
@@ -1852,6 +1824,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "(last_fetch_tomorrow=%s), today's prices will be refetched live",
                 self.last_fetch_tomorrow,
             )
+            self.last_fetch_tomorrow = None
             return
 
         new_today = dt_util.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
@@ -1878,7 +1851,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
 
         source_data = self.cached_prices or self.data
         if source_data is None:
-            _LOGGER.warning("Cannot promote tomorrow prices: no cached data available")
+            _LOGGER.warning(
+                "Cannot promote tomorrow prices: no cached data available; "
+                "clearing tomorrow cache for the new local day"
+            )
+            self.cached_prices_tomorrow = None
+            self.last_fetch_tomorrow = None
             return
 
         # Keep the combined data (yesterday + today) to prevent historical sensors
@@ -1941,14 +1919,10 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             energy_type=prices_tomorrow.energy_type,
         )
 
-        # Prices dated after the new today are still tomorrow's prices:
-        # promote them to the tomorrow cache instead of clearing it.
-        remaining_electricity = self._price_data_after(combined_electricity, new_today)
-        remaining_gas = self._price_data_after(combined_gas, new_today)
-
-        self.cached_prices_tomorrow = self._build_tomorrow_cache(
-            prices_tomorrow, remaining_electricity, remaining_gas
-        )
+        # Multi-day prices remain in updated_data, but the dedicated tomorrow
+        # cache is for the previous calendar day and must reset at midnight.
+        self.cached_prices_tomorrow = None
+        self.last_fetch_tomorrow = None
 
         self.cached_prices = updated_data
         self.data = updated_data
@@ -1960,17 +1934,11 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             len(prices_tomorrow.electricity.all) if prices_tomorrow.electricity else 0
         )
         promoted_gas = len(prices_tomorrow.gas.all) if prices_tomorrow.gas else 0
-        kept_elec = len(remaining_electricity.all) if remaining_electricity else 0
-        kept_gas = len(remaining_gas.all) if remaining_gas else 0
-
         _LOGGER.debug(
-            "Promoted %s electricity and %s gas price entries from tomorrow to "
-            "today's prices (%s electricity and %s gas price entries kept for "
-            "the new tomorrow)",
+            "Promoted %s electricity and %s gas price entries to today; "
+            "cleared the dedicated tomorrow cache",
             promoted_elec,
             promoted_gas,
-            kept_elec,
-            kept_gas,
         )
 
     def get_pv_system_metadata(self, system_id: str) -> dict[str, Any]:
