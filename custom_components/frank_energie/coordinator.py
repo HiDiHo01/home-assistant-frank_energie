@@ -721,11 +721,25 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
     def _tomorrow_prices_complete(
         self, prices: MarketPrices | None, tomorrow: date
     ) -> bool:
-        """Check tomorrow's dates and every commodity required by the site."""
+        """Check required contracts, including those inferred from cached today prices."""
+        required_contracts = self._price_contracts()
+        if not required_contracts and self._static_prices_today is not None:
+            # At startup, authentication and site discovery may not be ready.
+            # The restored today cache can still show which commodities were
+            # available; do not mistake a gas-only tomorrow cache for complete.
+            required_contracts = {
+                kind
+                for kind, series in (
+                    ("ELECTRICITY", self._static_prices_today.electricity),
+                    ("GAS", self._static_prices_today.gas),
+                )
+                if series is not None and series.all
+            }
+
         return self._tomorrow_cache_matches_date(
             prices, tomorrow
         ) and self._prices_cover_date(
-            prices, tomorrow, required_contracts=self._price_contracts()
+            prices, tomorrow, required_contracts=required_contracts
         )
 
     @staticmethod
