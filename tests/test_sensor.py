@@ -18,7 +18,8 @@ from python_frank_energie.domain import (
     SmartPvOperationalStatus,
     SmartPvSteeringStatus,
 )
-from python_frank_energie.models import MonthSummary, PriceData
+from python_frank_energie.exceptions import RequestException
+from python_frank_energie.models import Invoice, Invoices, MonthSummary, PriceData
 
 from custom_components.frank_energie import const
 from custom_components.frank_energie.device_inventory import (
@@ -2511,3 +2512,241 @@ def test_parse_contract_product_name() -> None:
 
     # Verify uppercase month handling
     assert _parse_contract_product_name("DEC") == {"DEC": "Startmaand: december"}
+@pytest.mark.parametrize("amount", (0.0, 24.5, -8.25))
+def test_month_summary_zero_costs_from_real_sdk_parser(amount: float) -> None:
+    """Keep zero and signed amounts across all existing monthly cost sensors."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    summary = MonthSummary.from_dict(
+        {
+            "data": {
+                "monthSummary": {
+                    "_id": "synthetic-monthly-summary",
+                    "actualCostsUntilLastMeterReadingDate": amount,
+                    "expectedCostsUntilLastMeterReadingDate": amount,
+                    "expectedCosts": amount,
+                    "lastMeterReadingDate": "2026-11-12",
+                    "meterReadingDayCompleteness": 0.5,
+                    "gasExcluded": False,
+                    "__typename": "MonthSummaryPayload",
+                }
+            }
+        }
+    )
+    assert summary is not None
+    data = {const.DATA_MONTH_SUMMARY: summary, const.DATA_INVOICES: None}
+    descriptions = {desc.key: desc for desc in SENSOR_TYPES}
+
+    for key in _MONTH_SUMMARY_COST_KEYS:
+        assert descriptions[key].value_fn(data) is not None, key
+    for key in (
+        "actual_costs_until_last_meter_reading_date",
+        "expected_costs_until_last_meter_reading_date",
+        "expected_costs_this_month",
+    ):
+        assert descriptions[key].value_fn(data) == pytest.approx(amount)
+    assert descriptions["difference_costs_until_last_meter_reading_date"].value_fn(
+        data
+    ) == pytest.approx(0.0)
+    if amount == 0.0:
+        for key in _MONTH_SUMMARY_COST_KEYS:
+            assert descriptions[key].value_fn(data) == 0.0, key
+
+
+def test_month_summary_null_forecast_remains_unknown_after_sdk_parsing() -> None:
+    """A nullable forecast must not become a numeric zero in the integration."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    summary = MonthSummary.from_dict(
+        {
+            "data": {
+                "monthSummary": {
+                    "_id": "synthetic-null-forecast",
+                    "actualCostsUntilLastMeterReadingDate": 0.0,
+                    "expectedCostsUntilLastMeterReadingDate": 0.0,
+                    "expectedCosts": None,
+                    "lastMeterReadingDate": "2026-11-12",
+                    "meterReadingDayCompleteness": 1,
+                    "gasExcluded": False,
+                    "__typename": "MonthSummaryPayload",
+                }
+            }
+        }
+    )
+    assert summary is not None
+    descriptions = {desc.key: desc for desc in SENSOR_TYPES}
+    data = {const.DATA_MONTH_SUMMARY: summary}
+    assert descriptions["expected_costs_this_month"].value_fn(data) is None
+    assert descriptions["expected_costs_per_day_this_month"].value_fn(data) is None
+    assert descriptions["actual_costs_until_last_meter_reading_date"].value_fn(
+        data
+    ) == 0.0
+
+
+@pytest.mark.parametrize(
+    "invalid_field",
+    (
+        "actualCostsUntilLastMeterReadingDate",
+        "expectedCostsUntilLastMeterReadingDate",
+    ),
+)
+def test_month_summary_sdk_rejects_missing_required_cost(
+    invalid_field: str,
+) -> None:
+    """Check the real SDK parser does not coerce a required null amount to zero."""
+    payload = {
+        "_id": "synthetic-invalid-summary",
+        "actualCostsUntilLastMeterReadingDate": 0.0,
+        "expectedCostsUntilLastMeterReadingDate": 0.0,
+        "expectedCosts": 0.0,
+        "lastMeterReadingDate": "2026-11-12",
+        "meterReadingDayCompleteness": 1,
+        "gasExcluded": False,
+        "__typename": "MonthSummaryPayload",
+    }
+    payload[invalid_field] = None
+
+    with pytest.raises(RequestException):
+        MonthSummary.from_dict({"data": {"monthSummary": payload}})
+
+
+@pytest.mark.parametrize("invalid_amount", (None, "invalid", True, float("nan")))
+def test_month_summary_invalid_values_do_not_become_zero(
+    invalid_amount: object,
+) -> None:
+    """Treat absent, malformed, boolean and non-finite monetary values as unknown."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    descriptions = {desc.key: desc for desc in SENSOR_TYPES}
+    summary = SimpleNamespace(
+        actualCostsUntilLastMeterReadingDate=invalid_amount,
+        expectedCostsUntilLastMeterReadingDate=invalid_amount,
+        expectedCosts=invalid_amount,
+        expectedCostsPerDay=invalid_amount,
+        costs_per_day_till_now=invalid_amount,
+        differenceUntilLastMeterReadingDate=invalid_amount,
+        differenceUntilLastMeterReadingDateAvg=invalid_amount,
+    )
+    data = {const.DATA_MONTH_SUMMARY: summary}
+
+    for key in _MONTH_SUMMARY_COST_KEYS:
+        assert descriptions[key].value_fn(data) is None, key
+
+
+@pytest.mark.parametrize("amount", (0.0, 15.25, -9.5))
+def test_invoice_amounts_from_real_sdk_parser(amount: float) -> None:
+    """Accept signed or zero invoice amounts while preserving period attributes."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    invoice = Invoice.from_dict(
+        {
+            "id": "synthetic-invoice",
+            "startDate": "2026-11-01T00:00:00+00:00",
+            "periodDescription": "November 2026",
+            "totalAmount": amount,
+        }
+    )
+    assert invoice is not None
+    invoices = Invoices(
+        previous_period_invoice=invoice,
+        current_period_invoice=invoice,
+        upcoming_period_invoice=invoice,
+        all_periods_invoices=[invoice],
+        total_costs_this_year=amount,
+        total_costs_previous_year=amount,
+    )
+    descriptions = {desc.key: desc for desc in SENSOR_TYPES}
+    data = {const.DATA_INVOICES: invoices, const.DATA_USER: None}
+    for key in (
+        "invoice_previous_period",
+        "invoice_current_period",
+        "invoice_upcoming_period",
+        "costs_this_year",
+        "costs_previous_year",
+        "total_costs",
+    ):
+        assert descriptions[key].value_fn(data) == pytest.approx(amount), key
+    assert descriptions["invoice_upcoming_period"].attr_fn(data)["Description"] == (
+        "November 2026"
+    )
+
+
+@pytest.mark.parametrize("invalid_amount", (None, "not-a-number"))
+def test_sdk_invoice_parser_rejects_unverified_amount(
+    invalid_amount: object,
+) -> None:
+    """Null and malformed upstream invoice amounts are not validated zeros."""
+    with pytest.raises(RequestException):
+        Invoice.from_dict(
+            {
+                "id": "synthetic-invalid-invoice",
+                "startDate": "2026-11-01T00:00:00+00:00",
+                "periodDescription": "November 2026",
+                "totalAmount": invalid_amount,
+            }
+        )
+
+
+def test_missing_invoices_and_invalid_period_amounts_remain_unknown() -> None:
+    """An empty invoice collection or invalid invoice amount is not zero."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    descriptions = {desc.key: desc for desc in SENSOR_TYPES}
+    data = {const.DATA_INVOICES: Invoices()}
+    for key in (
+        "invoice_previous_period",
+        "invoice_current_period",
+        "invoice_upcoming_period",
+        "costs_this_year",
+        "costs_previous_year",
+        "total_costs",
+    ):
+        assert descriptions[key].value_fn(data) is None, key
+
+    data[const.DATA_INVOICES] = SimpleNamespace(
+        current_period_invoice=SimpleNamespace(TotalAmount=None)
+    )
+    assert descriptions["invoice_current_period"].value_fn(data) is None
+
+
+@pytest.mark.parametrize("completeness", (0.0, 0.5, 1.0, None))
+def test_month_summary_source_metadata_distinguishes_reading_and_fetch(
+    completeness: float | None,
+) -> None:
+    """An older meter cutoff is valid, and fetch time must be independent."""
+    from types import SimpleNamespace
+
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    fetched_at = datetime(2026, 11, 13, 12, 2, 23, tzinfo=UTC)
+    summary = SimpleNamespace(
+        lastMeterReadingDate="2026-11-12",
+        meterReadingDayCompleteness=completeness,
+        expectedCosts=0.0,
+    )
+    description = next(
+        desc for desc in SENSOR_TYPES if desc.key == "expected_costs_this_month"
+    )
+    data = {
+        const.DATA_MONTH_SUMMARY: summary,
+        const.DATA_MONTH_SUMMARY_FETCHED_AT: fetched_at,
+        const.DATA_INVOICES: None,
+    }
+    assert description.value_fn(data) == 0.0
+    attrs = description.attr_fn(data)
+    assert attrs[const.ATTR_LAST_UPDATE] == "2026-11-12"
+    assert attrs["last_meter_reading_date"] == "2026-11-12"
+    assert attrs["source_updated_at"] == "2026-11-13T12:02:23+00:00"
+    assert "period" not in attrs
+    if completeness is None:
+        assert "meter_reading_day_completeness" not in attrs
+    else:
+        assert attrs["meter_reading_day_completeness"] == completeness
+
+    data[const.DATA_MONTH_SUMMARY_FETCHED_AT] = None
+    assert "source_updated_at" not in description.attr_fn(data)
+
