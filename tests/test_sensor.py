@@ -2580,9 +2580,9 @@ def test_month_summary_null_forecast_remains_unknown_after_sdk_parsing() -> None
     data = {const.DATA_MONTH_SUMMARY: summary}
     assert descriptions["expected_costs_this_month"].value_fn(data) is None
     assert descriptions["expected_costs_per_day_this_month"].value_fn(data) is None
-    assert descriptions["actual_costs_until_last_meter_reading_date"].value_fn(
-        data
-    ) == 0.0
+    assert (
+        descriptions["actual_costs_until_last_meter_reading_date"].value_fn(data) == 0.0
+    )
 
 
 @pytest.mark.parametrize(
@@ -2751,4 +2751,3 @@ def test_month_summary_source_metadata_distinguishes_reading_and_fetch(
 
     data[const.DATA_MONTH_SUMMARY_FETCHED_AT] = None
     assert "source_updated_at" not in description.attr_fn(data)
-
