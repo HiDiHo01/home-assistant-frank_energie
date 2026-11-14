@@ -4513,6 +4513,8 @@ class TestFindLowestConsecutiveHours:
         prices = self._make_prices([0.1, float("nan"), 0.1])
 
         assert coordinator._find_lowest_consecutive_hours(prices, 2) is None
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("last_day", "next_day"),
