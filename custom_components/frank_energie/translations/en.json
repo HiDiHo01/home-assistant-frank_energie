@@ -405,6 +405,20 @@
       }
     },
     "sensor": {
+        "month_insights_electricity_expected_costs": {"name": "Expected electricity costs (MonthInsights)"},
+        "month_insights_electricity_actual_usage": {"name": "Actual electricity usage (MonthInsights)"},
+        "month_insights_electricity_actual_average_unit_price": {"name": "Actual average electricity unit price (MonthInsights)"},
+        "month_insights_electricity_actual_costs": {"name": "Actual electricity costs (MonthInsights)"},
+        "month_insights_electricity_expected_usage": {"name": "Expected electricity usage (MonthInsights)"},
+        "month_insights_electricity_expected_average_unit_price": {"name": "Expected average electricity unit price (MonthInsights)"},
+        "month_insights_electricity_expected_costs_comparison": {"name": "Expected electricity costs comparison (MonthInsights)"},
+        "month_insights_gas_expected_costs": {"name": "Expected gas costs (MonthInsights)"},
+        "month_insights_gas_actual_usage": {"name": "Actual gas usage (MonthInsights)"},
+        "month_insights_gas_actual_average_unit_price": {"name": "Actual average gas unit price (MonthInsights)"},
+        "month_insights_gas_actual_costs": {"name": "Actual gas costs (MonthInsights)"},
+        "month_insights_gas_expected_usage": {"name": "Expected gas usage (MonthInsights)"},
+        "month_insights_gas_expected_average_unit_price": {"name": "Expected average gas unit price (MonthInsights)"},
+        "month_insights_gas_expected_costs_comparison": {"name": "Expected gas costs comparison (MonthInsights)"},
       "smart_hvac_device_count": {
         "name": "Connected devices"
       },
