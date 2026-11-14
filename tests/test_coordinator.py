@@ -4614,9 +4614,7 @@ async def test_statistics_replaces_retained_estimate_when_new_summary_arrives(
         second = await coordinator._async_update_data()
     coordinator.data = second
     assert second[DATA_MONTH_SUMMARY] is initial_summary
-    assert second[DATA_MONTH_SUMMARY_FETCHED_AT] == first[
-        DATA_MONTH_SUMMARY_FETCHED_AT
-    ]
+    assert second[DATA_MONTH_SUMMARY_FETCHED_AT] == first[DATA_MONTH_SUMMARY_FETCHED_AT]
 
     with freeze_time("2026-12-01T12:10:00+00:00"):
         third = await coordinator._async_update_data()
@@ -4639,9 +4637,7 @@ async def test_statistics_monthly_estimate_is_scoped_to_delivery_site(
     )
     coordinator._should_skip_api_calls = MagicMock(return_value=False)
     previous_summary = SimpleNamespace(expectedCosts=15.0)
-    coordinator._fetch_month_summary = AsyncMock(
-        side_effect=[previous_summary, None]
-    )
+    coordinator._fetch_month_summary = AsyncMock(side_effect=[previous_summary, None])
     coordinator._fetch_period_usage = AsyncMock(return_value=None)
 
     first = await coordinator._async_update_data()
@@ -4673,4 +4669,3 @@ async def test_statistics_does_not_fabricate_estimate_after_fresh_start(
     result = await coordinator._async_update_data()
     assert result[DATA_MONTH_SUMMARY] is None
     assert result[DATA_MONTH_SUMMARY_FETCHED_AT] is None
-
