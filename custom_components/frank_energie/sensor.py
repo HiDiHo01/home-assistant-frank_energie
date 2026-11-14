@@ -1636,7 +1636,6 @@ def _sensor_unique_id(
     return f"{entry.unique_id}.{legacy_key}"
 
 
-
 def _monetary_amount(value: object) -> float | None:
     """Accept finite numeric monetary amounts, including zero and negatives."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
