@@ -1,6 +1,6 @@
 ---
 name: frank-energie-development
-description: Develop, debug, review, and test the Frank Energie Home Assistant custom integration. Use for PR review, bug fixes, config flows, price and contract resolution, coordinators, entity platforms, EV charging, Smart HVAC/Smart heating, batteries, translations, API errors, security, migrations, and CI/quality-scale work in home-assistant-frank_energie.
+description: Develop, debug, review, test, and maintain release version consistency for the Frank Energie Home Assistant custom integration. Use for PR review, bug fixes, config flows, price and contract resolution, coordinators, entity platforms, EV charging, Smart HVAC/Smart heating, batteries, translations, API errors, security, migrations, and CI/quality-scale work in home-assistant-frank_energie.
 ---
 
 # Frank Energie development and review
@@ -29,6 +29,7 @@ This skill is a task workflow, not a replacement for repository policy.
 
 ## Select the task mode
 
+- **Integration-only release version bump:** Follow the [version synchronization and SDK-preservation checklist](../../../AGENTS.md#integration-only-release-version-bumps). Check all version-bearing files, preserve unchanged client dependencies, and review the entire PR diff before reporting completion.
 - **Review only:** Inspect the current PR diff, changed-file context, open review threads, and check results; report only reproducible, actionable findings with severity, file/line, impact, and fix. Do not edit code, post comments, or resolve conversations unless requested.
 - **Implement or refine:** Reproduce/verify the problem, identify affected contracts and data flows, make the smallest complete change, add regression tests, validate, and inspect the diff. Do not create a new PR for changes to an existing PR unless requested.
 - **Address review findings:** Independently validate each finding against the current head. Fix still-valid defects and explain skipped or outdated findings. Do not resolve a conversation without confirming the concern is addressed.
