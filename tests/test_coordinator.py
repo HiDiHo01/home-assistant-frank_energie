@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from freezegun import freeze_time
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -18,6 +19,7 @@ from custom_components.frank_energie.const import (
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
+    DATA_MONTH_SUMMARY_FETCHED_AT,
     DATA_USER,
     DATA_USER_SMART_FEED_IN,
     DATA_USER_SMART_FEED_IN_FETCHED,
@@ -4511,3 +4513,162 @@ class TestFindLowestConsecutiveHours:
         prices = self._make_prices([0.1, float("nan"), 0.1])
 
         assert coordinator._find_lowest_consecutive_hours(prices, 2) is None
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("last_day", "next_day"),
+    (
+        ("2026-11-30T12:02:23+00:00", "2026-12-01T12:05:00+00:00"),
+        ("2026-12-31T12:02:23+00:00", "2027-01-01T12:05:00+00:00"),
+    ),
+)
+async def test_statistics_preserves_last_month_estimate_and_source_time(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    last_day: str,
+    next_day: str,
+) -> None:
+    """Keep the last verified estimate during rollover without pretending it is fresh."""
+    from custom_components.frank_energie.sensor import SENSOR_TYPES
+
+    settings_coordinator = MagicMock()
+    settings_coordinator.data = {}
+    coordinator = FrankEnergieStatisticsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    summary = MonthSummary.from_dict(
+        {
+            "data": {
+                "monthSummary": {
+                    "_id": "synthetic-rollover-summary",
+                    "actualCostsUntilLastMeterReadingDate": 0.0,
+                    "expectedCostsUntilLastMeterReadingDate": 0.0,
+                    "expectedCosts": 101.25,
+                    "lastMeterReadingDate": last_day[:10],
+                    "meterReadingDayCompleteness": 0.5,
+                    "gasExcluded": False,
+                    "__typename": "MonthSummaryPayload",
+                }
+            }
+        }
+    )
+    assert summary is not None
+    coordinator._fetch_month_summary = AsyncMock(side_effect=[summary, None, None])
+    coordinator._fetch_period_usage = AsyncMock(return_value=None)
+    forecast_description = next(
+        desc for desc in SENSOR_TYPES if desc.key == "expected_costs_this_month"
+    )
+
+    with freeze_time(last_day):
+        first_result = await coordinator._async_update_data()
+    coordinator.data = first_result
+    original_fetched_at = first_result[DATA_MONTH_SUMMARY_FETCHED_AT]
+    assert original_fetched_at == datetime.fromisoformat(last_day)
+    assert forecast_description.value_fn(first_result) == 101.25
+
+    with freeze_time(next_day):
+        retained_result = await coordinator._async_update_data()
+    assert retained_result[DATA_MONTH_SUMMARY] is summary
+    assert retained_result[DATA_MONTH_SUMMARY_FETCHED_AT] == original_fetched_at
+    assert forecast_description.value_fn(retained_result) == 101.25
+    assert (
+        forecast_description.attr_fn(retained_result)["source_updated_at"]
+        == original_fetched_at.isoformat()
+    )
+    assert "period" not in forecast_description.attr_fn(retained_result)
+    coordinator.data = retained_result
+
+    with freeze_time(next_day):
+        repeated_result = await coordinator._async_update_data()
+    assert repeated_result[DATA_MONTH_SUMMARY_FETCHED_AT] == original_fetched_at
+    assert repeated_result[DATA_MONTH_SUMMARY] is summary
+    assert coordinator._fetch_month_summary.await_count == 3
+    assert coordinator._fetch_period_usage.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_statistics_replaces_retained_estimate_when_new_summary_arrives(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Replace cached MonthSummary only after the provider supplies a valid newer one."""
+    settings_coordinator = MagicMock()
+    settings_coordinator.data = {}
+    coordinator = FrankEnergieStatisticsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    initial_summary = SimpleNamespace(expectedCosts=20.0)
+    updated_summary = SimpleNamespace(expectedCosts=35.0)
+    coordinator._fetch_month_summary = AsyncMock(
+        side_effect=[initial_summary, None, updated_summary]
+    )
+    coordinator._fetch_period_usage = AsyncMock(return_value=None)
+
+    with freeze_time("2026-11-30T12:00:00+00:00"):
+        first = await coordinator._async_update_data()
+    coordinator.data = first
+    with freeze_time("2026-12-01T12:00:00+00:00"):
+        second = await coordinator._async_update_data()
+    coordinator.data = second
+    assert second[DATA_MONTH_SUMMARY] is initial_summary
+    assert second[DATA_MONTH_SUMMARY_FETCHED_AT] == first[
+        DATA_MONTH_SUMMARY_FETCHED_AT
+    ]
+
+    with freeze_time("2026-12-01T12:10:00+00:00"):
+        third = await coordinator._async_update_data()
+    assert third[DATA_MONTH_SUMMARY] is updated_summary
+    assert third[DATA_MONTH_SUMMARY_FETCHED_AT] == datetime(
+        2026, 12, 1, 12, 10, tzinfo=UTC
+    )
+
+
+@pytest.mark.asyncio
+async def test_statistics_monthly_estimate_is_scoped_to_delivery_site(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Never carry a previous site's forecast into a different selected site."""
+    settings_coordinator = MagicMock()
+    settings_coordinator.data = {}
+    coordinator = FrankEnergieStatisticsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    previous_summary = SimpleNamespace(expectedCosts=15.0)
+    coordinator._fetch_month_summary = AsyncMock(
+        side_effect=[previous_summary, None]
+    )
+    coordinator._fetch_period_usage = AsyncMock(return_value=None)
+
+    first = await coordinator._async_update_data()
+    coordinator.data = first
+    assert first[DATA_MONTH_SUMMARY] is previous_summary
+    assert first[DATA_MONTH_SUMMARY_FETCHED_AT] is not None
+
+    mock_config_entry.data["site_reference"] = "different-site"
+    second = await coordinator._async_update_data()
+    assert second[DATA_MONTH_SUMMARY] is None
+    assert second[DATA_MONTH_SUMMARY_FETCHED_AT] is None
+
+
+@pytest.mark.asyncio
+async def test_statistics_does_not_fabricate_estimate_after_fresh_start(
+    mock_frank_energie: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """An empty coordinator after restart has no estimate or source timestamp."""
+    settings_coordinator = MagicMock()
+    settings_coordinator.data = {}
+    coordinator = FrankEnergieStatisticsCoordinator(
+        MagicMock(), mock_config_entry, mock_frank_energie, settings_coordinator
+    )
+    coordinator._should_skip_api_calls = MagicMock(return_value=False)
+    coordinator._fetch_month_summary = AsyncMock(return_value=None)
+    coordinator._fetch_period_usage = AsyncMock(return_value=None)
+
+    result = await coordinator._async_update_data()
+    assert result[DATA_MONTH_SUMMARY] is None
+    assert result[DATA_MONTH_SUMMARY_FETCHED_AT] is None
+
