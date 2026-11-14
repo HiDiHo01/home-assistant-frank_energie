@@ -2642,20 +2642,30 @@ def test_invoice_amounts_from_real_sdk_parser(amount: float) -> None:
     """Accept signed or zero invoice amounts while preserving period attributes."""
     from custom_components.frank_energie.sensor import SENSOR_TYPES
 
+    current_year = dt.now().year
     invoice = Invoice.from_dict(
         {
             "id": "synthetic-invoice",
-            "startDate": "2026-11-01T00:00:00+00:00",
-            "periodDescription": "November 2026",
+            "startDate": f"{current_year}-11-01T00:00:00+00:00",
+            "periodDescription": f"November {current_year}",
+            "totalAmount": amount,
+        }
+    )
+    previous_invoice = Invoice.from_dict(
+        {
+            "id": "synthetic-previous-invoice",
+            "startDate": f"{current_year - 1}-11-01T00:00:00+00:00",
+            "periodDescription": f"November {current_year - 1}",
             "totalAmount": amount,
         }
     )
     assert invoice is not None
+    assert previous_invoice is not None
     invoices = Invoices(
-        previous_period_invoice=invoice,
+        previous_period_invoice=previous_invoice,
         current_period_invoice=invoice,
         upcoming_period_invoice=invoice,
-        all_periods_invoices=[invoice],
+        all_periods_invoices=[invoice, previous_invoice],
         total_costs_this_year=amount,
         total_costs_previous_year=amount,
     )
@@ -2667,11 +2677,11 @@ def test_invoice_amounts_from_real_sdk_parser(amount: float) -> None:
         "invoice_upcoming_period",
         "costs_this_year",
         "costs_previous_year",
-        "total_costs",
     ):
         assert descriptions[key].value_fn(data) == pytest.approx(amount), key
+    assert descriptions["total_costs"].value_fn(data) == pytest.approx(2 * amount)
     assert descriptions["invoice_upcoming_period"].attr_fn(data)["Description"] == (
-        "November 2026"
+        f"November {current_year}"
     )
 
 
@@ -2713,6 +2723,22 @@ def test_missing_invoices_and_invalid_period_amounts_remain_unknown() -> None:
         current_period_invoice=SimpleNamespace(TotalAmount=None)
     )
     assert descriptions["invoice_current_period"].value_fn(data) is None
+
+    # A reported SDK aggregate defaults to zero if a year has no invoices;
+    # the sensor must not mistake that default for a verified zero invoice.
+    prior_year = dt.now().year - 2
+    historical = Invoice.from_dict(
+        {
+            "id": "synthetic-historical-invoice",
+            "startDate": f"{prior_year}-11-01T00:00:00+00:00",
+            "periodDescription": f"November {prior_year}",
+            "totalAmount": 5.0,
+        }
+    )
+    assert historical is not None
+    data[const.DATA_INVOICES] = Invoices(all_periods_invoices=[historical])
+    assert descriptions["costs_this_year"].value_fn(data) is None
+    assert descriptions["costs_previous_year"].value_fn(data) is None
 
 
 @pytest.mark.parametrize("completeness", (0.0, 0.5, 1.0, None))
