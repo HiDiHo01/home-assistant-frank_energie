@@ -215,6 +215,7 @@ DATA_CONTRACT_PRICE_RESOLUTION_STATE: Final[str] = "contract_price_resolution_st
 DATA_ELECTRICITY: Final[str] = "electricity"
 DATA_GAS: Final[str] = "gas"
 DATA_MONTH_SUMMARY: Final[str] = "month_summary"
+DATA_MONTH_SUMMARY_FETCHED_AT: Final[str] = "month_summary_fetched_at"
 DATA_INVOICES: Final[str] = "invoices"
 DATA_USAGE: Final[str] = "usage"
 DATA_USER: Final[str] = "user"
