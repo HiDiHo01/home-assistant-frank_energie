@@ -30,35 +30,40 @@ FIELDS = (
 )
 
 
-def _insights(*, gas_excluded: bool = False, gas_unit: str = "m3",
-              electricity_unit: str = "kWh") -> MonthInsights:
+def _insights(
+    *, gas_excluded: bool = False, gas_unit: str = "m3", electricity_unit: str = "kWh"
+) -> MonthInsights:
     """Parse a sanitized GraphQL response with deliberately distinct amounts."""
     result = MonthInsights.from_dict(
-        {"data": {"monthInsights": {
-            "_id": "synthetic|2026-11",
-            "lastMeterReadingDate": "2026-11-13T00:00:00+00:00",
-            "gasExcluded": gas_excluded,
-            "expectedCostsGas": 71.5,
-            "expectedCostsElectricity": 52.5,
-            "gasDifference": {
-                "actualUsage": 4.0,
-                "actualAverageUnitPrice": 1.5,
-                "actualCosts": 6.0,
-                "expectedUsage": 8.0,
-                "expectedAverageUnitPrice": 2.5,
-                "expectedCosts": 20.0,
-                "unit": gas_unit,
-            },
-            "electricityDifference": {
-                "actualUsage": 14.0,
-                "actualAverageUnitPrice": 0.25,
-                "actualCosts": 3.5,
-                "expectedUsage": 18.0,
-                "expectedAverageUnitPrice": 0.35,
-                "expectedCosts": 6.3,
-                "unit": electricity_unit,
-            },
-        }}}
+        {
+            "data": {
+                "monthInsights": {
+                    "_id": "synthetic|2026-11",
+                    "lastMeterReadingDate": "2026-11-13T00:00:00+00:00",
+                    "gasExcluded": gas_excluded,
+                    "expectedCostsGas": 71.5,
+                    "expectedCostsElectricity": 52.5,
+                    "gasDifference": {
+                        "actualUsage": 4.0,
+                        "actualAverageUnitPrice": 1.5,
+                        "actualCosts": 6.0,
+                        "expectedUsage": 8.0,
+                        "expectedAverageUnitPrice": 2.5,
+                        "expectedCosts": 20.0,
+                        "unit": gas_unit,
+                    },
+                    "electricityDifference": {
+                        "actualUsage": 14.0,
+                        "actualAverageUnitPrice": 0.25,
+                        "actualCosts": 3.5,
+                        "expectedUsage": 18.0,
+                        "expectedAverageUnitPrice": 0.35,
+                        "expectedCosts": 6.3,
+                        "unit": electricity_unit,
+                    },
+                }
+            }
+        }
     )
     assert result is not None
     return result
@@ -67,7 +72,8 @@ def _insights(*, gas_excluded: bool = False, gas_unit: str = "m3",
 def _description(commodity: str, metric: str):
     """Return an independently keyed monthly finance description."""
     return next(
-        item for item in SENSOR_TYPES
+        item
+        for item in SENSOR_TYPES
         if item.key == f"month_insights_{commodity}_{metric}"
     )
 
@@ -79,7 +85,10 @@ def test_all_fourteen_cost_fields(commodity: str, metric: str, field: str) -> No
     insights = _insights()
     description = _description(commodity, metric)
     expected = (
-        getattr(insights, "expectedCostsGas" if commodity == "gas" else "expectedCostsElectricity")
+        getattr(
+            insights,
+            "expectedCostsGas" if commodity == "gas" else "expectedCostsElectricity",
+        )
         if field == "component"
         else getattr(getattr(insights, f"{commodity}Difference"), field)
     )
@@ -106,36 +115,47 @@ def test_registration_has_fourteen_unique_scoped_descriptions() -> None:
 @pytest.mark.parametrize("metric,field", FIELDS)
 def test_missing_insights_is_unknown(commodity: str, metric: str, field: str) -> None:
     """Absent MonthInsights cannot be turned into a valid numeric value."""
-    assert _description(commodity, metric).value_fn(
-        {const.DATA_MONTH_INSIGHTS: None}
-    ) is None
+    assert (
+        _description(commodity, metric).value_fn({const.DATA_MONTH_INSIGHTS: None})
+        is None
+    )
 
 
 @pytest.mark.parametrize("commodity", ("electricity", "gas"))
 def test_current_sdk_missing_numeric_fields_are_not_fabricated(commodity: str) -> None:
     """Reject SDK-defaulted zeros that cannot be distinguished from source null."""
     insights = MonthInsights.from_dict(
-        {"data": {"monthInsights": {
-            "_id": "synthetic|2026-11",
-            "lastMeterReadingDate": "2026-11-13T00:00:00+00:00",
-            f"{commodity}Difference": {
-                "unit": "m3" if commodity == "gas" else "kWh"
-            },
-        }}}
+        {
+            "data": {
+                "monthInsights": {
+                    "_id": "synthetic|2026-11",
+                    "lastMeterReadingDate": "2026-11-13T00:00:00+00:00",
+                    f"{commodity}Difference": {
+                        "unit": "m3" if commodity == "gas" else "kWh"
+                    },
+                }
+            }
+        }
     )
     assert insights is not None
     for metric, _field in FIELDS:
-        assert _description(commodity, metric).value_fn(
-            {const.DATA_MONTH_INSIGHTS: insights}
-        ) is None
+        assert (
+            _description(commodity, metric).value_fn(
+                {const.DATA_MONTH_INSIGHTS: insights}
+            )
+            is None
+        )
 
 
 @pytest.mark.parametrize("metric,field", FIELDS)
 def test_gas_excluded_is_not_reported(metric: str, field: str) -> None:
     """Gas-excluded statements must not claim real gas usage or costs."""
-    assert _description("gas", metric).value_fn(
-        {const.DATA_MONTH_INSIGHTS: _insights(gas_excluded=True)}
-    ) is None
+    assert (
+        _description("gas", metric).value_fn(
+            {const.DATA_MONTH_INSIGHTS: _insights(gas_excluded=True)}
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize("unit", ("", "unexpected", "m3"))
@@ -143,14 +163,20 @@ def test_invalid_electricity_unit_blocks_usage_and_prices(unit: str) -> None:
     """Never manufacture a kWh conversion from missing or gas volume units."""
     data = {const.DATA_MONTH_INSIGHTS: _insights(electricity_unit=unit)}
     assert _description("electricity", "actual_usage").value_fn(data) is None
-    assert _description("electricity", "expected_average_unit_price").value_fn(data) is None
+    assert (
+        _description("electricity", "expected_average_unit_price").value_fn(data)
+        is None
+    )
 
 
-@pytest.mark.parametrize("commodity,unit,expected", [
-    ("electricity", "kWh", UnitOfEnergy.KILO_WATT_HOUR),
-    ("gas", "m3", UnitOfVolume.CUBIC_METERS),
-    ("gas", "kWh", UnitOfEnergy.KILO_WATT_HOUR),
-])
+@pytest.mark.parametrize(
+    "commodity,unit,expected",
+    [
+        ("electricity", "kWh", UnitOfEnergy.KILO_WATT_HOUR),
+        ("gas", "m3", UnitOfVolume.CUBIC_METERS),
+        ("gas", "kWh", UnitOfEnergy.KILO_WATT_HOUR),
+    ],
+)
 def test_dynamic_units(commodity: str, unit: str, expected: str) -> None:
     """Use the provider's known unit instead of assuming every gas site is m³."""
     insights = _insights(
@@ -185,10 +211,16 @@ def test_month_attributes_do_not_leak_source_identifier() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("segments,calls", [
-    ({"GAS"}, 1), ({"ELECTRICITY"}, 1), ({"GAS", "ELECTRICITY"}, 1),
-    (set(), 0), (None, 0),
-])
+@pytest.mark.parametrize(
+    "segments,calls",
+    [
+        ({"GAS"}, 1),
+        ({"ELECTRICITY"}, 1),
+        ({"GAS", "ELECTRICITY"}, 1),
+        (set(), 0),
+        (None, 0),
+    ],
+)
 async def test_only_known_authenticated_segments_are_queried(
     segments: set[str] | None, calls: int
 ) -> None:
@@ -197,8 +229,9 @@ async def test_only_known_authenticated_segments_are_queried(
     coordinator.api.is_authenticated = True
     coordinator.site_reference = "synthetic"
     coordinator.settings_coordinator.data = {
-        const.DATA_DELIVERY_SITE:
-            SimpleNamespace(segments=segments) if segments is not None else None,
+        const.DATA_DELIVERY_SITE: SimpleNamespace(segments=segments)
+        if segments is not None
+        else None,
     }
     coordinator.async_api_call = AsyncMock(return_value=_insights())
     result = await FrankEnergieStatisticsCoordinator._fetch_month_insights(
@@ -209,10 +242,16 @@ async def test_only_known_authenticated_segments_are_queried(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source_id", [
-    "synthetic|2026-10", "synthetic|2027-01",
-    "synthetic", "|2026-11", "synthetic|2026-11junk",
-])
+@pytest.mark.parametrize(
+    "source_id",
+    [
+        "synthetic|2026-10",
+        "synthetic|2027-01",
+        "synthetic",
+        "|2026-11",
+        "synthetic|2026-11junk",
+    ],
+)
 async def test_period_mismatch_is_rejected(source_id: str) -> None:
     """Reject stale month and year rollover payloads from the SDK."""
     coordinator = MagicMock()
@@ -224,9 +263,12 @@ async def test_period_mismatch_is_rejected(source_id: str) -> None:
     value = _insights()
     value._id = source_id
     coordinator.async_api_call = AsyncMock(return_value=value)
-    assert await FrankEnergieStatisticsCoordinator._fetch_month_insights(
-        coordinator, "2026-11"
-    ) is None
+    assert (
+        await FrankEnergieStatisticsCoordinator._fetch_month_insights(
+            coordinator, "2026-11"
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio

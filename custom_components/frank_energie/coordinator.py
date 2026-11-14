@@ -4199,12 +4199,14 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         period = today.strftime("%Y-%m")
 
         try:
-            data_month_summary, data_period_usage, data_month_insights = (
-                await asyncio.gather(
-                    self._fetch_month_summary(),
-                    self._fetch_period_usage(start_date),
-                    self._fetch_month_insights(period),
-                )
+            (
+                data_month_summary,
+                data_period_usage,
+                data_month_insights,
+            ) = await asyncio.gather(
+                self._fetch_month_summary(),
+                self._fetch_period_usage(start_date),
+                self._fetch_month_insights(period),
             )
             result = _empty_data()
             if self.settings_coordinator.data:

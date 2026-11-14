@@ -1759,12 +1759,16 @@ def _month_insights_value(
     else:
         difference = getattr(insights, f"{commodity}Difference", None)
         value = getattr(difference, field_name, None)
-        if field_name in (
-            "actualUsage",
-            "expectedUsage",
-            "actualAverageUnitPrice",
-            "expectedAverageUnitPrice",
-        ) and _month_insights_unit(data, commodity) is None:
+        if (
+            field_name
+            in (
+                "actualUsage",
+                "expectedUsage",
+                "actualAverageUnitPrice",
+                "expectedAverageUnitPrice",
+            )
+            and _month_insights_unit(data, commodity) is None
+        ):
             return None
     amount = _monetary_amount(value)
     return amount if amount is not None and amount != 0.0 else None
@@ -1832,7 +1836,6 @@ def _month_insights_descriptions() -> tuple[FrankEnergieEntityDescription, ...]:
                 )
             )
     return tuple(descriptions)
-
 
 
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
@@ -4357,8 +4360,10 @@ class FrankEnergieSensor(
                 return None
             commodity = "gas" if self.entity_description.is_gas else "electricity"
             unit = _month_insights_unit(self.coordinator.data, commodity)
-            return f"{CURRENCY_EURO}/{unit}" if kind == "unit_price" and unit else (
-                unit if kind == "usage" else None
+            return (
+                f"{CURRENCY_EURO}/{unit}"
+                if kind == "unit_price" and unit
+                else (unit if kind == "usage" else None)
             )
         if self._attr_unit_of_measurement == UNIT_GAS_NL:
             if (
