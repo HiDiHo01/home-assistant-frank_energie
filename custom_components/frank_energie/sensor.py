@@ -1655,9 +1655,16 @@ def _invoice_period_amount(data: FrankEnergieData, period_name: str) -> float | 
 
 
 def _invoice_year_total(data: FrankEnergieData, field_name: str) -> float | None:
-    """Require at least one actual invoice before exposing an aggregate."""
+    """Expose a year total only when invoices exist for that calendar year."""
     invoices = data.get(DATA_INVOICES)
-    if invoices is None or not getattr(invoices, "all_periods_invoices", None):
+    periods = getattr(invoices, "all_periods_invoices", None)
+    if not periods:
+        return None
+    target_year = dt_util.now().year - (field_name == "total_costs_previous_year")
+    if not any(
+        getattr(getattr(invoice, "StartDate", None), "year", None) == target_year
+        for invoice in periods
+    ):
         return None
     return _monetary_amount(getattr(invoices, field_name, None))
 
