@@ -165,6 +165,16 @@ Verify:
 
 Do not add dependency pins without a demonstrated compatibility or reproducibility requirement.
 
+### Integration-only release version bumps
+
+The Home Assistant integration version and the separately released `python-frank-energie` client version are independent. For an **integration-only** release bump:
+
+1. Keep the integration version synchronized in `custom_components/frank_energie/manifest.json` (`version`), `custom_components/frank_energie/const.py` (`VERSION` and its version/date comment where present), and `pyproject.toml` (`[tool.poetry].version`).
+2. Search the repository for the previous version and inspect each match. Classify it as integration metadata, a client-library dependency, a resolved lockfile entry, a client release/source reference, or historical documentation. Do not use a blind repository-wide replacement.
+3. Unless a **client upgrade is explicitly in scope**, preserve the runtime `python-frank-energie` pin in `manifest.json`, its Poetry dependency constraint, the resolved SDK version in `poetry.lock`, and SDK-specific documentation links. Never change config-entry schema versions merely to bump the integration release number.
+4. Verify that all three integration version values match and that SDK declarations remain as intended. Validate the manifest JSON, check the diff for unrelated changes, run `poetry check --lock` and relevant CI/test checks when available, and report checks not run. The release workflow updates the packaged manifest from the release tag; that does **not** replace synchronizing source version declarations before the release PR.
+
+
 ### Config entries and runtime data
 
 * Prefer config entries for integration setup.
