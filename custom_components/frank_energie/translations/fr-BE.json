@@ -405,6 +405,20 @@
       }
     },
     "sensor": {
+        "month_insights_electricity_expected_costs": {"name": "Coût prévu de l’électricité (MonthInsights)"},
+        "month_insights_electricity_actual_usage": {"name": "Consommation réelle d’électricité (MonthInsights)"},
+        "month_insights_electricity_actual_average_unit_price": {"name": "Prix unitaire réel moyen de l’électricité (MonthInsights)"},
+        "month_insights_electricity_actual_costs": {"name": "Coût réel de l’électricité (MonthInsights)"},
+        "month_insights_electricity_expected_usage": {"name": "Consommation prévue d’électricité (MonthInsights)"},
+        "month_insights_electricity_expected_average_unit_price": {"name": "Prix unitaire prévu moyen de l’électricité (MonthInsights)"},
+        "month_insights_electricity_expected_costs_comparison": {"name": "Comparaison du coût prévu de l’électricité (MonthInsights)"},
+        "month_insights_gas_expected_costs": {"name": "Coût prévu du gaz (MonthInsights)"},
+        "month_insights_gas_actual_usage": {"name": "Consommation réelle de gaz (MonthInsights)"},
+        "month_insights_gas_actual_average_unit_price": {"name": "Prix unitaire réel moyen du gaz (MonthInsights)"},
+        "month_insights_gas_actual_costs": {"name": "Coût réel du gaz (MonthInsights)"},
+        "month_insights_gas_expected_usage": {"name": "Consommation prévue de gaz (MonthInsights)"},
+        "month_insights_gas_expected_average_unit_price": {"name": "Prix unitaire prévu moyen du gaz (MonthInsights)"},
+        "month_insights_gas_expected_costs_comparison": {"name": "Comparaison du coût prévu du gaz (MonthInsights)"},
       "ean": {
         "name": "Code EAN"
       },

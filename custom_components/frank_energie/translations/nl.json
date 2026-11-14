@@ -133,6 +133,20 @@
   },
   "entity": {
     "sensor": {
+        "month_insights_electricity_expected_costs": {"name": "Verwachte elektriciteitskosten (MonthInsights)"},
+        "month_insights_electricity_actual_usage": {"name": "Werkelijk elektriciteitsverbruik (MonthInsights)"},
+        "month_insights_electricity_actual_average_unit_price": {"name": "Gemiddelde werkelijke elektriciteitsprijs (MonthInsights)"},
+        "month_insights_electricity_actual_costs": {"name": "Werkelijke elektriciteitskosten (MonthInsights)"},
+        "month_insights_electricity_expected_usage": {"name": "Verwacht elektriciteitsverbruik (MonthInsights)"},
+        "month_insights_electricity_expected_average_unit_price": {"name": "Gemiddelde verwachte elektriciteitsprijs (MonthInsights)"},
+        "month_insights_electricity_expected_costs_comparison": {"name": "Verwachte elektriciteitskosten vergelijking (MonthInsights)"},
+        "month_insights_gas_expected_costs": {"name": "Verwachte gaskosten (MonthInsights)"},
+        "month_insights_gas_actual_usage": {"name": "Werkelijk gasverbruik (MonthInsights)"},
+        "month_insights_gas_actual_average_unit_price": {"name": "Gemiddelde werkelijke gasprijs (MonthInsights)"},
+        "month_insights_gas_actual_costs": {"name": "Werkelijke gaskosten (MonthInsights)"},
+        "month_insights_gas_expected_usage": {"name": "Verwacht gasverbruik (MonthInsights)"},
+        "month_insights_gas_expected_average_unit_price": {"name": "Gemiddelde verwachte gasprijs (MonthInsights)"},
+        "month_insights_gas_expected_costs_comparison": {"name": "Verwachte gaskosten vergelijking (MonthInsights)"},
       "smart_hvac_device_count": {
         "name": "Gekoppelde apparaten"
       },

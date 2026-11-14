@@ -4,6 +4,23 @@ This document describes the architecture of the Frank Energie Home Assistant int
 
 The integration uses separate coordinators for prices, settings, statistics, invoices, batteries, chargers, vehicles, and PV systems. They share one API client per config entry while keeping their polling and availability independent.
 
+## Monthly financial insights
+
+The statistics coordinator fetches authenticated `MonthInsights` for the
+selected delivery site and the current Amsterdam calendar month. When the
+selected-site contract segments are known, the existing Costs device exposes
+seven electricity and/or seven gas sensors. All use the same cached response.
+The source ID must end in the requested `|YYYY-MM` suffix; the opaque prefix
+is never exposed in entity attributes or logs. Retained values are isolated
+by config entry, site, and month and preserve their original retrieval time.
+
+**Draft limitation:** `python-frank-energie==2026.11.13` synthesizes `0.0`
+for null/missing numeric values and fails to parse missing meter-reading dates.
+Until upstream parsing preserves null-versus-zero, zero amounts are unavailable
+rather than displayed as verified values. This deliberately leaves valid zeros
+unavailable and requires an SDK fix before this feature is merge-ready.
+The existing MonthSummary and invoice sensors remain unchanged.
+
 ## High-Level Architecture
 
 ```text
