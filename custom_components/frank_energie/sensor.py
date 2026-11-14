@@ -66,6 +66,7 @@ from .const import (
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
+    DATA_MONTH_SUMMARY_FETCHED_AT,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
     DATA_REFRESH_TOKEN_EXPIRES_AT,
@@ -1635,6 +1636,48 @@ def _sensor_unique_id(
     return f"{entry.unique_id}.{legacy_key}"
 
 
+
+def _monetary_amount(value: object) -> float | None:
+    """Accept finite numeric monetary amounts, including zero and negatives."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if isfinite(value) else None
+
+
+def _month_summary_cost(data: FrankEnergieData, field_name: str) -> float | None:
+    """Read an existing MonthSummary cost without converting zero to unknown."""
+    return _monetary_amount(getattr(data.get(DATA_MONTH_SUMMARY), field_name, None))
+
+
+def _invoice_period_amount(data: FrankEnergieData, period_name: str) -> float | None:
+    """Read a monetary amount only when its invoice period exists."""
+    invoice = getattr(data.get(DATA_INVOICES), period_name, None)
+    return _monetary_amount(getattr(invoice, "TotalAmount", None))
+
+
+def _invoice_year_total(data: FrankEnergieData, field_name: str) -> float | None:
+    """Require at least one actual invoice before exposing an aggregate."""
+    invoices = data.get(DATA_INVOICES)
+    if invoices is None or not getattr(invoices, "all_periods_invoices", None):
+        return None
+    return _monetary_amount(getattr(invoices, field_name, None))
+
+
+def _total_invoice_amount(data: FrankEnergieData) -> float | None:
+    """Sum existing invoices only if every amount is a valid numeric value."""
+    invoices = data.get(DATA_INVOICES)
+    periods = getattr(invoices, "all_periods_invoices", None)
+    if not periods:
+        return None
+    amounts = [
+        _monetary_amount(getattr(invoice, "TotalAmount", None))
+        for invoice in periods
+    ]
+    if any(amount is None for amount in amounts):
+        return None
+    return sum(amount for amount in amounts if amount is not None)
+
+
 def _month_summary_meter_attributes(data: FrankEnergieData) -> dict[str, object]:
     """Expose the last processed meter-reading date and day completeness."""
     summary = data.get(DATA_MONTH_SUMMARY)
@@ -1645,10 +1688,14 @@ def _month_summary_meter_attributes(data: FrankEnergieData) -> dict[str, object]
     reading = getattr(summary, "lastMeterReadingDate", None)
     if reading is not None:
         result[ATTR_LAST_UPDATE] = reading
+        result["last_meter_reading_date"] = reading
 
     completeness = getattr(summary, "meterReadingDayCompleteness", None)
     if completeness is not None:
         result["meter_reading_day_completeness"] = completeness
+    fetched_at = data.get(DATA_MONTH_SUMMARY_FETCHED_AT)
+    if isinstance(fetched_at, datetime) and fetched_at.tzinfo is not None:
+        result["source_updated_at"] = fetched_at.isoformat()
     return result
 
 
@@ -3033,12 +3080,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].actualCostsUntilLastMeterReadingDate
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].actualCostsUntilLastMeterReadingDate
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "actualCostsUntilLastMeterReadingDate"),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3050,12 +3092,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].expectedCostsUntilLastMeterReadingDate
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].expectedCostsUntilLastMeterReadingDate
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "expectedCostsUntilLastMeterReadingDate"),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3067,12 +3104,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDate
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDate
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "differenceUntilLastMeterReadingDate"),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3084,12 +3116,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDateAvg
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].differenceUntilLastMeterReadingDateAvg
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "differenceUntilLastMeterReadingDateAvg"),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3101,11 +3128,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].expectedCosts
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].expectedCosts
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "expectedCosts"),
         attr_fn=_monthly_cost_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3117,11 +3140,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].expectedCostsPerDay
-            if data[DATA_MONTH_SUMMARY] and data[DATA_MONTH_SUMMARY].expectedCostsPerDay
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "expectedCostsPerDay"),
         attr_fn=_monthly_cost_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3133,12 +3152,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: (
-            data[DATA_MONTH_SUMMARY].costs_per_day_till_now
-            if data[DATA_MONTH_SUMMARY]
-            and data[DATA_MONTH_SUMMARY].costs_per_day_till_now
-            else None
-        ),
+        value_fn=lambda data: _month_summary_cost(data, "costs_per_day_till_now"),
         attr_fn=_monthly_cost_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3151,13 +3165,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         invoice_based=True,
-        value_fn=lambda data: (
-            data[DATA_INVOICES].previous_period_invoice.TotalAmount
-            if data[DATA_INVOICES]
-            and data[DATA_INVOICES].previous_period_invoice
-            and data[DATA_INVOICES].previous_period_invoice.TotalAmount
-            else None
-        ),
+        value_fn=lambda data: _invoice_period_amount(data, "previous_period_invoice"),
         attr_fn=lambda data: (
             {
                 ATTR_START_DATE: data[DATA_INVOICES].previous_period_invoice.StartDate,
@@ -3183,13 +3191,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         invoice_based=True,
-        value_fn=lambda data: (
-            data[DATA_INVOICES].current_period_invoice.TotalAmount
-            if data[DATA_INVOICES]
-            and data[DATA_INVOICES].current_period_invoice
-            and data[DATA_INVOICES].current_period_invoice.TotalAmount
-            else None
-        ),
+        value_fn=lambda data: _invoice_period_amount(data, "current_period_invoice"),
         attr_fn=lambda data: (
             {
                 ATTR_START_DATE: data[DATA_INVOICES].current_period_invoice.StartDate,
@@ -3214,13 +3216,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         invoice_based=True,
-        value_fn=lambda data: (
-            data[DATA_INVOICES].upcoming_period_invoice.TotalAmount
-            if data[DATA_INVOICES]
-            and data[DATA_INVOICES].upcoming_period_invoice
-            and data[DATA_INVOICES].upcoming_period_invoice.TotalAmount
-            else None
-        ),
+        value_fn=lambda data: _invoice_period_amount(data, "upcoming_period_invoice"),
         attr_fn=lambda data: (
             {
                 ATTR_START_DATE: data[DATA_INVOICES].upcoming_period_invoice.StartDate,
@@ -3230,7 +3226,8 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             }
             if data[DATA_INVOICES]
             and data[DATA_INVOICES].upcoming_period_invoice
-            and data[DATA_INVOICES].upcoming_period_invoice.TotalAmount
+            and data[DATA_INVOICES].upcoming_period_invoice.StartDate
+            and data[DATA_INVOICES].upcoming_period_invoice.PeriodDescription
             else {}
         ),
     ),
@@ -3244,11 +3241,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         invoice_based=True,
-        value_fn=lambda data: (
-            data[DATA_INVOICES].total_costs_this_year
-            if data[DATA_INVOICES] and data[DATA_INVOICES].total_costs_this_year
-            else None
-        ),
+        value_fn=lambda data: _invoice_year_total(data, "total_costs_this_year"),
         attr_fn=lambda data: (
             {"Invoices": data[DATA_INVOICES].all_invoices_dict_this_year}
             if data[DATA_INVOICES] and data[DATA_INVOICES].all_invoices_dict_this_year
@@ -3265,14 +3258,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         invoice_based=True,
-        value_fn=lambda data: (
-            sum(
-                invoice.TotalAmount
-                for invoice in data[DATA_INVOICES].all_periods_invoices
-            )
-            if data[DATA_INVOICES] and data[DATA_INVOICES].all_periods_invoices
-            else None
-        ),
+        value_fn=lambda data: _total_invoice_amount(data),
         attr_fn=lambda data: (
             {
                 "Invoices": data[DATA_INVOICES].all_invoices_dict,
@@ -3424,11 +3410,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
         invoice_based=True,
-        value_fn=lambda data: (
-            data[DATA_INVOICES].total_costs_previous_year
-            if data[DATA_INVOICES] and data[DATA_INVOICES].total_costs_previous_year
-            else None
-        ),
+        value_fn=lambda data: _invoice_year_total(data, "total_costs_previous_year"),
         attr_fn=lambda data: (
             {"Invoices": data[DATA_INVOICES].all_invoices_dict_previous_year}
             if data[DATA_INVOICES]
