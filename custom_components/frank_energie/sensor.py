@@ -1669,8 +1669,7 @@ def _total_invoice_amount(data: FrankEnergieData) -> float | None:
     if not periods:
         return None
     amounts = [
-        _monetary_amount(getattr(invoice, "TotalAmount", None))
-        for invoice in periods
+        _monetary_amount(getattr(invoice, "TotalAmount", None)) for invoice in periods
     ]
     if any(amount is None for amount in amounts):
         return None
@@ -3079,7 +3078,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: _month_summary_cost(data, "actualCostsUntilLastMeterReadingDate"),
+        value_fn=lambda data: _month_summary_cost(
+            data, "actualCostsUntilLastMeterReadingDate"
+        ),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3091,7 +3092,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: _month_summary_cost(data, "expectedCostsUntilLastMeterReadingDate"),
+        value_fn=lambda data: _month_summary_cost(
+            data, "expectedCostsUntilLastMeterReadingDate"
+        ),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3103,7 +3106,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: _month_summary_cost(data, "differenceUntilLastMeterReadingDate"),
+        value_fn=lambda data: _month_summary_cost(
+            data, "differenceUntilLastMeterReadingDate"
+        ),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
@@ -3115,7 +3120,9 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_COSTS,
-        value_fn=lambda data: _month_summary_cost(data, "differenceUntilLastMeterReadingDateAvg"),
+        value_fn=lambda data: _month_summary_cost(
+            data, "differenceUntilLastMeterReadingDateAvg"
+        ),
         attr_fn=_month_summary_meter_attributes,
     ),
     FrankEnergieEntityDescription(
