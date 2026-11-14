@@ -89,6 +89,7 @@ from .const import (
     DATA_GAS,
     DATA_INVOICES,
     DATA_MONTH_SUMMARY,
+    DATA_MONTH_SUMMARY_FETCHED_AT,
     DATA_PV_SUMMARY,
     DATA_PV_SYSTEMS,
     DATA_REFRESH_TOKEN_EXPIRES_AT,
@@ -341,6 +342,9 @@ class FrankEnergieData(TypedDict):
     month_summary: MonthSummary | None
     """Optional summary data for the month."""
 
+    month_summary_fetched_at: datetime | None
+    """Time of the last successful, non-null MonthSummary retrieval (UTC)."""
+
     invoices: Invoices | None
     """Optional invoices data."""
 
@@ -416,6 +420,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_ELECTRICITY: None,
         DATA_GAS: None,
         DATA_MONTH_SUMMARY: None,
+        DATA_MONTH_SUMMARY_FETCHED_AT: None,
         DATA_INVOICES: None,
         DATA_USAGE: None,
         DATA_USER: None,
@@ -4116,6 +4121,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         """Initialize the statistics coordinator."""
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie statistics coordinator"
+        self._month_summary_site_reference: str | None = None
         _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
@@ -4148,7 +4154,22 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 result[DATA_USER_SITES] = self.settings_coordinator.data.get(
                     DATA_USER_SITES
                 )
-            result[DATA_MONTH_SUMMARY] = data_month_summary
+            # Null/temporarily absent summaries do not invalidate the last
+            # verified estimate for the same delivery site.
+            previous_summary = (
+                self.data.get(DATA_MONTH_SUMMARY)
+                if self._month_summary_site_reference == self.site_reference
+                else None
+            )
+            if data_month_summary is not None:
+                result[DATA_MONTH_SUMMARY] = data_month_summary
+                result[DATA_MONTH_SUMMARY_FETCHED_AT] = datetime.now(UTC)
+                self._month_summary_site_reference = self.site_reference
+            elif previous_summary is not None:
+                result[DATA_MONTH_SUMMARY] = previous_summary
+                result[DATA_MONTH_SUMMARY_FETCHED_AT] = self.data.get(
+                    DATA_MONTH_SUMMARY_FETCHED_AT
+                )
             result[DATA_USAGE] = data_period_usage
             return result
         except Exception as err:
