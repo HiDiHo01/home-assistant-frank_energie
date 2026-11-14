@@ -113,6 +113,32 @@ Polling becomes more aggressive during important periods such as:
 
 Outside these periods, the integration reduces API load by using less frequent updates.
 
+## Monthly Costs and Meter-Reading Freshness
+
+The authenticated MonthSummary sensors use the most recent cost amounts
+reported by Frank Energie. A numeric zero is a valid reported amount; an
+absent or malformed amount is unknown rather than a fabricated zero.
+
+A returned `last_meter_reading_date` is the **last day processed by the
+provider**, not the time the API request completed. It may legitimately lag
+the current date. `meter_reading_day_completeness` describes that **one
+reading day** (from 0 to 1), not the entire month; incomplete readings do
+not suppress valid costs. The existing `Last update` attribute is retained.
+The UTC `source_updated_at` attribute identifies the last successful,
+non-null MonthSummary retrieval when available.
+
+If the provider temporarily returns no new MonthSummary, an earlier
+verified monthly estimate remains in memory for the same configuration entry
+and delivery site. The original `source_updated_at` is preserved until
+a new summary is successfully received. A month change alone does not
+invalidate the previous estimate; this continuity does not turn it into a
+newly verified bill or indicate the estimate's billing period.
+
+No billing `period` is inferred from the meter-reading cutoff. The
+statistics coordinator does not persist MonthSummary across a restart,
+so a fresh process without a provider response cannot recreate an older
+estimate. No additional API calls are made.
+
 ## Authenticated Data
 
 Customer-specific data requires authentication.
