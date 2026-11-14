@@ -7,8 +7,8 @@ Sensor platform for Frank Energie integration."""
 
 import inspect
 import logging
-from functools import partial
 from dataclasses import asdict, dataclass, field
+from functools import partial
 from datetime import datetime, timedelta
 from math import isfinite
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
@@ -883,121 +883,7 @@ def format_user_name(data: dict) -> str | None:
     return None
 
 
-STATIC_ENODE_def _month_insights_unit(data: FrankEnergieData, commodity: str) -> str | None:
-    """Accept only verified units returned by the corresponding Difference."""
-    insights = data.get(DATA_MONTH_INSIGHTS)
-    if insights is None or (commodity == "gas" and insights.gasExcluded):
-        return None
-    difference = getattr(insights, f"{commodity}Difference", None)
-    unit = getattr(difference, "unit", None)
-    if not isinstance(unit, str):
-        return None
-    normalized = unit.strip().lower().replace("³", "3")
-    if normalized == "kwh":
-        return UnitOfEnergy.KILO_WATT_HOUR
-    if commodity == "gas" and normalized == "m3":
-        return UnitOfVolume.CUBIC_METERS
-    return None
-
-
-def _month_insights_value(
-    data: FrankEnergieData, *, commodity: str, field_name: str
-) -> float | None:
-    """Return a verified nonzero finite value without inventing missing zeros.
-
-    SDK 2026.11.13 defaults absent/null MonthInsights numbers to 0.0, making
-    genuine zero indistinguishable. Do not publish any zero until its SDK
-    parser preserves field presence; this limitation blocks merging the PR.
-    """
-    insights = data.get(DATA_MONTH_INSIGHTS)
-    if insights is None or (commodity == "gas" and insights.gasExcluded):
-        return None
-    if field_name == "component":
-        value = getattr(
-            insights,
-            "expectedCostsGas" if commodity == "gas" else "expectedCostsElectricity",
-            None,
-        )
-    else:
-        difference = getattr(insights, f"{commodity}Difference", None)
-        value = getattr(difference, field_name, None)
-        if field_name in (
-            "actualUsage",
-            "expectedUsage",
-            "actualAverageUnitPrice",
-            "expectedAverageUnitPrice",
-        ) and _month_insights_unit(data, commodity) is None:
-            return None
-    amount = _monetary_amount(value)
-    return amount if amount is not None and amount != 0.0 else None
-
-
-def _month_insights_attributes(data: FrankEnergieData) -> dict[str, object]:
-    """Expose validated month, provider cutoff and original retrieval time."""
-    insights = data.get(DATA_MONTH_INSIGHTS)
-    if insights is None:
-        return {}
-    attributes: dict[str, object] = {}
-    period = data.get(DATA_MONTH_INSIGHTS_PERIOD)
-    if isinstance(period, str):
-        attributes["period"] = period
-    fetched_at = data.get(DATA_MONTH_INSIGHTS_FETCHED_AT)
-    if isinstance(fetched_at, datetime) and fetched_at.tzinfo is not None:
-        attributes["source_updated_at"] = fetched_at.isoformat()
-    reading = getattr(insights, "lastMeterReadingDate", None)
-    if isinstance(reading, datetime) and reading.tzinfo is not None:
-        attributes["last_meter_reading_date"] = reading.isoformat()
-    return attributes
-
-
-def _month_insights_descriptions() -> tuple[FrankEnergieEntityDescription, ...]:
-    """Define seven fields for each contract commodity under the Costs device."""
-    fields = (
-        ("expected_costs", "component", "cost"),
-        ("actual_usage", "actualUsage", "usage"),
-        ("actual_average_unit_price", "actualAverageUnitPrice", "unit_price"),
-        ("actual_costs", "actualCosts", "cost"),
-        ("expected_usage", "expectedUsage", "usage"),
-        ("expected_average_unit_price", "expectedAverageUnitPrice", "unit_price"),
-        ("expected_costs_comparison", "expectedCosts", "cost"),
-    )
-    descriptions: list[FrankEnergieEntityDescription] = []
-    for commodity in ("electricity", "gas"):
-        for metric, field_name, kind in fields:
-            descriptions.append(
-                FrankEnergieEntityDescription(
-                    key=f"month_insights_{commodity}_{metric}",
-                    translation_key=f"month_insights_{commodity}_{metric}",
-                    authenticated=True,
-                    requires_known_contract=True,
-                    is_electricity=commodity == "electricity",
-                    is_gas=commodity == "gas",
-                    service_name=SERVICE_NAME_COSTS,
-                    icon="mdi:currency-eur" if kind == "cost" else "mdi:chart-line",
-                    device_class=SensorDeviceClass.MONETARY if kind == "cost" else None,
-                    state_class=(
-                        SensorStateClass.TOTAL
-                        if kind == "cost"
-                        else SensorStateClass.MEASUREMENT
-                    ),
-                    native_unit_of_measurement=(
-                        CURRENCY_EURO if kind == "cost" else None
-                    ),
-                    suggested_display_precision=2 if kind == "cost" else 3,
-                    month_insights_unit_kind=None if kind == "cost" else kind,
-                    value_fn=partial(
-                        _month_insights_value,
-                        commodity=commodity,
-                        field_name=field_name,
-                    ),
-                    attr_fn=_month_insights_attributes,
-                )
-            )
-    return tuple(descriptions)
-
-
-SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
-    *_month_insights_descriptions(),
+STATIC_ENODE_SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="enode_total_chargers",
         native_unit_of_measurement=None,
@@ -1835,7 +1721,122 @@ def _monthly_cost_attributes(data: FrankEnergieData) -> dict[str, object]:
     return result
 
 
+def _month_insights_unit(data: FrankEnergieData, commodity: str) -> str | None:
+    """Accept only verified units returned by the corresponding Difference."""
+    insights = data.get(DATA_MONTH_INSIGHTS)
+    if insights is None or (commodity == "gas" and insights.gasExcluded):
+        return None
+    difference = getattr(insights, f"{commodity}Difference", None)
+    unit = getattr(difference, "unit", None)
+    if not isinstance(unit, str):
+        return None
+    normalized = unit.strip().lower().replace("³", "3")
+    if normalized == "kwh":
+        return UnitOfEnergy.KILO_WATT_HOUR
+    if commodity == "gas" and normalized == "m3":
+        return UnitOfVolume.CUBIC_METERS
+    return None
+
+
+def _month_insights_value(
+    data: FrankEnergieData, *, commodity: str, field_name: str
+) -> float | None:
+    """Return a verified nonzero finite value without inventing missing zeros.
+
+    SDK 2026.11.13 defaults absent/null MonthInsights numbers to 0.0, making
+    genuine zero indistinguishable. Do not publish any zero until its SDK
+    parser preserves field presence; this limitation blocks merging the PR.
+    """
+    insights = data.get(DATA_MONTH_INSIGHTS)
+    if insights is None or (commodity == "gas" and insights.gasExcluded):
+        return None
+    if field_name == "component":
+        value = getattr(
+            insights,
+            "expectedCostsGas" if commodity == "gas" else "expectedCostsElectricity",
+            None,
+        )
+    else:
+        difference = getattr(insights, f"{commodity}Difference", None)
+        value = getattr(difference, field_name, None)
+        if field_name in (
+            "actualUsage",
+            "expectedUsage",
+            "actualAverageUnitPrice",
+            "expectedAverageUnitPrice",
+        ) and _month_insights_unit(data, commodity) is None:
+            return None
+    amount = _monetary_amount(value)
+    return amount if amount is not None and amount != 0.0 else None
+
+
+def _month_insights_attributes(data: FrankEnergieData) -> dict[str, object]:
+    """Expose validated month, provider cutoff and original retrieval time."""
+    insights = data.get(DATA_MONTH_INSIGHTS)
+    if insights is None:
+        return {}
+    attributes: dict[str, object] = {}
+    period = data.get(DATA_MONTH_INSIGHTS_PERIOD)
+    if isinstance(period, str):
+        attributes["period"] = period
+    fetched_at = data.get(DATA_MONTH_INSIGHTS_FETCHED_AT)
+    if isinstance(fetched_at, datetime) and fetched_at.tzinfo is not None:
+        attributes["source_updated_at"] = fetched_at.isoformat()
+    reading = getattr(insights, "lastMeterReadingDate", None)
+    if isinstance(reading, datetime) and reading.tzinfo is not None:
+        attributes["last_meter_reading_date"] = reading.isoformat()
+    return attributes
+
+
+def _month_insights_descriptions() -> tuple[FrankEnergieEntityDescription, ...]:
+    """Define seven fields for each contract commodity under the Costs device."""
+    fields = (
+        ("expected_costs", "component", "cost"),
+        ("actual_usage", "actualUsage", "usage"),
+        ("actual_average_unit_price", "actualAverageUnitPrice", "unit_price"),
+        ("actual_costs", "actualCosts", "cost"),
+        ("expected_usage", "expectedUsage", "usage"),
+        ("expected_average_unit_price", "expectedAverageUnitPrice", "unit_price"),
+        ("expected_costs_comparison", "expectedCosts", "cost"),
+    )
+    descriptions: list[FrankEnergieEntityDescription] = []
+    for commodity in ("electricity", "gas"):
+        for metric, field_name, kind in fields:
+            descriptions.append(
+                FrankEnergieEntityDescription(
+                    key=f"month_insights_{commodity}_{metric}",
+                    translation_key=f"month_insights_{commodity}_{metric}",
+                    authenticated=True,
+                    requires_known_contract=True,
+                    is_electricity=commodity == "electricity",
+                    is_gas=commodity == "gas",
+                    service_name=SERVICE_NAME_COSTS,
+                    icon="mdi:currency-eur" if kind == "cost" else "mdi:chart-line",
+                    device_class=SensorDeviceClass.MONETARY if kind == "cost" else None,
+                    state_class=(
+                        SensorStateClass.TOTAL
+                        if kind == "cost"
+                        else SensorStateClass.MEASUREMENT
+                    ),
+                    native_unit_of_measurement=(
+                        CURRENCY_EURO if kind == "cost" else None
+                    ),
+                    suggested_display_precision=2 if kind == "cost" else 3,
+                    month_insights_unit_kind=None if kind == "cost" else kind,
+                    value_fn=partial(
+                        _month_insights_value,
+                        commodity=commodity,
+                        field_name=field_name,
+                    ),
+                    attr_fn=_month_insights_attributes,
+                )
+            )
+    return tuple(descriptions)
+
+
+
 SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
+    *_month_insights_descriptions(),
     FrankEnergieEntityDescription(
         key="contract_price_resolution_state",
         is_electricity=True,
