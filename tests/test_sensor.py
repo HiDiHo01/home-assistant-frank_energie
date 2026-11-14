@@ -2512,6 +2512,8 @@ def test_parse_contract_product_name() -> None:
 
     # Verify uppercase month handling
     assert _parse_contract_product_name("DEC") == {"DEC": "Startmaand: december"}
+
+
 @pytest.mark.parametrize("amount", (0.0, 24.5, -8.25))
 def test_month_summary_zero_costs_from_real_sdk_parser(amount: float) -> None:
     """Keep zero and signed amounts across all existing monthly cost sensors."""
