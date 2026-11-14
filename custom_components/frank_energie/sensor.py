@@ -8,8 +8,8 @@ Sensor platform for Frank Energie integration."""
 import inspect
 import logging
 from dataclasses import asdict, dataclass, field
-from functools import partial
 from datetime import datetime, timedelta
+from functools import partial
 from math import isfinite
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
