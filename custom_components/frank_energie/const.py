@@ -16,7 +16,6 @@ from python_frank_energie.models import (
     EnodeVehicles,
     Invoices,
     MarketPrices,
-    MonthInsights,
     MonthSummary,
     PeriodUsageAndCosts,
     SmartBatteries,
