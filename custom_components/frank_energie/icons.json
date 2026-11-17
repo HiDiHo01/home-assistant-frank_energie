@@ -37,5 +37,10 @@
         "default": "mdi:currency-eur"
       }
     }
+  },
+  "services": {
+    "get_prices_for_date": {
+      "service": "mdi:calendar-clock"
+    }
   }
 }

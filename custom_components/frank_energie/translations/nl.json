@@ -1286,5 +1286,41 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "price_contract_unavailable": {
+      "message": "De gekozen leveringslocatie heeft geen contract voor dit energietype."
+    },
+    "prices_for_date_unavailable": {
+      "message": "De cache bevat geen volledige prijzen voor {date}. Controleer of de prijzen zijn gepubliceerd en probeer het opnieuw."
+    }
+  },
+  "services": {
+    "get_prices_for_date": {
+      "name": "Prijzen voor een datum ophalen",
+      "description": "Geef markt- en all-inprijzen uit de cache terug voor de gekozen datum.",
+      "fields": {
+        "config_entry": {
+          "name": "Configuratie",
+          "description": "Kies de Frank Energie-configuratie waarvan je de prijzen wilt ophalen."
+        },
+        "date": {
+          "name": "Datum",
+          "description": "Kies een kalenderdatum in Europe/Amsterdam."
+        },
+        "energy_type": {
+          "name": "Energietype",
+          "description": "Kies elektriciteit of gas."
+        }
+      }
+    }
+  },
+  "selector": {
+    "price_energy_type": {
+      "options": {
+        "electricity": "Elektriciteit",
+        "gas": "Gas"
+      }
+    }
   }
 }

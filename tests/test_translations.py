@@ -339,13 +339,14 @@ def test_select_attributes_translation_keys():
 
 
 class _TranslationKeyExtractor(ast.NodeVisitor):
-    """Collect entity and service translation keys from integration Python code."""
+    """Collect entity, device and exception keys from integration Python code."""
 
     def __init__(self) -> None:
         """Initialize disjoint sets of declared translation and service keys."""
         self.translation_keys: set[str] = set()
         self.button_keys: set[str] = set()
         self.service_names: set[str] = set()
+        self.exception_keys: set[str] = set()
 
     def _record_assignment(self, target: ast.expr, value: ast.expr | None) -> None:
         """Track translation keys and service constants from string assignments."""
@@ -369,32 +370,44 @@ class _TranslationKeyExtractor(ast.NodeVisitor):
         self._record_assignment(node.target, node.value)
         self.generic_visit(node)
 
+    @staticmethod
+    def _call_name(target: ast.expr) -> str:
+        """Read a direct or qualified function name."""
+        match target:
+            case ast.Attribute(attr=name) | ast.Name(id=name):
+                return name
+            case _:
+                return ""
+
     def visit_Call(self, node: ast.Call) -> None:
-        """Keep Repairs issue keys separate from entity and button keys."""
-        is_issue_call = (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "async_create_issue"
-        ) or (isinstance(node.func, ast.Name) and node.func.id == "async_create_issue")
-        if is_issue_call:
+        """Read translation keys in the namespace used by their call."""
+        call_name = self._call_name(node.func)
+        if call_name == "async_create_issue":
             self.generic_visit(node)
             return
+        translation_keys = (
+            self.exception_keys
+            if call_name in {"ServiceValidationError", "HomeAssistantError"}
+            else self.translation_keys
+        )
         for keyword in node.keywords:
             if not isinstance(keyword.value, ast.Constant) or not isinstance(
                 keyword.value.value, str
             ):
                 continue
             if keyword.arg == "translation_key":
-                self.translation_keys.add(keyword.value.value)
+                translation_keys.add(keyword.value.value)
             elif keyword.arg == "key":
                 self.button_keys.add(keyword.value.value)
         self.generic_visit(node)
 
 
-def test_translation_key_extractor_separates_repairs_and_entities() -> None:
-    """A Repairs key must never satisfy an entity translation requirement."""
+def test_translation_key_extractor_handles_supported_namespaces() -> None:
+    """Keep entity, exception, and Repairs translations in their own namespaces."""
     source = """
 ir.async_create_issue(translation_key="stale_device")
 async_create_issue(translation_key="stale_device")
+ServiceValidationError(translation_key="prices_for_date_unavailable")
 SensorEntityDescription(translation_key="current_price", key="current_price")
 """
     extractor = _TranslationKeyExtractor()
@@ -402,16 +415,23 @@ SensorEntityDescription(translation_key="current_price", key="current_price")
 
     assert extractor.translation_keys == {"current_price"}
     assert extractor.button_keys == {"current_price"}
+    assert extractor.exception_keys == {"prices_for_date_unavailable"}
     assert "stale_device" not in extractor.translation_keys
+
+
+def _integration_translation_keys() -> _TranslationKeyExtractor:
+    """Collect translation keys from the integration's Python source."""
+    extractor = _TranslationKeyExtractor()
+    for py_file in INTEGRATION_DIR.glob("**/*.py"):
+        extractor.visit(
+            ast.parse(py_file.read_text(encoding="utf-8"), filename=py_file.name)
+        )
+    return extractor
 
 
 def test_no_unused_or_missing_translation_keys() -> None:
     """Verify that every declared entity and service translation key is used."""
-    extractor = _TranslationKeyExtractor()
-    for py_file in INTEGRATION_DIR.glob("**/*.py"):
-        with open(py_file, "r", encoding="utf-8") as f:
-            tree = ast.parse(f.read(), filename=py_file.name)
-            extractor.visit(tree)
+    extractor = _integration_translation_keys()
 
     # Load strings.json
     with open(STRINGS_FILE, "r", encoding="utf-8") as f:
@@ -481,6 +501,15 @@ def test_no_unused_or_missing_translation_keys() -> None:
     assert not missing_entity_keys, (
         f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
     )
+
+
+def test_exception_translation_keys() -> None:
+    """Require all localized errors to exist in the exceptions section."""
+    expected = _integration_translation_keys().exception_keys
+    assert expected
+    for locale_file in (STRINGS_FILE, *TRANSLATIONS_DIR.glob("*.json")):
+        translation_data = json.loads(locale_file.read_text(encoding="utf-8"))
+        assert set(translation_data.get("exceptions", {})) == expected, locale_file.name
 
 
 def test_repairs_issue_translation_keys() -> None:

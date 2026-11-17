@@ -1,6 +1,7 @@
 {
     "domain": "frank_energie",
     "name": "Frank Energie",
+    "after_dependencies": ["recorder"],
     "categories": ["energy.provider"],
     "codeowners": [
         "@HiDiHo01",
