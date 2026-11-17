@@ -26,7 +26,7 @@ from .device_inventory import (
     inventory_device_identifiers,
     smart_hvac_device_identifier,
 )
-from .helpers import service_device_info
+from .helpers import register_service_device, service_device_info
 from .smart_hvac import (
     FrankEnergieSmartHvacCoordinator,
     smart_hvac_activation,
@@ -302,17 +302,19 @@ def _site_has_active_smart_hvac(settings: FrankEnergieSettingsCoordinator) -> bo
 @callback
 def _async_sync_equipment(
     hass: HomeAssistant,
-    entry_id: str,
+    entry: ConfigEntry[FrankEnergieEntryData],
     coordinator: FrankEnergieSmartHvacCoordinator,
     devices: dict[str, SmartHvacDevice],
     known_devices: dict[str, SmartHvacDevice] | None,
 ) -> tuple[dict[str, SmartHvacDevice], list[_SmartHvacDeviceSensor]]:
-    """Register discovered HVAC hardware without deleting absent equipment.
+    """Link discovered HVAC hardware to the site's Smart Heating service.
 
     Keep previously registered identities so a temporarily disconnected
     device is not re-added under a duplicate entity on reconnection.
     Only the user-confirmed Repairs flow may remove a missing device.
     """
+    entry_id = entry.entry_id
+    service_device_id = register_service_device(hass, entry, SERVICE_NAME_SMART_HVAC)
     current = {
         sha256(f"{entry_id}:{device_id}".encode()).hexdigest(): device
         for device_id, device in devices.items()
@@ -328,7 +330,11 @@ def _async_sync_equipment(
         registered_device = device_registry.async_get_device_by_identifier(
             (DOMAIN, identifier), config_entry_id=entry_id
         )
-        if device == previous_device and registered_device is not None:
+        if (
+            device == previous_device
+            and registered_device is not None
+            and registered_device.via_device_id == service_device_id
+        ):
             continue
 
         device_registry.async_get_or_create(
@@ -339,6 +345,7 @@ def _async_sync_equipment(
                 manufacturer=device.brand,
                 model=device.model,
                 entry_type=None,
+                via_device_id=service_device_id,
             ),
         )
         if previous_device is None or registered_device is None:
@@ -404,7 +411,7 @@ def async_setup_smart_hvac_sensors(
             requests_added = True
         if devices is not None:
             known_devices, equipment_sensors = _async_sync_equipment(
-                hass, entry_id, coordinator, devices, known_devices
+                hass, entry, coordinator, devices, known_devices
             )
             sensors.extend(equipment_sensors)
         if sensors:
