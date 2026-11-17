@@ -16,6 +16,7 @@ htmlcov/
 .HA_VERSION
 .storage/
 *.yaml
+!custom_components/frank_energie/services.yaml
 blueprints/
 *.log*
 *.db
