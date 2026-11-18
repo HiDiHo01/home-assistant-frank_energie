@@ -4109,7 +4109,12 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 from .usage_statistics import async_record_period_usage
 
                 await async_record_period_usage(
-                    self.hass, self.config_entry, site_reference, usage, now_utc
+                    self.hass,
+                    self.config_entry,
+                    site_reference,
+                    usage,
+                    now_utc,
+                    owner=self,
                 )
             return usage
 
