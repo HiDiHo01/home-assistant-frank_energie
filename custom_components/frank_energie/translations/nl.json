@@ -712,9 +712,6 @@
       "ean": {
         "name": "EAN (Energy Account Number)"
       },
-      "costs_electricity_this_month": {
-        "name": "Kosten elektriciteit deze maand"
-      },
       "elec_lowest_4p": {
         "name": "Laagste gem. elektriciteitsprijs (4 periodes)"
       },

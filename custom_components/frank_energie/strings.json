@@ -975,9 +975,6 @@
       "vehicle_name": {
         "name": "Vehicle Name"
       },
-      "costs_electricity_this_month": {
-        "name": "Costs electricity this month"
-      },
       "elec_lowest_4p": {
         "name": "Lowest average electricity price (4 periods)"
       },
