@@ -447,3 +447,6 @@ async def test_usage_history_persists_across_home_assistant_restart(
             )
             _, repeated_history = await _history(restarted_hass, restarted_recorder)
             assert repeated_history[statistic_id] == updated_history[statistic_id]
+        # The nested Home Assistant is not owned by pytest's hass fixture.
+        # Stop it explicitly so Recorder's daily cleanup timer is cancelled.
+        await restarted_hass.async_stop(force=True)
