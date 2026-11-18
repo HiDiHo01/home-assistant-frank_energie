@@ -467,6 +467,7 @@ def test_no_unused_or_missing_translation_keys() -> None:
     # rather than exempting unknown translations through a static whitelist.
     from custom_components.frank_energie.sensor import (
         ENODE_VEHICLE_SENSOR_TYPES,
+        SENSOR_TYPES,
         WEEKDAYS,
     )
 
@@ -477,12 +478,29 @@ def test_no_unused_or_missing_translation_keys() -> None:
     }
     assert dynamic_vehicle_keys == {f"charging_hour_{weekday}" for weekday in WEEKDAYS}
 
+    month_insights_keys = {
+        description.translation_key
+        for description in SENSOR_TYPES
+        if description.key.startswith("month_insights_")
+    }
+    assert len(month_insights_keys) == 14
+    assert (
+        len(
+            {
+                key
+                for key in month_insights_keys
+                if key.startswith("month_insights_gas_")
+            }
+        )
+        == 7
+    )
     # Verify that all translation keys in strings.json are used in the codebase
     all_used_entity_keys = (
         extractor.translation_keys
         | extractor.button_keys
         | dynamic_whitelist
         | dynamic_vehicle_keys
+        | month_insights_keys
     )
     unused_entity_keys = strings_entity_keys - all_used_entity_keys
     assert not unused_entity_keys, (
@@ -495,7 +513,7 @@ def test_no_unused_or_missing_translation_keys() -> None:
     )
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
-    missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys) - (
+    missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys | month_insights_keys) - (
         strings_entity_keys
     )
     assert not missing_entity_keys, (
