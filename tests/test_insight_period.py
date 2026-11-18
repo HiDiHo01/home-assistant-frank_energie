@@ -256,6 +256,10 @@ async def test_insight_period_attributes_preserve_all_provider_items(
 ) -> None:
     """Expose the entire provider category and items for every period granularity."""
     entry = _entry(hass)
+    # Feed-in sensors consult account settings when determining default visibility.
+    entry.runtime_data = SimpleNamespace(
+        settings_coordinator=SimpleNamespace(data={})
+    )
     coordinator = _coordinator(hass, entry)
     # Regression: month/year must not be truncated even for large item lists.
     item_count = 5000 if len(period) < 10 else 2
