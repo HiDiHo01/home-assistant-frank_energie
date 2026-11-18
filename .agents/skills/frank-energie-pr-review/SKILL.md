@@ -72,17 +72,19 @@ available solely because `mergeable` is true.
    complete commit ancestry and diff. Apply obsolete-PR triage first.
    A clean merge status does not prove GitHub's rebase method is usable.
 2. **Select a history strategy.** Prefer an actual rebase/cherry-pick
-   to preserve distinct commits. For a one-commit rewrite, require
-   explicit authorization and disclose the loss of old commit IDs.
+   to preserve distinct commits. A necessary, lease-guarded rewrite
+   within a requested PR rebase or conflict repair does not require
+   separate force-push approval. Disclose the loss of old commit IDs
+   when using a one-commit rewrite.
    Use the PR's target base, not an assumed `main`. Check that the
    target-base SHA is an ancestor of the old PR head before reusing
    its exact tree. Otherwise integrate the new base and resolve
    conflicts before rebuilding; never reparent a tree omitting base
    changes or mistake an equal tree SHA for a valid merge result.
-3. **Back up and verify content.** Preserve the previous head as an
-   explicitly authorized, **durable remote** backup ref and verify
-   that it resolves to the inspected SHA. Do not rely on a local-only
-   branch or publish sensitive history without authorization.
+3. **Back up and verify content.** Preserve the previous head as a
+   **durable remote** backup ref and verify that it resolves to the
+   inspected SHA. Do not rely on a local-only branch or publish
+   sensitive history or unnecessary public refs.
    For a valid exact-tree rewrite, verify identical old/new Git
    tree SHAs and full diffs against the same base, including every
    file and test. When incorporating base changes, audit the
@@ -116,7 +118,7 @@ The PR head `9fa1643` had two parents, because `main` had been merged
 into the PR. Prior CI was green but the **Rebase and merge** method
 remained unavailable.
 
-After the maintainer explicitly authorized a force-push:
+The documented repair proceeded as follows:
 
 1. Created backup branch `backup-pr-408-before-rebase-9fa1643` at
    the original head, then verified the backup.
@@ -134,7 +136,8 @@ After the maintainer explicitly authorized a force-push:
 because of ancestry. Safeguard the original head, preserve and verify
 the complete tree/diff, use a lease, then verify GitHub's actual
 rebaseability and re-run current-head checks. A one-commit rewrite
-collapses history and is only appropriate when explicitly authorized.
+collapses history and is appropriate only for a verified PR repair
+with all safeguards; separate force-push approval is not required.
 
 ## Merge-readiness decision
 
