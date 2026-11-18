@@ -147,6 +147,37 @@ def test_current_sdk_missing_numeric_fields_are_not_fabricated(commodity: str) -
         )
 
 
+@pytest.mark.parametrize("commodity", ("electricity", "gas"))
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    (
+        (0.0, None),
+        (-0.0, None),
+        (0.001, 0.001),
+        (-1.25, -1.25),
+        (float("inf"), None),
+        (float("nan"), None),
+    ),
+)
+def test_month_insights_only_reports_finite_nonzero_values(
+    commodity: str, value: float, expected: float | None
+) -> None:
+    """Reject ambiguous SDK zeros and non-finite values without losing negatives."""
+    difference = SimpleNamespace(actualCosts=value)
+    insights = SimpleNamespace(
+        gasExcluded=False,
+        electricityDifference=difference,
+        gasDifference=difference,
+    )
+    result = _description(commodity, "actual_costs").value_fn(
+        {const.DATA_MONTH_INSIGHTS: insights}
+    )
+    if expected is None:
+        assert result is None
+    else:
+        assert result == pytest.approx(expected)
+
+
 @pytest.mark.parametrize("metric,field", FIELDS)
 def test_gas_excluded_is_not_reported(metric: str, field: str) -> None:
     """Gas-excluded statements must not claim real gas usage or costs."""
@@ -167,6 +198,16 @@ def test_invalid_electricity_unit_blocks_usage_and_prices(unit: str) -> None:
         _description("electricity", "expected_average_unit_price").value_fn(data)
         is None
     )
+    coordinator = MagicMock()
+    coordinator.data = data
+    entry = MagicMock()
+    entry.unique_id = "synthetic"
+    entry.entry_id = "synthetic"
+    for metric in ("actual_usage", "expected_average_unit_price"):
+        sensor = FrankEnergieSensor(
+            coordinator, _description("electricity", metric), entry
+        )
+        assert sensor.native_unit_of_measurement is None
 
 
 @pytest.mark.parametrize(
