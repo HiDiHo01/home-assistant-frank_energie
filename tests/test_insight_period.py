@@ -311,6 +311,7 @@ async def test_changed_delivery_site_never_publishes_old_insight_totals(
     assert data[DATA_INSIGHT_PERIOD] is None
     assert data[DATA_INSIGHT_USAGE] is None
 
+
 @pytest.mark.parametrize(
     ("sensor_key", "object_id"),
     [
@@ -319,7 +320,10 @@ async def test_changed_delivery_site_never_publishes_old_insight_totals(
         ("costs_gas_yesterday", "frank_energie_inzicht_kosten_gas"),
         ("usage_gas_yesterday", "frank_energie_inzicht_verbruik_gas"),
         ("gains_feed_in_yesterday", "frank_energie_inzicht_opbrengst_elektriciteit"),
-        ("delivered_feed_in_yesterday", "frank_energie_inzicht_teruggeleverde_elektriciteit"),
+        (
+            "delivered_feed_in_yesterday",
+            "frank_energie_inzicht_teruggeleverde_elektriciteit",
+        ),
     ],
 )
 @pytest.mark.parametrize("old_suffix", ["gisteren", "geselecteerde_periode"])
@@ -332,7 +336,9 @@ async def test_insight_default_entity_ids_migrate(
     unique_id = f"{entry.unique_id}.{sensor_key}"
     old_entity_id = f"sensor.{object_id}_{old_suffix}"
     original = registry.async_get_or_create(
-        "sensor", DOMAIN, unique_id,
+        "sensor",
+        DOMAIN,
+        unique_id,
         suggested_object_id=f"{object_id}_{old_suffix}",
         config_entry=entry,
     )
@@ -359,7 +365,10 @@ async def test_insight_default_entity_ids_migrate(
         ("costs_gas_yesterday", "frank_energie_inzicht_kosten_gas"),
         ("usage_gas_yesterday", "frank_energie_inzicht_verbruik_gas"),
         ("gains_feed_in_yesterday", "frank_energie_inzicht_opbrengst_elektriciteit"),
-        ("delivered_feed_in_yesterday", "frank_energie_inzicht_teruggeleverde_elektriciteit"),
+        (
+            "delivered_feed_in_yesterday",
+            "frank_energie_inzicht_teruggeleverde_elektriciteit",
+        ),
     ],
 )
 async def test_insight_custom_entity_ids_are_preserved(
@@ -369,8 +378,11 @@ async def test_insight_custom_entity_ids_are_preserved(
     entry = _entry(hass)
     registry = er.async_get(hass)
     original = registry.async_get_or_create(
-        "sensor", DOMAIN, f"{entry.unique_id}.{sensor_key}",
-        suggested_object_id=f"my_custom_{object_id}", config_entry=entry,
+        "sensor",
+        DOMAIN,
+        f"{entry.unique_id}.{sensor_key}",
+        suggested_object_id=f"my_custom_{object_id}",
+        config_entry=entry,
     )
     _async_migrate_insight_entity_ids(hass, entry)
     assert registry.async_get(original.entity_id) == original
@@ -383,12 +395,16 @@ async def test_insight_migration_skips_occupied_destination(
     entry = _entry(hass)
     registry = er.async_get(hass)
     original = registry.async_get_or_create(
-        "sensor", DOMAIN, f"{entry.unique_id}.costs_electricity_yesterday",
+        "sensor",
+        DOMAIN,
+        f"{entry.unique_id}.costs_electricity_yesterday",
         suggested_object_id="frank_energie_inzicht_kosten_elektriciteit_gisteren",
         config_entry=entry,
     )
     occupied = registry.async_get_or_create(
-        "sensor", DOMAIN, "occupied_by_another_entity",
+        "sensor",
+        DOMAIN,
+        "occupied_by_another_entity",
         suggested_object_id="frank_energie_inzicht_kosten_elektriciteit",
     )
     _async_migrate_insight_entity_ids(hass, entry)
