@@ -432,7 +432,6 @@ async def test_insight_migration_preserves_description_unique_ids(
         assert _sensor_unique_id(entry, description) == f"{entry.unique_id}.{key}"
 
 
-
 def test_obsolete_month_electricity_cost_sensor_is_not_registered() -> None:
     """The removed monthly cost description cannot be added again."""
     assert "costs_electricity_this_month" not in {
@@ -474,9 +473,7 @@ async def test_deprecated_insight_month_cost_cleanup_is_config_entry_scoped(
 ) -> None:
     """Never remove a registry entry owned by another config entry."""
     entry = _entry(hass)
-    other_entry = MockConfigEntry(
-        domain=DOMAIN, unique_id="independent-delivery-site"
-    )
+    other_entry = MockConfigEntry(domain=DOMAIN, unique_id="independent-delivery-site")
     other_entry.add_to_hass(hass)
     registry = er.async_get(hass)
     other_entity = registry.async_get_or_create(
