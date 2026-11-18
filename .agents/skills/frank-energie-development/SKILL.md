@@ -160,7 +160,7 @@ For workflow or release-manifest changes, also run `poetry run pytest -q tests/t
 
 ## PR and completion rules
 
-- Follow the repository's existing issue and PR governance; do not create extra issues or branches without a justified need or authorization. Never force-push, merge, delete branches, or rewrite history without explicit permission.
+- Follow the repository's existing issue and PR governance; do not create extra issues or branches without a justified need or authorization. Never merge pull requests or delete branches without explicit permission. For a requested PR rebase or conflict repair, a verified force-with-lease may rewrite that PR branch without separate approval, following the backup, SHA lease, diff verification, and current-head CI requirements in `AGENTS.md` and the PR review skill.
 - Preserve verified full-commit SHA pins and their documented versions for all external GitHub Actions.
 - Do not disable CI checks, weaken assertions, or add blanket lint/type suppressions to force green status.
 - The manifest's `quality_scale` declaration is not proof of Platinum compliance. Verify the applicable official quality-scale rules before claiming a tier.
