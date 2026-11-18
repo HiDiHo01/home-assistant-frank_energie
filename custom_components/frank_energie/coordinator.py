@@ -1227,8 +1227,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not self.api.is_authenticated or not self.site_reference:
             return None
 
+        settings_data = self.settings_coordinator.data
         contracts = helpers.known_site_contracts(
-            self.settings_coordinator.data.get(DATA_DELIVERY_SITE)
+            settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
         )
         if not contracts:
             return None
@@ -1243,6 +1244,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             RequestException,
             FrankEnergieException,
             ClientError,
+            TimeoutError,
         ) as exc:
             _LOGGER.debug("MonthInsights unavailable (%s)", type(exc).__name__)
             return None
