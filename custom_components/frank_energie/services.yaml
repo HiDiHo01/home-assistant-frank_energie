@@ -1,0 +1,19 @@
+get_prices_for_date:
+  fields:
+    config_entry:
+      required: true
+      selector:
+        config_entry:
+          integration: frank_energie
+    date:
+      required: true
+      selector:
+        date:
+    energy_type:
+      required: true
+      selector:
+        select:
+          options:
+            - electricity
+            - gas
+          translation_key: price_energy_type
