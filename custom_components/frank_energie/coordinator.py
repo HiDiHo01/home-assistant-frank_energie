@@ -1223,7 +1223,9 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             "invoices", self.api.invoices, self.site_reference
         )
 
-    async def _fetch_period_usage(self, start_date: date | str) -> PeriodUsageAndCosts | None:
+    async def _fetch_period_usage(
+        self, start_date: date | str
+    ) -> PeriodUsageAndCosts | None:
         """Fetch period usage and costs from the API."""
         if not self.api.is_authenticated:
             _LOGGER.debug(
@@ -4177,7 +4179,11 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 )
                 insight_usage = data_period_usage
             else:
-                data_month_summary, data_period_usage, insight_usage = await asyncio.gather(
+                (
+                    data_month_summary,
+                    data_period_usage,
+                    insight_usage,
+                ) = await asyncio.gather(
                     self._fetch_month_summary(),
                     self._async_fetch_and_record_usage(start_date, now_utc),
                     self._fetch_period_usage(selected_period),
