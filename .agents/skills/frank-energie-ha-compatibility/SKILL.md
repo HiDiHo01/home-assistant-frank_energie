@@ -1,6 +1,6 @@
 ---
 name: frank-energie-ha-compatibility
-description: Check the Frank Energie custom integration against Home Assistant API changes and deprecations. Use for Core and Python upgrades, ConfigEntry and config flows, entity and device registry APIs, DataUpdateCoordinator, migration risks, and release-note impact.
+description: Check the Frank Energie custom integration against Home Assistant API changes and deprecations. Use for Core and Python upgrades, ConfigEntry and config flows, entity and device registry APIs, DataUpdateCoordinator, manifest categories, HACS validation, migration risks, and release-note impact.
 ---
 
 # Home Assistant compatibility and deprecation assessment
@@ -26,6 +26,12 @@ Do not apply obsolete guidance, Core-only `dev` tooling, or general dependency-b
 - Exercise startup-only coordinator refreshes through `hass.config_entries.async_setup()`, which supplies the required `SETUP_IN_PROGRESS` state. For tests with distinct provider mocks per entry, add the second entry after the first is loaded. Initial integration setup can also load entries that are already registered.
 - Test discovery, removal, failed inventory reads, and reload using the real entity registry. Include repeated upstream IDs across sites and check that equipment cleanup preserves site and account aggregates. Register discovery listener cleanup with `entry.async_on_unload()`. [Smart heating regression tests](../../../tests/test_smart_hvac.py)
 - Use `DeviceInfo(entry_type=None)` for physical equipment and `DeviceEntryType.SERVICE` for service aggregates. When moving existing equipment sensors to a physical device, retain their unique IDs so Home Assistant reattaches their existing registry entries during platform setup. Seed the previous service and entity registrations in a regression test. [Home Assistant device registry](https://developers.home-assistant.io/docs/device_registry_index/)
+- Register the service with `register_service_device` and pass its registry ID as `via_device_id` for equipment in the same config entry. Update matching registry entries in place and skip unchanged hardware only when the existing link is correct. Test a missing link on an existing device, reload, discovery, and two entries with the same provider device ID. With `always_update=False`, unchanged snapshots suppress ordinary coordinator listeners; use a separate callback after successful inventory reads and unregister it on config-entry unload. Test recovery after clearing the registry link while keeping all provider responses, including summaries, unchanged. [Smart Heating registry tests](../../../tests/test_smart_hvac.py)
+
+## Manifest category validation
+
+- Match the integration's purpose to an exact documented `categories` key. Frank Energie uses `energy.energy_prices` for its dynamic tariffs. [Home Assistant integration categories](https://contributors.home-assistant.io/core/integrations/categories/)
+- Inspect HACS and Hassfest individually on the candidate commit. HACS rejects unknown category values, and a failure can leave the following Hassfest step skipped. [Custom integration category checks](https://contributors.home-assistant.io/blog/2026/10/20/integration-categories/) · [Repository validation workflow](../../../.github/workflows/validate.yml)
 
 ## Verify
 

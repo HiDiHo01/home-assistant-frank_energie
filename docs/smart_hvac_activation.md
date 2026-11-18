@@ -102,12 +102,15 @@ activation binary sensor and the connection request count appear on the
 | Account connection requests | Count, brand, Frank's request status, and an indication that Frank reported an error |
 
 Each linked `SmartHvacDevice` in the selected site's inventory appears as a
-separate Home Assistant device with its equipment and summary sensors. The
-integration uses Frank's display name, brand, and model when available. An
-opaque identifier derived from the selected site and Frank's device ID keeps
-the device stable across refreshes. Existing equipment sensors keep their
-entity IDs and unique IDs when they move from the service to the device. The
-service holds the device count and profile information.
+separate Home Assistant device with its equipment and summary sensors. Its
+device page links to the Smart heating service for that delivery site. After
+an update, an existing device gains this link when it next appears in a
+successful inventory sync. The integration uses Frank's display name, brand,
+and model when available. An opaque identifier derived from the selected site
+and Frank's device ID keeps the device stable across refreshes. Existing
+equipment sensors keep their entity IDs and unique IDs when they move from
+the service to the device. The service holds the device count and profile
+information.
 
 The sensor displayed as **Total savings** (Dutch: **Totale besparingen**; French:
 **Économies totales**) keeps the stable `smart_hvac_total_result` translation
