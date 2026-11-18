@@ -419,4 +419,7 @@ def async_setup_smart_hvac_sensors(
 
     _async_sync_sensors()
     entry.async_on_unload(coordinator.async_add_listener(_async_sync_sensors))
+    entry.async_on_unload(
+        coordinator.async_add_inventory_refresh_listener(_async_sync_sensors)
+    )
     entry.async_on_unload(settings.async_add_listener(_async_sync_sensors))
