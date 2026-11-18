@@ -44,6 +44,26 @@ _UNIT_CLASSES: Final = {
     _ENERGY_UNIT: EnergyConverter.UNIT_CLASS,
     _VOLUME_UNIT: VolumeConverter.UNIT_CLASS,
 }
+_IMPORT_LOCKS_KEY: Final = f"{DOMAIN}_usage_import_locks"
+
+
+def _import_lock(hass: HomeAssistant, entry: ConfigEntry) -> asyncio.Lock:
+    """Share one Recorder import lock across coordinators for this entry."""
+    locks: dict[str, asyncio.Lock] = hass.data.setdefault(_IMPORT_LOCKS_KEY, {})
+    return locks.setdefault(entry.entry_id, asyncio.Lock())
+
+
+def remove_import_lock(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Forget an entry's import lock only when the entry is permanently removed."""
+    hass.data.get(_IMPORT_LOCKS_KEY, {}).pop(entry.entry_id, None)
+
+
+def _current_import_owner(entry: ConfigEntry, owner: object | None) -> bool:
+    """Reject a stale coordinator after the entry has published a replacement."""
+    if owner is None:
+        return True
+    runtime = getattr(entry, "runtime_data", None)
+    return getattr(runtime, "statistics_coordinator", None) is owner
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,10 +116,18 @@ def _usage_interval(
     item: UsageItem, category_unit: str, now_utc: datetime, *, gas: bool
 ) -> _UsageInterval | None:
     """Accept only finite measurements in closed, aligned provider intervals."""
-    unit = _USAGE_UNITS.get((item.unit or category_unit).strip().lower())
+    raw_unit = item.unit or category_unit
+    if not isinstance(raw_unit, str):
+        return None
+    unit = _USAGE_UNITS.get(raw_unit.strip().lower())
     if unit is None or (not gas and unit != _ENERGY_UNIT):
         return None
-    if not isfinite(item.usage) or not isfinite(item.costs):
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not isfinite(value)
+        for value in (item.usage, item.costs)
+    ):
         return None
     try:
         start, end = _usage_bounds(item)
@@ -255,15 +283,20 @@ async def async_record_period_usage(
     site_reference: str,
     usage: PeriodUsageAndCosts,
     now_utc: datetime,
+    *,
+    owner: object | None = None,
 ) -> None:
-    """Import provider intervals by hour using the existing usage refresh."""
+    """Import completed hours, serialized across entry reloads and coordinators."""
     try:
         series = list(_usage_series(entry, site_reference, usage, now_utc))
         if not series:
             return
         recorder = get_instance(hass)
-        async with asyncio.timeout(10):
-            # A previous import can still be queued when a new refresh starts.
+        async with asyncio.timeout(10), _import_lock(hass, entry):
+            # A retired coordinator must never overwrite the replacement's data.
+            if not _current_import_owner(entry, owner):
+                return
+            # Read and queue all series under the same entry-scoped lock.
             await recorder.async_block_till_done()
             for metadata, measurements in series:
                 try:
