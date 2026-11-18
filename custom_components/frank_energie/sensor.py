@@ -1665,6 +1665,8 @@ def _async_migrate_insight_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -
     Only the six known default IDs are changed. Custom IDs and occupied
     destinations are left alone; migration can safely run on each setup.
     """
+    if not entry.runtime_data.settings_coordinator.api.is_authenticated:
+        return
     registry = er.async_get(hass)
     for sensor_key, object_id in _INSIGHT_DEFAULT_OBJECT_IDS.items():
         unique_id = f"{entry.unique_id}.{sensor_key}"
@@ -5166,8 +5168,7 @@ async def async_setup_entry(
     statistics_coordinator = runtime_data.statistics_coordinator
     invoice_coordinator = runtime_data.invoice_coordinator
 
-    if settings_coordinator.api.is_authenticated:
-        _async_migrate_insight_entity_ids(hass, config_entry)
+    _async_migrate_insight_entity_ids(hass, config_entry)
 
     def _get_coordinator_for_description(
         description: FrankEnergieEntityDescription,
