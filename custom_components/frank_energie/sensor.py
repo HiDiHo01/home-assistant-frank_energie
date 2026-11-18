@@ -1847,7 +1847,9 @@ def _month_insights_value(
         ):
             return None
     amount = _monetary_amount(value)
-    return amount if amount is not None and amount != 0.0 else None
+    if not amount:
+        return None
+    return amount
 
 
 def _month_insights_attributes(data: FrankEnergieData) -> dict[str, object]:
@@ -4410,11 +4412,13 @@ class FrankEnergieSensor(
                 return None
             commodity = "gas" if self.entity_description.is_gas else "electricity"
             unit = _month_insights_unit(self.coordinator.data, commodity)
-            return (
-                f"{CURRENCY_EURO}/{unit}"
-                if kind == "unit_price" and unit
-                else (unit if kind == "usage" else None)
-            )
+            if kind == "unit_price":
+                if unit is None:
+                    return None
+                return f"{CURRENCY_EURO}/{unit}"
+            if kind == "usage":
+                return unit
+            return None
         if self._attr_unit_of_measurement == UNIT_GAS_NL:
             if (
                 self.coordinator.data
