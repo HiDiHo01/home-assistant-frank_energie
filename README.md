@@ -84,7 +84,8 @@ are migrated when the shorter ID is free, while customized IDs remain
 unchanged. Update references to renamed entity IDs.
 Older attribute labels such as `Electricity costs yesterday` have been
 renamed; update existing templates. Month and year lists can be large.
-The selection does not affect Energy Dashboard History.
+Insight amounts are based on **Marktprijs+** (market price + sourcing fee + VAT),
+not the market price alone. The selection does not affect Energy Dashboard History.
 See [Insight examples and template migration](docs/examples.md#insight-selecting-a-day-month-or-year).
 
 ### Gebruik

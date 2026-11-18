@@ -364,6 +364,10 @@ Each available category has `usage_total`, `costs_total`, `unit` and
 contains `date`, `from_time`, `till_time`, `usage`, `costs`
 and `unit`. Missing categories are omitted.
 
+**Insight pricing:** the amounts shown in Insight are based on **Marktprijs+**
+(market price + sourcing fee + VAT). This also applies when selecting a full
+month or year; do not interpret the shown amounts as market price alone.
+
 To see electricity usage and cost totals in **Developer tools > Template**,
 replace the sensor placeholder with your own electricity cost sensor:
 

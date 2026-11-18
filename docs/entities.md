@@ -159,6 +159,10 @@ reporting-period suffix. Update any affected entity ID references and use
 
 Each available category exposes `usage_total`, `costs_total`,
 `unit` and the complete provider `items` list for that period.
+
+**Pricing basis:** the monetary amounts shown in Insight use **Marktprijs+**:
+market price **plus the sourcing fee and VAT**. They do not represent the
+market price alone, regardless of whether a day, month, or year is selected.
 Previously used attribute labels containing `yesterday`, such as
 `Electricity costs yesterday`, are no longer available; update templates
 accordingly. Full-year item lists may use considerable Recorder storage.
