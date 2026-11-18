@@ -168,6 +168,9 @@ async def async_remove_entry(
     _LOGGER.debug("Removing entry: %s", entry.entry_id)
     await price_cache_store(hass, entry.entry_id).async_remove()
     remove_rate_limit_state(hass, entry.entry_id)
+    from .usage_statistics import remove_import_lock
+
+    remove_import_lock(hass, entry)
 
 
 def _is_unused_service_device(
