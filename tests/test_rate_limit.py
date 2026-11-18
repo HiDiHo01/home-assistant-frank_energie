@@ -815,7 +815,10 @@ async def test_invoice_throttle_allows_entry_setup_and_routes_sensors(
     assert invoice.available
     assert invoice.native_value == 15.0
     assert monthly.available
-    assert monthly.extra_state_attributes == {"Description": "October"}
+    assert monthly.extra_state_attributes == {
+        "Description": "October",
+        "source_updated_at": "2026-10-28T10:00:00+00:00",
+    }
 
 
 async def test_invoice_attributes_do_not_change_monthly_availability(
@@ -1325,7 +1328,10 @@ def test_monthly_cost_reading_date_survives_missing_invoice(
         DATA_MONTH_SUMMARY: SimpleNamespace(lastMeterReadingDate="2026-10-28"),
         DATA_INVOICES: None,
     }
-    assert description.attr_fn(data) == {"Last update": "2026-10-28"}
+    assert description.attr_fn(data) == {
+        "Last update": "2026-10-28",
+        "last_meter_reading_date": "2026-10-28",
+    }
 
 
 def test_multisite_legacy_default_site_is_not_duplicated(

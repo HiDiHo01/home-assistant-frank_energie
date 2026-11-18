@@ -39,11 +39,11 @@ De waarden van de prijssensoren kunnen bijvoorbeeld gebruikt worden om apparatuu
 
 - [ChatGPT Frank Energie Assistant](https://chatgpt.com/g/g-6a30a8e006b081919967c4c79fd542d7-frank-energie-assistant)
 
-# Services
+# Actions
 
-The Frank Energie integration does not currently register any Home Assistant services.
-
-The integration exposes functionality through entities, events, buttons, selects, and sensors.
+Use `frank_energie.get_prices_for_date` in automations to retrieve cached market
+and all-in price intervals. With Recorder loaded, Frank Energie also imports
+completed usage and cost hours for the Energy Dashboard. [Automation example and dashboard setup](docs/examples.md#prices-for-a-date)
 
 ## Installatie
 Plaats de map `frank_energie` uit de map `custom_components` binnen deze repo in de `custom_components` map van je Home Assistant installatie.
