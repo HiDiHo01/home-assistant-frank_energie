@@ -513,9 +513,9 @@ def test_no_unused_or_missing_translation_keys() -> None:
     )
 
     # Verify that all explicit translation keys defined in Python are translated in strings.json
-    missing_entity_keys = (extractor.translation_keys | dynamic_vehicle_keys | month_insights_keys) - (
-        strings_entity_keys
-    )
+    missing_entity_keys = (
+        extractor.translation_keys | dynamic_vehicle_keys | month_insights_keys
+    ) - (strings_entity_keys)
     assert not missing_entity_keys, (
         f"Translation keys defined in code but missing from strings.json: {sorted(missing_entity_keys)}"
     )
