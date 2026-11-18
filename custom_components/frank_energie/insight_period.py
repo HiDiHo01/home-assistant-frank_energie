@@ -3,7 +3,7 @@
 import re
 from datetime import date, timedelta
 
-_PERIOD_PATTERN = re.compile(r"[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\Z")
+_PERIOD_PATTERN = re.compile(r"\d{4}(?:-\d{2}(?:-\d{2})?)?\Z", re.ASCII)
 
 
 def validate_insight_period(period: str, today: date) -> str:

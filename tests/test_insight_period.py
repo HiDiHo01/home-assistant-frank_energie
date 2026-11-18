@@ -32,7 +32,10 @@ from custom_components.frank_energie.sensor import (
     _async_remove_deprecated_insight_month_cost_sensor,
     _sensor_unique_id,
 )
-from custom_components.frank_energie.text import FrankEnergieInsightPeriod
+from custom_components.frank_energie.text import (
+    FrankEnergieInsightPeriod,
+    async_setup_entry as async_setup_insight_text_entry,
+)
 
 
 @pytest.mark.parametrize(
@@ -487,3 +490,32 @@ async def test_deprecated_insight_month_cost_cleanup_is_config_entry_scoped(
     _async_remove_deprecated_insight_month_cost_sensor(hass, entry)
 
     assert registry.async_get(other_entity.entity_id) == other_entity
+
+
+@pytest.mark.parametrize("period", ["٢٠٢٦", "2026-١١", "2026-11-١٨"])
+def test_rejects_non_ascii_decimal_digits(period: str) -> None:
+    """Keep ISO selector validation ASCII-only after regex modernization."""
+    with pytest.raises(ValueError, match="Insight period"):
+        validate_insight_period(period, date(2026, 11, 18))
+
+
+@pytest.mark.parametrize("authenticated", [True, False])
+async def test_text_platform_setup_preserves_async_contract(
+    hass: HomeAssistant, authenticated: bool
+) -> None:
+    """Await the Home Assistant platform hook and register only signed-in entries."""
+    entry = _entry(hass)
+    coordinator = _coordinator(hass, entry)
+    coordinator.api.is_authenticated = authenticated
+    entry.runtime_data = SimpleNamespace(statistics_coordinator=coordinator)
+    add_entities = MagicMock()
+
+    await async_setup_insight_text_entry(hass, entry, add_entities)
+
+    if authenticated:
+        add_entities.assert_called_once()
+        created = add_entities.call_args.args[0]
+        assert len(created) == 1
+        assert isinstance(created[0], FrankEnergieInsightPeriod)
+    else:
+        add_entities.assert_not_called()
