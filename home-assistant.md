@@ -9,7 +9,7 @@ This guide records behavior and invariants specific to this integration. General
 - **Nullable upstream data:** Treat missing, `null`, expired, and partial fields as possible when the upstream contract permits them. In particular, nullable vehicle, charger, battery, or account fields must not crash parsing or take down an entire coordinator when a safe, semantically correct fallback exists. Do not fabricate valid-looking values.
 - **Time semantics:** Keep timestamps timezone-aware. Distinguish UTC instants from Amsterdam-local calendar dates and price publication windows. Preserve the repository's timezone policy; consider daylight-saving transitions and midnight boundaries when changing time-sensitive logic.
 - **Cache integrity:** Preserve cache freshness and validation. Do not present stale cached data as current, overwrite valid cached data with fabricated values after a failed refresh, or confuse a cache fallback with a successful live update.
-- **Service claims:** The integration README states that no Home Assistant services are registered. Do not document or introduce service actions unless the implementation actually registers them. Describe existing behavior through the entities, events, buttons, selects, and sensors implemented by the repository.
+- **Action claims:** Document registered Home Assistant actions with their actual parameters, responses, and error behavior. Keep actions scoped to the selected configuration and use the price coordinator for cached price reads.
 
 ## Repository references
 

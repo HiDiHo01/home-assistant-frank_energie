@@ -238,6 +238,50 @@ template:
             {{ ns.result }}
 ```
 
+## Prices for a Date
+
+Select **Get prices for a date** in an automation and choose the Frank Energie
+configuration, the date, and the energy type. Select the configuration in the UI
+to obtain its config entry ID for YAML. Dates use the Europe/Amsterdam calendar.
+The example uses today's date in an installation configured for that time zone.
+
+```yaml
+actions:
+  - action: frank_energie.get_prices_for_date
+    data:
+      config_entry: YOUR_FRANK_ENERGIE_CONFIG_ENTRY_ID
+      date: "{{ now().date().isoformat() }}"
+      energy_type: electricity
+    response_variable: tariff
+  - variables:
+      cheapest_period: "{{ tariff.prices | min(attribute='all_in_price') }}"
+```
+
+The response contains `unit`, the validated UTC `coverage`, and a chronological
+`prices` list. Each period gives its original `start` and `end`, `market_price`, and
+`all_in_price`. The action reads the existing cache. Use a date whose prices
+have been published and cached. Tomorrow's gas prices cover local midnight
+through 06:00. If the requested coverage is unavailable, the action reports
+an error.
+
+## Energy Dashboard History
+
+With Recorder enabled, the integration imports complete hourly readings from
+the usual authenticated usage refresh. It creates separate statistics for
+electricity consumption, feed-in, and gas consumption, plus the corresponding
+cost or compensation series when the provider reports them. Each statistic's
+name includes the configured entry title. History grows from the returned
+usage periods, and missing hours remain gaps. Separate date and clock values
+use Europe/Amsterdam. A repeated local hour needs an explicit offset to be
+imported.
+
+In the Energy Dashboard settings, select the statistics for your delivery
+location. Use **Electricity consumption** for grid consumption,
+**Electricity feed-in** for return to the grid, and **Gas consumption** for
+gas. Choose the gas series with the unit used by your installation. Under
+costs and compensation, choose the matching EUR series where applicable. Use
+one consumption or cost source for each flow to avoid counting it twice.
+
 ## Dashboard Ideas
 
 Useful entities for Energy dashboards:

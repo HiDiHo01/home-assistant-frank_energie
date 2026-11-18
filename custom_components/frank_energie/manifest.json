@@ -1,7 +1,8 @@
 {
     "domain": "frank_energie",
     "name": "Frank Energie",
-    "categories": ["energy.energy_prices"],
+    "after_dependencies": ["recorder"],
+    "categories": ["energy.provider"],
     "codeowners": [
         "@HiDiHo01",
         "@Veldkornet"

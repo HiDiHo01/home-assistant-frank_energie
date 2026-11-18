@@ -689,36 +689,6 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         }
 
     @staticmethod
-    def _price_series_covers_day(
-        price_series: PriceData | None, day_start: datetime, day_end: datetime
-    ) -> bool:
-        """Require uninterrupted, non-overlapping UTC price-interval coverage."""
-        if price_series is None or not price_series.all:
-            return False
-
-        covered_until = day_start
-        for price in sorted(
-            price_series.all, key=lambda item: item.date_from.astimezone(UTC)
-        ):
-            start = price.date_from
-            end = price.date_till
-            if start.tzinfo is None or end.tzinfo is None:
-                return False
-
-            start_utc = start.astimezone(UTC)
-            end_utc = end.astimezone(UTC)
-            if end_utc <= start_utc:
-                return False
-            if end_utc <= day_start or start_utc >= day_end:
-                continue
-            if max(start_utc, day_start) != covered_until:
-                # A gap or overlapping interval makes the day incomplete.
-                return False
-            covered_until = min(end_utc, day_end)
-
-        return covered_until == day_end
-
-    @staticmethod
     def _prices_cover_date(
         prices: MarketPrices | None,
         day: date,
@@ -742,21 +712,12 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
         if not price_series_list:
             return False
 
-        tz_amsterdam = ZoneInfo(TIMEZONE_AMSTERDAM)
-        day_start = datetime.combine(day, time.min, tz_amsterdam).astimezone(UTC)
-        day_end = datetime.combine(
-            day + timedelta(days=1), time.min, tz_amsterdam
-        ).astimezone(UTC)
-        gas_end = (
-            datetime.combine(day, time(hour=6), tz_amsterdam).astimezone(UTC)
-            if tomorrow_gas_window
-            else day_end
-        )
         return all(
-            FrankEnergieCoordinator._price_series_covers_day(
+            helpers.prices_covering_window(
                 series,
-                day_start,
-                gas_end if series is prices.gas else day_end,
+                *helpers.price_date_window(
+                    day, tomorrow_gas=tomorrow_gas_window and series is prices.gas
+                ),
             )
             for series in price_series_list
         )
@@ -4122,6 +4083,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie statistics coordinator"
         self._month_summary_site_reference: str | None = None
+        self._usage_lock = asyncio.Lock()
         _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
         self.update_interval = timedelta(
@@ -4130,8 +4092,29 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
             )
         )
 
+    async def _async_fetch_and_record_usage(
+        self, start_date: date, now_utc: datetime
+    ) -> PeriodUsageAndCosts | None:
+        """Keep a usage fetch and its optional Recorder import in order."""
+        async with self._usage_lock:
+            site_reference = self.site_reference
+            usage = await self._fetch_period_usage(start_date)
+            if (
+                isinstance(usage, PeriodUsageAndCosts)
+                and site_reference
+                and self.site_reference == site_reference
+                and "recorder" in self.hass.config.components
+            ):
+                # Recorder installs optional database dependencies during setup.
+                from .usage_statistics import async_record_period_usage
+
+                await async_record_period_usage(
+                    self.hass, self.config_entry, site_reference, usage, now_utc
+                )
+            return usage
+
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch historical statistics data."""
+        """Fetch monthly data and refresh usage and its hourly statistics."""
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
             _LOGGER.debug("Skipping statistics fetch during maintenance window")
@@ -4146,7 +4129,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         try:
             data_month_summary, data_period_usage = await asyncio.gather(
                 self._fetch_month_summary(),
-                self._fetch_period_usage(start_date),
+                self._async_fetch_and_record_usage(start_date, now_utc),
             )
             result = _empty_data()
             if self.settings_coordinator.data:
