@@ -282,7 +282,8 @@ async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     coordinator._month_insights_site_reference = None
     coordinator._month_insights_period = None
     coordinator._fetch_month_summary = AsyncMock(return_value=None)
-    coordinator._fetch_period_usage = AsyncMock(return_value="usage_result")
+    coordinator._async_fetch_and_record_usage = AsyncMock(return_value="usage_result")
+    coordinator._async_fetch_optional_insight_usage = AsyncMock(return_value=None)
     coordinator._fetch_month_insights = AsyncMock(return_value=None)
     coordinator.data = {}
     result = await FrankEnergieStatisticsCoordinator._async_update_data(coordinator)
