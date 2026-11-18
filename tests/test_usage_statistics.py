@@ -157,9 +157,7 @@ async def test_usage_imports_utc_hours_and_preserves_meter_units(
     )
     assert by_series["feed_in_usage_kwh"][0]["state"] == pytest.approx(0.75)
     assert by_series["feed_in_cost"][0]["state"] == pytest.approx(0.2)
-    assert [row["start"] for row in by_series["gas_usage_m3"]] == [
-        _START.timestamp()
-    ]
+    assert [row["start"] for row in by_series["gas_usage_m3"]] == [_START.timestamp()]
     assert [row["state"] for row in by_series["gas_usage_m3"]] == pytest.approx([1])
     assert [row["sum"] for row in by_series["gas_usage_m3"]] == pytest.approx([1])
     assert [row["start"] for row in by_series["gas_usage_kwh"]] == [
@@ -171,12 +169,8 @@ async def test_usage_imports_utc_hours_and_preserves_meter_units(
         _START.timestamp(),
         later_hour.timestamp(),
     ]
-    assert [row["state"] for row in by_series["gas_cost"]] == pytest.approx(
-        [0.4, 0.3]
-    )
-    assert [row["sum"] for row in by_series["gas_cost"]] == pytest.approx(
-        [0.4, 0.7]
-    )
+    assert [row["state"] for row in by_series["gas_cost"]] == pytest.approx([0.4, 0.3])
+    assert [row["sum"] for row in by_series["gas_cost"]] == pytest.approx([0.4, 0.7])
     unit_classes = {
         fields["statistics_unit_of_measurement"]: fields["unit_class"]
         for fields in metadata.values()
@@ -417,7 +411,8 @@ async def test_usage_history_persists_across_home_assistant_restart(
         await async_record_period_usage(hass, entry, "test-site", first, _NOW)
         metadata, history = await _history(hass, recorder)
         statistic_id = next(
-            key for key, fields in metadata.items()
+            key
+            for key, fields in metadata.items()
             if fields["name"] == "test-site Electricity consumption"
         )
         assert [row["sum"] for row in history[statistic_id]] == pytest.approx([2])
