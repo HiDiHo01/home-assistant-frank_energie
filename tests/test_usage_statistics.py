@@ -19,6 +19,7 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.core import HomeAssistant
 from homeassistant.util.unit_conversion import EnergyConverter, VolumeConverter
 from pytest_homeassistant.common import MockConfigEntry, async_test_home_assistant
+from pytest_homeassistant.components.recorder.common import async_wait_recording_done
 from python_frank_energie.models import EnergyCategory, PeriodUsageAndCosts, UsageItem
 
 from custom_components.frank_energie.const import DATA_USAGE, DOMAIN
@@ -86,8 +87,8 @@ async def _setup(hass: HomeAssistant, entry: MockConfigEntry, api: AsyncMock) ->
 async def _history(
     hass: HomeAssistant, recorder: Recorder
 ) -> tuple[dict[str, dict[str, object]], dict[str, list[StatisticsRow]]]:
-    """Read the metadata and rows that the Energy Dashboard can select."""
-    await recorder.async_block_till_done()
+    """Read committed metadata and rows that the Energy Dashboard can select."""
+    await async_wait_recording_done(hass)
     statistics = await recorder.async_add_executor_job(list_statistic_ids, hass)
     metadata = {
         fields["statistic_id"]: fields
