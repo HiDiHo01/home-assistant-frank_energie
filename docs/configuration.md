@@ -97,6 +97,21 @@ Legacy authenticated entries without a selected site can update credentials only
 for their existing login email. Add a separate integration entry to use another
 account or delivery site.
 
+## Insight Reporting Period
+
+With an authenticated entry, open **Settings > Devices & services > Frank Energie**
+and select the **Inzicht / Insight** service device. Edit its **Insight period**
+text entity to report on a calendar year (`YYYY`, for example `2025`),
+a month (`YYYY-MM`, for example `2026-10`), or a day
+(`YYYY-MM-DD`, for example `2026-11-17`).
+
+The default is yesterday in `Europe/Amsterdam`; invalid and future periods
+are rejected. Your selection is stored per configuration entry across restarts.
+The six Insight sensors display totals for that period, while the automated
+Recorder Energy Dashboard History import remains independent.
+
+See [action, sensor and template examples](examples.md#insight-selecting-a-day-month-or-year).
+
 ## Resolution Selection
 
 The integration supports multiple electricity market resolutions.

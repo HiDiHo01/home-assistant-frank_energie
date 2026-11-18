@@ -306,28 +306,107 @@ Refer to [Entities](entities.md) to identify the corresponding entity IDs in you
 - Smart Charging and Smart Battery examples require supported Frank Energie account features.
 - The integration dynamically creates entities based on available account data and connected devices.
 
-## Frank Energie Insight reporting period
+## Insight: selecting a day, month, or year
 
-The **Insight period** text control on the **Frank Energie - Usage / Inzicht** device
-accepts `YYYY` (such as `2025`), `YYYY-MM` (such as `2026-10`), and
-`YYYY-MM-DD` (such as `2026-11-17`). It defaults to yesterday in
-Europe/Amsterdam and rejects invalid or future periods.
+Authenticated users can choose the reporting period for the **Frank Energie - Inzicht**
+service device. Open **Settings > Devices & services > Frank Energie**, select
+the **Inzicht / Insight** device, and edit the **Insight period / Inzichtperiode**
+text entity. Data is retrieved for the selected delivery site.
 
-Changing the period retrieves the corresponding `periodUsageAndCosts` totals
-for electricity, gas and feed-in. The selected period is exposed as a
-`selected_period` attribute. All available provider `items` are included in
-the Insight sensor attributes for day (`YYYY-MM-DD`), month (`YYYY-MM`) and
-year (`YYYY`) selections alike. The nested category attribute keys are
-`electricity`, `gas`, and `feed_in`, respectively, on both consumption and
-cost sensors. They replace the former labels such as `Electricity costs yesterday`;
-existing Home Assistant templates referring to those old attribute names must
-be updated. Year-long item lists can be very large and increase Recorder
-database storage considerably. The existing six Insight sensor unique IDs
-remain intact, but their display names describe a selected period rather than
-always claiming *yesterday*. These values are selected-period snapshots,
-**not** cumulative energy meters; do not use them as Energy Dashboard meters.
+| Input | Reporting period | Example |
+| --- | --- | --- |
+| `YYYY` | Entire calendar year | `2025` |
+| `YYYY-MM` | Entire calendar month | `2026-10` |
+| `YYYY-MM-DD` | One calendar day | `2026-11-17` |
 
-The routine yesterday usage fetch and any Recorder history import remain
-independent of the selector. When the selection differs from yesterday, one
-additional API request is made per statistics refresh. The selected period is
-persisted across Home Assistant restarts.
+The default is yesterday in `Europe/Amsterdam`. Invalid dates and
+future periods are rejected. The selection is saved for each configuration
+entry and persists across restarts. If the selected period differs from
+yesterday, the integration requests it separately from the normal usage
+refresh.
+
+### Example: select a month with an action
+
+Use Home Assistant's built-in `text.set_value` action. Replace the placeholder
+with your actual **Insight period** entity ID:
+
+```yaml
+action: text.set_value
+target:
+  entity_id: text.REPLACE_WITH_YOUR_INSIGHT_PERIOD_ENTITY
+data:
+  value: "2026-10"
+```
+
+You can also set `value` to `"2025"` for a year or `"2026-11-17"`
+for a day. These are examples, not fixed or automatically created entity IDs.
+
+### Insight sensor attributes
+
+The six existing Insight sensor unique IDs are preserved. Both electricity
+sensors (usage and costs) expose the same category, and likewise for gas and
+feed-in:
+
+| Insight sensors | Nested attribute | Other attribute |
+| --- | --- | --- |
+| Electricity consumption and costs | `electricity` | `selected_period` |
+| Gas consumption and costs | `gas` | `selected_period` |
+| Feed-in and compensation | `feed_in` | `selected_period` |
+
+Each available category has `usage_total`, `costs_total`, `unit` and
+**all** `items` returned for the selected day, month or year. Each item
+contains `date`, `from_time`, `till_time`, `usage`, `costs`
+and `unit`. Missing categories are omitted.
+
+To see electricity usage and cost totals in **Developer tools > Template**,
+replace the sensor placeholder with your own electricity cost sensor:
+
+```jinja2
+{% set entity_id = 'sensor.REPLACE_WITH_YOUR_INSIGHT_ELECTRICITY_COST_SENSOR' %}
+{% set category = state_attr(entity_id, 'electricity') %}
+{% if category is not none %}
+  Period: {{ state_attr(entity_id, 'selected_period') }}
+  Usage: {{ category.usage_total }} {{ category.unit }}
+  Costs: {{ category.costs_total }} EUR
+{% else %}
+  No electricity details available for this period.
+{% endif %}
+```
+
+To count the returned `items`, including full month or year lists:
+
+```jinja2
+{% set category = state_attr('sensor.REPLACE_WITH_YOUR_INSIGHT_ELECTRICITY_COST_SENSOR', 'electricity') %}
+{% if category is none %}
+  0
+{% elif category is mapping %}
+  {{ category['items'] | count }}
+{% else %}
+  {{ category.items | count }}
+{% endif %}
+```
+
+Use the same approach with the `gas` or `feed_in` attribute on your gas
+or feed-in sensor. Choose entity IDs from Home Assistant's entity picker; IDs
+may vary with localization and previous installations.
+
+### Migrating existing templates
+
+The old attribute labels no longer exist. Replace them as follows:
+
+| Old attribute | New attribute |
+| --- | --- |
+| `Electricity costs yesterday`, `Electricity usage yesterday` | `electricity` |
+| `Gas costs gas`, `Gas usage yesterday` | `gas` |
+| `feed-in gains yesterday`, `Amount feed-in yesterday` | `feed_in` |
+
+For instance, replace
+`state_attr('sensor.YOUR_ELECTRICITY_SENSOR', 'Electricity costs yesterday')`
+with `state_attr('sensor.YOUR_ELECTRICITY_SENSOR', 'electricity')`.
+
+**Storage and Energy Dashboard:** year-long `items` lists can be large and
+may increase Recorder database storage or hit Home Assistant attribute size
+limits. The selected-period totals are snapshots, not cumulative meters: do
+not configure them as Energy Dashboard consumption statistics. The separate
+automatic Recorder **Energy Dashboard History** import continues to use
+the ordinary yesterday usage request regardless of the selection.

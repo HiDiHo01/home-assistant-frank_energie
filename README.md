@@ -70,6 +70,19 @@ Indien je deze plugin al gebruikte en hebt ingesteld via `configuration.yaml` di
 
 Bij het instellen van de integratie wordt de mogelijkheid gegeven in te loggen met je Frank Energie-account. Inloggen is geen vereiste voor werking van deze integratie maar biedt de mogelijkheid om ook klantspecifieke gegevens op te halen. Op dit moment krijg je na inloggen naast de gebruikelijke tariefsensoren ook de beschikking over sensoren voor de verwachte en daadwerkelijke verbruikskosten voor de huidige maand.
 
+### Insight reporting period: day, month or year
+
+Signed-in users can set the **Insight period** text entity on the
+**Frank Energie - Inzicht** device to `YYYY` (year), `YYYY-MM` (month)
+or `YYYY-MM-DD` (day). The default is yesterday. The six existing Insight
+sensors expose `selected_period` and the complete provider `items`
+within the `electricity`, `gas` or `feed_in` category attribute.
+
+Older attribute labels such as `Electricity costs yesterday` have been
+renamed; update existing templates. Month and year lists can be large.
+The selection does not affect Energy Dashboard History.
+See [Insight examples and template migration](docs/examples.md#insight-selecting-a-day-month-or-year).
+
 ### Gebruik
 
 Een aantal sensors hebben een `prices` attribuut die alle bekende prijzen bevat. Dit kan worden gebruikt om zelf met een template nieuwe sensors te maken.
