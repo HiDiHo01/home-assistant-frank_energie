@@ -23,7 +23,7 @@ from custom_components.frank_energie.insight_period import (
     default_insight_period,
     validate_insight_period,
 )
-from custom_components.frank_energie.sensor import SENSOR_TYPES
+from custom_components.frank_energie.sensor import SENSOR_TYPES, FrankEnergieSensor
 from custom_components.frank_energie.text import FrankEnergieInsightPeriod
 
 
@@ -97,7 +97,7 @@ def _entry(
     return entry
 
 
-@pytest.mark.parametrize("period", ["2025", "2026-10", "2026-11-17"])
+@pytest.mark.parametrize("period", ["2025", "2026-10", "2026-11-15"])
 async def test_selected_period_uses_provider_totals_without_changing_recorder_source(
     hass: HomeAssistant, period: str
 ) -> None:
@@ -233,3 +233,53 @@ def test_selected_insight_sensors_use_provider_totals_including_zero() -> None:
     for key, value in expected.items():
         assert by_key[key].value_fn(data) == value
         assert by_key[key].state_class is None
+
+
+@pytest.mark.parametrize("period", ["2025", "2026-10"])
+async def test_long_period_attributes_do_not_contain_provider_interval_history(
+    hass: HomeAssistant, period: str
+) -> None:
+    """Do not copy potentially thousands of interval items to Recorder attributes."""
+    entry = _entry(hass)
+    coordinator = _coordinator(hass, entry)
+    coordinator.data = {
+        DATA_INSIGHT_USAGE: SimpleNamespace(
+            electricity=SimpleNamespace(
+                costs_total=12.0,
+                usage_total=25.0,
+                items=[{"usage": 1.0}] * 5000,
+            ),
+        ),
+        DATA_INSIGHT_PERIOD: period,
+    }
+    description = next(
+        item for item in SENSOR_TYPES if item.key == "costs_electricity_yesterday"
+    )
+    sensor = FrankEnergieSensor(coordinator, description, entry)
+    assert sensor.extra_state_attributes == {"selected_period": period}
+
+
+async def test_changed_delivery_site_never_publishes_old_insight_totals(
+    hass: HomeAssistant,
+) -> None:
+    """Never attach the former delivery site's totals after reconfiguration."""
+    entry = _entry(hass, {CONF_INSIGHT_PERIOD: "2025"})
+    coordinator = _coordinator(hass, entry)
+
+    async def _switch_site(_day: date, _now: object) -> object:
+        """Simulate a site change while the two provider reads are in flight."""
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, "site_reference": "another-site"},
+        )
+        return SimpleNamespace(_id="previous-site-usage")
+
+    coordinator._async_fetch_and_record_usage = AsyncMock(side_effect=_switch_site)
+    coordinator._fetch_period_usage = AsyncMock(
+        return_value=SimpleNamespace(_id="selected-old-site")
+    )
+    with freeze_time("2026-11-18T12:00:00+00:00"):
+        data = await coordinator._async_update_data()
+
+    assert data[DATA_INSIGHT_PERIOD] is None
+    assert data[DATA_INSIGHT_USAGE] is None

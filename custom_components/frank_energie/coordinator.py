@@ -4170,6 +4170,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         yesterday = today - timedelta(days=1)
         start_date = yesterday
         selected_period = self.insight_period
+        selected_site_reference = self.site_reference
 
         try:
             if selected_period == yesterday.isoformat():
@@ -4212,7 +4213,10 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 )
             result[DATA_USAGE] = data_period_usage
             # Avoid associating an in-flight response with a changed selection.
-            if selected_period == self.insight_period:
+            if (
+                selected_period == self.insight_period
+                and selected_site_reference == self.site_reference
+            ):
                 result[DATA_INSIGHT_PERIOD] = selected_period
                 result[DATA_INSIGHT_USAGE] = insight_usage
             return result
