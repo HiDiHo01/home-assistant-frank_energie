@@ -235,28 +235,46 @@ def test_selected_insight_sensors_use_provider_totals_including_zero() -> None:
         assert by_key[key].state_class is None
 
 
-@pytest.mark.parametrize("period", ["2025", "2026-10"])
-async def test_long_period_attributes_do_not_contain_provider_interval_history(
-    hass: HomeAssistant, period: str
+@pytest.mark.parametrize("period", ["2025", "2026-10", "2026-11-17"])
+@pytest.mark.parametrize(
+    ("sensor_key", "source_key", "attribute_key"),
+    [
+        ("costs_electricity_yesterday", "electricity", "Electricity costs yesterday"),
+        ("usage_electricity_yesterday", "electricity", "Electricity usage yesterday"),
+        ("costs_gas_yesterday", "gas", "Gas costs gas"),
+        ("usage_gas_yesterday", "gas", "Gas usage yesterday"),
+        ("gains_feed_in_yesterday", "feed_in", "feed-in gains yesterday"),
+        ("delivered_feed_in_yesterday", "feed_in", "Amount feed-in yesterday"),
+    ],
+)
+async def test_insight_period_attributes_preserve_all_provider_items(
+    hass: HomeAssistant,
+    period: str,
+    sensor_key: str,
+    source_key: str,
+    attribute_key: str,
 ) -> None:
-    """Do not copy potentially thousands of interval items to Recorder attributes."""
+    """Expose the entire provider category and items for every period granularity."""
     entry = _entry(hass)
     coordinator = _coordinator(hass, entry)
+    # Regression: month/year must not be truncated even for large item lists.
+    item_count = 5000 if len(period) < 10 else 2
+    items = [{"date": "2025-01-01", "usage": 1.0}] * item_count
+    source = SimpleNamespace(costs_total=12.0, usage_total=25.0, items=items)
     coordinator.data = {
-        DATA_INSIGHT_USAGE: SimpleNamespace(
-            electricity=SimpleNamespace(
-                costs_total=12.0,
-                usage_total=25.0,
-                items=[{"usage": 1.0}] * 5000,
-            ),
-        ),
+        DATA_INSIGHT_USAGE: SimpleNamespace(**{source_key: source}),
         DATA_INSIGHT_PERIOD: period,
     }
     description = next(
-        item for item in SENSOR_TYPES if item.key == "costs_electricity_yesterday"
+        item for item in SENSOR_TYPES if item.key == sensor_key
     )
     sensor = FrankEnergieSensor(coordinator, description, entry)
-    assert sensor.extra_state_attributes == {"selected_period": period}
+
+    attributes = sensor.extra_state_attributes
+    assert attributes["selected_period"] == period
+    assert attributes[attribute_key] is source
+    assert attributes[attribute_key].items is items
+    assert len(attributes[attribute_key].items) == item_count
 
 
 async def test_changed_delivery_site_never_publishes_old_insight_totals(
