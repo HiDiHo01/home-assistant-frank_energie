@@ -199,21 +199,6 @@ def main() -> int:
         return 1
 
     print(f"Exported {result['total']} SonarQube issues to {_OUTPUT_PATH.name}")
-    # Temporary PR #485 diagnostic: report public issue summaries, without secrets.
-    if pull_request == "485":
-        for issue in result["issues"]:
-            print(
-                json.dumps(
-                    {
-                        "key": issue.get("key"),
-                        "rule": issue.get("rule"),
-                        "component": issue.get("component"),
-                        "line": issue.get("line"),
-                        "message": issue.get("message"),
-                    },
-                    ensure_ascii=False,
-                )
-            )
     return 0
 
 
