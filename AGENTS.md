@@ -161,6 +161,7 @@ Verify:
 * `requirements` contains only necessary dependencies.
 * `dependencies` and `after_dependencies` accurately represent load ordering.
 * `integration_type` is appropriate and explicitly declared where required.
+* When declaring `categories`, use exact identifiers from the official taxonomy. Choose categories by the integration's purpose and verify the HACS and Hassfest steps on the candidate commit. [Home Assistant integration categories](https://contributors.home-assistant.io/core/integrations/categories/)
 * The manifest remains valid JSON and passes the current validation tools.
 
 Do not add dependency pins without a demonstrated compatibility or reproducibility requirement.
@@ -277,7 +278,7 @@ Follow the current entity architecture and entity platform conventions.
 * Provide stable, meaningful `unique_id` values.
 * Set `has_entity_name = True` when appropriate for modern entity naming.
 * Use `device_info` only when a real, identifiable device exists.
-* Ensure every referenced `via_device` or parent device has a valid registered device identifier.
+* Register the service or hub before setting `via_device_id` on its equipment. Use the Home Assistant device-registry ID from the same config entry. Use `parent_device_id` for a logical component of a single device.
 * Do not invent device identifiers or create duplicate device-registry entries.
 * Use `EntityDescription` and platform-specific descriptions when they improve consistency.
 * Use `CoordinatorEntity` for entities that consume coordinator data.
@@ -542,6 +543,8 @@ At minimum, verify:
 Use the project's configured Python and Home Assistant versions. Do not assume that a check passed because the code appears correct.
 
 Never fabricate test results or claim a command succeeded when it was not executed.
+
+To classify a failing test as pre-existing, reproduce the same test and error on the unchanged target commit using the same locked environment. Record the check results for the final PR commit.
 
 If a tool cannot be run in the available environment, report that limitation and identify the exact unverified check.
 

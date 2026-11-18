@@ -308,6 +308,7 @@ async def test_hvac_site_device_and_account_diagnostics(
         "smart_hvac_device_count",
         "smart_hvac_profile_created_at",
     }
+    assert {sensor.device_id for sensor in service_sensors} == {device.via_device_id}
     device_sensors = er.async_entries_for_device(er.async_get(hass), device.id)
     states = {
         sensor.translation_key: _state(hass, sensor)
@@ -421,6 +422,7 @@ async def test_hvac_inventory_changes_and_recovery(
     assert len(devices) == 2
     assert {device.name for device in devices} == {"Fixture Model A", "Fixture Model B"}
     assert all(device.entry_type is None for device in devices)
+    assert {device.via_device_id for device in devices} == {count.device_id}
     registry = er.async_get(hass)
     equipment_sensors = [
         sensor
@@ -635,6 +637,33 @@ async def test_hvac_updates_device_metadata_without_duplicates(
     assert _state(hass, original_sensor).state == "Fixture Model A"
 
 
+async def test_hvac_restores_missing_service_link_on_inventory_refresh(
+    hass: HomeAssistant, api: AsyncMock
+) -> None:
+    """Link a registered device even when its inventory metadata is unchanged."""
+    entry = _entry(hass)
+    api.smart_hvacs.return_value = [_equipment("fixture-device", "Model A")]
+    await _setup(hass, entry, api)
+    (original_device,) = _equipment_devices(hass, entry)
+    original_sensor = _sensor(hass, entry, "smart_hvac_equipment")
+    service_id = _sensor(hass, entry, "smart_hvac_device_count").device_id
+    assert service_id is not None
+
+    device_registry = dr.async_get(hass)
+    device_registry.async_update_device(original_device.id, via_device_id=None)
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    previous_data = coordinator.data
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.data == previous_data
+    (linked_device,) = _equipment_devices(hass, entry)
+    assert linked_device.id == original_device.id
+    assert linked_device.via_device_id == service_id
+    assert _sensor(hass, entry, "smart_hvac_equipment") == original_sensor
+
+
 async def test_hvac_existing_sensors_move_to_equipment_device(
     hass: HomeAssistant, api: AsyncMock
 ) -> None:
@@ -755,6 +784,13 @@ async def test_hvac_entries_isolate_site_data_and_reload(
     other_sensor = _sensor(hass, other, "smart_hvac_equipment")
     (primary_device,) = _equipment_devices(hass, primary)
     (other_device,) = _equipment_devices(hass, other)
+    primary_service_id = _sensor(hass, primary, "smart_hvac_device_count").device_id
+    other_service_id = _sensor(hass, other, "smart_hvac_device_count").device_id
+    assert primary_service_id is not None
+    assert other_service_id is not None
+    assert primary_service_id != other_service_id
+    assert primary_device.via_device_id == primary_service_id
+    assert other_device.via_device_id == other_service_id
     assert primary_sensor.device_id == primary_device.id
     assert other_sensor.device_id == other_device.id
     assert primary_device.identifiers.isdisjoint(other_device.identifiers)
@@ -764,6 +800,7 @@ async def test_hvac_entries_isolate_site_data_and_reload(
     api.smart_hvacs.assert_awaited_with("test-site")
     other_api.smart_hvacs.assert_awaited_with("other-site")
 
+    dr.async_get(hass).async_update_device(primary_device.id, via_device_id=None)
     with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
         assert await hass.config_entries.async_reload(primary.entry_id)
         await hass.async_block_till_done()
@@ -771,7 +808,9 @@ async def test_hvac_entries_isolate_site_data_and_reload(
         _sensor(hass, primary, "smart_hvac_equipment").entity_id
         == primary_sensor.entity_id
     )
-    assert _equipment_devices(hass, primary)[0].id == primary_device.id
+    (reloaded_device,) = _equipment_devices(hass, primary)
+    assert reloaded_device.id == primary_device.id
+    assert reloaded_device.via_device_id == primary_service_id
     assert (
         _sensor(hass, other, "smart_hvac_equipment").entity_id == other_sensor.entity_id
     )
