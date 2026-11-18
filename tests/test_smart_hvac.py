@@ -651,11 +651,13 @@ async def test_hvac_restores_missing_service_link_on_inventory_refresh(
 
     device_registry = dr.async_get(hass)
     device_registry.async_update_device(original_device.id, via_device_id=None)
-    api.smart_hvac_summary.return_value = SmartHvacSummary(total_result=1.0)
+    coordinator = entry.runtime_data.smart_hvac_coordinator
+    previous_data = coordinator.data
 
-    await entry.runtime_data.smart_hvac_coordinator.async_refresh()
+    await coordinator.async_refresh()
     await hass.async_block_till_done()
 
+    assert coordinator.data == previous_data
     (linked_device,) = _equipment_devices(hass, entry)
     assert linked_device.id == original_device.id
     assert linked_device.via_device_id == service_id
