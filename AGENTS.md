@@ -727,16 +727,18 @@ triage below before rewriting any history.
   never assume `main`. Before reusing the old head's exact Git tree,
   verify that the checked base SHA is an ancestor of the old head
   (for example, `git merge-base --is-ancestor <base_sha> <old_head_sha>`).
-  If it is not, first incorporate the target branch through a
-  conflict-resolved rebase/cherry-pick; do not reparent an old tree
-  that omits newer base changes.
-- **Verify content:** only when base ancestry and the rewrite's scope
-  are verified, use the inspected base SHA as the new commit's sole
-  parent and retain the old head's exact Git tree.
-  Check tree identity and compare complete original/replacement diffs
-  against the same checked target base, including tests and unrelated
-  files. After base reconciliation, instead verify every intended
-  content change and reject accidental deletions.
+  If the target has advanced, incorporate its changes through a
+  conflict-resolved rebase/cherry-pick. When every PR-modified path has
+  an identical blob SHA in the old and new target bases, a verified
+  patch/blob transplant onto the **new target base tree** is also
+  permitted. Never reparent an old tree that omits newer base changes.
+- **Verify content:** reuse the old head's exact Git tree only when
+  it already includes the checked target base and its ancestry and
+  contents have been verified. Otherwise build on the current target
+  tree and compare the complete original and replacement PR diffs
+  against their respective bases: changed paths, blob SHAs, patches,
+  file statistics, tests, and any unrelated files. Reject lost target
+  changes, unintended deletions, and changed PR behavior.
 - **Explicit expected-head lease:** refresh both live target-base and
   PR-head SHAs immediately before publishing; abort and rebuild if
   either differs from the inspected values. Pin Git's lease to the
