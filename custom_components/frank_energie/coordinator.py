@@ -4319,7 +4319,10 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                     DATA_MONTH_SUMMARY_FETCHED_AT
                 )
             self._store_month_insights(
-                result, data_month_insights, month_insights_period, selected_site_reference
+                result,
+                data_month_insights,
+                month_insights_period,
+                selected_site_reference,
             )
             result[DATA_USAGE] = data_period_usage
             # Avoid associating an in-flight response with a changed selection.
