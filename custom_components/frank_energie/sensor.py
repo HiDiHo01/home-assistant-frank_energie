@@ -4414,6 +4414,12 @@ class FrankEnergieSensor(
                         else None
                     ),
                 }
+            if self.entity_description.key in _INSIGHT_SENSOR_KEYS:
+                period = data.get(DATA_INSIGHT_PERIOD)
+                # A year or month can contain thousands of interval readings.
+                # Never expose their full provider items in Recorder attributes.
+                if isinstance(period, str) and len(period) < 10:
+                    return {"selected_period": period}
             attributes = self.entity_description.attr_fn(data) or {}
             if self.entity_description.key in _INSIGHT_SENSOR_KEYS:
                 attributes = {
