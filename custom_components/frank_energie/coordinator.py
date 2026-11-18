@@ -4149,13 +4149,26 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         """Validate and save the Insight period, then request statistics refresh."""
         today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         selected = validate_insight_period(period, today)
-        if selected == self.insight_period:
+        if selected == self.config_entry.options.get(CONF_INSIGHT_PERIOD):
             return
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             options={**self.config_entry.options, CONF_INSIGHT_PERIOD: selected},
         )
         await self.async_request_refresh()
+
+    async def _async_fetch_optional_insight_usage(
+        self, selected_period: str
+    ) -> PeriodUsageAndCosts | None:
+        """Keep selected-period timeouts from interrupting base statistics."""
+        try:
+            return await self._fetch_period_usage(selected_period)
+        except TimeoutError:
+            _LOGGER.debug(
+                "Selected Insight period request timed out; "
+                "base statistics refresh continues"
+            )
+            return None
 
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch monthly data and refresh usage and its hourly statistics."""
@@ -4187,7 +4200,7 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 ) = await asyncio.gather(
                     self._fetch_month_summary(),
                     self._async_fetch_and_record_usage(start_date, now_utc),
-                    self._fetch_period_usage(selected_period),
+                    self._async_fetch_optional_insight_usage(selected_period),
                 )
             result = _empty_data()
             if self.settings_coordinator.data:

@@ -1,6 +1,7 @@
 """Regression tests for flexible Frank Energie Insight reporting periods."""
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
+from json import dumps
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +15,7 @@ from custom_components.frank_energie.const import (
     CONF_INSIGHT_PERIOD,
     DATA_INSIGHT_PERIOD,
     DATA_INSIGHT_USAGE,
+    DATA_MONTH_SUMMARY,
     DATA_USAGE,
     DOMAIN,
 )
@@ -148,6 +150,56 @@ async def test_default_yesterday_avoids_second_api_request(hass: HomeAssistant) 
     assert data[DATA_INSIGHT_PERIOD] == "2026-11-17"
     assert data[DATA_INSIGHT_USAGE] is yesterday
     coordinator._fetch_period_usage.assert_not_awaited()
+    coordinator._async_fetch_and_record_usage.assert_awaited_once_with(
+        date(2026, 11, 17), datetime(2026, 11, 18, 12, tzinfo=UTC)
+    )
+
+
+async def test_explicit_default_day_selection_remains_fixed_after_midnight(
+    hass: HomeAssistant,
+) -> None:
+    """Persist yesterday when explicitly chosen, even if it matches the default."""
+    entry = _entry(hass)
+    coordinator = _coordinator(hass, entry)
+    coordinator.async_request_refresh = AsyncMock()
+
+    with freeze_time("2026-11-18T12:00:00+00:00"):
+        assert coordinator.insight_period == "2026-11-17"
+        await coordinator.async_set_insight_period("2026-11-17")
+        assert entry.options[CONF_INSIGHT_PERIOD] == "2026-11-17"
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    with freeze_time("2026-11-19T12:00:00+00:00"):
+        assert coordinator.insight_period == "2026-11-17"
+        assert _coordinator(hass, entry).insight_period == "2026-11-17"
+        await coordinator.async_set_insight_period("2026-11-17")
+        coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_selected_period_timeout_preserves_base_statistics(
+    hass: HomeAssistant,
+) -> None:
+    """A timed-out optional Insight request must not discard yesterday's data."""
+    entry = _entry(hass, {CONF_INSIGHT_PERIOD: "2026-10"})
+    coordinator = _coordinator(hass, entry)
+    summary = SimpleNamespace(_id="2026-11")
+    yesterday = SimpleNamespace(_id="yesterday")
+    coordinator._fetch_month_summary = AsyncMock(return_value=summary)
+    coordinator._async_fetch_and_record_usage = AsyncMock(return_value=yesterday)
+    coordinator._fetch_period_usage = AsyncMock(side_effect=TimeoutError)
+
+    with freeze_time("2026-11-18T12:00:00+00:00"):
+        data = await coordinator._async_update_data()
+
+    assert data[DATA_MONTH_SUMMARY] is summary
+    assert data[DATA_USAGE] is yesterday
+    assert data[DATA_INSIGHT_PERIOD] == "2026-10"
+    assert data[DATA_INSIGHT_USAGE] is None
+    coordinator._fetch_month_summary.assert_awaited_once_with()
+    coordinator._async_fetch_and_record_usage.assert_awaited_once_with(
+        date(2026, 11, 17), datetime(2026, 11, 18, 12, tzinfo=UTC)
+    )
+    coordinator._fetch_period_usage.assert_awaited_once_with("2026-10")
 
 
 async def test_selected_period_persists_without_reloading_or_refetching_prices(
@@ -288,6 +340,53 @@ async def test_insight_period_attributes_preserve_all_provider_items(
     }
     assert attributes[attribute_key].items is items
     assert len(attributes[attribute_key].items) == item_count
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "category_key"),
+    [
+        ("costs_electricity_yesterday", "electricity"),
+        ("costs_gas_yesterday", "gas"),
+        ("gains_feed_in_yesterday", "feed_in"),
+    ],
+)
+async def test_insight_year_categories_are_excluded_from_recorder(
+    hass: HomeAssistant, sensor_key: str, category_key: str
+) -> None:
+    """Exclude year-length payloads from recorded attrs but retain them live."""
+    entry = _entry(hass)
+    coordinator = _coordinator(hass, entry)
+    items = [
+        {
+            "date": (date(2025, 1, 1) + timedelta(days=index)).isoformat(),
+            "usage": 1.25,
+            "costs": 0.25,
+        }
+        for index in range(365)
+    ]
+    category = SimpleNamespace(costs_total=91.25, usage_total=456.25, items=items)
+    coordinator.data = {
+        DATA_INSIGHT_USAGE: SimpleNamespace(**{category_key: category}),
+        DATA_INSIGHT_PERIOD: "2025",
+    }
+    entry.runtime_data = SimpleNamespace(settings_coordinator=SimpleNamespace(data={}))
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    sensor = FrankEnergieSensor(coordinator, description, entry)
+
+    live_attributes = sensor.extra_state_attributes
+    assert live_attributes[category_key] is category
+    assert live_attributes["selected_period"] == "2025"
+    assert len(dumps(live_attributes, default=vars).encode("utf-8")) > 16_384
+    assert category_key in sensor._unrecorded_attributes
+    assert "selected_period" not in sensor._unrecorded_attributes
+
+    recorded_attributes = {
+        key: value
+        for key, value in live_attributes.items()
+        if key not in sensor._unrecorded_attributes
+    }
+    assert recorded_attributes == {"selected_period": "2025"}
+    assert len(dumps(recorded_attributes).encode("utf-8")) < 16_384
 
 
 async def test_changed_delivery_site_never_publishes_old_insight_totals(
