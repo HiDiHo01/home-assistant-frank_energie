@@ -312,6 +312,17 @@ async def test_changed_delivery_site_never_publishes_old_insight_totals(
     assert data[DATA_INSIGHT_USAGE] is None
 
 
+def _authenticated_insight_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Create an entry with an authenticated settings coordinator for migration."""
+    entry = _entry(hass)
+    entry.runtime_data = SimpleNamespace(
+        settings_coordinator=SimpleNamespace(
+            api=SimpleNamespace(is_authenticated=True)
+        )
+    )
+    return entry
+
+
 @pytest.mark.parametrize(
     ("sensor_key", "object_id"),
     [
@@ -331,7 +342,7 @@ async def test_insight_default_entity_ids_migrate(
     hass: HomeAssistant, sensor_key: str, object_id: str, old_suffix: str
 ) -> None:
     """Migrate standard registered names without changing the existing identity."""
-    entry = _entry(hass)
+    entry = _authenticated_insight_entry(hass)
     registry = er.async_get(hass)
     unique_id = f"{entry.unique_id}.{sensor_key}"
     old_entity_id = f"sensor.{object_id}_{old_suffix}"
@@ -375,7 +386,7 @@ async def test_insight_custom_entity_ids_are_preserved(
     hass: HomeAssistant, sensor_key: str, object_id: str
 ) -> None:
     """Do not touch an Insight entity ID changed by the Home Assistant user."""
-    entry = _entry(hass)
+    entry = _authenticated_insight_entry(hass)
     registry = er.async_get(hass)
     original = registry.async_get_or_create(
         "sensor",
@@ -392,7 +403,7 @@ async def test_insight_migration_skips_occupied_destination(
     hass: HomeAssistant,
 ) -> None:
     """Do not rename when another entity owns the requested short ID."""
-    entry = _entry(hass)
+    entry = _authenticated_insight_entry(hass)
     registry = er.async_get(hass)
     original = registry.async_get_or_create(
         "sensor",
@@ -416,7 +427,7 @@ async def test_insight_migration_preserves_description_unique_ids(
     hass: HomeAssistant,
 ) -> None:
     """Renaming entity IDs must not change the six sensor unique IDs."""
-    entry = _entry(hass)
+    entry = _authenticated_insight_entry(hass)
     for key in _INSIGHT_DEFAULT_OBJECT_IDS:
         description = next(item for item in SENSOR_TYPES if item.key == key)
         assert _sensor_unique_id(entry, description) == f"{entry.unique_id}.{key}"
