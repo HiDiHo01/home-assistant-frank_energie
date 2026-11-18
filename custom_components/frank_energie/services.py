@@ -22,15 +22,14 @@ from .const import (
     DATA_ELECTRICITY,
     DATA_GAS,
     DOMAIN,
-    PER_UNIT_TO_UNIT,
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
-    UNIT_GAS_NL,
 )
 from .helpers import (
     known_site_contracts,
     price_date_window,
     prices_covering_window,
+    resolve_gas_unit,
 )
 
 if TYPE_CHECKING:
@@ -61,10 +60,7 @@ def _unavailable_prices(day: date) -> ServiceValidationError:
 
 def _gas_price_unit(periods: list[Price], fallback: str | None) -> str | None:
     """Require one supported gas unit across all returned intervals."""
-    units: set[str | None] = set()
-    for price in periods:
-        per_unit = price.per_unit or fallback
-        units.add(PER_UNIT_TO_UNIT.get(per_unit.upper()) if per_unit else UNIT_GAS_NL)
+    units = {resolve_gas_unit(price.per_unit or fallback) for price in periods}
     return units.pop() if len(units) == 1 else None
 
 
