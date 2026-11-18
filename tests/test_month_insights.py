@@ -271,7 +271,6 @@ async def test_period_mismatch_is_rejected(source_id: str) -> None:
     )
 
 
-
 @pytest.mark.asyncio
 async def test_missing_settings_do_not_fetch_month_insights() -> None:
     """Optional insights must not fail when settings are not ready yet."""
@@ -306,6 +305,7 @@ async def test_month_insights_timeout_is_optional() -> None:
 
     assert result is None
     coordinator.async_api_call.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_absent_month_insights_does_not_hide_other_stats() -> None:
