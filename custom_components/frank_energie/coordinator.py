@@ -4226,6 +4226,36 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
             )
             return None
 
+    def _store_month_insights(
+        self,
+        result: FrankEnergieData,
+        fetched_insights: MonthInsights | None,
+        period: str,
+        selected_site_reference: str | None,
+    ) -> None:
+        """Retain only same-site, same-period insights and the original fetch time."""
+        if selected_site_reference != self.site_reference:
+            return
+        previous_insights = (
+            self.data.get(DATA_MONTH_INSIGHTS)
+            if self.data
+            and self._month_insights_site_reference == selected_site_reference
+            and self._month_insights_period == period
+            else None
+        )
+        if fetched_insights is not None:
+            result[DATA_MONTH_INSIGHTS] = fetched_insights
+            result[DATA_MONTH_INSIGHTS_PERIOD] = period
+            result[DATA_MONTH_INSIGHTS_FETCHED_AT] = datetime.now(UTC)
+            self._month_insights_site_reference = selected_site_reference
+            self._month_insights_period = period
+        elif previous_insights is not None:
+            result[DATA_MONTH_INSIGHTS] = previous_insights
+            result[DATA_MONTH_INSIGHTS_PERIOD] = period
+            result[DATA_MONTH_INSIGHTS_FETCHED_AT] = self.data.get(
+                DATA_MONTH_INSIGHTS_FETCHED_AT
+            )
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch monthly data and refresh usage and its hourly statistics."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -4288,27 +4318,9 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 result[DATA_MONTH_SUMMARY_FETCHED_AT] = self.data.get(
                     DATA_MONTH_SUMMARY_FETCHED_AT
                 )
-            # Do not associate an in-flight response with a changed delivery site.
-            if selected_site_reference == self.site_reference:
-                previous_insights = (
-                    self.data.get(DATA_MONTH_INSIGHTS)
-                    if self.data
-                    and self._month_insights_site_reference == selected_site_reference
-                    and self._month_insights_period == month_insights_period
-                    else None
-                )
-                if data_month_insights is not None:
-                    result[DATA_MONTH_INSIGHTS] = data_month_insights
-                    result[DATA_MONTH_INSIGHTS_PERIOD] = month_insights_period
-                    result[DATA_MONTH_INSIGHTS_FETCHED_AT] = datetime.now(UTC)
-                    self._month_insights_site_reference = selected_site_reference
-                    self._month_insights_period = month_insights_period
-                elif previous_insights is not None:
-                    result[DATA_MONTH_INSIGHTS] = previous_insights
-                    result[DATA_MONTH_INSIGHTS_PERIOD] = month_insights_period
-                    result[DATA_MONTH_INSIGHTS_FETCHED_AT] = self.data.get(
-                        DATA_MONTH_INSIGHTS_FETCHED_AT
-                    )
+            self._store_month_insights(
+                result, data_month_insights, month_insights_period, selected_site_reference
+            )
             result[DATA_USAGE] = data_period_usage
             # Avoid associating an in-flight response with a changed selection.
             if (
