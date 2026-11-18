@@ -317,8 +317,12 @@ Changing the period retrieves the corresponding `periodUsageAndCosts` totals
 for electricity, gas and feed-in. The selected period is exposed as a
 `selected_period` attribute. All available provider `items` are included in
 the Insight sensor attributes for day (`YYYY-MM-DD`), month (`YYYY-MM`) and
-year (`YYYY`) selections alike. Year-long item lists can be very large and
-increase Recorder database storage considerably. The existing six Insight sensor unique IDs
+year (`YYYY`) selections alike. The nested category attribute keys are
+`electricity`, `gas`, and `feed_in`, respectively, on both consumption and
+cost sensors. They replace the former labels such as `Electricity costs yesterday`;
+existing Home Assistant templates referring to those old attribute names must
+be updated. Year-long item lists can be very large and increase Recorder
+database storage considerably. The existing six Insight sensor unique IDs
 remain intact, but their display names describe a selected period rather than
 always claiming *yesterday*. These values are selected-period snapshots,
 **not** cumulative energy meters; do not use them as Energy Dashboard meters.
