@@ -19,7 +19,13 @@ pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 
 def _price_data(
-    start: datetime, hours: int, *, unit: str, minutes: int = 60, base: float = 0.0
+    start: datetime,
+    hours: int,
+    *,
+    unit: str,
+    minutes: int = 60,
+    base: float = 0.0,
+    unit_overrides: dict[int, str] | None = None,
 ) -> PriceData:
     """Build provider prices with explicit, fixed-duration UTC intervals."""
     interval = timedelta(minutes=minutes)
@@ -32,7 +38,7 @@ def _price_data(
                 "marketPriceTax": 0.0,
                 "sourcingMarkupPrice": 0.0,
                 "energyTaxPrice": 0.01 if index == 0 else 0.0,
-                "perUnit": unit,
+                "perUnit": (unit_overrides or {}).get(index, unit),
             }
             for index in range(hours * 60 // minutes)
         ],
@@ -211,3 +217,36 @@ async def test_action_rejects_incomplete_prices_and_invalid_entries(
     with pytest.raises(ServiceValidationError) as error:
         await _prices_for_date(hass, foreign, "2026-07-21", "electricity")
     assert error.value.translation_key == "service_config_entry_wrong_domain"
+
+
+async def test_gas_action_falls_back_for_unknown_provider_units(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Unknown gas unit codes use the same cubic-meter fallback as the sensors."""
+    freezer.move_to(datetime(2026, 7, 19, 12, tzinfo=UTC))
+    start = datetime(2026, 7, 19, 22, tzinfo=UTC)
+    entry = await _load_entry(
+        hass, {"gas": _price_data(start, 6, unit="UNKNOWN")}, contracts=("GAS",)
+    )
+
+    response = await _prices_for_date(hass, entry, "2026-07-20", "gas")
+
+    assert response["unit"] == "€/m³"
+    assert len(response["prices"]) == 6
+
+
+async def test_gas_action_rejects_mixed_known_provider_units(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Reject complete gas windows that mix cubic-meter and kWh prices."""
+    freezer.move_to(datetime(2026, 7, 19, 12, tzinfo=UTC))
+    start = datetime(2026, 7, 19, 22, tzinfo=UTC)
+    entry = await _load_entry(
+        hass,
+        {"gas": _price_data(start, 6, unit="m3", unit_overrides={1: "kwh"})},
+        contracts=("GAS",),
+    )
+
+    with pytest.raises(ServiceValidationError) as error:
+        await _prices_for_date(hass, entry, "2026-07-20", "gas")
+    assert error.value.translation_key == "prices_for_date_unavailable"
