@@ -85,7 +85,9 @@ worden indien mogelijk gemigreerd; aangepaste ID's blijven ongewijzigd.
 Pas verwijzingen in automatiseringen, dashboards en templates aan.
 Oude attribuutnamen, zoals `Electricity costs yesterday`, zijn vervangen;
 pas bestaande templates aan. Maand- en jaarlijsten kunnen omvangrijk zijn.
-De selectie verandert Energy Dashboard History niet.
+**Let op:** de bedragen in Inzicht zijn gebaseerd op **Marktprijs+**:
+**de marktprijs plus de inkoopvergoeding en btw**. Het gaat dus niet om
+alleen de kale marktprijs. De selectie verandert Energy Dashboard History niet.
 Zie [Inzichtvoorbeelden en templatemigratie](docs/examples.md#insight-selecting-a-day-month-or-year).
 
 ### Gebruik

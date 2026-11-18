@@ -84,7 +84,9 @@ standard sont migrés si le nouvel identifiant est libre. Les identifiants
 personnalisés restent inchangés. Mettez à jour vos références.
 Les anciennes clés comme `Electricity costs yesterday` ont changé :
 adaptez vos modèles. Les listes mensuelles ou annuelles peuvent être
-volumineuses. Ce choix ne modifie pas Energy Dashboard History.
+volumineuses. Les montants affichés dans Insight reposent sur **Marktprijs+** :
+**le prix du marché augmenté des frais d'approvisionnement et de la TVA**.
+Ce ne sont pas les prix du marché seuls. Ce choix ne modifie pas Energy Dashboard History.
 Consultez les [exemples et la migration des modèles](docs/examples.md#insight-selecting-a-day-month-or-year).
 
 ### Utilisation

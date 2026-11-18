@@ -108,7 +108,8 @@ a month (`YYYY-MM`, for example `2026-10`), or a day
 The default is yesterday in `Europe/Amsterdam`; invalid and future periods
 are rejected. Your selection is stored per configuration entry across restarts.
 The six Insight sensors display totals for that period, while the automated
-Recorder Energy Dashboard History import remains independent.
+Recorder Energy Dashboard History import remains independent. Insight amounts
+are based on **Marktprijs+** (market price + sourcing fee + VAT).
 
 See [action, sensor and template examples](examples.md#insight-selecting-a-day-month-or-year).
 
