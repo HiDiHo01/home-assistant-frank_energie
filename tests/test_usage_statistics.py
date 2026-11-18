@@ -1,7 +1,10 @@
 """Exercise hourly provider statistics with a real Home Assistant Recorder."""
 
+import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, call, patch
 
 import pytest
@@ -15,12 +18,13 @@ from homeassistant.components.recorder.statistics import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.util.unit_conversion import EnergyConverter, VolumeConverter
-from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry, async_test_home_assistant
 from python_frank_energie.models import EnergyCategory, PeriodUsageAndCosts, UsageItem
 
 from custom_components.frank_energie.const import DATA_USAGE, DOMAIN
 from custom_components.frank_energie.usage_statistics import (
     _completed_usage_hours,
+    _import_lock,
     async_record_period_usage,
 )
 
@@ -153,6 +157,26 @@ async def test_usage_imports_utc_hours_and_preserves_meter_units(
     )
     assert by_series["feed_in_usage_kwh"][0]["state"] == pytest.approx(0.75)
     assert by_series["feed_in_cost"][0]["state"] == pytest.approx(0.2)
+    assert [row["start"] for row in by_series["gas_usage_m3"]] == [
+        _START.timestamp()
+    ]
+    assert [row["state"] for row in by_series["gas_usage_m3"]] == pytest.approx([1])
+    assert [row["sum"] for row in by_series["gas_usage_m3"]] == pytest.approx([1])
+    assert [row["start"] for row in by_series["gas_usage_kwh"]] == [
+        later_hour.timestamp()
+    ]
+    assert [row["state"] for row in by_series["gas_usage_kwh"]] == pytest.approx([2])
+    assert [row["sum"] for row in by_series["gas_usage_kwh"]] == pytest.approx([2])
+    assert [row["start"] for row in by_series["gas_cost"]] == [
+        _START.timestamp(),
+        later_hour.timestamp(),
+    ]
+    assert [row["state"] for row in by_series["gas_cost"]] == pytest.approx(
+        [0.4, 0.3]
+    )
+    assert [row["sum"] for row in by_series["gas_cost"]] == pytest.approx(
+        [0.4, 0.7]
+    )
     unit_classes = {
         fields["statistics_unit_of_measurement"]: fields["unit_class"]
         for fields in metadata.values()
@@ -228,6 +252,12 @@ async def test_usage_refresh_corrects_later_sums_after_reload(
     assert [row["sum"] for row in corrected[selected_id]] == pytest.approx([2, 5, 7])
     assert corrected[other_id] == history[other_id]
 
+    # Replaying identical provider data must not increment persisted totals.
+    await entry.runtime_data.statistics_coordinator.async_refresh()
+    _, replayed = await _history(hass, recorder)
+    assert replayed[selected_id] == corrected[selected_id]
+    assert replayed[other_id] == corrected[other_id]
+
     api.period_usage_and_costs.return_value = PeriodUsageAndCosts(
         "later-period",
         None,
@@ -239,7 +269,7 @@ async def test_usage_refresh_corrects_later_sums_after_reload(
     assert [row["sum"] for row in appended[selected_id]] == pytest.approx([2, 5, 7, 8])
     assert (
         api.period_usage_and_costs.await_args_list
-        == [call("test-site", "2026-07-19")] * 4
+        == [call("test-site", "2026-07-19")] * 5
     )
 
 
@@ -293,3 +323,132 @@ def test_usage_wall_clock_and_repeated_dst_hour() -> None:
         datetime(2026, 10, 25, 1, tzinfo=UTC),
     ]
     assert [usage for _, _, usage, _ in hours] == pytest.approx([1, 2, 3])
+
+
+@pytest.mark.parametrize(
+    ("usage_value", "cost_value", "accepted"),
+    [
+        (None, 1.0, False),
+        (1.0, None, False),
+        ("invalid", 1.0, False),
+        (1.0, "invalid", False),
+        (float("nan"), 1.0, False),
+        (1.0, float("inf"), False),
+        (True, 1.0, False),
+        (0.0, -0.25, True),
+    ],
+)
+def test_usage_skips_malformed_measurements_without_losing_valid_zero(
+    usage_value: object, cost_value: object, accepted: bool
+) -> None:
+    """Ignore malformed provider readings without converting them to zero."""
+    item = UsageItem(
+        _START.date().isoformat(),
+        _START.isoformat(),
+        (_START + timedelta(hours=1)).isoformat(),
+        usage_value,
+        cost_value,
+        "kWh",
+    )
+
+    hours = list(_completed_usage_hours(_category(item), _NOW, gas=False))
+
+    if accepted:
+        assert hours == [(_START, "kWh", 0.0, -0.25)]
+    else:
+        assert hours == []
+
+
+async def test_stale_usage_import_is_skipped_after_coordinator_replacement(
+    async_setup_recorder_instance: Callable[[HomeAssistant], Awaitable[Recorder]],
+    hass: HomeAssistant,
+) -> None:
+    """Share the import lock and ignore a queued write from a retired coordinator."""
+    recorder = await async_setup_recorder_instance(hass)
+    entry = _entry(hass)
+    old_owner = object()
+    new_owner = object()
+    old_usage = PeriodUsageAndCosts(
+        "stale-period", None, _category(_reading(_START, 100, 10)), None
+    )
+    new_usage = PeriodUsageAndCosts(
+        "current-period", None, _category(_reading(_START, 2, 0.5)), None
+    )
+    entry.runtime_data = SimpleNamespace(statistics_coordinator=old_owner)
+
+    # The old import is queued while its replacement becomes the active owner.
+    async with _import_lock(hass, entry):
+        old_task = asyncio.create_task(
+            async_record_period_usage(
+                hass, entry, "test-site", old_usage, _NOW, owner=old_owner
+            )
+        )
+        await asyncio.sleep(0)
+        entry.runtime_data = SimpleNamespace(statistics_coordinator=new_owner)
+        new_task = asyncio.create_task(
+            async_record_period_usage(
+                hass, entry, "test-site", new_usage, _NOW, owner=new_owner
+            )
+        )
+    await asyncio.gather(old_task, new_task)
+
+    metadata, history = await _history(hass, recorder)
+    assert len(metadata) == 2
+    amounts = next(
+        history[statistic_id]
+        for statistic_id, fields in metadata.items()
+        if fields["name"] == "test-site Electricity consumption"
+    )
+    assert [row["state"] for row in amounts] == pytest.approx([2])
+    assert [row["sum"] for row in amounts] == pytest.approx([2])
+
+
+@pytest.mark.parametrize("persistent_database", [True])
+async def test_usage_history_persists_across_home_assistant_restart(
+    async_test_recorder: Callable[..., AbstractAsyncContextManager[Recorder]],
+    hass: HomeAssistant,
+) -> None:
+    """Restore hourly sums from an on-disk Recorder after a real HA restart."""
+    entry = _entry(hass)
+    first = PeriodUsageAndCosts(
+        "before-restart", None, _category(_reading(_START, 2, 0.5)), None
+    )
+    async with async_test_recorder(hass) as recorder:
+        await async_record_period_usage(hass, entry, "test-site", first, _NOW)
+        metadata, history = await _history(hass, recorder)
+        statistic_id = next(
+            key for key, fields in metadata.items()
+            if fields["name"] == "test-site Electricity consumption"
+        )
+        assert [row["sum"] for row in history[statistic_id]] == pytest.approx([2])
+
+    async with async_test_home_assistant() as restarted_hass:
+        restarted_entry = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id=entry.entry_id,
+            title="test-site",
+            unique_id="test-site",
+            data=dict(entry.data),
+        )
+        restarted_entry.add_to_hass(restarted_hass)
+        corrected = PeriodUsageAndCosts(
+            "after-restart",
+            None,
+            _category(_reading(_START, 3, 0.5)),
+            None,
+        )
+        async with async_test_recorder(restarted_hass) as restarted_recorder:
+            await async_record_period_usage(
+                restarted_hass, restarted_entry, "test-site", corrected, _NOW
+            )
+            updated_metadata, updated_history = await _history(
+                restarted_hass, restarted_recorder
+            )
+            assert statistic_id in updated_metadata
+            assert [row["state"] for row in updated_history[statistic_id]] == [3]
+            assert [row["sum"] for row in updated_history[statistic_id]] == [3]
+            await async_record_period_usage(
+                restarted_hass, restarted_entry, "test-site", corrected, _NOW
+            )
+            _, repeated_history = await _history(restarted_hass, restarted_recorder)
+            assert repeated_history[statistic_id] == updated_history[statistic_id]
