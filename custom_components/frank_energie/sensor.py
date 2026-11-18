@@ -4320,6 +4320,10 @@ class FrankEnergieSensor(
             "upcoming_market_prices",
             "upcoming_market_tax_prices",
             "upcoming_market_tax_markup_prices",
+            # Insight category payloads may contain a year's daily items.
+            "electricity",
+            "gas",
+            "feed_in",
             # metadata / nested
             "connections",
             "contracts",
