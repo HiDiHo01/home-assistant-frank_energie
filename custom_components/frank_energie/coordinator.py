@@ -4242,12 +4242,14 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
 
         try:
             if selected_period == yesterday.isoformat():
-                data_month_summary, data_period_usage, data_month_insights = (
-                    await asyncio.gather(
-                        self._fetch_month_summary(),
-                        self._async_fetch_and_record_usage(start_date, now_utc),
-                        self._fetch_month_insights(month_insights_period),
-                    )
+                (
+                    data_month_summary,
+                    data_period_usage,
+                    data_month_insights,
+                ) = await asyncio.gather(
+                    self._fetch_month_summary(),
+                    self._async_fetch_and_record_usage(start_date, now_utc),
+                    self._fetch_month_insights(month_insights_period),
                 )
                 insight_usage = data_period_usage
             else:
