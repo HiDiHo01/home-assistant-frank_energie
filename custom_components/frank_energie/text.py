@@ -11,8 +11,9 @@ from .coordinator import FrankEnergieStatisticsCoordinator
 from .helpers import service_device_info
 
 
-async def async_setup_entry(
-    hass: HomeAssistant,
+# Home Assistant awaits this platform hook even though entity registration is sync.
+async def async_setup_entry(  # NOSONAR(S7503)
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
