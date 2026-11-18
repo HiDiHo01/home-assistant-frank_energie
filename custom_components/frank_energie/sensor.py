@@ -3462,7 +3462,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Electricity costs yesterday": data[DATA_INSIGHT_USAGE].electricity}
+            {"electricity": data[DATA_INSIGHT_USAGE].electricity}
             if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].electricity
             else {}
         ),
@@ -3510,7 +3510,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Electricity usage yesterday": data[DATA_INSIGHT_USAGE].electricity}
+            {"electricity": data[DATA_INSIGHT_USAGE].electricity}
             if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].electricity
             else {}
         ),
@@ -3531,7 +3531,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Gas costs gas": data[DATA_INSIGHT_USAGE].gas}
+            {"gas": data[DATA_INSIGHT_USAGE].gas}
             if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].gas
             else {}
         ),
@@ -3553,7 +3553,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Gas usage yesterday": data[DATA_INSIGHT_USAGE].gas}
+            {"gas": data[DATA_INSIGHT_USAGE].gas}
             if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].gas
             else {}
         ),
@@ -3574,7 +3574,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"feed-in gains yesterday": data[DATA_INSIGHT_USAGE].feed_in}
+            {"feed_in": data[DATA_INSIGHT_USAGE].feed_in}
             if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].feed_in
             else {}
         ),
@@ -3596,7 +3596,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
             else None
         ),
         attr_fn=lambda data: (
-            {"Amount feed-in yesterday": data[DATA_INSIGHT_USAGE].feed_in}
+            {"feed_in": data[DATA_INSIGHT_USAGE].feed_in}
             if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].feed_in
             else {}
         ),

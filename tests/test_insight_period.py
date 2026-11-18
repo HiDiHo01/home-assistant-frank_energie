@@ -239,12 +239,12 @@ def test_selected_insight_sensors_use_provider_totals_including_zero() -> None:
 @pytest.mark.parametrize(
     ("sensor_key", "source_key", "attribute_key"),
     [
-        ("costs_electricity_yesterday", "electricity", "Electricity costs yesterday"),
-        ("usage_electricity_yesterday", "electricity", "Electricity usage yesterday"),
-        ("costs_gas_yesterday", "gas", "Gas costs gas"),
-        ("usage_gas_yesterday", "gas", "Gas usage yesterday"),
-        ("gains_feed_in_yesterday", "feed_in", "feed-in gains yesterday"),
-        ("delivered_feed_in_yesterday", "feed_in", "Amount feed-in yesterday"),
+        ("costs_electricity_yesterday", "electricity", "electricity"),
+        ("usage_electricity_yesterday", "electricity", "electricity"),
+        ("costs_gas_yesterday", "gas", "gas"),
+        ("usage_gas_yesterday", "gas", "gas"),
+        ("gains_feed_in_yesterday", "feed_in", "feed_in"),
+        ("delivered_feed_in_yesterday", "feed_in", "feed_in"),
     ],
 )
 async def test_insight_period_attributes_preserve_all_provider_items(
@@ -271,8 +271,10 @@ async def test_insight_period_attributes_preserve_all_provider_items(
     sensor = FrankEnergieSensor(coordinator, description, entry)
 
     attributes = sensor.extra_state_attributes
-    assert attributes["selected_period"] == period
-    assert attributes[attribute_key] is source
+    assert attributes == {
+        attribute_key: source,
+        "selected_period": period,
+    }
     assert attributes[attribute_key].items is items
     assert len(attributes[attribute_key].items) == item_count
 
