@@ -271,6 +271,42 @@ async def test_period_mismatch_is_rejected(source_id: str) -> None:
     )
 
 
+
+@pytest.mark.asyncio
+async def test_missing_settings_do_not_fetch_month_insights() -> None:
+    """Optional insights must not fail when settings are not ready yet."""
+    coordinator = MagicMock()
+    coordinator.api.is_authenticated = True
+    coordinator.site_reference = "synthetic"
+    coordinator.settings_coordinator.data = None
+    coordinator.async_api_call = AsyncMock()
+
+    result = await FrankEnergieStatisticsCoordinator._fetch_month_insights(
+        coordinator, "2026-11"
+    )
+
+    assert result is None
+    coordinator.async_api_call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_month_insights_timeout_is_optional() -> None:
+    """A timed-out insights request must not invalidate normal statistics."""
+    coordinator = MagicMock()
+    coordinator.api.is_authenticated = True
+    coordinator.site_reference = "synthetic"
+    coordinator.settings_coordinator.data = {
+        const.DATA_DELIVERY_SITE: SimpleNamespace(segments={"ELECTRICITY"})
+    }
+    coordinator.async_api_call = AsyncMock(side_effect=TimeoutError)
+
+    result = await FrankEnergieStatisticsCoordinator._fetch_month_insights(
+        coordinator, "2026-11"
+    )
+
+    assert result is None
+    coordinator.async_api_call.assert_awaited_once()
+
 @pytest.mark.asyncio
 async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     """Keep existing usage and summary results during insights failure."""
