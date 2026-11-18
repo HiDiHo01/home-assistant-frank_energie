@@ -265,9 +265,7 @@ async def test_insight_period_attributes_preserve_all_provider_items(
         DATA_INSIGHT_USAGE: SimpleNamespace(**{source_key: source}),
         DATA_INSIGHT_PERIOD: period,
     }
-    description = next(
-        item for item in SENSOR_TYPES if item.key == sensor_key
-    )
+    description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
     sensor = FrankEnergieSensor(coordinator, description, entry)
 
     attributes = sensor.extra_state_attributes
