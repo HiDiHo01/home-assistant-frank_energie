@@ -4626,10 +4626,12 @@ async def test_statistics_replaces_retained_estimate_when_new_summary_arrives(
 
 @pytest.mark.asyncio
 async def test_statistics_monthly_estimate_is_scoped_to_delivery_site(
+    hass: HomeAssistant,
     mock_frank_energie: AsyncMock,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Never carry a previous site's forecast into a different selected site."""
+    mock_config_entry.add_to_hass(hass)
     settings_coordinator = MagicMock()
     settings_coordinator.data = {}
     coordinator = FrankEnergieStatisticsCoordinator(
@@ -4645,7 +4647,10 @@ async def test_statistics_monthly_estimate_is_scoped_to_delivery_site(
     assert first[DATA_MONTH_SUMMARY] is previous_summary
     assert first[DATA_MONTH_SUMMARY_FETCHED_AT] is not None
 
-    mock_config_entry.data["site_reference"] = "different-site"
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, "site_reference": "different-site"},
+    )
     second = await coordinator._async_update_data()
     assert second[DATA_MONTH_SUMMARY] is None
     assert second[DATA_MONTH_SUMMARY_FETCHED_AT] is None
