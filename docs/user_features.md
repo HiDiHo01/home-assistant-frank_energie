@@ -60,6 +60,11 @@ Authenticated users may access:
 - Historical usage information
 - Monthly summaries
 
+Authenticated users can also select an **Insight period** (day, month or year)
+with full provider `items` under the `electricity`, `gas` or `feed_in`
+attributes. See the [Insight examples](examples.md#insight-selecting-a-day-month-or-year)
+and [entity reference](entities.md#insight-selected-reporting-period).
+
 ## Cost Features
 
 Cost-related entities may include:

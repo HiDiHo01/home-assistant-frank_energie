@@ -70,6 +70,19 @@ Si vous utilisiez déjà cette intégration avec `configuration.yaml`, supprimez
 
 Lors de la configuration, vous pouvez vous connecter avec votre compte Frank Energie. La connexion n'est pas nécessaire pour obtenir les prix publics, mais elle permet d'accéder aux données liées à votre compte. Après connexion, des capteurs peuvent notamment afficher les coûts de consommation prévisionnels et réels du mois en cours, lorsque ces données sont disponibles via l'API.
 
+### Période Insight : jour, mois ou année
+
+Après connexion, vous pouvez modifier l'entité texte **Période des statistiques**
+sur l'appareil **Frank Energie - Inzicht** avec `YYYY` (année),
+`YYYY-MM` (mois) ou `YYYY-MM-DD` (jour). Par défaut, la veille est
+sélectionnée. Les six capteurs Insight exposent `selected_period` et
+tous les `items` dans l'attribut `electricity`, `gas` ou `feed_in`.
+
+Les anciennes clés comme `Electricity costs yesterday` ont changé :
+adaptez vos modèles. Les listes mensuelles ou annuelles peuvent être
+volumineuses. Ce choix ne modifie pas Energy Dashboard History.
+Consultez les [exemples et la migration des modèles](docs/examples.md#insight-selecting-a-day-month-or-year).
+
 ### Utilisation
 
 Certains capteurs disposent d'un attribut `prices` contenant les prix connus. Vous pouvez utiliser un modèle Home Assistant pour créer vos propres capteurs à partir de ces données.

@@ -20,6 +20,7 @@ The integration may create entities from the following Home Assistant platforms.
 | Sensor | Electricity prices, gas prices, costs, contracts, invoices, smart charging and battery information |
 | Binary Sensor | Status indicators, feature availability and configuration states |
 | Select | Smart charging and smart battery configuration options |
+| Text | Editable reporting period for authenticated Insight data |
 | Number | Configurable charging and battery settings |
 | Button | Actions such as refreshing data or synchronizing connected services |
 
@@ -131,6 +132,32 @@ Consumption entities may include:
 - Monthly usage
 - Yearly usage
 - Forecast usage
+
+### Insight: Selected Reporting Period
+
+The authenticated **Frank Energie - Inzicht / Insight** device includes an
+**Insight period** text entity. Select a year (`YYYY`), a month
+(`YYYY-MM`) or a day (`YYYY-MM-DD`), with yesterday in
+`Europe/Amsterdam` as the default.
+
+The six existing Insight sensors retain their unique IDs, but use the
+selected period's totals. Each pair shares a nested category attribute:
+
+| Sensors | Category attribute | Additional attribute |
+| --- | --- | --- |
+| Electricity consumption and costs | `electricity` | `selected_period` |
+| Gas consumption and costs | `gas` | `selected_period` |
+| Feed-in and compensation | `feed_in` | `selected_period` |
+
+Each available category exposes `usage_total`, `costs_total`,
+`unit` and the complete provider `items` list for that period.
+Previously used attribute labels containing `yesterday`, such as
+`Electricity costs yesterday`, are no longer available; update templates
+accordingly. Full-year item lists may use considerable Recorder storage.
+
+These changing snapshots are **not cumulative Energy Dashboard meters**.
+The separate Recorder Energy Dashboard History import is unaffected.
+See [Insight examples](examples.md#insight-selecting-a-day-month-or-year).
 
 ### Cost Entities
 

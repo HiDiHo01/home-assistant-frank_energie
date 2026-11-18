@@ -13,6 +13,9 @@ If you are new to the integration, start here:
 3. [Entities](entities.md)
 4. [Examples](examples.md)
 
+For Insight usage and costs by day, month or year, see
+[Insight reporting periods and template examples](examples.md#insight-selecting-a-day-month-or-year).
+
 ## User Documentation
 
 ### Configuration

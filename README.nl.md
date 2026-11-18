@@ -70,6 +70,20 @@ Heb je Frank Energie eerder via `configuration.yaml` ingesteld? Verwijder dan de
 
 Tijdens het instellen kun je je aanmelden met je Frank Energie-account. Aanmelden is niet vereist voor openbare prijsinformatie, maar geeft toegang tot accountgebonden gegevens. Na aanmelden zijn onder meer sensoren voor de verwachte en daadwerkelijke kosten in de huidige maand beschikbaar, voor zover de API die gegevens aanbiedt.
 
+### Inzichtperiode: dag, maand of jaar
+
+Bij een aangemeld account kun je op het apparaat **Frank Energie - Inzicht**
+de tekstentiteit **Inzichtperiode** instellen op `YYYY` (jaar),
+`YYYY-MM` (maand) of `YYYY-MM-DD` (dag). Standaard is gisteren
+geselecteerd. De bestaande zes Inzicht-sensoren tonen `selected_period`
+en de volledige `items`-lijst via het attribuut `electricity`, `gas`
+of `feed_in`.
+
+Oude attribuutnamen, zoals `Electricity costs yesterday`, zijn vervangen;
+pas bestaande templates aan. Maand- en jaarlijsten kunnen omvangrijk zijn.
+De selectie verandert Energy Dashboard History niet.
+Zie [Inzichtvoorbeelden en templatemigratie](docs/examples.md#insight-selecting-a-day-month-or-year).
+
 ### Gebruik
 
 Sommige sensoren hebben een attribuut `prices` met de bekende prijzen. Met een Home Assistant-template kun je hiervan eigen sensoren maken.

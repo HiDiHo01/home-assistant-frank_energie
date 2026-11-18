@@ -2,6 +2,21 @@
 
 This page answers common questions about the Frank Energie integration.
 
+## How can I see Insight costs for a month or year?
+
+Edit the **Insight period** text entity on the authenticated
+**Frank Energie - Inzicht / Insight** device. Enter `YYYY`, `YYYY-MM`
+or `YYYY-MM-DD`. By default, the selection is yesterday. Electricity
+usage and costs are under `electricity`; gas uses `gas`; feed-in
+and compensation use `feed_in`. Each category includes the complete
+provider `items` list.
+
+Older templates that read attributes like `Electricity costs yesterday`
+must switch to `electricity`. This setting does not affect the automatic
+Energy Dashboard History import. See [examples and migration guide](examples.md#insight-selecting-a-day-month-or-year).
+
+---
+
 ## Why are tomorrow's prices missing?
 
 This is usually expected behavior.
