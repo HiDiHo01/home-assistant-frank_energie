@@ -1688,6 +1688,31 @@ def _async_migrate_insight_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -
             )
 
 
+@callback
+def _async_remove_deprecated_insight_month_cost_sensor(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
+    """Remove this entry's deprecated monthly electricity cost sensor.
+
+    The obsolete sensor duplicated yesterday's cost. Preserve any registry
+    entry belonging to a different configuration, even if its ID matches.
+    """
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "sensor",
+        DOMAIN,
+        f"{config_entry.unique_id}.costs_electricity_this_month",
+    )
+    if entity_id is None:
+        return
+    registered_entity = registry.async_get(entity_id)
+    if (
+        registered_entity is not None
+        and registered_entity.config_entry_id == config_entry.entry_id
+    ):
+        registry.async_remove(entity_id)
+
+
 def _monetary_amount(value: object) -> float | None:
     """Accept finite numeric monetary amounts, including zero and negatives."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -3507,32 +3532,6 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         ),
     ),
     FrankEnergieEntityDescription(
-        key="costs_electricity_this_month",
-        is_electricity=True,
-        translation_key="costs_electricity_this_month",
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
-        authenticated=True,
-        service_name=SERVICE_NAME_USAGE,
-        value_fn=lambda data: (
-            data[DATA_USAGE].electricity.costs_total
-            if data[DATA_USAGE]
-            and data[DATA_USAGE].electricity
-            and data[DATA_USAGE].electricity.costs_total
-            else None
-        ),
-        attr_fn=lambda data: (
-            {"Electricity costs total": data[DATA_USAGE].electricity.costs_total}
-            if data[DATA_USAGE]
-            and data[DATA_USAGE].electricity
-            and hasattr(data[DATA_USAGE].electricity, "costs_total")
-            else {}
-        ),
-        entity_registry_enabled_default=False,
-    ),
-    FrankEnergieEntityDescription(
         key="usage_electricity_yesterday",
         is_electricity=True,
         translation_key="usage_electricity_yesterday",
@@ -5168,6 +5167,7 @@ async def async_setup_entry(
     statistics_coordinator = runtime_data.statistics_coordinator
     invoice_coordinator = runtime_data.invoice_coordinator
 
+    _async_remove_deprecated_insight_month_cost_sensor(hass, config_entry)
     _async_migrate_insight_entity_ids(hass, config_entry)
 
     def _get_coordinator_for_description(

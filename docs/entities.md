@@ -163,6 +163,12 @@ Previously used attribute labels containing `yesterday`, such as
 `Electricity costs yesterday`, are no longer available; update templates
 accordingly. Full-year item lists may use considerable Recorder storage.
 
+The old, default-disabled **Electricity costs this month** sensor was removed
+because it used yesterday's cost rather than a monthly total. Previously
+registered instances of this obsolete sensor are cleaned up automatically
+on setup. Select `YYYY-MM` in **Insight period** to retrieve monthly costs
+through the supported Insight electricity costs sensor.
+
 These changing snapshots are **not cumulative Energy Dashboard meters**.
 The separate Recorder Energy Dashboard History import is unaffected.
 See [Insight examples](examples.md#insight-selecting-a-day-month-or-year).

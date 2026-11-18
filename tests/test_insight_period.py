@@ -29,6 +29,7 @@ from custom_components.frank_energie.sensor import (
     FrankEnergieSensor,
     _INSIGHT_DEFAULT_OBJECT_IDS,
     _async_migrate_insight_entity_ids,
+    _async_remove_deprecated_insight_month_cost_sensor,
     _sensor_unique_id,
 )
 from custom_components.frank_energie.text import FrankEnergieInsightPeriod
@@ -429,3 +430,63 @@ async def test_insight_migration_preserves_description_unique_ids(
     for key in _INSIGHT_DEFAULT_OBJECT_IDS:
         description = next(item for item in SENSOR_TYPES if item.key == key)
         assert _sensor_unique_id(entry, description) == f"{entry.unique_id}.{key}"
+
+
+
+def test_obsolete_month_electricity_cost_sensor_is_not_registered() -> None:
+    """The removed monthly cost description cannot be added again."""
+    assert "costs_electricity_this_month" not in {
+        description.key for description in SENSOR_TYPES
+    }
+
+
+@pytest.mark.parametrize("renamed", [False, True])
+async def test_deprecated_insight_month_cost_registry_entry_is_removed(
+    hass: HomeAssistant, renamed: bool
+) -> None:
+    """Remove obsolete registry entries even when users renamed the entity."""
+    entry = _entry(hass)
+    registry = er.async_get(hass)
+    old_unique_id = f"{entry.unique_id}.costs_electricity_this_month"
+    object_id = (
+        "my_custom_month_cost_entity"
+        if renamed
+        else "frank_energie_inzicht_kosten_elektriciteit_deze_maand"
+    )
+    old_entity = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        old_unique_id,
+        suggested_object_id=object_id,
+        config_entry=entry,
+    )
+
+    _async_remove_deprecated_insight_month_cost_sensor(hass, entry)
+
+    assert registry.async_get(old_entity.entity_id) is None
+    assert registry.async_get_entity_id("sensor", DOMAIN, old_unique_id) is None
+    # Running again after a restart must be harmless.
+    _async_remove_deprecated_insight_month_cost_sensor(hass, entry)
+
+
+async def test_deprecated_insight_month_cost_cleanup_is_config_entry_scoped(
+    hass: HomeAssistant,
+) -> None:
+    """Never remove a registry entry owned by another config entry."""
+    entry = _entry(hass)
+    other_entry = MockConfigEntry(
+        domain=DOMAIN, unique_id="independent-delivery-site"
+    )
+    other_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    other_entity = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.unique_id}.costs_electricity_this_month",
+        suggested_object_id="another_site_existing_entity",
+        config_entry=other_entry,
+    )
+
+    _async_remove_deprecated_insight_month_cost_sensor(hass, entry)
+
+    assert registry.async_get(other_entity.entity_id) == other_entity
