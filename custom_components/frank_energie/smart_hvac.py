@@ -97,6 +97,30 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         self.verified_inventory_ids: set[str] | None = None
         self._api = api
         self._retry_at = 0.0
+        self._inventory_fetched_this_refresh = False
+        self._inventory_refresh_listeners: set[Callable[[], None]] = set()
+
+    def async_add_inventory_refresh_listener(
+        self, update_callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Subscribe to successful inventory reads, including unchanged snapshots."""
+        self._inventory_refresh_listeners.add(update_callback)
+        return lambda: self._inventory_refresh_listeners.discard(update_callback)
+
+    def _async_refresh_finished(self) -> None:
+        """Reconcile a fresh inventory independently of snapshot equality."""
+        super()._async_refresh_finished()
+        if not self.last_update_success or not self._inventory_fetched_this_refresh:
+            return
+
+        for listener in tuple(self._inventory_refresh_listeners):
+            try:
+                listener()
+            except Exception as error:  # noqa: BLE001 - Do not interrupt polling
+                _LOGGER.warning(
+                    "Smart Heating inventory reconciliation failed (%s)",
+                    type(error).__name__,
+                )
 
     def _requests_paused(self) -> bool:
         """Return whether maintenance or provider backoff blocks requests."""
@@ -194,6 +218,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         refresh before any reads start.
         """
         self.verified_inventory_ids = None
+        self._inventory_fetched_this_refresh = False
         if not self._api.is_authenticated:
             return SmartHvacData()
         if self._requests_paused():
@@ -201,6 +226,9 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
 
         inventory = await self._async_read(
             "inventory", self._api.smart_hvacs, self.site_reference
+        )
+        self._inventory_fetched_this_refresh = (
+            inventory.fetched and inventory.value is not None
         )
         requests = await self._async_read(
             "connection requests", self._api.smart_hvac_connect_requests
