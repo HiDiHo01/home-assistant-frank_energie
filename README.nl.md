@@ -79,6 +79,10 @@ geselecteerd. De bestaande zes Inzicht-sensoren tonen `selected_period`
 en de volledige `items`-lijst via het attribuut `electricity`, `gas`
 of `feed_in`.
 
+De standaard entiteits-ID's eindigen niet meer op `_gisteren`, bijvoorbeeld
+`sensor.frank_energie_inzicht_kosten_elektriciteit`. Bestaande standaard-ID's
+worden indien mogelijk gemigreerd; aangepaste ID's blijven ongewijzigd.
+Pas verwijzingen in automatiseringen, dashboards en templates aan.
 Oude attribuutnamen, zoals `Electricity costs yesterday`, zijn vervangen;
 pas bestaande templates aan. Maand- en jaarlijsten kunnen omvangrijk zijn.
 De selectie verandert Energy Dashboard History niet.

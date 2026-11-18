@@ -78,6 +78,10 @@ or `YYYY-MM-DD` (day). The default is yesterday. The six existing Insight
 sensors expose `selected_period` and the complete provider `items`
 within the `electricity`, `gas` or `feed_in` category attribute.
 
+The Dutch default entity IDs no longer end in `_gisteren`: for example,
+`sensor.frank_energie_inzicht_kosten_elektriciteit`. Existing standard IDs
+are migrated when the shorter ID is free, while customized IDs remain
+unchanged. Update references to renamed entity IDs.
 Older attribute labels such as `Electricity costs yesterday` have been
 renamed; update existing templates. Month and year lists can be large.
 The selection does not affect Energy Dashboard History.
