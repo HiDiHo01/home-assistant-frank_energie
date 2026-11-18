@@ -8,8 +8,9 @@ import base64
 import hashlib
 import logging
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet, InvalidToken  # type: ignore[import]
 from homeassistant.core import HomeAssistant, callback
@@ -25,6 +26,7 @@ from .const import (
     DATA_BATTERY_SETTINGS,
     DOMAIN,
     SERVICE_NAME_PRICES,
+    TIMEZONE_AMSTERDAM,
     UNIT_GAS_BE,
     UNIT_GAS_NL,
     VERSION,
@@ -33,7 +35,12 @@ from .exceptions import EncryptionError
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from python_frank_energie.models import ChargeSettings, DeliverySite
+    from python_frank_energie.models import (
+        ChargeSettings,
+        DeliverySite,
+        Price,
+        PriceData,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -115,6 +122,45 @@ PRICE_CACHE_STORE_VERSION: Final[int] = 1
 def api_maintenance_active(now_utc: datetime) -> bool:
     """Return whether Frank Energie is in its daily UTC maintenance window."""
     return now_utc.hour == 0
+
+
+def price_date_window(
+    day: date, *, tomorrow_gas: bool = False
+) -> tuple[datetime, datetime]:
+    """Return UTC bounds for the published Amsterdam-local price window."""
+    local_zone = ZoneInfo(TIMEZONE_AMSTERDAM)
+    end_day = day if tomorrow_gas else day + timedelta(days=1)
+    end_time = time(6) if tomorrow_gas else time.min
+    return (
+        datetime.combine(day, time.min, local_zone).astimezone(UTC),
+        datetime.combine(end_day, end_time, local_zone).astimezone(UTC),
+    )
+
+
+def prices_covering_window(
+    series: PriceData | None, start: datetime, end: datetime
+) -> list[Price]:
+    """Return the original intervals if they cover the UTC window continuously."""
+    if series is None or not series.all:
+        return []
+
+    covered_until = start
+    periods: list[Price] = []
+    for price in sorted(series.all, key=lambda item: item.date_from.astimezone(UTC)):
+        if price.date_from.utcoffset() is None or price.date_till.utcoffset() is None:
+            return []
+        price_start = price.date_from.astimezone(UTC)
+        price_end = price.date_till.astimezone(UTC)
+        if price_end <= price_start:
+            return []
+        if price_end <= start or price_start >= end:
+            continue
+        if max(price_start, start) != covered_until:
+            return []
+        covered_until = min(price_end, end)
+        periods.append(price)
+
+    return periods if covered_until == end else []
 
 
 def known_site_contracts(site: DeliverySite | None) -> set[str] | None:

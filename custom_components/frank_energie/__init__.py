@@ -14,10 +14,12 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_utc_time_change
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import AuthException, RateLimitException
@@ -53,9 +55,11 @@ from .rate_limit import (
     get_rate_limit_state,
     remove_rate_limit_state,
 )
+from .services import async_setup_services
 from .smart_hvac import FrankEnergieSmartHvacCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PRICE_RELEASE_HOUR_UTC: Final[int] = 11
 # HA Core versions before the config-entry-scoped device registry API don't
 # have this method.
@@ -91,6 +95,12 @@ _DEPENDENT_PLATFORMS: list[str] = [
     Platform.SELECT,
 ]
 PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the actions shared by all Frank Energie config entries."""
+    async_setup_services(hass)
+    return True
 
 
 # Home Assistant awaits this hook; config-entry updates are synchronous callbacks.

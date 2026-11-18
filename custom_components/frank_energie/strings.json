@@ -1286,5 +1286,41 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "price_contract_unavailable": {
+      "message": "The selected delivery site does not have a contract for this energy type."
+    },
+    "prices_for_date_unavailable": {
+      "message": "The cache does not contain complete prices for {date}. Check publication and try again."
+    }
+  },
+  "services": {
+    "get_prices_for_date": {
+      "name": "Get prices for a date",
+      "description": "Return cached market and all-in tariffs for the selected date.",
+      "fields": {
+        "config_entry": {
+          "name": "Configuration",
+          "description": "Select the Frank Energie configuration to read."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Select a calendar date in Europe/Amsterdam."
+        },
+        "energy_type": {
+          "name": "Energy type",
+          "description": "Select electricity or gas."
+        }
+      }
+    }
+  },
+  "selector": {
+    "price_energy_type": {
+      "options": {
+        "electricity": "Electricity",
+        "gas": "Gas"
+      }
+    }
   }
 }
