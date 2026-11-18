@@ -786,7 +786,8 @@ async def test_hvac_entries_isolate_site_data_and_reload(
     (other_device,) = _equipment_devices(hass, other)
     primary_service_id = _sensor(hass, primary, "smart_hvac_device_count").device_id
     other_service_id = _sensor(hass, other, "smart_hvac_device_count").device_id
-    assert primary_service_id is not None and other_service_id is not None
+    assert primary_service_id is not None
+    assert other_service_id is not None
     assert primary_service_id != other_service_id
     assert primary_device.via_device_id == primary_service_id
     assert other_device.via_device_id == other_service_id
