@@ -256,8 +256,6 @@ async def test_insight_period_attributes_preserve_all_provider_items(
 ) -> None:
     """Expose the entire provider category and items for every period granularity."""
     entry = _entry(hass)
-    # Feed-in sensors consult account settings when determining default visibility.
-    entry.runtime_data = SimpleNamespace(settings_coordinator=SimpleNamespace(data={}))
     coordinator = _coordinator(hass, entry)
     # Regression: month/year must not be truncated even for large item lists.
     item_count = 5000 if len(period) < 10 else 2
@@ -268,6 +266,8 @@ async def test_insight_period_attributes_preserve_all_provider_items(
         DATA_INSIGHT_PERIOD: period,
     }
     description = next(item for item in SENSOR_TYPES if item.key == sensor_key)
+    # Coordinator setup can replace config-entry runtime data in this fixture.
+    entry.runtime_data = SimpleNamespace(settings_coordinator=SimpleNamespace(data={}))
     sensor = FrankEnergieSensor(coordinator, description, entry)
 
     attributes = sensor.extra_state_attributes
