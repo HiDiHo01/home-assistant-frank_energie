@@ -305,3 +305,22 @@ Refer to [Entities](entities.md) to identify the corresponding entity IDs in you
 - Events are generally preferred over polling sensors for automation triggers.
 - Smart Charging and Smart Battery examples require supported Frank Energie account features.
 - The integration dynamically creates entities based on available account data and connected devices.
+
+## Frank Energie Insight reporting period
+
+The **Insight period** text control on the **Frank Energie - Usage / Inzicht** device
+accepts `YYYY` (such as `2025`), `YYYY-MM` (such as `2026-10`), and
+`YYYY-MM-DD` (such as `2026-11-17`). It defaults to yesterday in
+Europe/Amsterdam and rejects invalid or future periods.
+
+Changing the period retrieves the corresponding `periodUsageAndCosts` totals
+for electricity, gas and feed-in. The selected period is exposed as a
+`selected_period` attribute. The existing six Insight sensor unique IDs
+remain intact, but their display names describe a selected period rather than
+always claiming *yesterday*. These values are selected-period snapshots,
+**not** cumulative energy meters; do not use them as Energy Dashboard meters.
+
+The routine yesterday usage fetch and any Recorder history import remain
+independent of the selector. When the selection differs from yesterday, one
+additional API request is made per statistics refresh. The selected period is
+persisted across Home Assistant restarts.

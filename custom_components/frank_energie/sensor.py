@@ -72,6 +72,8 @@ from .const import (
     DATA_REFRESH_TOKEN_EXPIRES_AT,
     DATA_TOKEN_EXPIRES_AT,
     DATA_USAGE,
+    DATA_INSIGHT_USAGE,
+    DATA_INSIGHT_PERIOD,
     DATA_USER,
     DATA_USER_SITES,
     DOMAIN,
@@ -120,6 +122,15 @@ from .statistics import lowest_window
 _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
+
+_INSIGHT_SENSOR_KEYS: Final[frozenset[str]] = frozenset({
+    "costs_electricity_yesterday",
+    "usage_electricity_yesterday",
+    "costs_gas_yesterday",
+    "usage_gas_yesterday",
+    "gains_feed_in_yesterday",
+    "delivered_feed_in_yesterday",
+})
 
 _HAS_VIA_DEVICE_ID: Final[bool] = (
     "via_device_id"
@@ -3436,21 +3447,21 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         is_electricity=True,
         translation_key="costs_electricity_yesterday",
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         value_fn=lambda data: (
-            data[DATA_USAGE].electricity.costs_total
-            if data[DATA_USAGE]
-            and data[DATA_USAGE].electricity
-            and data[DATA_USAGE].electricity.costs_total
+            data[DATA_INSIGHT_USAGE].electricity.costs_total
+            if data[DATA_INSIGHT_USAGE]
+            and data[DATA_INSIGHT_USAGE].electricity
+            and data[DATA_INSIGHT_USAGE].electricity.costs_total is not None
             else None
         ),
         attr_fn=lambda data: (
-            {"Electricity costs yesterday": data[DATA_USAGE].electricity}
-            if data[DATA_USAGE] and data[DATA_USAGE].electricity
+            {"Electricity costs yesterday": data[DATA_INSIGHT_USAGE].electricity}
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].electricity
             else {}
         ),
     ),
@@ -3486,19 +3497,19 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="usage_electricity_yesterday",
         icon="mdi:transmission-tower-export",
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         value_fn=lambda data: (
-            data[DATA_USAGE].electricity.usage_total
-            if data[DATA_USAGE] and data[DATA_USAGE].electricity
+            data[DATA_INSIGHT_USAGE].electricity.usage_total
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].electricity
             else None
         ),
         attr_fn=lambda data: (
-            {"Electricity usage yesterday": data[DATA_USAGE].electricity}
-            if data[DATA_USAGE] and data[DATA_USAGE].electricity
+            {"Electricity usage yesterday": data[DATA_INSIGHT_USAGE].electricity}
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].electricity
             else {}
         ),
     ),
@@ -3506,20 +3517,20 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="costs_gas_yesterday",
         translation_key="costs_gas_yesterday",
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         is_gas=True,
         value_fn=lambda data: (
-            data[DATA_USAGE].gas.costs_total
-            if data[DATA_USAGE] and data[DATA_USAGE].gas
+            data[DATA_INSIGHT_USAGE].gas.costs_total
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].gas
             else None
         ),
         attr_fn=lambda data: (
-            {"Gas costs gas": data[DATA_USAGE].gas}
-            if data[DATA_USAGE] and data[DATA_USAGE].gas
+            {"Gas costs gas": data[DATA_INSIGHT_USAGE].gas}
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].gas
             else {}
         ),
     ),
@@ -3528,20 +3539,20 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="usage_gas_yesterday",
         icon="mdi:meter-gas",
         device_class=SensorDeviceClass.GAS,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         is_gas=True,
         value_fn=lambda data: (
-            data[DATA_USAGE].gas.usage_total
-            if data[DATA_USAGE] and data[DATA_USAGE].gas
+            data[DATA_INSIGHT_USAGE].gas.usage_total
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].gas
             else None
         ),
         attr_fn=lambda data: (
-            {"Gas usage yesterday": data[DATA_USAGE].gas}
-            if data[DATA_USAGE] and data[DATA_USAGE].gas
+            {"Gas usage yesterday": data[DATA_INSIGHT_USAGE].gas}
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].gas
             else {}
         ),
     ),
@@ -3549,20 +3560,20 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         key="gains_feed_in_yesterday",
         translation_key="gains_feed_in_yesterday",
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         is_feed_in=True,
         value_fn=lambda data: (
-            data[DATA_USAGE].feed_in.costs_total
-            if data[DATA_USAGE] and data[DATA_USAGE].feed_in
+            data[DATA_INSIGHT_USAGE].feed_in.costs_total
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].feed_in
             else None
         ),
         attr_fn=lambda data: (
-            {"feed-in gains yesterday": data[DATA_USAGE].feed_in}
-            if data[DATA_USAGE] and data[DATA_USAGE].feed_in
+            {"feed-in gains yesterday": data[DATA_INSIGHT_USAGE].feed_in}
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].feed_in
             else {}
         ),
     ),
@@ -3571,20 +3582,20 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
         translation_key="delivered_feed_in_yesterday",
         icon="mdi:transmission-tower-import",
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         suggested_display_precision=2,
         authenticated=True,
         service_name=SERVICE_NAME_USAGE,
         is_feed_in=True,
         value_fn=lambda data: (
-            data[DATA_USAGE].feed_in.usage_total
-            if data[DATA_USAGE] and data[DATA_USAGE].feed_in
+            data[DATA_INSIGHT_USAGE].feed_in.usage_total
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].feed_in
             else None
         ),
         attr_fn=lambda data: (
-            {"Amount feed-in yesterday": data[DATA_USAGE].feed_in}
-            if data[DATA_USAGE] and data[DATA_USAGE].feed_in
+            {"Amount feed-in yesterday": data[DATA_INSIGHT_USAGE].feed_in}
+            if data[DATA_INSIGHT_USAGE] and data[DATA_INSIGHT_USAGE].feed_in
             else {}
         ),
     ),
@@ -4401,7 +4412,10 @@ class FrankEnergieSensor(
                         else None
                     ),
                 }
-            return self.entity_description.attr_fn(data) or {}
+            attributes = self.entity_description.attr_fn(data) or {}
+            if self.entity_description.key in _INSIGHT_SENSOR_KEYS:
+                attributes = {**attributes, "selected_period": data.get(DATA_INSIGHT_PERIOD)}
+            return attributes
         except Exception:
             return {}
 

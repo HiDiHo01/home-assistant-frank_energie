@@ -68,6 +68,7 @@ from python_frank_energie.models import (
 )
 
 from . import helpers
+from .insight_period import default_insight_period, validate_insight_period
 from .const import (
     CONF_INTERVAL_BATTERIES,
     CONF_INTERVAL_BATTERY_SESSIONS,
@@ -76,6 +77,7 @@ from .const import (
     CONF_INTERVAL_SETTINGS,
     CONF_INTERVAL_STATISTICS,
     CONF_INTERVAL_VEHICLES,
+    CONF_INSIGHT_PERIOD,
     COUNTRY_USES_SIMPLE_MARKET_PRICES,
     DATA_BATTERIES,
     DATA_BATTERY_DETAILS,
@@ -95,6 +97,8 @@ from .const import (
     DATA_REFRESH_TOKEN_EXPIRES_AT,
     DATA_TOKEN_EXPIRES_AT,
     DATA_USAGE,
+    DATA_INSIGHT_USAGE,
+    DATA_INSIGHT_PERIOD,
     DATA_USER,
     DATA_USER_SITES,
     DATA_USER_SMART_FEED_IN,
@@ -349,7 +353,13 @@ class FrankEnergieData(TypedDict):
     """Optional invoices data."""
 
     usage: PeriodUsageAndCosts | None
-    """Optional user data."""
+    """Unmodified provider usage for the previous day and Recorder history."""
+
+    insight_usage: PeriodUsageAndCosts | None
+    """Provider totals for the selected Insight reporting period."""
+
+    insight_period: str | None
+    """ISO reporting period represented by insight_usage."""
 
     user: User | None
     """Optional user data."""
@@ -423,6 +433,8 @@ def _empty_data() -> FrankEnergieData:
         DATA_MONTH_SUMMARY_FETCHED_AT: None,
         DATA_INVOICES: None,
         DATA_USAGE: None,
+        DATA_INSIGHT_USAGE: None,
+        DATA_INSIGHT_PERIOD: None,
         DATA_USER: None,
         DATA_USER_SITES: None,
         DATA_DELIVERY_SITE: None,
@@ -1211,7 +1223,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             "invoices", self.api.invoices, self.site_reference
         )
 
-    async def _fetch_period_usage(self, start_date: date) -> PeriodUsageAndCosts | None:
+    async def _fetch_period_usage(self, start_date: date | str) -> PeriodUsageAndCosts | None:
         """Fetch period usage and costs from the API."""
         if not self.api.is_authenticated:
             _LOGGER.debug(
@@ -1226,7 +1238,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 "period_usage_and_costs",
                 self.api.period_usage_and_costs,
                 self.site_reference,
-                start_date.isoformat(),
+                start_date.isoformat() if isinstance(start_date, date) else start_date,
             )
         except RateLimitException:
             raise
@@ -4118,6 +4130,31 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                 )
             return usage
 
+    @property
+    def insight_period(self) -> str:
+        """Return the selected reporting period or yesterday in Amsterdam."""
+        today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        fallback = default_insight_period(today)
+        stored = self.config_entry.options.get(CONF_INSIGHT_PERIOD)
+        if not isinstance(stored, str):
+            return fallback
+        try:
+            return validate_insight_period(stored, today)
+        except ValueError:
+            return fallback
+
+    async def async_set_insight_period(self, period: str) -> None:
+        """Validate and save the Insight period, then request statistics refresh."""
+        today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        selected = validate_insight_period(period, today)
+        if selected == self.insight_period:
+            return
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options={**self.config_entry.options, CONF_INSIGHT_PERIOD: selected},
+        )
+        await self.async_request_refresh()
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch monthly data and refresh usage and its hourly statistics."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -4130,12 +4167,21 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         today = now_utc.astimezone(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
         yesterday = today - timedelta(days=1)
         start_date = yesterday
+        selected_period = self.insight_period
 
         try:
-            data_month_summary, data_period_usage = await asyncio.gather(
-                self._fetch_month_summary(),
-                self._async_fetch_and_record_usage(start_date, now_utc),
-            )
+            if selected_period == yesterday.isoformat():
+                data_month_summary, data_period_usage = await asyncio.gather(
+                    self._fetch_month_summary(),
+                    self._async_fetch_and_record_usage(start_date, now_utc),
+                )
+                insight_usage = data_period_usage
+            else:
+                data_month_summary, data_period_usage, insight_usage = await asyncio.gather(
+                    self._fetch_month_summary(),
+                    self._async_fetch_and_record_usage(start_date, now_utc),
+                    self._fetch_period_usage(selected_period),
+                )
             result = _empty_data()
             if self.settings_coordinator.data:
                 result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
@@ -4159,6 +4205,10 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                     DATA_MONTH_SUMMARY_FETCHED_AT
                 )
             result[DATA_USAGE] = data_period_usage
+            # Avoid associating an in-flight response with a changed selection.
+            if selected_period == self.insight_period:
+                result[DATA_INSIGHT_PERIOD] = selected_period
+                result[DATA_INSIGHT_USAGE] = insight_usage
             return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
