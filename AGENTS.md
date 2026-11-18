@@ -693,13 +693,14 @@ When working on GitHub repositories:
 * Inspect the current branch and working tree before making changes.
 * Preserve unrelated user modifications.
 * Never overwrite or discard uncommitted work.
-* Do not force-push, rewrite history, delete branches, or merge pull requests without explicit authorization.
+* Never delete branches or merge pull requests without explicit authorization.
+* A history rewrite or force-push is permitted when needed for a requested PR rebase or conflict repair, provided all safeguards below are met. Never use an unchecked force-push.
 * Do not commit secrets or personal data.
 * Keep commits and pull requests focused.
 * Describe the root cause, implementation, compatibility considerations, and validation results.
 * Include relevant test results and any checks that could not be executed.
 
-Do not assume that pushing, publishing, releasing, or merging is authorized merely because code changes were requested.
+Do not assume that publishing releases, merging pull requests, or deleting branches is authorized merely because code changes were requested. A requested PR maintenance or conflict-repair task includes updating that PR branch, including a verified lease-guarded history rewrite when necessary.
 
 ### Repair rebase-only pull-request blockers safely
 
@@ -710,17 +711,18 @@ branch (`base.ref` and `base.sha`), source head SHA, mergeability,
 target branch do not guarantee `rebaseable: true`. Apply obsolete-PR
 triage below before rewriting any history.
 
-- **Authorization and intent:** do not rewrite or force-push without
-  explicit approval. Prefer rebase/cherry-pick to retain meaningful
-  individual commits; an approved single-commit rewrite loses their
-  identities. Verify that rebase ancestry, not another merge gate,
-  is the actual blocker.
-- **Durable backup:** before modifying the source branch, create an
-  authorized backup ref at the exact inspected old head SHA on a durable
-  remote (or equivalently durable, access-controlled storage) and read
-  it back to confirm its SHA. A local-only backup that disappears with
+- **Scope and intent:** a requested PR rebase or conflict repair permits
+  a necessary history rewrite using a verified force-with-lease, without
+  separate force-push approval. Prefer rebase/cherry-pick to preserve
+  meaningful individual commits; a single-commit rewrite replaces their
+  identities and must be disclosed. Confirm that commit ancestry, not
+  another merge gate, is the actual blocker.
+- **Durable backup:** before modifying the source branch, create a
+  backup ref at the exact inspected old head SHA on a durable remote
+  (or equivalently durable, access-controlled storage) and read it
+  back to confirm its SHA. A local-only backup that disappears with
   a workspace is insufficient. Do not expose private data or create
-  unauthorized public refs; stop if a safe backup cannot be stored.
+  unnecessary public refs; stop if a safe backup cannot be stored.
 - **Target-base ancestry:** use the PR's checked target-branch tip,
   never assume `main`. Before reusing the old head's exact Git tree,
   verify that the checked base SHA is an ancestor of the old head
@@ -728,9 +730,9 @@ triage below before rewriting any history.
   If it is not, first incorporate the target branch through a
   conflict-resolved rebase/cherry-pick; do not reparent an old tree
   that omits newer base changes.
-- **Verify content:** only when base ancestry is confirmed and a
-  one-parent rewrite is authorized, use the inspected base SHA as the
-  new commit's sole parent and retain the old head's exact Git tree.
+- **Verify content:** only when base ancestry and the rewrite's scope
+  are verified, use the inspected base SHA as the new commit's sole
+  parent and retain the old head's exact Git tree.
   Check tree identity and compare complete original/replacement diffs
   against the same checked target base, including tests and unrelated
   files. After base reconciliation, instead verify every intended
