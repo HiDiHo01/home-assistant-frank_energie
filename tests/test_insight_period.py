@@ -316,9 +316,7 @@ def _authenticated_insight_entry(hass: HomeAssistant) -> MockConfigEntry:
     """Create an entry with an authenticated settings coordinator for migration."""
     entry = _entry(hass)
     entry.runtime_data = SimpleNamespace(
-        settings_coordinator=SimpleNamespace(
-            api=SimpleNamespace(is_authenticated=True)
-        )
+        settings_coordinator=SimpleNamespace(api=SimpleNamespace(is_authenticated=True))
     )
     return entry
 
