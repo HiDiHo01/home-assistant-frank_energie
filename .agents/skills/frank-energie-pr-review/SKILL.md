@@ -50,11 +50,21 @@ When a PR's SonarQube Cloud check reports open findings but does not expose
 their messages as GitHub annotations, use the manual
 [`Export SonarQube Issues`](../../../.github/workflows/sonar-issues-export.yml)
 workflow with that PR number and inspect the `sonar-open-issues.json` artifact.
-Verify the JSON includes all pages and filters for `OPEN,CONFIRMED` issues
-before addressing exact rule IDs and source lines. Do not treat a passing
-Sonar Quality Gate as proof that the issue count is zero. On the project's
-main branch, leaving the PR field empty exports all open issues.
-Do not log or post upstream tokens or unredacted private project data.
+When the user supplies a GitHub Actions artifact URL, extract its run/artifact
+IDs, verify it with the GitHub workflow-artifact listing, download its ZIP via
+the GitHub connector, and parse the enclosed JSON; do not repeatedly request
+a pasted response when the artifact is already accessible. The exporter
+queries `/api/issues/search` using `componentKeys`, `pullRequest`,
+`issueStatuses=OPEN,CONFIRMED`, and `sinceLeakPeriod=true`. Check
+`projectKey`, `pullRequest`, filters, `total`, and each issue's
+`key`, `rule`, `component`, `line`, and `message` before fixing code.
+For example, PR #481's `python:S9073` identified a composite assertion
+in `tests/test_smart_hvac.py`; splitting it preserved test semantics.
+Verify the **new-head** Sonar check reports zero new findings and its Quality
+Gate passes. A passing Quality Gate alone does not prove that the issue
+count is zero. On the project's main branch, leaving the PR field empty
+exports all open issues. Never log or post upstream tokens or unredacted
+private project data.
 
 ## Rebase-only conflicts and safe history repair
 
@@ -78,9 +88,13 @@ available solely because `mergeable` is true.
    when using a one-commit rewrite.
    Use the PR's target base, not an assumed `main`. Check that the
    target-base SHA is an ancestor of the old PR head before reusing
-   its exact tree. Otherwise integrate the new base and resolve
-   conflicts before rebuilding; never reparent a tree omitting base
-   changes or mistake an equal tree SHA for a valid merge result.
+   its exact tree. If the base advanced, integrate it first; when
+   all PR-modified blobs are identical in the old and new target
+   bases, transplant only the changed blobs onto the new base tree.
+   Verify patch equivalence for every changed path against the
+   corresponding old/new bases and reject missing base changes.
+   Never reparent an old tree omitting new base commits or mistake
+   an equal tree SHA for a valid merge result.
 3. **Back up and verify content.** Preserve the previous head as a
    **durable remote** backup ref and verify that it resolves to the
    inspected SHA. Do not rely on a local-only branch or publish
@@ -138,6 +152,32 @@ the complete tree/diff, use a lease, then verify GitHub's actual
 rebaseability and re-run current-head checks. A one-commit rewrite
 collapses history and is appropriate only for a verified PR repair
 with all safeguards; separate force-push approval is not required.
+
+### Verified recovery with an advanced base: PR #481 (2026-11-18)
+
+[`PR #481`](https://github.com/HiDiHo01/home-assistant-frank_energie/pull/481)
+was mergeable but not rebaseable because the feature branch had merged
+`main`. Meanwhile, its target advanced from `ed254a7` to `7866bb5`
+by 24 commits. Those commits modified other paths, not the six changed
+PR files. The repair:
+
+1. Saved and verified `backup-pr-481-before-rebase-260273c` at the
+   exact old head `260273c`.
+2. Verified that each PR file's blob SHA was identical on both target
+   bases, then built a new tree from `7866bb5` with only the six
+   tested PR blobs, preserving all new target-branch changes.
+3. Created one-parent commit `3a77a2e` and compared old-base-to-old-head
+   and new-base-to-new-head patches, blob SHAs, and per-file statistics:
+   all six matched, with no added or removed paths.
+4. Used the connector's expected-head SHA lease to update the branch,
+   verified the backup, base and head refs, and confirmed `rebaseable:
+   true`, `ahead_by: 1`, `behind_by: 0`. Reran CI on the new head.
+
+**Lesson:** never use the stale PR head's tree when the target branch has
+advanced. A disjoint-path transplant must start from the *current base*
+tree, preserve the full target delta, and prove exact PR-patch equality.
+After the force-with-lease, update the PR description's test links to the
+new head: previous-commit successes are historical, not new-head evidence.
 
 ## Merge-readiness decision
 
