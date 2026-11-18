@@ -93,6 +93,7 @@ _DEPENDENT_PLATFORMS: list[str] = [
     Platform.DATETIME,
     Platform.NUMBER,
     Platform.SELECT,
+    Platform.TEXT,
 ]
 PLATFORMS: list[str] = [Platform.SENSOR] + _DEPENDENT_PLATFORMS
 

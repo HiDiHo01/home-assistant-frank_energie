@@ -568,22 +568,22 @@
         "name": "Landcode"
       },
       "costs_electricity_yesterday": {
-        "name": "Kosten elektriciteit gisteren"
+        "name": "Kosten elektriciteit (geselecteerde periode)"
       },
       "usage_electricity_yesterday": {
-        "name": "Verbruik elektriciteit gisteren"
+        "name": "Verbruik elektriciteit (geselecteerde periode)"
       },
       "costs_gas_yesterday": {
-        "name": "Kosten gas gisteren"
+        "name": "Kosten gas (geselecteerde periode)"
       },
       "usage_gas_yesterday": {
-        "name": "Verbruik gas gisteren"
+        "name": "Verbruik gas (geselecteerde periode)"
       },
       "gains_feed_in_yesterday": {
-        "name": "Opbrengst elektriciteit gisteren"
+        "name": "Opbrengst elektriciteit (geselecteerde periode)"
       },
       "delivered_feed_in_yesterday": {
-        "name": "Teruggeleverde elektriciteit gisteren"
+        "name": "Teruggeleverde elektriciteit (geselecteerde periode)"
       },
       "delivery_site": {
         "name": "Leveringslocatie",
@@ -1267,6 +1267,11 @@
       },
       "initial_charge": {
         "name": "Startniveau batterij"
+      }
+    },
+    "text": {
+      "insight_period": {
+        "name": "Inzichtperiode"
       }
     }
   },
