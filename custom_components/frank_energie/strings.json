@@ -587,10 +587,10 @@
         "name": "Contract Start Date"
       },
       "costs_electricity_yesterday": {
-        "name": "Coûts électricité (période sélectionnée)"
+        "name": "Electricity costs"
       },
       "costs_gas_yesterday": {
-        "name": "Coûts gaz (période sélectionnée)"
+        "name": "Gas costs"
       },
       "costs_per_day_till_now_this_month": {
         "name": "Cost per day till now this month"
@@ -628,7 +628,7 @@
         "name": "Current electricity VAT price"
       },
       "delivered_feed_in_yesterday": {
-        "name": "Injection électricité (période sélectionnée)"
+        "name": "Electricity feed-in"
       },
       "delivery_end_date": {
         "name": "Delivery end date"
@@ -763,7 +763,7 @@
         "name": "Full Name"
       },
       "gains_feed_in_yesterday": {
-        "name": "Rémunération injection (période sélectionnée)"
+        "name": "Feed-in compensation"
       },
       "gas_contract_status": {
         "name": "Gas Contract Status",
@@ -967,10 +967,10 @@
         "name": "Trees count"
       },
       "usage_electricity_yesterday": {
-        "name": "Consommation électricité (période sélectionnée)"
+        "name": "Electricity consumption"
       },
       "usage_gas_yesterday": {
-        "name": "Consommation gaz (période sélectionnée)"
+        "name": "Gas consumption"
       },
       "vehicle_name": {
         "name": "Vehicle Name"
@@ -1245,7 +1245,7 @@
     },
     "text": {
       "insight_period": {
-        "name": "Période des statistiques"
+        "name": "Insight period"
       }
     }
   },

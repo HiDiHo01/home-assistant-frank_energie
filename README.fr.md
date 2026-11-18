@@ -78,6 +78,10 @@ sur l'appareil **Frank Energie - Inzicht** avec `YYYY` (année),
 sélectionnée. Les six capteurs Insight exposent `selected_period` et
 tous les `items` dans l'attribut `electricity`, `gas` ou `feed_in`.
 
+Les identifiants néerlandais n'ont plus le suffixe `_gisteren` :
+`sensor.frank_energie_inzicht_kosten_elektriciteit`. Les anciens identifiants
+standard sont migrés si le nouvel identifiant est libre. Les identifiants
+personnalisés restent inchangés. Mettez à jour vos références.
 Les anciennes clés comme `Electricity costs yesterday` ont changé :
 adaptez vos modèles. Les listes mensuelles ou annuelles peuvent être
 volumineuses. Ce choix ne modifie pas Energy Dashboard History.

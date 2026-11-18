@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from freezegun import freeze_time
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.frank_energie.const import (
@@ -23,7 +24,13 @@ from custom_components.frank_energie.insight_period import (
     default_insight_period,
     validate_insight_period,
 )
-from custom_components.frank_energie.sensor import SENSOR_TYPES, FrankEnergieSensor
+from custom_components.frank_energie.sensor import (
+    SENSOR_TYPES,
+    FrankEnergieSensor,
+    _INSIGHT_DEFAULT_OBJECT_IDS,
+    _async_migrate_insight_entity_ids,
+    _sensor_unique_id,
+)
 from custom_components.frank_energie.text import FrankEnergieInsightPeriod
 
 
@@ -303,3 +310,97 @@ async def test_changed_delivery_site_never_publishes_old_insight_totals(
 
     assert data[DATA_INSIGHT_PERIOD] is None
     assert data[DATA_INSIGHT_USAGE] is None
+
+@pytest.mark.parametrize(
+    ("sensor_key", "object_id"),
+    [
+        ("costs_electricity_yesterday", "frank_energie_inzicht_kosten_elektriciteit"),
+        ("usage_electricity_yesterday", "frank_energie_inzicht_verbruik_elektriciteit"),
+        ("costs_gas_yesterday", "frank_energie_inzicht_kosten_gas"),
+        ("usage_gas_yesterday", "frank_energie_inzicht_verbruik_gas"),
+        ("gains_feed_in_yesterday", "frank_energie_inzicht_opbrengst_elektriciteit"),
+        ("delivered_feed_in_yesterday", "frank_energie_inzicht_teruggeleverde_elektriciteit"),
+    ],
+)
+@pytest.mark.parametrize("old_suffix", ["gisteren", "geselecteerde_periode"])
+async def test_insight_default_entity_ids_migrate(
+    hass: HomeAssistant, sensor_key: str, object_id: str, old_suffix: str
+) -> None:
+    """Migrate standard registered names without changing the existing identity."""
+    entry = _entry(hass)
+    registry = er.async_get(hass)
+    unique_id = f"{entry.unique_id}.{sensor_key}"
+    old_entity_id = f"sensor.{object_id}_{old_suffix}"
+    original = registry.async_get_or_create(
+        "sensor", DOMAIN, unique_id,
+        suggested_object_id=f"{object_id}_{old_suffix}",
+        config_entry=entry,
+    )
+    assert original.entity_id == old_entity_id
+
+    _async_migrate_insight_entity_ids(hass, entry)
+
+    new_entity_id = f"sensor.{object_id}"
+    migrated = registry.async_get(new_entity_id)
+    assert migrated is not None
+    assert migrated.id == original.id
+    assert migrated.unique_id == original.unique_id
+    assert migrated.config_entry_id == entry.entry_id
+    assert registry.async_get(old_entity_id) is None
+    _async_migrate_insight_entity_ids(hass, entry)
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) == new_entity_id
+
+
+@pytest.mark.parametrize(
+    ("sensor_key", "object_id"),
+    [
+        ("costs_electricity_yesterday", "frank_energie_inzicht_kosten_elektriciteit"),
+        ("usage_electricity_yesterday", "frank_energie_inzicht_verbruik_elektriciteit"),
+        ("costs_gas_yesterday", "frank_energie_inzicht_kosten_gas"),
+        ("usage_gas_yesterday", "frank_energie_inzicht_verbruik_gas"),
+        ("gains_feed_in_yesterday", "frank_energie_inzicht_opbrengst_elektriciteit"),
+        ("delivered_feed_in_yesterday", "frank_energie_inzicht_teruggeleverde_elektriciteit"),
+    ],
+)
+async def test_insight_custom_entity_ids_are_preserved(
+    hass: HomeAssistant, sensor_key: str, object_id: str
+) -> None:
+    """Do not touch an Insight entity ID changed by the Home Assistant user."""
+    entry = _entry(hass)
+    registry = er.async_get(hass)
+    original = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{entry.unique_id}.{sensor_key}",
+        suggested_object_id=f"my_custom_{object_id}", config_entry=entry,
+    )
+    _async_migrate_insight_entity_ids(hass, entry)
+    assert registry.async_get(original.entity_id) == original
+
+
+async def test_insight_migration_skips_occupied_destination(
+    hass: HomeAssistant,
+) -> None:
+    """Do not rename when another entity owns the requested short ID."""
+    entry = _entry(hass)
+    registry = er.async_get(hass)
+    original = registry.async_get_or_create(
+        "sensor", DOMAIN, f"{entry.unique_id}.costs_electricity_yesterday",
+        suggested_object_id="frank_energie_inzicht_kosten_elektriciteit_gisteren",
+        config_entry=entry,
+    )
+    occupied = registry.async_get_or_create(
+        "sensor", DOMAIN, "occupied_by_another_entity",
+        suggested_object_id="frank_energie_inzicht_kosten_elektriciteit",
+    )
+    _async_migrate_insight_entity_ids(hass, entry)
+    assert registry.async_get(original.entity_id) == original
+    assert registry.async_get(occupied.entity_id) == occupied
+
+
+async def test_insight_migration_preserves_description_unique_ids(
+    hass: HomeAssistant,
+) -> None:
+    """Renaming entity IDs must not change the six sensor unique IDs."""
+    entry = _entry(hass)
+    for key in _INSIGHT_DEFAULT_OBJECT_IDS:
+        description = next(item for item in SENSOR_TYPES if item.key == key)
+        assert _sensor_unique_id(entry, description) == f"{entry.unique_id}.{key}"

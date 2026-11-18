@@ -343,7 +343,13 @@ for a day. These are examples, not fixed or automatically created entity IDs.
 
 ### Insight sensor attributes
 
-The six existing Insight sensor unique IDs are preserved. Both electricity
+The six existing Insight sensor unique IDs are preserved. Dutch installations
+use IDs without a period suffix, such as
+`sensor.frank_energie_inzicht_kosten_elektriciteit` (no `_gisteren`).
+Existing standard Dutch entity IDs ending in `_gisteren` are migrated when
+the short ID is free. User-customized entity IDs remain unchanged. Update
+templates, automations and dashboards that reference renamed IDs.
+Both electricity
 sensors (usage and costs) expose the same category, and likewise for gas and
 feed-in:
 
@@ -362,7 +368,7 @@ To see electricity usage and cost totals in **Developer tools > Template**,
 replace the sensor placeholder with your own electricity cost sensor:
 
 ```jinja2
-{% set entity_id = 'sensor.REPLACE_WITH_YOUR_INSIGHT_ELECTRICITY_COST_SENSOR' %}
+{% set entity_id = 'sensor.frank_energie_inzicht_kosten_elektriciteit' %}
 {% set category = state_attr(entity_id, 'electricity') %}
 {% if category is not none %}
   Period: {{ state_attr(entity_id, 'selected_period') }}
@@ -376,7 +382,7 @@ replace the sensor placeholder with your own electricity cost sensor:
 To count the returned `items`, including full month or year lists:
 
 ```jinja2
-{% set category = state_attr('sensor.REPLACE_WITH_YOUR_INSIGHT_ELECTRICITY_COST_SENSOR', 'electricity') %}
+{% set category = state_attr('sensor.frank_energie_inzicht_kosten_elektriciteit', 'electricity') %}
 {% if category is none %}
   0
 {% elif category is mapping %}

@@ -568,22 +568,22 @@
         "name": "Landcode"
       },
       "costs_electricity_yesterday": {
-        "name": "Kosten elektriciteit (geselecteerde periode)"
+        "name": "Kosten elektriciteit"
       },
       "usage_electricity_yesterday": {
-        "name": "Verbruik elektriciteit (geselecteerde periode)"
+        "name": "Verbruik elektriciteit"
       },
       "costs_gas_yesterday": {
-        "name": "Kosten gas (geselecteerde periode)"
+        "name": "Kosten gas"
       },
       "usage_gas_yesterday": {
-        "name": "Verbruik gas (geselecteerde periode)"
+        "name": "Verbruik gas"
       },
       "gains_feed_in_yesterday": {
-        "name": "Opbrengst elektriciteit (geselecteerde periode)"
+        "name": "Opbrengst elektriciteit"
       },
       "delivered_feed_in_yesterday": {
-        "name": "Teruggeleverde elektriciteit (geselecteerde periode)"
+        "name": "Teruggeleverde elektriciteit"
       },
       "delivery_site": {
         "name": "Leveringslocatie",

@@ -134,6 +134,15 @@ _INSIGHT_SENSOR_KEYS: Final[frozenset[str]] = frozenset(
     }
 )
 
+_INSIGHT_DEFAULT_OBJECT_IDS: Final[dict[str, str]] = {
+    "costs_electricity_yesterday": "frank_energie_inzicht_kosten_elektriciteit",
+    "usage_electricity_yesterday": "frank_energie_inzicht_verbruik_elektriciteit",
+    "costs_gas_yesterday": "frank_energie_inzicht_kosten_gas",
+    "usage_gas_yesterday": "frank_energie_inzicht_verbruik_gas",
+    "gains_feed_in_yesterday": "frank_energie_inzicht_opbrengst_elektriciteit",
+    "delivered_feed_in_yesterday": "frank_energie_inzicht_teruggeleverde_elektriciteit",
+}
+
 _HAS_VIA_DEVICE_ID: Final[bool] = (
     "via_device_id"
     in inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
@@ -1647,6 +1656,34 @@ def _sensor_unique_id(
     """Preserve the registered identity of renamed gas tax and VAT sensors."""
     legacy_key = _LEGACY_GAS_SENSOR_KEYS.get(description.key, description.key)
     return f"{entry.unique_id}.{legacy_key}"
+
+
+@callback
+def _async_migrate_insight_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rename standard Dutch Insight IDs, preserving registry unique IDs.
+
+    Only the six known default IDs are changed. Custom IDs and occupied
+    destinations are left alone; migration can safely run on each setup.
+    """
+    registry = er.async_get(hass)
+    for sensor_key, object_id in _INSIGHT_DEFAULT_OBJECT_IDS.items():
+        unique_id = f"{entry.unique_id}.{sensor_key}"
+        old_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        target_id = f"sensor.{object_id}"
+        if old_id not in (
+            f"{target_id}_gisteren",
+            f"{target_id}_geselecteerde_periode",
+        ):
+            continue
+        if registry.async_get(target_id) is not None:
+            _LOGGER.debug("Insight entity ID rename skipped: destination occupied")
+            continue
+        try:
+            registry.async_update_entity(old_id, new_entity_id=target_id)
+        except ValueError:
+            _LOGGER.warning(
+                "Could not rename an Insight entity ID: destination unavailable"
+            )
 
 
 def _monetary_amount(value: object) -> float | None:
@@ -5128,6 +5165,9 @@ async def async_setup_entry(
     vehicle_coordinator = runtime_data.vehicle_coordinator
     statistics_coordinator = runtime_data.statistics_coordinator
     invoice_coordinator = runtime_data.invoice_coordinator
+
+    if settings_coordinator.api.is_authenticated:
+        _async_migrate_insight_entity_ids(hass, config_entry)
 
     def _get_coordinator_for_description(
         description: FrankEnergieEntityDescription,

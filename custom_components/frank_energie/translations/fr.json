@@ -587,10 +587,10 @@
         "name": "Date de début du contrat"
       },
       "costs_electricity_yesterday": {
-        "name": "Coûts électricité (période sélectionnée)"
+        "name": "Coûts électricité"
       },
       "costs_gas_yesterday": {
-        "name": "Coûts gaz (période sélectionnée)"
+        "name": "Coûts gaz"
       },
       "costs_per_day_till_now_this_month": {
         "name": "Coût par jour ce mois-ci jusqu'à aujourd'hui"
@@ -628,7 +628,7 @@
         "name": "Prix actuel de la TVA sur l'électricité"
       },
       "delivered_feed_in_yesterday": {
-        "name": "Injection électricité (période sélectionnée)"
+        "name": "Injection électricité"
       },
       "delivery_end_date": {
         "name": "Date de fin de livraison"
@@ -763,7 +763,7 @@
         "name": "Nom complet"
       },
       "gains_feed_in_yesterday": {
-        "name": "Rémunération injection (période sélectionnée)"
+        "name": "Rémunération injection"
       },
       "gas_contract_status": {
         "name": "Statut du contrat de gaz",
@@ -967,10 +967,10 @@
         "name": "Nombre d'arbres"
       },
       "usage_electricity_yesterday": {
-        "name": "Consommation électricité (période sélectionnée)"
+        "name": "Consommation électricité"
       },
       "usage_gas_yesterday": {
-        "name": "Consommation gaz (période sélectionnée)"
+        "name": "Consommation gaz"
       },
       "vehicle_name": {
         "name": "Nom du véhicule"

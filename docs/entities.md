@@ -149,6 +149,14 @@ selected period's totals. Each pair shares a nested category attribute:
 | Gas consumption and costs | `gas` | `selected_period` |
 | Feed-in and compensation | `feed_in` | `selected_period` |
 
+New Dutch entity IDs no longer end in `_gisteren`. For example,
+`sensor.frank_energie_inzicht_kosten_elektriciteit` replaces
+`sensor.frank_energie_inzicht_kosten_elektriciteit_gisteren`. Existing
+standard Dutch IDs are renamed when the new ID is available; manually
+customized IDs stay unchanged. The display names no longer include a
+reporting-period suffix. Update any affected entity ID references and use
+`selected_period` to see which period the sensor represents.
+
 Each available category exposes `usage_total`, `costs_total`,
 `unit` and the complete provider `items` list for that period.
 Previously used attribute labels containing `yesterday`, such as
