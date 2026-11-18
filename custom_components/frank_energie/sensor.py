@@ -123,14 +123,16 @@ _DataT = TypeVar("_DataT")
 _LOGGER = logging.getLogger(__name__)
 FORMAT_DATE = "%d-%m-%Y"
 
-_INSIGHT_SENSOR_KEYS: Final[frozenset[str]] = frozenset({
-    "costs_electricity_yesterday",
-    "usage_electricity_yesterday",
-    "costs_gas_yesterday",
-    "usage_gas_yesterday",
-    "gains_feed_in_yesterday",
-    "delivered_feed_in_yesterday",
-})
+_INSIGHT_SENSOR_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "costs_electricity_yesterday",
+        "usage_electricity_yesterday",
+        "costs_gas_yesterday",
+        "usage_gas_yesterday",
+        "gains_feed_in_yesterday",
+        "delivered_feed_in_yesterday",
+    }
+)
 
 _HAS_VIA_DEVICE_ID: Final[bool] = (
     "via_device_id"
@@ -4414,7 +4416,10 @@ class FrankEnergieSensor(
                 }
             attributes = self.entity_description.attr_fn(data) or {}
             if self.entity_description.key in _INSIGHT_SENSOR_KEYS:
-                attributes = {**attributes, "selected_period": data.get(DATA_INSIGHT_PERIOD)}
+                attributes = {
+                    **attributes,
+                    "selected_period": data.get(DATA_INSIGHT_PERIOD),
+                }
             return attributes
         except Exception:
             return {}

@@ -39,9 +39,21 @@ def test_accepts_year_month_and_day(period: str) -> None:
 @pytest.mark.parametrize(
     "period",
     [
-        "", "202", "2026-1", "2026-11-1", "2026-13", "2026-00",
-        "2026-02-29", "2026-11-31", "2027", "2026-12", "2026-11-19",
-        "2026-11-18T00:00:00", " 2026-11", "2026-11 ", "2026-11-\n",
+        "",
+        "202",
+        "2026-1",
+        "2026-11-1",
+        "2026-13",
+        "2026-00",
+        "2026-02-29",
+        "2026-11-31",
+        "2027",
+        "2026-12",
+        "2026-11-19",
+        "2026-11-18T00:00:00",
+        " 2026-11",
+        "2026-11 ",
+        "2026-11-\n",
     ],
 )
 def test_rejects_invalid_or_future_periods(period: str) -> None:
@@ -70,7 +82,9 @@ def _coordinator(
     return coordinator
 
 
-def _entry(hass: HomeAssistant, options: dict[str, str] | None = None) -> MockConfigEntry:
+def _entry(
+    hass: HomeAssistant, options: dict[str, str] | None = None
+) -> MockConfigEntry:
     """Register one configured delivery site for the Insight tests."""
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -91,7 +105,9 @@ async def test_selected_period_uses_provider_totals_without_changing_recorder_so
     entry = _entry(hass, {CONF_INSIGHT_PERIOD: period})
     coordinator = _coordinator(hass, entry)
     yesterday = SimpleNamespace(_id="yesterday")
-    chosen = SimpleNamespace(_id="selected", electricity=SimpleNamespace(costs_total=12.5))
+    chosen = SimpleNamespace(
+        _id="selected", electricity=SimpleNamespace(costs_total=12.5)
+    )
     coordinator._async_fetch_and_record_usage = AsyncMock(return_value=yesterday)
     coordinator._fetch_period_usage = AsyncMock(return_value=chosen)
 
@@ -154,7 +170,9 @@ async def test_invalid_selector_never_writes_config_entry(hass: HomeAssistant) -
     coordinator.async_request_refresh.assert_not_awaited()
 
 
-async def test_selected_period_is_sent_unchanged_to_provider(hass: HomeAssistant) -> None:
+async def test_selected_period_is_sent_unchanged_to_provider(
+    hass: HomeAssistant,
+) -> None:
     """Pass a month or year string to the existing client without inserting a day."""
     entry = _entry(hass)
     coordinator = _coordinator(hass, entry)
@@ -169,7 +187,9 @@ async def test_selected_period_is_sent_unchanged_to_provider(hass: HomeAssistant
     )
 
 
-async def test_text_entity_is_on_existing_insight_service_device(hass: HomeAssistant) -> None:
+async def test_text_entity_is_on_existing_insight_service_device(
+    hass: HomeAssistant,
+) -> None:
     """Use a stable per-entry ID and the shared Insight parent device."""
     entry = _entry(hass)
     coordinator = _coordinator(hass, entry)

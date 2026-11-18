@@ -17,7 +17,9 @@ def validate_insight_period(period: str, today: date) -> str:
         day = int(components[2]) if len(components) > 2 else 1
         first_day = date(year, month, day)
     except ValueError as err:
-        raise ValueError("Insight period is not a valid calendar year, month, or day") from err
+        raise ValueError(
+            "Insight period is not a valid calendar year, month, or day"
+        ) from err
     if first_day > today:
         raise ValueError("Insight period cannot be in the future")
     return period
