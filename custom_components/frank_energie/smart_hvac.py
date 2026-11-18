@@ -12,7 +12,7 @@ from typing import Final, TypedDict
 
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from python_frank_energie import FrankEnergie
@@ -100,6 +100,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         self._inventory_fetched_this_refresh = False
         self._inventory_refresh_listeners: set[Callable[[], None]] = set()
 
+    @callback
     def async_add_inventory_refresh_listener(
         self, update_callback: Callable[[], None]
     ) -> Callable[[], None]:
@@ -107,6 +108,7 @@ class FrankEnergieSmartHvacCoordinator(DataUpdateCoordinator[SmartHvacData]):
         self._inventory_refresh_listeners.add(update_callback)
         return lambda: self._inventory_refresh_listeners.discard(update_callback)
 
+    @callback
     def _async_refresh_finished(self) -> None:
         """Reconcile a fresh inventory independently of snapshot equality."""
         super()._async_refresh_finished()
