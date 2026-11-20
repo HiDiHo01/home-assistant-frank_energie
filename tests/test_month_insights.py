@@ -516,8 +516,6 @@ def test_store_month_insights_rejects_changed_site_or_month(
     )
     result = {}
 
-    coordinator._store_month_insights(
-        result, None, "2026-11", selected_site_reference
-    )
+    coordinator._store_month_insights(result, None, "2026-11", selected_site_reference)
 
     assert const.DATA_MONTH_INSIGHTS not in result
