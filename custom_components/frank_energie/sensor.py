@@ -4396,29 +4396,31 @@ class FrankEnergieSensor(
         except (TypeError, IndexError, ValueError, AttributeError):
             return None
 
+    def _month_insights_native_unit(self, kind: str) -> str | None:
+        """Resolve the validated unit for a MonthInsights sensor."""
+        if self.coordinator.data is None:
+            return None
+        commodity = "gas" if self.entity_description.is_gas else "electricity"
+        unit = _month_insights_unit(self.coordinator.data, commodity)
+        if kind == "unit_price" and unit is not None:
+            return f"{CURRENCY_EURO}/{unit}"
+        if kind == "usage":
+            return unit
+        return None
+
     @property
     def native_unit_of_measurement(self) -> str | None:
         """Return the unit of measurement, including verified monthly units."""
         kind = self.entity_description.month_insights_unit_kind
         if kind is not None:
-            if self.coordinator.data is None:
-                return None
-            commodity = "gas" if self.entity_description.is_gas else "electricity"
-            unit = _month_insights_unit(self.coordinator.data, commodity)
-            if kind == "unit_price":
-                if unit is None:
-                    return None
-                return f"{CURRENCY_EURO}/{unit}"
-            if kind == "usage":
-                return unit
-            return None
+            return self._month_insights_native_unit(kind)
         if self._attr_unit_of_measurement == UNIT_GAS_NL:
-            if (
-                self.coordinator.data
-                and (gas_data := self.coordinator.data.get(DATA_GAS))
-                and (per_unit := getattr(gas_data, "per_unit", None))
-            ):
-                return resolve_gas_unit(per_unit)
+            data = self.coordinator.data
+            if data is not None:
+                gas_data = data.get(DATA_GAS)
+                per_unit = getattr(gas_data, "per_unit", None)
+                if per_unit:
+                    return resolve_gas_unit(per_unit)
         return self._attr_unit_of_measurement
 
     _no_record_keys: ClassVar[frozenset[str]] = frozenset(
