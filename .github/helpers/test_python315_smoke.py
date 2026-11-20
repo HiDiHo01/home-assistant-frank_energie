@@ -3,7 +3,7 @@
 import json
 import sys
 import unittest
-from importlib.metadata import version
+from importlib.metadata import distribution, version
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -29,11 +29,24 @@ class Python315SmokeTests(unittest.TestCase):
         requirements = [
             requirement
             for requirement in manifest["requirements"]
-            if requirement.startswith("python-frank-energie==")
+            if requirement.partition(" @ ")[0] == "python-frank-energie"
+            or requirement.startswith("python-frank-energie==")
         ]
         self.assertEqual(len(requirements), 1)
-        expected_version = requirements[0].partition("==")[2]
-        self.assertEqual(version("python-frank-energie"), expected_version)
+        requirement = requirements[0]
+        if "==" in requirement:
+            self.assertEqual(
+                version("python-frank-energie"), requirement.partition("==")[2]
+            )
+        else:
+            requested_revision = requirement.rpartition("@")[2]
+            installed_url = json.loads(
+                distribution("python-frank-energie").read_text("direct_url.json")
+                or "{}"
+            )
+            self.assertEqual(
+                installed_url.get("vcs_info", {}).get("commit_id"), requested_revision
+            )
         self.assertTrue(callable(FrankEnergie))
 
     def test_upstream_models_parse_offline(self) -> None:

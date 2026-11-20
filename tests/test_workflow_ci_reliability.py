@@ -185,6 +185,8 @@ def test_ci_blocks_new_full_flake8_violations() -> None:
     )
     assert client_step["if"] == "${{ matrix.experimental }}"
     assert "--only-binary=:all:" in str(client_step["run"])
+    assert 'pip install --no-deps "$client_requirement"' in str(client_step["run"])
+    assert "importlib.metadata import requires" in str(client_step["run"])
     assert "manifest.json" in str(client_step["run"])
     smoke_step = _named_step(
         "ci.yaml", "run", "Run Python 3.15 upstream client smoke tests"
