@@ -3737,10 +3737,8 @@ description = "Asynchronous Python client for the Frank Energie integration"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = [
-    {file = "python_frank_energie-2026.11.13-py3-none-any.whl", hash = "sha256:4b0345a6d6eb84c8449f57f7531c0ce84d75f3a23103ea246d0d66cfaa09f39b"},
-    {file = "python_frank_energie-2026.11.13.tar.gz", hash = "sha256:0986f02e8766baf82c5feec11739903a1d757a7aa6dae6bc7a9f4cbc22d115ae"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 aiohttp = ">=3.13.5"
@@ -3749,6 +3747,12 @@ idna = ">=3.7"
 pydantic = ">=2.0.0"
 PyJWT = ">=2.10.1"
 typing-extensions = ">=4.10.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/HiDiHo01/python-frank-energie.git"
+reference = "946ab4da4e06b460d95145925026ef4922c502ec"
+resolved_reference = "946ab4da4e06b460d95145925026ef4922c502ec"
 
 [[package]]
 name = "python-slugify"
@@ -5065,4 +5069,4 @@ ifaddr = ">=0.1.7"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14.2,<4.0"
-content-hash = "55f50f91d44c9b19ff0398210ce45697aa20325e8a0c4bb7f534e802e4d72de8"
+content-hash = "572d8f5b674f2019c15aba8d5140c425ae850e4facae32b7755e52e1bc14e86f"

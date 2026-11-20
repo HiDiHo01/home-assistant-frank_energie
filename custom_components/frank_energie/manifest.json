@@ -17,7 +17,7 @@
         "python_frank_energie"
     ],
     "requirements": [
-        "python-frank-energie==2026.11.13"
+        "python-frank-energie @ git+https://github.com/HiDiHo01/python-frank-energie.git@946ab4da4e06b460d95145925026ef4922c502ec"
     ],
     "version": "2026.11.14"
 }

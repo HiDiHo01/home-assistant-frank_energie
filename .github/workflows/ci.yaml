@@ -107,17 +107,31 @@ jobs:
           requirements = [
               value
               for value in manifest["requirements"]
-              if value.startswith("python-frank-energie==")
+              if value.partition(" @ ")[0] == "python-frank-energie"
+              or value.startswith("python-frank-energie==")
           ]
           if len(requirements) != 1:
-              raise SystemExit("Expected exactly one pinned python-frank-energie requirement.")
+              raise SystemExit("Expected exactly one python-frank-energie requirement.")
           print(requirements[0])
           PY
           )
-          # The released client models import dateutil but its package
-          # metadata does not yet declare python-dateutil as a dependency.
+          # The SDK source tag is pinned by commit while its PyPI publish is
+          # repaired. Build the pure-Python client without resolving dependencies,
+          # then require binary wheels for its declared runtime dependencies.
+          python -m pip install --no-deps "$client_requirement"
+          python - <<'PY'
+          """Write the installed client dependencies for wheel-only resolution."""
+          from importlib.metadata import requires
+          from pathlib import Path
+
+          client_dependencies = requires("python-frank-energie") or []
+          Path("/tmp/python-frank-energie-requirements.txt").write_text(
+              "\n".join(client_dependencies) + "\n", encoding="utf-8"
+          )
+          PY
           python -m pip install --only-binary=:all: \
-            "$client_requirement" "python-dateutil>=2.9,<3" "packaging>=24.2,<27"
+            --requirement /tmp/python-frank-energie-requirements.txt \
+            "python-dateutil>=2.9,<3" "packaging>=24.2,<27"
           python -m pip check
 
       - name: Diagnose experimental Python wheel availability

@@ -6,12 +6,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.const import CURRENCY_EURO, UnitOfEnergy, UnitOfVolume
+from python_frank_energie.exceptions import RateLimitException
 from python_frank_energie.models import MonthInsights
 
 from custom_components.frank_energie import const
 from custom_components.frank_energie.coordinator import (
+    FrankEnergieCoordinator,
     FrankEnergieStatisticsCoordinator,
 )
+from custom_components.frank_energie.rate_limit import RateLimitState
 from custom_components.frank_energie.sensor import (
     FrankEnergieSensor,
     SENSOR_TYPES,
@@ -28,6 +31,7 @@ FIELDS = (
     ("expected_average_unit_price", "expectedAverageUnitPrice"),
     ("expected_costs_comparison", "expectedCosts"),
 )
+MISSING = object()
 
 
 def _insights(
@@ -123,7 +127,7 @@ def test_missing_insights_is_unknown(commodity: str, metric: str, field: str) ->
 
 @pytest.mark.parametrize("commodity", ("electricity", "gas"))
 def test_current_sdk_missing_numeric_fields_are_not_fabricated(commodity: str) -> None:
-    """Reject SDK-defaulted zeros that cannot be distinguished from source null."""
+    """Absent numeric fields stay unavailable after the nullable SDK upgrade."""
     insights = MonthInsights.from_dict(
         {
             "data": {
@@ -147,22 +151,60 @@ def test_current_sdk_missing_numeric_fields_are_not_fabricated(commodity: str) -
         )
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    ((3.75, 3.75), (0.0, 0.0), (None, None), (MISSING, None)),
+)
+def test_month_insights_parser_preserves_present_zero_and_missing_values(
+    value: object, expected: float | None
+) -> None:
+    """Map raw API amounts through the SDK without conflating absent and zero."""
+    payload: dict[str, object] = {
+        "_id": "synthetic|2026-11",
+        "electricityDifference": {"unit": "kWh"},
+    }
+    difference = payload["electricityDifference"]
+    assert isinstance(difference, dict)
+    if value is not MISSING:
+        payload["expectedCostsElectricity"] = value
+        difference["actualCosts"] = value
+
+    insights = MonthInsights.from_dict({"data": {"monthInsights": payload}})
+
+    assert insights is not None
+    assert insights.expectedCostsElectricity == expected
+    assert insights.electricityDifference is not None
+    assert insights.electricityDifference.actualCosts == expected
+    assert (
+        _description("electricity", "expected_costs").value_fn(
+            {const.DATA_MONTH_INSIGHTS: insights}
+        )
+        == expected
+    )
+    assert (
+        _description("electricity", "actual_costs").value_fn(
+            {const.DATA_MONTH_INSIGHTS: insights}
+        )
+        == expected
+    )
+
+
 @pytest.mark.parametrize("commodity", ("electricity", "gas"))
 @pytest.mark.parametrize(
     ("value", "expected"),
     (
-        (0.0, None),
-        (-0.0, None),
+        (0.0, 0.0),
+        (-0.0, -0.0),
         (0.001, 0.001),
         (-1.25, -1.25),
         (float("inf"), None),
         (float("nan"), None),
     ),
 )
-def test_month_insights_only_reports_finite_nonzero_values(
+def test_month_insights_only_reports_finite_values(
     commodity: str, value: float, expected: float | None
 ) -> None:
-    """Reject ambiguous SDK zeros and non-finite values without losing negatives."""
+    """Retain finite zero and negative amounts while rejecting non-finite values."""
     difference = SimpleNamespace(actualCosts=value)
     insights = SimpleNamespace(
         gasExcluded=False,
@@ -349,6 +391,37 @@ async def test_month_insights_timeout_is_optional() -> None:
 
 
 @pytest.mark.asyncio
+async def test_month_insights_rate_limit_sets_cooldown() -> None:
+    """Record the published SDK's MonthInsights throttle in its cooldown."""
+    coordinator = MagicMock()
+    coordinator.api.is_authenticated = True
+    coordinator.api.month_insights = AsyncMock(
+        side_effect=RateLimitException("MonthInsights", retry_after=60)
+    )
+    coordinator.site_reference = "synthetic"
+    coordinator.settings_coordinator.data = {
+        const.DATA_DELIVERY_SITE: SimpleNamespace(segments={"ELECTRICITY"})
+    }
+    coordinator.rate_limits = RateLimitState()
+    coordinator.async_api_call = FrankEnergieCoordinator.async_api_call.__get__(
+        coordinator
+    )
+
+    result = await FrankEnergieStatisticsCoordinator._fetch_month_insights(
+        coordinator, "2026-11"
+    )
+    assert result is None
+
+    assert (
+        await FrankEnergieStatisticsCoordinator._fetch_month_insights(
+            coordinator, "2026-11"
+        )
+        is None
+    )
+    coordinator.api.month_insights.assert_awaited_once_with("synthetic", "2026-11")
+
+
+@pytest.mark.asyncio
 async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     """Keep existing usage and summary results during insights failure."""
     coordinator = MagicMock()
@@ -363,6 +436,9 @@ async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     coordinator._async_fetch_optional_insight_usage = AsyncMock(return_value=None)
     coordinator._fetch_month_insights = AsyncMock(return_value=None)
     coordinator.data = {}
+    coordinator._build_statistics_data = (
+        FrankEnergieStatisticsCoordinator._build_statistics_data.__get__(coordinator)
+    )
     result = await FrankEnergieStatisticsCoordinator._async_update_data(coordinator)
     assert result[const.DATA_MONTH_INSIGHTS] is None
     assert result[const.DATA_USAGE] == "usage_result"

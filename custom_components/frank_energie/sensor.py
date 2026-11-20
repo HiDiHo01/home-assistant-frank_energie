@@ -1817,12 +1817,7 @@ def _month_insights_unit(data: FrankEnergieData, commodity: str) -> str | None:
 def _month_insights_value(
     data: FrankEnergieData, *, commodity: str, field_name: str
 ) -> float | None:
-    """Return a verified nonzero finite value without inventing missing zeros.
-
-    SDK 2026.11.13 defaults absent/null MonthInsights numbers to 0.0, making
-    genuine zero indistinguishable. Do not publish any zero until its SDK
-    parser preserves field presence; this limitation blocks merging the PR.
-    """
+    """Return a finite MonthInsights value while keeping missing fields unknown."""
     insights = data.get(DATA_MONTH_INSIGHTS)
     if insights is None or (commodity == "gas" and insights.gasExcluded):
         return None
@@ -1847,8 +1842,6 @@ def _month_insights_value(
         ):
             return None
     amount = _monetary_amount(value)
-    if not amount:
-        return None
     return amount
 
 
