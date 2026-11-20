@@ -443,3 +443,81 @@ async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     assert result[const.DATA_MONTH_INSIGHTS] is None
     assert result[const.DATA_USAGE] == "usage_result"
     assert result[const.DATA_MONTH_SUMMARY] is None
+
+
+def test_store_month_insights_saves_fresh_value_and_timestamp() -> None:
+    """Store a successful MonthInsights response with its cache metadata."""
+    coordinator = MagicMock()
+    coordinator.site_reference = "synthetic"
+    coordinator.data = {}
+    coordinator._month_insights_site_reference = None
+    coordinator._month_insights_period = None
+    coordinator._store_month_insights = (
+        FrankEnergieStatisticsCoordinator._store_month_insights.__get__(coordinator)
+    )
+    result = {}
+    insights = _insights()
+
+    coordinator._store_month_insights(result, insights, "2026-11", "synthetic")
+
+    assert result[const.DATA_MONTH_INSIGHTS] is insights
+    assert result[const.DATA_MONTH_INSIGHTS_PERIOD] == "2026-11"
+    fetched_at = result[const.DATA_MONTH_INSIGHTS_FETCHED_AT]
+    assert isinstance(fetched_at, datetime)
+    assert fetched_at.tzinfo is UTC
+    assert coordinator._month_insights_site_reference == "synthetic"
+    assert coordinator._month_insights_period == "2026-11"
+
+
+def test_store_month_insights_retains_same_site_month_and_original_timestamp() -> None:
+    """Keep cached insights and their original timestamp after an empty read."""
+    insights = _insights()
+    fetched_at = datetime(2026, 11, 19, 12, tzinfo=UTC)
+    coordinator = MagicMock()
+    coordinator.site_reference = "synthetic"
+    coordinator.data = {
+        const.DATA_MONTH_INSIGHTS: insights,
+        const.DATA_MONTH_INSIGHTS_FETCHED_AT: fetched_at,
+    }
+    coordinator._month_insights_site_reference = "synthetic"
+    coordinator._month_insights_period = "2026-11"
+    coordinator._store_month_insights = (
+        FrankEnergieStatisticsCoordinator._store_month_insights.__get__(coordinator)
+    )
+    result = {}
+
+    coordinator._store_month_insights(result, None, "2026-11", "synthetic")
+
+    assert result[const.DATA_MONTH_INSIGHTS] is insights
+    assert result[const.DATA_MONTH_INSIGHTS_PERIOD] == "2026-11"
+    assert result[const.DATA_MONTH_INSIGHTS_FETCHED_AT] is fetched_at
+
+
+@pytest.mark.parametrize(
+    ("selected_site_reference", "cached_site_reference", "cached_period"),
+    (
+        ("other-site", "synthetic", "2026-11"),
+        ("synthetic", "synthetic", "2026-10"),
+    ),
+)
+def test_store_month_insights_rejects_changed_site_or_month(
+    selected_site_reference: str,
+    cached_site_reference: str,
+    cached_period: str,
+) -> None:
+    """Do not reuse a cache entry after its site or month no longer matches."""
+    coordinator = MagicMock()
+    coordinator.site_reference = "synthetic"
+    coordinator.data = {const.DATA_MONTH_INSIGHTS: _insights()}
+    coordinator._month_insights_site_reference = cached_site_reference
+    coordinator._month_insights_period = cached_period
+    coordinator._store_month_insights = (
+        FrankEnergieStatisticsCoordinator._store_month_insights.__get__(coordinator)
+    )
+    result = {}
+
+    coordinator._store_month_insights(
+        result, None, "2026-11", selected_site_reference
+    )
+
+    assert const.DATA_MONTH_INSIGHTS not in result
