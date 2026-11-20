@@ -51,6 +51,7 @@ from python_frank_energie.models import (
     EnodeVehicles,
     Invoices,
     MarketPrices,
+    MonthInsights,
     MonthSummary,
     PeriodUsageAndCosts,
     Price,
@@ -90,6 +91,9 @@ from .const import (
     DATA_ENODE_VEHICLES,
     DATA_GAS,
     DATA_INVOICES,
+    DATA_MONTH_INSIGHTS,
+    DATA_MONTH_INSIGHTS_FETCHED_AT,
+    DATA_MONTH_INSIGHTS_PERIOD,
     DATA_MONTH_SUMMARY,
     DATA_MONTH_SUMMARY_FETCHED_AT,
     DATA_PV_SUMMARY,
@@ -343,6 +347,15 @@ class FrankEnergieData(TypedDict):
     gas: PriceData | None
     """Gas price data."""
 
+    month_insights: MonthInsights | None
+    """Verified MonthInsights for the Amsterdam-local calendar month."""
+
+    month_insights_period: str | None
+    """Verified year-month for the selected site."""
+
+    month_insights_fetched_at: datetime | None
+    """Original, timezone-aware UTC fetch time for retained insights."""
+
     month_summary: MonthSummary | None
     """Optional summary data for the month."""
 
@@ -429,6 +442,9 @@ def _empty_data() -> FrankEnergieData:
     return {  # type: ignore[typeddict-unknown-key]
         DATA_ELECTRICITY: None,
         DATA_GAS: None,
+        DATA_MONTH_INSIGHTS: None,
+        DATA_MONTH_INSIGHTS_PERIOD: None,
+        DATA_MONTH_INSIGHTS_FETCHED_AT: None,
         DATA_MONTH_SUMMARY: None,
         DATA_MONTH_SUMMARY_FETCHED_AT: None,
         DATA_INVOICES: None,
@@ -1205,6 +1221,44 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 ex,
             )
             return None
+
+    async def _fetch_month_insights(self, period: str) -> MonthInsights | None:
+        """Fetch month insights only for authenticated sites with known contracts."""
+        if not self.api.is_authenticated or not self.site_reference:
+            return None
+
+        settings_data = self.settings_coordinator.data
+        contracts = helpers.known_site_contracts(
+            settings_data.get(DATA_DELIVERY_SITE) if settings_data else None
+        )
+        if not contracts:
+            return None
+
+        try:
+            insights = await self.async_api_call(
+                "month_insights", self.api.month_insights, self.site_reference, period
+            )
+        except (
+            AuthException,
+            RateLimitException,
+            RequestException,
+            FrankEnergieException,
+            ClientError,
+            TimeoutError,
+        ) as exc:
+            _LOGGER.debug("MonthInsights unavailable (%s)", type(exc).__name__)
+            return None
+
+        if insights is None:
+            return None
+        identifier = getattr(insights, "_id", None)
+        if not isinstance(identifier, str):
+            return None
+        prefix, separator, source_period = identifier.rpartition("|")
+        if not prefix or not separator or source_period != period:
+            _LOGGER.debug("MonthInsights response period did not match request")
+            return None
+        return insights
 
     async def _fetch_invoices(self) -> Invoices | None:
         """Fetch invoices from the API."""
@@ -4097,6 +4151,8 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         super().__init__(hass, config_entry, api)
         self.name = "Frank Energie statistics coordinator"
         self._month_summary_site_reference: str | None = None
+        self._month_insights_site_reference: str | None = None
+        self._month_insights_period: str | None = None
         self._usage_lock = asyncio.Lock()
         _LOGGER.debug("Initializing %s (country_code=%s)", self.name, self.country_code)
         self.settings_coordinator = settings_coordinator
@@ -4170,6 +4226,87 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
             )
             return None
 
+    def _store_month_insights(
+        self,
+        result: FrankEnergieData,
+        fetched_insights: MonthInsights | None,
+        period: str,
+        selected_site_reference: str | None,
+    ) -> None:
+        """Retain only same-site, same-period insights and the original fetch time."""
+        if selected_site_reference != self.site_reference:
+            return
+        previous_insights = (
+            self.data.get(DATA_MONTH_INSIGHTS)
+            if self.data
+            and self._month_insights_site_reference == selected_site_reference
+            and self._month_insights_period == period
+            else None
+        )
+        if fetched_insights is not None:
+            result[DATA_MONTH_INSIGHTS] = fetched_insights
+            result[DATA_MONTH_INSIGHTS_PERIOD] = period
+            result[DATA_MONTH_INSIGHTS_FETCHED_AT] = datetime.now(UTC)
+            self._month_insights_site_reference = selected_site_reference
+            self._month_insights_period = period
+        elif previous_insights is not None:
+            result[DATA_MONTH_INSIGHTS] = previous_insights
+            result[DATA_MONTH_INSIGHTS_PERIOD] = period
+            result[DATA_MONTH_INSIGHTS_FETCHED_AT] = self.data.get(
+                DATA_MONTH_INSIGHTS_FETCHED_AT
+            )
+
+    def _build_statistics_data(
+        self,
+        *,
+        data_month_summary: MonthSummary | None,
+        data_period_usage: PeriodUsageAndCosts | None,
+        insight_usage: PeriodUsageAndCosts | None,
+        data_month_insights: MonthInsights | None,
+        selected_period: str,
+        selected_site_reference: str | None,
+        month_insights_period: str,
+    ) -> FrankEnergieData:
+        """Aggregate statistics while retaining only same-site cached values."""
+        result = _empty_data()
+        settings_data = self.settings_coordinator.data
+        if settings_data:
+            result[DATA_USER] = settings_data.get(DATA_USER)
+            result[DATA_USER_SITES] = settings_data.get(DATA_USER_SITES)
+
+        # Null/temporarily absent summaries do not invalidate the last
+        # verified estimate for the same delivery site.
+        previous_summary = (
+            self.data.get(DATA_MONTH_SUMMARY)
+            if self._month_summary_site_reference == self.site_reference
+            else None
+        )
+        if data_month_summary is not None:
+            result[DATA_MONTH_SUMMARY] = data_month_summary
+            result[DATA_MONTH_SUMMARY_FETCHED_AT] = datetime.now(UTC)
+            self._month_summary_site_reference = self.site_reference
+        elif previous_summary is not None:
+            result[DATA_MONTH_SUMMARY] = previous_summary
+            result[DATA_MONTH_SUMMARY_FETCHED_AT] = self.data.get(
+                DATA_MONTH_SUMMARY_FETCHED_AT
+            )
+
+        self._store_month_insights(
+            result,
+            data_month_insights,
+            month_insights_period,
+            selected_site_reference,
+        )
+        result[DATA_USAGE] = data_period_usage
+        # Avoid associating an in-flight response with a changed selection.
+        if (
+            selected_period == self.insight_period
+            and selected_site_reference == self.site_reference
+        ):
+            result[DATA_INSIGHT_PERIOD] = selected_period
+            result[DATA_INSIGHT_USAGE] = insight_usage
+        return result
+
     async def _async_update_data(self) -> FrankEnergieData:
         """Fetch monthly data and refresh usage and its hourly statistics."""
         now_utc = datetime.now(ZoneInfo("UTC"))
@@ -4184,12 +4321,18 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
         start_date = yesterday
         selected_period = self.insight_period
         selected_site_reference = self.site_reference
+        month_insights_period = today.strftime("%Y-%m")
 
         try:
             if selected_period == yesterday.isoformat():
-                data_month_summary, data_period_usage = await asyncio.gather(
+                (
+                    data_month_summary,
+                    data_period_usage,
+                    data_month_insights,
+                ) = await asyncio.gather(
                     self._fetch_month_summary(),
                     self._async_fetch_and_record_usage(start_date, now_utc),
+                    self._fetch_month_insights(month_insights_period),
                 )
                 insight_usage = data_period_usage
             else:
@@ -4197,42 +4340,22 @@ class FrankEnergieStatisticsCoordinator(FrankEnergieCoordinator):
                     data_month_summary,
                     data_period_usage,
                     insight_usage,
+                    data_month_insights,
                 ) = await asyncio.gather(
                     self._fetch_month_summary(),
                     self._async_fetch_and_record_usage(start_date, now_utc),
                     self._async_fetch_optional_insight_usage(selected_period),
+                    self._fetch_month_insights(month_insights_period),
                 )
-            result = _empty_data()
-            if self.settings_coordinator.data:
-                result[DATA_USER] = self.settings_coordinator.data.get(DATA_USER)
-                result[DATA_USER_SITES] = self.settings_coordinator.data.get(
-                    DATA_USER_SITES
-                )
-            # Null/temporarily absent summaries do not invalidate the last
-            # verified estimate for the same delivery site.
-            previous_summary = (
-                self.data.get(DATA_MONTH_SUMMARY)
-                if self._month_summary_site_reference == self.site_reference
-                else None
+            return self._build_statistics_data(
+                data_month_summary=data_month_summary,
+                data_period_usage=data_period_usage,
+                insight_usage=insight_usage,
+                data_month_insights=data_month_insights,
+                selected_period=selected_period,
+                selected_site_reference=selected_site_reference,
+                month_insights_period=month_insights_period,
             )
-            if data_month_summary is not None:
-                result[DATA_MONTH_SUMMARY] = data_month_summary
-                result[DATA_MONTH_SUMMARY_FETCHED_AT] = datetime.now(UTC)
-                self._month_summary_site_reference = self.site_reference
-            elif previous_summary is not None:
-                result[DATA_MONTH_SUMMARY] = previous_summary
-                result[DATA_MONTH_SUMMARY_FETCHED_AT] = self.data.get(
-                    DATA_MONTH_SUMMARY_FETCHED_AT
-                )
-            result[DATA_USAGE] = data_period_usage
-            # Avoid associating an in-flight response with a changed selection.
-            if (
-                selected_period == self.insight_period
-                and selected_site_reference == self.site_reference
-            ):
-                result[DATA_INSIGHT_PERIOD] = selected_period
-                result[DATA_INSIGHT_USAGE] = insight_usage
-            return result
         except Exception as err:
             await self._handle_fetch_exceptions(err)
             raise UpdateFailed(f"Failed to fetch statistics data: {err}") from err
