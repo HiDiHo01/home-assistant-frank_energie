@@ -436,6 +436,9 @@ async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     coordinator._async_fetch_optional_insight_usage = AsyncMock(return_value=None)
     coordinator._fetch_month_insights = AsyncMock(return_value=None)
     coordinator.data = {}
+    coordinator._store_month_insights = (
+        FrankEnergieStatisticsCoordinator._store_month_insights.__get__(coordinator)
+    )
     coordinator._build_statistics_data = (
         FrankEnergieStatisticsCoordinator._build_statistics_data.__get__(coordinator)
     )
@@ -497,6 +500,7 @@ def test_store_month_insights_retains_same_site_month_and_original_timestamp() -
     ("selected_site_reference", "cached_site_reference", "cached_period"),
     (
         ("other-site", "synthetic", "2026-11"),
+        ("synthetic", "other-site", "2026-11"),
         ("synthetic", "synthetic", "2026-10"),
     ),
 )
