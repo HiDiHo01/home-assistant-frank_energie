@@ -10,6 +10,7 @@ from python_frank_energie.exceptions import RateLimitException
 from python_frank_energie.models import MonthInsights
 
 from custom_components.frank_energie import const
+from custom_components.frank_energie import coordinator as coordinator_module
 from custom_components.frank_energie.coordinator import (
     FrankEnergieCoordinator,
     FrankEnergieStatisticsCoordinator,
@@ -446,6 +447,52 @@ async def test_absent_month_insights_does_not_hide_other_stats() -> None:
     assert result[const.DATA_MONTH_INSIGHTS] is None
     assert result[const.DATA_USAGE] == "usage_result"
     assert result[const.DATA_MONTH_SUMMARY] is None
+
+
+@pytest.mark.parametrize(
+    ("local_now", "expected_month", "previous_day"),
+    (
+        ("2026-11-01T00:30:00+01:00", "2026-11", "2026-10-31"),
+        ("2027-01-01T00:30:00+01:00", "2027-01", "2026-12-31"),
+    ),
+)
+async def test_month_insights_fetch_uses_current_local_month_at_year_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    local_now: str,
+    expected_month: str,
+    previous_day: str,
+) -> None:
+    """Fetch MonthInsights for the Amsterdam month across calendar rollovers."""
+    frozen_now = datetime.fromisoformat(local_now)
+    monkeypatch.setattr(
+        coordinator_module,
+        "datetime",
+        SimpleNamespace(now=lambda _timezone: frozen_now),
+    )
+    coordinator = MagicMock()
+    coordinator._should_skip_api_calls.return_value = False
+    coordinator.site_reference = "synthetic"
+    coordinator.settings_coordinator = SimpleNamespace(data={})
+    coordinator.config_entry = SimpleNamespace(options={})
+    coordinator.insight_period = previous_day
+    coordinator.data = {}
+    coordinator._fetch_month_summary = AsyncMock(return_value=None)
+    coordinator._async_fetch_and_record_usage = AsyncMock(return_value=None)
+    coordinator._fetch_month_insights = AsyncMock(return_value=_insights())
+    coordinator._store_month_insights = (
+        FrankEnergieStatisticsCoordinator._store_month_insights.__get__(coordinator)
+    )
+    coordinator._build_statistics_data = (
+        FrankEnergieStatisticsCoordinator._build_statistics_data.__get__(coordinator)
+    )
+    coordinator._async_update_data = (
+        FrankEnergieStatisticsCoordinator._async_update_data.__get__(coordinator)
+    )
+
+    result = await coordinator._async_update_data()
+
+    coordinator._fetch_month_insights.assert_awaited_once_with(expected_month)
+    assert result[const.DATA_MONTH_INSIGHTS_PERIOD] == expected_month
 
 
 def test_store_month_insights_saves_fresh_value_and_timestamp() -> None:
