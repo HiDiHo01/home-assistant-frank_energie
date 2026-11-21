@@ -39,11 +39,11 @@ Vous pouvez, par exemple, utiliser les capteurs de prix pour automatiser des app
 
 - [Assistant ChatGPT Frank Energie](https://chatgpt.com/g/g-6a30a8e006b081919967c4c79fd542d7-frank-energie-assistant)
 
-# Services
+# Actions
 
-L'intégration Frank Energie n'enregistre actuellement aucun service Home Assistant.
+Utilisez `frank_energie.get_prices_for_date` pour consulter les tarifs disponibles à une date donnée. [Exemple pour les tarifs](docs/examples.md#prices-for-a-date)
 
-Ses fonctionnalités sont accessibles à l'aide des entités, événements, boutons, listes de sélection et capteurs.
+Utilisez `frank_energie.get_battery_results` pour obtenir les résultats de chaque batterie, la correction EPEX signée et les sessions quotidiennes entre deux dates incluses. [Champs de réponse et exemple d’automatisation](docs/smart_battery.md#results-for-a-date-range)
 
 ## Installation
 Copiez le dossier `frank_energie` situé dans `custom_components` de ce dépôt vers le dossier `custom_components` de votre installation Home Assistant.

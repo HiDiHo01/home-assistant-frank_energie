@@ -868,7 +868,7 @@
         "name": "Periode Frank Slim bonus"
       },
       "daily_trading_result": {
-        "name": "Handelsresultaat van gisteren"
+        "name": "Resultaat van gisteren"
       },
       "total_trading_result": {
         "name": "Totaal handelsresultaat"
@@ -1309,6 +1309,15 @@
     },
     "prices_for_date_unavailable": {
       "message": "De cache bevat geen volledige prijzen voor {date}. Controleer of de prijzen zijn gepubliceerd en probeer het opnieuw."
+    },
+    "battery_results_auth_required": {
+      "message": "Kies een Frank Energie-configuratie met een ingelogd account en een leveringslocatie om batterijresultaten op te vragen."
+    },
+    "battery_inventory_unavailable": {
+      "message": "De batterijlijst is niet beschikbaar. Probeer het opnieuw nadat de batterijgegevens zijn bijgewerkt."
+    },
+    "battery_results_reversed_dates": {
+      "message": "De einddatum moet op of na de begindatum liggen."
     }
   },
   "services": {
@@ -1327,6 +1336,24 @@
         "energy_type": {
           "name": "Energietype",
           "description": "Kies elektriciteit of gas."
+        }
+      }
+    },
+    "get_battery_results": {
+      "name": "Resultaten van slimme batterijen ophalen",
+      "description": "Haal het handelsresultaat, de EPEX-correctie met teken en de dagelijkse sessies per batterij op voor de gekozen periode.",
+      "fields": {
+        "config_entry": {
+          "name": "Configuratie",
+          "description": "Kies de Frank Energie-configuratie waarvan je de prijzen wilt ophalen."
+        },
+        "start_date": {
+          "name": "Begindatum",
+          "description": "Eerste dag van de periode (tijdzone Europa/Amsterdam)."
+        },
+        "end_date": {
+          "name": "Einddatum",
+          "description": "Laatste dag van de periode. Kies voor één dag dezelfde begin- en einddatum."
         }
       }
     }

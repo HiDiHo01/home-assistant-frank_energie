@@ -105,6 +105,7 @@ from .const import (
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
 )
+from .battery_results import battery_day, period_breakdown, session_status
 from .coordinator import (
     FrankEnergieBatterySessionCoordinator,
     FrankEnergieCoordinator,
@@ -150,30 +151,6 @@ _HAS_VIA_DEVICE_ID: Final[bool] = (
     "via_device_id"
     in inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters
 )
-
-
-def _format_battery_date(date_val) -> datetime | None:
-    """Parse a battery session date value (str or date) into a timezone-aware datetime.
-
-    Accepts either a raw ISO date string (e.g. "2024-01-15") or a date/datetime
-    object that already has a .replace() method.  Returns None when date_val is
-    falsy so callers can use a simple ``if data`` guard.
-
-    Returns a datetime (not a str) so that SensorDeviceClass.TIMESTAMP sensors
-    receive a value with a .tzinfo attribute as required by Home Assistant.
-    """
-    tz = ZoneInfo(TIMEZONE_AMSTERDAM)
-    if not date_val:
-        return None
-    if isinstance(date_val, str):
-        return datetime.strptime(date_val, "%Y-%m-%d").replace(tzinfo=tz)
-    if isinstance(date_val, datetime):
-        return (
-            date_val.astimezone(tz)
-            if date_val.tzinfo is not None
-            else date_val.replace(tzinfo=tz)
-        )
-    return datetime.combine(date_val, datetime.min.time(), tz)
 
 
 def _parse_site_date(date_str: str | None) -> str | None:
@@ -486,18 +463,7 @@ class FrankEnergieBatterySessionSensor(
     def native_value(self) -> StateType:
         """Return the native value of the sensor."""
         try:
-            value = self.entity_description.value_fn(self.coordinator.data)
-
-            if value is None:
-                return None
-
-            if isinstance(value, (int, float)):
-                precision = self.entity_description.suggested_display_precision
-                if precision is not None:
-                    return round(value, precision)
-
-            return value
-
+            return self.entity_description.value_fn(self.coordinator.data)
         except Exception as err:
             self._logger().error(
                 "Failed to get native value for %s: %s",
@@ -515,7 +481,8 @@ class FrankEnergieBatterySessionSensor(
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        if not self.coordinator.data:
+        """Return period attributes even when the response has no daily rows."""
+        if self.coordinator.data is None:
             return {}
         try:
             return self.entity_description.attr_fn(self.coordinator.data) or {}
@@ -1360,38 +1327,9 @@ def _calculate_market_percent_tax(price_data: object | None) -> float | None:
     return None
 
 
-def _safe_session_result_sum(sessions: Any) -> float:
-    """Safely sum session results, explicitly handling None values."""
-    total = 0.0
-    for session in sessions:
-        res = getattr(session, "result", None)
-        if res is not None:
-            total += res
-    return total
-
-
-def _get_session_status(session: Any) -> str:
-    """Safely extract the session status string without a walrus operator."""
-    status = getattr(session, "status", None)
-    if status is None:
-        return "unknown"
-    return str(getattr(status, "value", status)).lower()
-
-
-def _get_period_trading_result(data: object | None) -> float | None:
-    """Calculate the period trading result."""
-    if not data:
-        return None
-    if getattr(data, "period_trading_result", None):
-        return getattr(data, "period_trading_result")
-
-    sessions = getattr(data, "sessions", None) or []
-    return _safe_session_result_sum(sessions)
-
-
 def _get_period_trade_index(data: object | None) -> float | None:
     """Calculate the period trade index."""
-    if not data:
+    if data is None:
         return None
     if getattr(data, "period_trade_index", None) is not None:
         return getattr(data, "period_trade_index")
@@ -1407,44 +1345,49 @@ def _get_period_trade_index(data: object | None) -> float | None:
     return round(sum(trade_indices) / len(trade_indices))
 
 
-def _get_period_imbalance_result(data: object | None) -> float | None:
-    """Calculate the period imbalance result."""
-    if not data:
+def _battery_period_attributes(data: SmartBatterySessions | None) -> dict[str, object]:
+    """Keep the original attribute keys and their displayed period meanings."""
+    if data is None:
+        return {}
+    amounts = period_breakdown(data)
+    return {
+        "device_id": data.device_id,
+        "period_start_date": data.period_start_date,
+        "period_end_date": data.period_end_date,
+        "period_trade_index": _get_period_trade_index(data),
+        "period_trading_result": amounts["result"],
+        "period_total_result": amounts["total"],
+        "period_imbalance_result": amounts["trading_result"],
+        "period_epex_result": amounts["epex_correction"],
+        "period_frank_slim": amounts["frank_slim"],
+        "sessions": [
+            {
+                "date": session.date,
+                "result": session.result,
+                "cumulative_result": session.cumulative_result,
+                "status": session_status(session),
+            }
+            for session in data.sessions
+        ],
+    }
+
+
+def _yesterday_battery_result(data: SmartBatterySessions | None) -> float | None:
+    """Sum reported results only when yesterday's sessions have finished."""
+    if data is None:
         return None
-    if getattr(data, "period_imbalance_result", None):
-        return getattr(data, "period_imbalance_result")
-
-    trading_result = _get_period_trading_result(data)
-    if trading_result is None:
-        return None
-
-    frank_slim = getattr(data, "period_frank_slim", None) or 0
-    return trading_result - frank_slim
-
-
-def _get_period_epex_result(data: object | None) -> float | None:
-    """Calculate the period EPEX result, ensuring it is a cost (negative value)."""
-    if not data:
-        return None
-    epex = getattr(data, "period_epex_result", None)
-    if epex is None:
-        return None
-    return -epex if epex > 0 else epex
-
-
-def _get_period_total_result(data: object | None) -> float | None:
-    """Calculate the period total result."""
-    if not data:
-        return None
-    if getattr(data, "period_total_result", None):
-        return getattr(data, "period_total_result")
-
-    trading_result = _get_period_trading_result(data)
-    if trading_result is None:
-        return None
-
-    epex_result = _get_period_epex_result(data) or 0
-    return trading_result + epex_result
+    yesterday = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date() - timedelta(days=1)
+    results = []
+    for session in data.sessions:
+        if battery_day(session.date) != yesterday:
+            continue
+        if session.result is None or session_status(session) not in (
+            "complete_final",
+            "completed",
+        ):
+            return None
+        results.append(session.result)
+    return sum(results) if results else None
 
 
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
@@ -1458,11 +1401,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         state_class=None,
         device_class=SensorDeviceClass.DATE,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            _format_battery_date(getattr(data, "period_start_date", None)).date()
-            if data and _format_battery_date(getattr(data, "period_start_date", None))
-            else None
-        ),
+        value_fn=lambda data: battery_day(getattr(data, "period_start_date", None)),
     ),
     FrankEnergieEntityDescription(
         key="period_end_date",
@@ -1472,11 +1411,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         state_class=None,
         device_class=SensorDeviceClass.DATE,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            _format_battery_date(getattr(data, "period_end_date", None)).date()
-            if data and _format_battery_date(getattr(data, "period_end_date", None))
-            else None
-        ),
+        value_fn=lambda data: battery_day(getattr(data, "period_end_date", None)),
     ),
     FrankEnergieEntityDescription(
         key="period_trade_index",
@@ -1494,10 +1429,10 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
+        suggested_display_precision=4,
         entity_category=None,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=_get_period_trading_result,
+        value_fn=lambda data: period_breakdown(data)["result"],
     ),
     FrankEnergieEntityDescription(
         key="period_total_result",
@@ -1505,33 +1440,10 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
+        suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=_get_period_total_result,
-        attr_fn=lambda data: (
-            {
-                "device_id": getattr(data, "device_id", None),
-                "period_start_date": getattr(data, "period_start_date", None),
-                "period_end_date": getattr(data, "period_end_date", None),
-                "period_trade_index": _get_period_trade_index(data),
-                "period_trading_result": _get_period_trading_result(data),
-                "period_total_result": _get_period_total_result(data),
-                "period_imbalance_result": _get_period_imbalance_result(data),
-                "period_epex_result": _get_period_epex_result(data),
-                "period_frank_slim": getattr(data, "period_frank_slim", None),
-                "sessions": [
-                    {
-                        "date": s.date,
-                        "result": s.result,
-                        "cumulative_result": s.cumulative_result,
-                        "status": _get_session_status(s),
-                    }
-                    for s in getattr(data, "sessions", []) or []
-                ],
-            }
-            if data
-            else {}
-        ),
+        value_fn=lambda data: period_breakdown(data)["total"],
+        attr_fn=_battery_period_attributes,
     ),
     FrankEnergieEntityDescription(
         key="period_imbalance_result",
@@ -1539,9 +1451,9 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
+        suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=_get_period_imbalance_result,
+        value_fn=lambda data: period_breakdown(data)["trading_result"],
     ),
     FrankEnergieEntityDescription(
         key="period_epex_result",
@@ -1549,9 +1461,9 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
+        suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=_get_period_epex_result,
+        value_fn=lambda data: period_breakdown(data)["epex_correction"],
     ),
     FrankEnergieEntityDescription(
         key="period_frank_slim_bonus",
@@ -1559,13 +1471,9 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
+        suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            getattr(data, "period_frank_slim", None)
-            if data and getattr(data, "period_frank_slim", None) is not None
-            else None
-        ),
+        value_fn=lambda data: period_breakdown(data)["frank_slim"],
     ),
     FrankEnergieEntityDescription(
         key="daily_trading_result",
@@ -1573,25 +1481,9 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=2,
+        suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=lambda data: (
-            round(
-                _safe_session_result_sum(
-                    session
-                    for session in (getattr(data, "sessions", None) or [])
-                    if getattr(session, "date", None)
-                    and _format_battery_date(session.date).date()
-                    == (
-                        datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
-                        - timedelta(days=1)
-                    )
-                ),
-                5,
-            )
-            if data
-            else None
-        ),
+        value_fn=_yesterday_battery_result,
     ),
     FrankEnergieEntityDescription(
         key="total_trading_result",
@@ -5568,34 +5460,23 @@ async def async_setup_entry(
                         "Added individual smart battery sensor for %s", description.key
                     )
 
-            # Create sensors for each battery session coordinator
-            for battery_id, session_coordinator in session_coordinators.items():
-                sessions_data = session_coordinator.data
-                if not sessions_data or not getattr(sessions_data, "sessions", None):
-                    _LOGGER.debug(
-                        "No session data found in session coordinator for battery %s "
-                        "(entry %s). Sensors will still be created but report unknown state.",
-                        battery_id,
-                        config_entry.entry_id,
-                    )
-                else:
-                    _LOGGER.debug(
-                        "Creating battery session sensors for battery: %s",
-                        battery_id,
-                    )
-                for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
-                    if (
-                        not description.authenticated
-                        or settings_coordinator.api.is_authenticated
-                    ):
-                        entities.append(
-                            FrankEnergieBatterySessionSensor(
-                                coordinator=session_coordinator,
-                                description=description,
-                                battery_id=battery_id,
-                                is_total=False,
-                            )
+        for battery_id, session_coordinator in session_coordinators.items():
+            if session_coordinator.data is None:
+                _LOGGER.debug(
+                    "Creating battery session sensors before results are available"
+                )
+            for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
+                if (
+                    not description.authenticated
+                    or settings_coordinator.api.is_authenticated
+                ):
+                    entities.append(
+                        FrankEnergieBatterySessionSensor(
+                            coordinator=session_coordinator,
+                            description=description,
+                            battery_id=battery_id,
                         )
+                    )
 
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0

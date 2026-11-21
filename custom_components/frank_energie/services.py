@@ -1,11 +1,13 @@
-"""Read-only actions for cached Frank Energie tariffs."""
+"""Read-only actions for Frank Energie tariffs and Smart Battery results."""
 
+import logging
 from datetime import UTC, date, datetime, timedelta
 from math import isfinite
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
 
 import probatio
+from aiohttp import ClientError
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -13,11 +15,19 @@ from homeassistant.core import (
     SupportsResponse,
     callback,
 )
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, service
 from homeassistant.helpers.selector import ConfigEntrySelector
+from python_frank_energie.exceptions import (
+    AuthException,
+    AuthRequiredException,
+    FrankEnergieException,
+    RateLimitException,
+)
 
+from .battery_results import battery_range_result
 from .const import (
+    DATA_BATTERIES,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -25,7 +35,9 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
 )
+from .device_inventory import validated_inventory_ids
 from .helpers import (
+    api_maintenance_active,
     known_site_contracts,
     price_date_window,
     prices_covering_window,
@@ -37,14 +49,33 @@ if TYPE_CHECKING:
     from python_frank_energie.models import Price
 
     from . import FrankEnergieEntryData
+    from .coordinator import FrankEnergieBatteryCoordinator
 
 
+_LOGGER = logging.getLogger(__name__)
 SERVICE_GET_PRICES_FOR_DATE: Final = "get_prices_for_date"
+SERVICE_GET_BATTERY_RESULTS: Final = "get_battery_results"
 _GET_PRICES_SCHEMA: Final = probatio.Schema(
     {
         probatio.Required("config_entry"): ConfigEntrySelector({"integration": DOMAIN}),
         probatio.Required("date"): cv.date,
         probatio.Required("energy_type"): probatio.In((DATA_ELECTRICITY, DATA_GAS)),
+    }
+)
+
+
+def _calendar_date(value: object) -> date:
+    """Require a calendar date so the SDK never sends a timestamp."""
+    if isinstance(value, datetime):
+        raise probatio.Invalid("Expected a calendar date without a time")
+    return cv.date(value)
+
+
+_BATTERY_RESULTS_SCHEMA: Final = probatio.Schema(
+    {
+        probatio.Required("config_entry"): ConfigEntrySelector({"integration": DOMAIN}),
+        probatio.Required("start_date"): _calendar_date,
+        probatio.Required("end_date"): _calendar_date,
     }
 )
 
@@ -126,13 +157,87 @@ def _async_get_prices_for_date(call: ServiceCall) -> ServiceResponse:
     }
 
 
+def _battery_ids(coordinator: FrankEnergieBatteryCoordinator) -> list[str]:
+    """Read the selected configuration's last successful battery inventory."""
+    if not coordinator.api.is_authenticated or not coordinator.site_reference:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="battery_results_auth_required"
+        )
+    ids = validated_inventory_ids(
+        "batteries", (coordinator.data or {}).get(DATA_BATTERIES)
+    )
+    if ids is None or not coordinator.last_update_success:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="battery_inventory_unavailable"
+        )
+    return sorted(ids)
+
+
+async def _async_get_battery_results(call: ServiceCall) -> ServiceResponse:
+    """Fetch one inclusive range per battery without changing polling caches."""
+    start: date = call.data["start_date"]
+    end: date = call.data["end_date"]
+    if end < start:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="battery_results_reversed_dates"
+        )
+    entry: ConfigEntry[FrankEnergieEntryData] = service.async_get_config_entry(
+        call.hass, DOMAIN, call.data["config_entry"]
+    )
+    coordinator = entry.runtime_data.battery_coordinator
+    results: dict[str, dict[str, object] | None] = dict.fromkeys(
+        _battery_ids(coordinator)
+    )
+    for battery_id in results:
+        if api_maintenance_active(datetime.now(UTC)):
+            break
+        try:
+            data = await coordinator.async_api_call(
+                "smart_battery_sessions",
+                coordinator.api.smart_battery_sessions,
+                battery_id,
+                start,
+                end,
+            )
+        except (RateLimitException, AuthException, AuthRequiredException) as err:
+            _LOGGER.debug(
+                "Stopping Smart Battery date-range requests (%s)", type(err).__name__
+            )
+            break
+        except (
+            FrankEnergieException,
+            ClientError,
+            TimeoutError,
+            ValueError,
+            TypeError,
+        ) as err:
+            _LOGGER.debug(
+                "Smart Battery date-range results unavailable (%s)", type(err).__name__
+            )
+            continue
+        results[battery_id] = battery_range_result(data, battery_id, start, end)
+
+    return {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "batteries": results,
+    }
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
-    """Register the domain's response-only price action."""
+    """Register the domain's response-only actions."""
     hass.services.async_register(
         DOMAIN,
         SERVICE_GET_PRICES_FOR_DATE,
         _async_get_prices_for_date,
         schema=_GET_PRICES_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_BATTERY_RESULTS,
+        _async_get_battery_results,
+        schema=_BATTERY_RESULTS_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )

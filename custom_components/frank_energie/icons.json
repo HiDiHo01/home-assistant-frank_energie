@@ -39,6 +39,9 @@
     }
   },
   "services": {
+    "get_battery_results": {
+      "service": "mdi:calendar-range"
+    },
     "get_prices_for_date": {
       "service": "mdi:calendar-clock"
     }
