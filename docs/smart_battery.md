@@ -125,16 +125,103 @@ This threshold determines when the battery prioritizes self-consumption behavior
 
 ## Battery Sessions
 
-The integration exposes battery session information when available.
+The period sensors use Frank Energie's reported amounts in EUR. Their unique IDs
+stay stable for existing dashboards and statistics. The ID suffixes predate the
+current API field names.
 
-Examples include:
+| Sensor | Existing ID suffix | Source or calculation |
+| --- | --- | --- |
+| Period Trading Result | `period_imbalance_result` | `periodBreakdownTradingResult` |
+| Period Frank Slim Bonus | `period_frank_slim_bonus` | `periodBreakdownFrankSlim` |
+| Period Total Result (before EPEX) | `period_trading_result` | `periodResult` |
+| Period EPEX Correction | `period_epex_result` | `periodBreakdownEpexCorrection`, with its reported sign |
+| Period Total to Settle | `period_total_result` | `periodResult + periodBreakdownEpexCorrection` |
 
-- Charging sessions
-- Discharging sessions
-- Session summaries
-- Optimization information
+For example, a result of €0.0899 and a correction of −€0.6557 settle at
+−€0.5658. A positive correction increases the total. If either operand is
+missing, the settlement total is unknown. A reported zero remains zero.
 
-Session availability depends on battery support and API capabilities.
+The existing `daily_trading_result` sensor is now named **Yesterday's Result**.
+It uses the daily session result before EPEX. It shows a value when yesterday's
+sessions have reported results and their statuses are `completed` or
+`complete_final`. For billing, check explicitly for `complete_final` in the action.
+
+### Results for a date range
+
+Use **Get Smart Battery results** (`frank_energie.get_battery_results`) with a
+signed-in configuration. Both `start_date` and `end_date` are inclusive Amsterdam
+calendar dates. Use the same date for yesterday, or request a whole billing
+period in one call. The SDK forwards both dates directly. Any maximum range
+depends on the provider.
+
+The response contains the requested dates and a `batteries` object keyed by
+battery ID. Each battery has the five amounts for the **whole range** and the
+provider's daily sessions. To get all five amounts for one day, request that day.
+
+```json
+{
+  "start_date": "2026-11-14",
+  "end_date": "2026-11-14",
+  "batteries": {
+    "example-battery": {
+      "trading_result": 0.1613,
+      "frank_slim": 0.0202,
+      "result": 0.1814,
+      "epex_correction": -0.0034,
+      "total": 0.1780,
+      "sessions": [
+        {"date": "2026-11-14", "result": 0.1814, "status": "complete_final"}
+      ]
+    }
+  }
+}
+```
+
+A missing amount is `null`. A battery whose request failed, or whose response
+belongs to another battery or range, has a `null` entry. If maintenance begins
+or the SDK signals throttling, results already fetched are retained and the
+remaining batteries have `null` entries. A successful empty inventory returns
+`"batteries": {}`. An unavailable inventory or a configuration without a login
+raises an action error. Requests leave the sensors' polling data intact.
+
+The automation below checks yesterday at 08:00, 10:00 and 12:00 on a Home
+Assistant installation configured for Europe/Amsterdam. It posts the amount
+once all sessions for that day are final. Later checks update the same
+notification. Select the config entry in the action editor and replace the
+example battery ID with a key from the action response.
+
+```yaml
+alias: Report yesterday's finalized Smart Battery result
+triggers:
+  - trigger: time
+    at:
+      - "08:00:00"
+      - "10:00:00"
+      - "12:00:00"
+variables:
+  day: "{{ (now().date() - timedelta(days=1)).isoformat() }}"
+  battery_id: example-battery
+actions:
+  - action: frank_energie.get_battery_results
+    data:
+      config_entry: YOUR_FRANK_ENERGIE_CONFIG_ENTRY_ID
+      start_date: "{{ day }}"
+      end_date: "{{ day }}"
+    response_variable: report
+  - variables:
+      battery: "{{ report.batteries.get(battery_id) }}"
+  - condition: template
+    value_template: >-
+      {{ battery is mapping and battery.total is number
+         and battery.sessions | count > 0
+         and battery.sessions | rejectattr('status', 'equalto', 'complete_final')
+                              | list | count == 0 }}
+  - action: persistent_notification.create
+    data:
+      notification_id: "battery_result_{{ battery_id }}_{{ day }}"
+      title: "Battery settlement for {{ day }}"
+      message: "Total including EPEX correction: €{{ battery.total }}"
+```
 
 ## Battery Optimization
 

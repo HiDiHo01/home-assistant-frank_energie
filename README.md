@@ -45,6 +45,9 @@ Use `frank_energie.get_prices_for_date` in automations to retrieve cached market
 and all-in price intervals. With Recorder loaded, Frank Energie also imports
 completed usage and cost hours for the Energy Dashboard. [Automation example and dashboard setup](docs/examples.md#prices-for-a-date)
 
+Use `frank_energie.get_battery_results` to retrieve signed battery results and
+daily session statuses for an inclusive date range. [Response fields and automation example](docs/smart_battery.md#results-for-a-date-range)
+
 ## Installatie
 Plaats de map `frank_energie` uit de map `custom_components` binnen deze repo in de `custom_components` map van je Home Assistant installatie.
 

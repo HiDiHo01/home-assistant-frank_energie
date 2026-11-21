@@ -1140,7 +1140,7 @@
         "name": "Period Frank Slim Bonus"
       },
       "daily_trading_result": {
-        "name": "Yesterday's Trading Result"
+        "name": "Yesterday's Result"
       },
       "total_trading_result": {
         "name": "Total Trading Result"
@@ -1309,6 +1309,15 @@
     },
     "prices_for_date_unavailable": {
       "message": "The cache does not contain complete prices for {date}. Check publication and try again."
+    },
+    "battery_results_auth_required": {
+      "message": "Select a signed-in Frank Energie configuration with a delivery site to request battery results."
+    },
+    "battery_inventory_unavailable": {
+      "message": "The battery list is unavailable. Try again after the next successful battery update."
+    },
+    "battery_results_reversed_dates": {
+      "message": "The end date must be on or after the start date."
     }
   },
   "services": {
@@ -1327,6 +1336,24 @@
         "energy_type": {
           "name": "Energy type",
           "description": "Select electricity or gas."
+        }
+      }
+    },
+    "get_battery_results": {
+      "name": "Get Smart Battery results",
+      "description": "Get trading results, signed EPEX corrections and daily sessions for each battery over an inclusive date range.",
+      "fields": {
+        "config_entry": {
+          "name": "Configuration",
+          "description": "Select the Frank Energie configuration to read."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "First Amsterdam calendar date to include."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Last Amsterdam calendar date to include. Use the same date for a single day."
         }
       }
     }
