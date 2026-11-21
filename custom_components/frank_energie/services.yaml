@@ -17,3 +17,19 @@ get_prices_for_date:
             - electricity
             - gas
           translation_key: price_energy_type
+
+get_battery_results:
+  fields:
+    config_entry:
+      required: true
+      selector:
+        config_entry:
+          integration: frank_energie
+    start_date:
+      required: true
+      selector:
+        date:
+    end_date:
+      required: true
+      selector:
+        date:

@@ -1674,8 +1674,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
             return None
 
         try:
-            # Fetch Month-To-Date sessions up to and including today (by querying until 'tomorrow') to get unfinalized live data
-            # Missing dynamic totals will be manually reconstructed in sensor.py
+            # Keep yesterday in the polling window at the start of a new month.
             today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
             mtd_start = min(today.replace(day=1), today - timedelta(days=1))
             sessions = await self.async_api_call(
@@ -1685,7 +1684,7 @@ class FrankEnergieCoordinator(DataUpdateCoordinator[FrankEnergieData]):
                 mtd_start,
                 tomorrow,
             )
-            if sessions and isinstance(sessions.sessions, list):
+            if sessions is not None and isinstance(sessions.sessions, list):
                 _LOGGER.debug(
                     "Fetched %d session(s) for battery %s",
                     len(sessions.sessions),
@@ -3847,7 +3846,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         ):
             if details:
                 details_list.append(details)
-            if sessions:
+            if sessions is not None:
                 sessions_list.append(sessions)
             known = self._record_battery_settings(
                 battery.id, fetched, settings, requests[battery.id], now, retry_delay

@@ -1067,7 +1067,7 @@
         "name": "Bonus Frank Slim de la période"
       },
       "daily_trading_result": {
-        "name": "Résultat de trading d'hier"
+        "name": "Résultat d'hier"
       },
       "total_trading_result": {
         "name": "Résultat de trading total"
@@ -1309,6 +1309,15 @@
     },
     "prices_for_date_unavailable": {
       "message": "Le cache ne contient pas de tarifs complets pour le {date}. Vérifiez que les tarifs ont été publiés et réessayez."
+    },
+    "battery_results_auth_required": {
+      "message": "Sélectionnez une configuration Frank Energie avec un compte connecté et un site de livraison pour consulter les résultats des batteries."
+    },
+    "battery_inventory_unavailable": {
+      "message": "La liste des batteries est indisponible. Réessayez après la prochaine mise à jour réussie des batteries."
+    },
+    "battery_results_reversed_dates": {
+      "message": "La date de fin doit être égale ou postérieure à la date de début."
     }
   },
   "services": {
@@ -1327,6 +1336,24 @@
         "energy_type": {
           "name": "Type d’énergie",
           "description": "Sélectionnez l’électricité ou le gaz."
+        }
+      }
+    },
+    "get_battery_results": {
+      "name": "Obtenir les résultats des batteries intelligentes",
+      "description": "Récupère le résultat du trading, la correction EPEX avec son signe et les sessions quotidiennes de chaque batterie sur la période choisie.",
+      "fields": {
+        "config_entry": {
+          "name": "Configuration",
+          "description": "Sélectionnez la configuration Frank Energie à consulter."
+        },
+        "start_date": {
+          "name": "Date de début",
+          "description": "Premier jour inclus dans la période, selon le fuseau horaire Europe/Amsterdam."
+        },
+        "end_date": {
+          "name": "Date de fin",
+          "description": "Dernier jour inclus dans la période. Pour une seule journée, utilisez la même date de début et de fin."
         }
       }
     }

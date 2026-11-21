@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant import config_entries
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, State
@@ -1820,35 +1821,49 @@ def test_calculate_market_percent_tax() -> None:
     assert _calculate_market_percent_tax(price_data_all_zero) == pytest.approx(0.0)
 
 
-def test_safe_session_result_sum():
-    """Test that _safe_session_result_sum handles None and values correctly."""
-    from custom_components.frank_energie.sensor import _safe_session_result_sum
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        ([], None),
+        ([("2026-12-30", 5.0, "complete_final")], None),
+        ([("2026-12-31", None, "complete_final")], None),
+        ([("2026-12-31", 0.0, "pending")], None),
+        ([("2026-12-31", 0.0, "complete_final")], 0.0),
+        ([("2026-12-31", 1.5, "completed"), ("2026-12-31", 2.5, "completed")], 4.0),
+        (
+            [("2026-12-31", 1.5, "complete_final"), ("2026-12-31", None, "completed")],
+            None,
+        ),
+    ],
+)
+def test_yesterday_battery_result(
+    freezer: FrozenDateTimeFactory,
+    rows: list[tuple[str, float | None, str]],
+    expected: float | None,
+) -> None:
+    """Select yesterday in Amsterdam and require a finished, reported result."""
+    from types import SimpleNamespace
+    from custom_components.frank_energie.sensor import (
+        BATTERY_SESSION_SENSOR_DESCRIPTIONS,
+    )
 
-    class DummySession:
-        def __init__(self, result):
-            self.result = result
-
-    # Test with normal values
-    sessions = [DummySession(1.5), DummySession(2.5)]
-    assert _safe_session_result_sum(sessions) == pytest.approx(4.0)
-
-    # Test with None values
-    sessions = [DummySession(1.5), DummySession(None), DummySession(2.5)]
-    assert _safe_session_result_sum(sessions) == pytest.approx(4.0)
-
-    # Test with 0.0 values
-    sessions = [DummySession(0.0), DummySession(0)]
-    assert _safe_session_result_sum(sessions) == pytest.approx(0.0)
-
-    # Test with missing result attribute (should default to None safely)
-    class MissingResultSession:
-        pass
-
-    sessions = [DummySession(1.5), MissingResultSession()]
-    assert _safe_session_result_sum(sessions) == pytest.approx(1.5)
-
-    # Test empty
-    assert _safe_session_result_sum([]) == pytest.approx(0.0)
+    freezer.move_to("2026-12-31T23:30:00+00:00")
+    description = next(
+        item
+        for item in BATTERY_SESSION_SENSOR_DESCRIPTIONS
+        if item.key == "daily_trading_result"
+    )
+    data = SimpleNamespace(
+        sessions=[
+            SimpleNamespace(date=day, result=result, status=status)
+            for day, result, status in rows
+        ]
+    )
+    value = description.value_fn(data)
+    if expected is None:
+        assert value is None
+    else:
+        assert value == pytest.approx(expected)
 
 
 def _pv_sensor_description(key: str) -> object:

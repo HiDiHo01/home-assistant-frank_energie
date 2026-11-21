@@ -39,11 +39,11 @@ Je kunt de prijssensoren bijvoorbeeld gebruiken om apparaten automatisch in of u
 
 - [ChatGPT Frank Energie-assistent](https://chatgpt.com/g/g-6a30a8e006b081919967c4c79fd542d7-frank-energie-assistant)
 
-# Services
+# Acties
 
-De Frank Energie-integratie registreert momenteel geen Home Assistant-services.
+Met `frank_energie.get_prices_for_date` haal je de beschikbare energieprijzen voor een datum op. [Prijsvoorbeeld](docs/examples.md#prices-for-a-date)
 
-De beschikbare functies worden aangeboden via entiteiten, gebeurtenissen, knoppen, keuzelijsten en sensoren.
+Met `frank_energie.get_battery_results` krijg je per batterij de opbrengst, de EPEX-correctie en de dagelijkse sessies voor een periode. De begin- en einddatum tellen beide mee. [Antwoordvelden en automatisering](docs/smart_battery.md#results-for-a-date-range)
 
 ## Installatie
 Kopieer de map `frank_energie` uit `custom_components` in deze repository naar de map `custom_components` van je Home Assistant-installatie.
