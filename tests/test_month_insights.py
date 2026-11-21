@@ -467,7 +467,7 @@ async def test_month_insights_fetch_uses_current_local_month_at_year_boundaries(
     monkeypatch.setattr(
         coordinator_module,
         "datetime",
-        SimpleNamespace(now=lambda _timezone: frozen_now),
+        SimpleNamespace(now=lambda timezone: frozen_now.astimezone(timezone)),
     )
     coordinator = MagicMock()
     coordinator._should_skip_api_calls.return_value = False
