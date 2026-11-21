@@ -36,15 +36,19 @@ MISSING = object()
 
 
 def _insights(
-    *, gas_excluded: bool = False, gas_unit: str = "m3", electricity_unit: str = "kWh"
+    *,
+    period: str = "2026-11",
+    gas_excluded: bool = False,
+    gas_unit: str = "m3",
+    electricity_unit: str = "kWh",
 ) -> MonthInsights:
     """Parse a sanitized GraphQL response with deliberately distinct amounts."""
     result = MonthInsights.from_dict(
         {
             "data": {
                 "monthInsights": {
-                    "_id": "synthetic|2026-11",
-                    "lastMeterReadingDate": "2026-11-13T00:00:00+00:00",
+                    "_id": f"synthetic|{period}",
+                    "lastMeterReadingDate": f"{period}-13T00:00:00+00:00",
                     "gasExcluded": gas_excluded,
                     "expectedCostsGas": 71.5,
                     "expectedCostsElectricity": 52.5,
@@ -478,7 +482,9 @@ async def test_month_insights_fetch_uses_current_local_month_at_year_boundaries(
     coordinator.data = {}
     coordinator._fetch_month_summary = AsyncMock(return_value=None)
     coordinator._async_fetch_and_record_usage = AsyncMock(return_value=None)
-    coordinator._fetch_month_insights = AsyncMock(return_value=_insights())
+    coordinator._fetch_month_insights = AsyncMock(
+        return_value=_insights(period=expected_month)
+    )
     coordinator._store_month_insights = (
         FrankEnergieStatisticsCoordinator._store_month_insights.__get__(coordinator)
     )
@@ -493,6 +499,7 @@ async def test_month_insights_fetch_uses_current_local_month_at_year_boundaries(
 
     coordinator._fetch_month_insights.assert_awaited_once_with(expected_month)
     assert result[const.DATA_MONTH_INSIGHTS_PERIOD] == expected_month
+    assert result[const.DATA_MONTH_INSIGHTS]._id == f"synthetic|{expected_month}"
 
 
 def test_store_month_insights_saves_fresh_value_and_timestamp() -> None:
