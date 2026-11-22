@@ -14,11 +14,6 @@
     {
       "path": "custom_components/frank_energie/coordinator.py",
       "code": "C901",
-      "message": "'FrankEnergieBatterySessionCoordinator._async_update_data' is too complex (11)"
-    },
-    {
-      "path": "custom_components/frank_energie/coordinator.py",
-      "code": "C901",
       "message": "'FrankEnergieCoordinator._fetch_user_data' is too complex (14)"
     },
     {
@@ -79,7 +74,7 @@
     {
       "path": "custom_components/frank_energie/sensor.py",
       "code": "C901",
-      "message": "'async_setup_entry' is too complex (49)"
+      "message": "'async_setup_entry' is too complex (42)"
     },
     {
       "path": "tests/test_translations.py",

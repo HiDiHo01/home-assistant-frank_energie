@@ -3,18 +3,27 @@
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from inspect import iscoroutinefunction
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RequestException
-from python_frank_energie.models import MarketPrices, PriceData, User, UserSites
+from python_frank_energie.models import (
+    MarketPrices,
+    PriceData,
+    SmartBatteries,
+    SmartBattery,
+    SmartBatterySessions,
+    User,
+    UserSites,
+)
 from pytest_homeassistant.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -29,6 +38,7 @@ from custom_components.frank_energie.const import (
     SERVICE_NAME_PRICES,
     TIMEZONE_AMSTERDAM,
 )
+from custom_components.frank_energie.battery_results import CONF_BATTERY_PERIOD
 from custom_components.frank_energie.coordinator import (
     FrankEnergiePriceCoordinator,
     FrankEnergieSettingsCoordinator,
@@ -112,6 +122,143 @@ def _api_for_contracts(contracts: tuple[str, ...], resolution: int) -> AsyncMock
     api.prices.side_effect = public_prices
     api.user_prices.side_effect = user_prices
     return api
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_battery_period_date_controls_follow_the_site_through_reload(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Drive real date entities and distinguish the selected report from rolling sessions."""
+    freezer.move_to("2027-01-02T09:00:00Z")
+    api = _api_for_contracts(("ELECTRICITY",), 15)
+    api.user.return_value = User.from_dict(
+        {"data": {"me": {"countryCode": "NL", "smartTrading": {"isActivated": True}}}}
+    )
+    ids = ("battery-a", "battery-b")
+    api.smart_batteries.return_value = SmartBatteries([])
+    start, end = date(2026, 12, 31), date(2027, 1, 2)
+
+    def sessions(battery_id: str, first: date, last: date) -> SmartBatterySessions:
+        """Return the requested provider bounds and a completed row for yesterday if covered."""
+        yesterday = date(2027, 1, 1)
+        day = yesterday if first <= yesterday <= last else first
+        return SmartBatterySessions.from_dict(
+            {
+                "data": {
+                    "smartBatterySessions": {
+                        "deviceId": battery_id,
+                        "periodStartDate": first.isoformat(),
+                        "periodEndDate": last.isoformat(),
+                        "periodResult": 0.1814,
+                        "periodBreakdownEpexCorrection": -0.0034,
+                        "sessions": [
+                            {
+                                "date": day.isoformat(),
+                                "status": "COMPLETE_FINAL",
+                                "result": 0.1814,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+
+    api.smart_battery_sessions.side_effect = sessions
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="test-site",
+        data={
+            "site_reference": "test-site",
+            "access_token": "fixture",
+            "token": "fixture-refresh",
+        },
+        options={"resolution": "PT15M"},
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+
+    def entity_id(domain: str, unique_id: str) -> str:
+        """Resolve registered entities independently of Home Assistant's UI language."""
+        registered = registry.async_get_entity_id(domain, DOMAIN, unique_id)
+        assert registered is not None
+        return registered
+
+    async def set_date(target: str, value: str) -> None:
+        """Set a date via its public action and wait for queued battery requests."""
+        await hass.services.async_call(
+            "date", "set_value", {"entity_id": target, "date": value}, blocking=True
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    with patch("custom_components.frank_energie.FrankEnergie", return_value=api):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        try:
+            await hass.async_block_till_done(wait_background_tasks=True)
+            start_key = f"{entry.entry_id}_battery_period_start_date"
+            assert registry.async_get_entity_id("date", DOMAIN, start_key) is None
+            api.smart_batteries.return_value = SmartBatteries(
+                [SmartBattery(id=item) for item in ids]
+            )
+            await entry.runtime_data.battery_coordinator.async_refresh()
+            await hass.async_block_till_done(wait_background_tasks=True)
+            first = entity_id("date", start_key)
+            last = entity_id("date", f"{entry.entry_id}_battery_period_end_date")
+            length = entity_id("sensor", f"{entry.entry_id}_battery_period_length")
+            assert (
+                registry.async_get(first).device_id
+                == registry.async_get(last).device_id
+                == registry.async_get(length).device_id
+            )
+            assert hass.states.get(first).state == "2027-01-01"
+            assert hass.states.get(last).state == end.isoformat()
+            assert hass.states.get(length).state == "2"
+            assert hass.states.get(length).attributes["unit_of_measurement"] == "d"
+            api.smart_battery_sessions.reset_mock()
+            await set_date(first, start.isoformat())
+            assert hass.states.get(length).state == "3"
+            assert api.smart_battery_sessions.await_args_list == [
+                call(item, start, end) for item in ids
+            ]
+            with pytest.raises(ServiceValidationError) as error:
+                await set_date(last, "2026-12-30")
+            assert error.value.translation_key == "battery_results_reversed_dates"
+            assert hass.states.get(last).state == end.isoformat()
+            assert api.smart_battery_sessions.await_count == 2
+            await set_date(last, start.isoformat())
+            assert hass.states.get(length).state == "1"
+            for item in ids:
+                assert (
+                    hass.states.get(
+                        entity_id("sensor", f"{item}_period_start_date")
+                    ).state
+                    == start.isoformat()
+                )
+                assert (
+                    hass.states.get(
+                        entity_id("sensor", f"{item}_period_end_date")
+                    ).state
+                    == start.isoformat()
+                )
+                daily = hass.states.get(
+                    entity_id("sensor", f"{item}_daily_trading_result")
+                )
+                assert float(daily.state) == pytest.approx(0.1814)
+            assert entry.options["resolution"] == "PT15M"
+            assert entry.options[CONF_BATTERY_PERIOD] == {
+                "start_date": start.isoformat(),
+                "end_date": start.isoformat(),
+            }
+            assert await hass.config_entries.async_reload(entry.entry_id)
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert entity_id("date", start_key) == first
+            assert (
+                hass.states.get(first).state
+                == hass.states.get(last).state
+                == start.isoformat()
+            )
+            assert hass.states.get(length).state == "1"
+        finally:
+            await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

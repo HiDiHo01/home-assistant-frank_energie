@@ -26,10 +26,10 @@ get_battery_results:
         config_entry:
           integration: frank_energie
     start_date:
-      required: true
+      required: false
       selector:
         date:
     end_date:
-      required: true
+      required: false
       selector:
         date:

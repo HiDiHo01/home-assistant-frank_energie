@@ -148,20 +148,38 @@ sessions have reported results and their statuses are `completed` or
 
 ### Results for a date range
 
-Use **Get Smart Battery results** (`frank_energie.get_battery_results`) with a
-signed-in configuration. Both `start_date` and `end_date` are inclusive Amsterdam
-calendar dates. Use the same date for yesterday, or request a whole billing
-period in one call. The SDK forwards both dates directly. Any maximum range
-depends on the provider.
+On the **Batteries** device, set **Period start date** and **Period end date**
+to update the period sensors for every battery at that site. **Period length**
+counts Amsterdam calendar days, including both endpoints. For example, 31 December
+through 2 January is three days. Equal dates select a single day.
 
-The response contains the requested dates and a `batteries` object keyed by
-battery ID. Each battery has the five amounts for the **whole range** and the
-provider's daily sessions. To get all five amounts for one day, request that day.
+The initial selection follows the first of the current month through today.
+Editing a date saves the pair across Home Assistant restarts. To move the range
+entirely into the past, set the start first. To move it forward, set the end first.
+An edit that would reverse the range raises an error and keeps the previous dates.
+Each battery shares one request across its period sensors. The previous period's
+amounts disappear while the new report is being fetched. Yesterday's Result and the
+lifetime result continue to use the rolling battery sessions. User-selected reporting
+periods can overlap, so the period amounts and trade index do not feed long-term
+statistics. Their current values and normal Recorder history remain available.
+
+Use **Get Smart Battery results** (`frank_energie.get_battery_results`) with a
+signed-in configuration. Omit both date fields to read the selected period, or
+pass both `start_date` and `end_date` to request a different range for that call.
+Both are inclusive Amsterdam calendar dates. Use the same date for yesterday,
+or request a whole billing period in one call. The SDK forwards both dates
+directly. Any maximum range depends on the provider.
+
+The response contains the requested dates, their inclusive `period_days` count
+and a `batteries` object keyed by battery ID. Each battery has the five amounts
+for the **whole range** and the provider's daily sessions. To get all five
+amounts for one day, request that day.
 
 ```json
 {
   "start_date": "2026-11-14",
   "end_date": "2026-11-14",
+  "period_days": 1,
   "batteries": {
     "example-battery": {
       "trading_result": 0.1613,

@@ -132,7 +132,18 @@
     }
   },
   "entity": {
+    "date": {
+      "battery_period_start": {
+        "name": "Begindatum periode"
+      },
+      "battery_period_end": {
+        "name": "Einddatum periode"
+      }
+    },
     "sensor": {
+      "battery_period_length": {
+        "name": "Periodelengte"
+      },
       "month_insights_electricity_expected_costs": {"name":"Verwachte elektriciteitskosten (MonthInsights)"},
       "month_insights_electricity_actual_usage": {"name":"Werkelijk elektriciteitsverbruik (MonthInsights)"},
       "month_insights_electricity_actual_average_unit_price": {"name":"Gemiddelde werkelijke elektriciteitsprijs (MonthInsights)"},
@@ -1316,6 +1327,9 @@
     "battery_inventory_unavailable": {
       "message": "De batterijlijst is niet beschikbaar. Probeer het opnieuw nadat de batterijgegevens zijn bijgewerkt."
     },
+    "battery_period_date_only": {
+      "message": "Kies een kalenderdatum zonder tijdstip."
+    },
     "battery_results_reversed_dates": {
       "message": "De einddatum moet op of na de begindatum liggen."
     }
@@ -1341,7 +1355,7 @@
     },
     "get_battery_results": {
       "name": "Resultaten van slimme batterijen ophalen",
-      "description": "Haal het handelsresultaat, de EPEX-correctie met teken en de dagelijkse sessies per batterij op voor de gekozen periode.",
+      "description": "Haal het handelsresultaat, de EPEX-correctie met teken en de dagelijkse sessies per batterij op voor de gekozen periode. Laat beide datums leeg om de periode van het apparaat Batterijen te gebruiken.",
       "fields": {
         "config_entry": {
           "name": "Configuratie",

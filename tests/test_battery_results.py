@@ -23,6 +23,10 @@ from python_frank_energie.models import (
 )
 
 from custom_components.frank_energie import FrankEnergieEntryData
+from custom_components.frank_energie.battery_results import (
+    CONF_BATTERY_PERIOD,
+    BatteryPeriod,
+)
 from custom_components.frank_energie.const import DATA_BATTERIES, DOMAIN
 from custom_components.frank_energie.coordinator import (
     FrankEnergieBatteryCoordinator,
@@ -101,7 +105,7 @@ def test_period_entities_and_attributes(
 ) -> None:
     """Preserve entity identities, component meanings, signs and sub-cent values."""
     coordinator = MagicMock()
-    coordinator.data = _report(
+    coordinator.period_data = _report(
         period_breakdown_trading_result=trading,
         period_breakdown_frank_slim=slim,
         period_result=result,
@@ -123,6 +127,7 @@ def test_period_entities_and_attributes(
     attributes = entities["period_total_result"].extra_state_attributes
     for key, amount in expected.items():
         assert entities[key].unique_id == f"{_BATTERY}_{key}"
+        assert entities[key].state_class is None
         attribute = "period_frank_slim" if key == "period_frank_slim_bonus" else key
         if amount is None:
             assert entities[key].native_value is None
@@ -212,6 +217,7 @@ async def test_single_day_through_sdk_parser(hass: HomeAssistant) -> None:
     assert response == {
         "start_date": _DAY,
         "end_date": _DAY,
+        "period_days": 1,
         "batteries": {
             _BATTERY: {
                 "trading_result": 0.1613,
@@ -379,6 +385,130 @@ async def test_invalid_dates_are_rejected_before_fetch(hass: HomeAssistant) -> N
         fetch.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    ("start", "end", "days"),
+    [
+        ("2026-11-14", "2026-11-14", 1),
+        ("2026-12-31", "2027-01-02", 3),
+        ("2028-02-28", "2028-03-01", 3),
+        ("2026-03-28", "2026-03-30", 3),
+        ("2026-10-24", "2026-10-26", 3),
+    ],
+)
+def test_period_calendar_days(start: str, end: str, days: int) -> None:
+    """Count inclusive local dates across leap days, DST and year boundaries."""
+    assert (
+        BatteryPeriod(date.fromisoformat(start), date.fromisoformat(end)).days == days
+    )
+
+
+async def test_default_period_rolls_over_at_amsterdam_midnight(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Only entries without a saved selection follow the new local calendar month."""
+    automatic = await _load_entry(hass)
+    fixed = await _load_entry(hass)
+    saved = {"start_date": _DAY, "end_date": _DAY}
+    hass.config_entries.async_update_entry(fixed, options={CONF_BATTERY_PERIOD: saved})
+    freezer.move_to("2026-03-31T21:59:59Z")
+    assert BatteryPeriod.for_entry(automatic) == BatteryPeriod(
+        date(2026, 3, 1), date(2026, 3, 31)
+    )
+    freezer.move_to("2026-03-31T22:00:00Z")
+    assert BatteryPeriod.for_entry(automatic) == BatteryPeriod(
+        date(2026, 4, 1), date(2026, 4, 1)
+    )
+    assert BatteryPeriod.for_entry(fixed) == BatteryPeriod(
+        date.fromisoformat(_DAY), date.fromisoformat(_DAY)
+    )
+
+
+async def test_action_reads_own_selection_and_accepts_explicit_pair(
+    hass: HomeAssistant,
+) -> None:
+    """Omitting both dates selects only this entry's range; explicit dates are one-shot."""
+    first = await _load_entry(hass)
+    other = await _load_entry(hass)
+    saved = {"start_date": _YEAR_END, "end_date": _NEW_YEAR}
+    hass.config_entries.async_update_entry(first, options={CONF_BATTERY_PERIOD: saved})
+
+    async def report(entry: MockConfigEntry, **fields: str) -> ServiceResponse:
+        """Call the action with precisely the fields a dashboard or automation supplied."""
+        return await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_BATTERY_RESULTS,
+            {"config_entry": entry.entry_id, **fields},
+            blocking=True,
+            return_response=True,
+        )
+
+    with (
+        patch.object(
+            first.runtime_data.battery_coordinator.api,
+            "smart_battery_sessions",
+            return_value=None,
+        ) as fetch,
+        patch.object(
+            other.runtime_data.battery_coordinator.api,
+            "smart_battery_sessions",
+            return_value=None,
+        ),
+    ):
+        for field in ("start_date", "end_date"):
+            with pytest.raises(probatio.Invalid):
+                await report(first, **{field: _DAY})
+        fetch.assert_not_awaited()
+        selected = await report(first)
+        assert (
+            selected["start_date"],
+            selected["end_date"],
+            selected["period_days"],
+        ) == (_YEAR_END, _NEW_YEAR, 2)
+        fetch.assert_awaited_once_with(_BATTERY, date(2026, 12, 31), date(2027, 1, 1))
+        automatic = await report(other)
+        assert (automatic["start_date"], automatic["end_date"]) == (
+            _NEW_YEAR,
+            "2027-01-02",
+        )
+        override = await _request(hass, first)
+        assert override["period_days"] == 1
+        assert first.options[CONF_BATTERY_PERIOD] == saved
+
+
+async def test_late_period_response_stays_hidden_after_edit(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """A late response or maintenance cannot publish a previous period's settlement."""
+    entry = await _load_entry(hass)
+    api = entry.runtime_data.battery_coordinator.api
+    session = FrankEnergieBatterySessionCoordinator(hass, entry, api, _BATTERY)
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def delayed(battery_id: str, start: date, end: date) -> SimpleNamespace:
+        """Hold the first report until the entry has switched to a single day."""
+        started.set()
+        await release.wait()
+        return _report(
+            battery_id, start.isoformat(), end.isoformat(), period_result=0.0
+        )
+
+    with patch.object(api, "smart_battery_sessions", side_effect=delayed) as fetch:
+        pending = hass.async_create_task(session.async_refresh())
+        await started.wait()
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_BATTERY_PERIOD: {"start_date": _DAY, "end_date": _DAY}}
+        )
+        release.set()
+        await pending
+        assert session.period_data is None
+        await session.async_refresh()
+        assert session.period_data.period_result == pytest.approx(0.0)
+        freezer.move_to("2027-01-03T00:15:00Z")
+        await session.async_refresh()
+        assert not session.last_update_success
+        assert fetch.await_count == 2
+
+
 def test_empty_sdk_session_list_keeps_period_metadata() -> None:
     """The SDK collection can be falsey while carrying period data."""
     data = SmartBatterySessions.from_dict(
@@ -395,7 +525,7 @@ def test_empty_sdk_session_list_keeps_period_metadata() -> None:
         }
     )
     coordinator = MagicMock()
-    coordinator.data = data
+    coordinator.period_data = data
     description = next(
         item
         for item in BATTERY_SESSION_SENSOR_DESCRIPTIONS
@@ -434,10 +564,9 @@ async def test_two_batteries_register_each_session_sensor_once(
         statistics_coordinator=other_coordinator,
     )
     add_entities = MagicMock()
-    with patch.object(
-        FrankEnergieBatterySessionCoordinator, "async_config_entry_first_refresh"
-    ):
+    with patch.object(FrankEnergieBatterySessionCoordinator, "async_refresh"):
         await async_setup_sensors(hass, entry, add_entities)
+        await hass.async_block_till_done(wait_background_tasks=True)
 
     entity_ids = [
         entity.unique_id
@@ -463,4 +592,3 @@ async def test_cancelling_a_range_stops_later_requests(hass: HomeAssistant) -> N
         with pytest.raises(asyncio.CancelledError):
             await _request(hass, entry)
     fetch.assert_awaited_once()
-

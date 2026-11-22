@@ -25,9 +25,8 @@ from python_frank_energie.exceptions import (
     RateLimitException,
 )
 
-from .battery_results import battery_range_result
+from .battery_results import BatteryPeriod, battery_range_result, current_battery_ids
 from .const import (
-    DATA_BATTERIES,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -35,7 +34,6 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     UNIT_ELECTRICITY,
 )
-from .device_inventory import validated_inventory_ids
 from .helpers import (
     api_maintenance_active,
     known_site_contracts,
@@ -74,8 +72,8 @@ def _calendar_date(value: object) -> date:
 _BATTERY_RESULTS_SCHEMA: Final = probatio.Schema(
     {
         probatio.Required("config_entry"): ConfigEntrySelector({"integration": DOMAIN}),
-        probatio.Required("start_date"): _calendar_date,
-        probatio.Required("end_date"): _calendar_date,
+        probatio.Inclusive("start_date", "period"): _calendar_date,
+        probatio.Inclusive("end_date", "period"): _calendar_date,
     }
 )
 
@@ -163,10 +161,8 @@ def _battery_ids(coordinator: FrankEnergieBatteryCoordinator) -> list[str]:
         raise ServiceValidationError(
             translation_domain=DOMAIN, translation_key="battery_results_auth_required"
         )
-    ids = validated_inventory_ids(
-        "batteries", (coordinator.data or {}).get(DATA_BATTERIES)
-    )
-    if ids is None or not coordinator.last_update_success:
+    ids = current_battery_ids(coordinator)
+    if ids is None:
         raise HomeAssistantError(
             translation_domain=DOMAIN, translation_key="battery_inventory_unavailable"
         )
@@ -175,14 +171,13 @@ def _battery_ids(coordinator: FrankEnergieBatteryCoordinator) -> list[str]:
 
 async def _async_get_battery_results(call: ServiceCall) -> ServiceResponse:
     """Fetch one inclusive range per battery without changing polling caches."""
-    start: date = call.data["start_date"]
-    end: date = call.data["end_date"]
-    if end < start:
-        raise ServiceValidationError(
-            translation_domain=DOMAIN, translation_key="battery_results_reversed_dates"
-        )
     entry: ConfigEntry[FrankEnergieEntryData] = service.async_get_config_entry(
         call.hass, DOMAIN, call.data["config_entry"]
+    )
+    period = (
+        BatteryPeriod(call.data["start_date"], call.data["end_date"])
+        if "start_date" in call.data
+        else BatteryPeriod.for_entry(entry)
     )
     coordinator = entry.runtime_data.battery_coordinator
     results: dict[str, dict[str, object] | None] = dict.fromkeys(
@@ -196,8 +191,8 @@ async def _async_get_battery_results(call: ServiceCall) -> ServiceResponse:
                 "smart_battery_sessions",
                 coordinator.api.smart_battery_sessions,
                 battery_id,
-                start,
-                end,
+                period.start_date,
+                period.end_date,
             )
         except (RateLimitException, AuthException, AuthRequiredException) as err:
             _LOGGER.debug(
@@ -215,11 +210,12 @@ async def _async_get_battery_results(call: ServiceCall) -> ServiceResponse:
                 "Smart Battery date-range results unavailable (%s)", type(err).__name__
             )
             continue
-        results[battery_id] = battery_range_result(data, battery_id, start, end)
+        results[battery_id] = battery_range_result(data, battery_id, period)
 
     return {
-        "start_date": start.isoformat(),
-        "end_date": end.isoformat(),
+        "start_date": period.start_date.isoformat(),
+        "end_date": period.end_date.isoformat(),
+        "period_days": period.days,
         "batteries": results,
     }
 
