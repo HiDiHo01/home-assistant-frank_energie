@@ -5,6 +5,7 @@ Sensor platform for Frank Energie integration."""
 # -*- coding: utf-8 -*-
 # VERSION = "2026.6.21"
 
+import asyncio
 import inspect
 import logging
 from dataclasses import asdict, dataclass, field
@@ -59,6 +60,7 @@ from .const import (
     BATTERY_MODE_STATES,
     BATTERY_STRATEGY_OPTIONS,
     DATA_BATTERIES,
+    DATA_BATTERY_SESSIONS,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -105,8 +107,16 @@ from .const import (
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
 )
-from .battery_results import battery_day, period_breakdown, session_status
+from .battery_results import (
+    BatteryPeriod,
+    BatteryPeriodEntity,
+    async_watch_battery_inventory,
+    battery_day,
+    period_breakdown,
+    session_status,
+)
 from .coordinator import (
+    FrankEnergieBatteryCoordinator,
     FrankEnergieBatterySessionCoordinator,
     FrankEnergieCoordinator,
     FrankEnergieData,
@@ -437,14 +447,17 @@ class ChargerSensorDescription(SensorEntityDescription):
 
 
 class FrankEnergieBatterySessionSensor(
-    CoordinatorEntity[DataUpdateCoordinator[SmartBatterySessions | None]],
+    CoordinatorEntity[
+        FrankEnergieBatterySessionCoordinator | FrankEnergieBatteryCoordinator
+    ],
     SensorEntity,
 ):
     """Sensor voor een enkele smart battery sessie."""
 
     def __init__(
         self,
-        coordinator: FrankEnergieBatterySessionCoordinator | FrankEnergieCoordinator,
+        coordinator: FrankEnergieBatterySessionCoordinator
+        | FrankEnergieBatteryCoordinator,
         description: FrankEnergieEntityDescription,
         battery_id: str | None = None,
         is_total: bool = False,
@@ -460,10 +473,20 @@ class FrankEnergieBatterySessionSensor(
         self._is_total = is_total
 
     @property
+    def _sessions(self) -> SmartBatterySessions | None:
+        """Use rolling data for yesterday and lifetime, selected data for the period."""
+        if isinstance(self.coordinator, FrankEnergieBatteryCoordinator):
+            reports = (self.coordinator.data or {}).get(DATA_BATTERY_SESSIONS) or ()
+            return next(
+                (item for item in reports if item.device_id == self._battery_id), None
+            )
+        return self.coordinator.period_data
+
+    @property
     def native_value(self) -> StateType:
         """Return the native value of the sensor."""
         try:
-            return self.entity_description.value_fn(self.coordinator.data)
+            return self.entity_description.value_fn(self._sessions)
         except Exception as err:
             self._logger().error(
                 "Failed to get native value for %s: %s",
@@ -482,10 +505,11 @@ class FrankEnergieBatterySessionSensor(
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         """Return period attributes even when the response has no daily rows."""
-        if self.coordinator.data is None:
+        sessions = self._sessions
+        if sessions is None:
             return {}
         try:
-            return self.entity_description.attr_fn(self.coordinator.data) or {}
+            return self.entity_description.attr_fn(sessions) or {}
         except Exception:
             _LOGGER.exception(
                 "Failed to get attributes for %s", self.entity_description.key
@@ -1418,7 +1442,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         icon="mdi:numeric",
         native_unit_of_measurement=None,
         entity_category=None,
-        state_class="measurement",
+        state_class=None,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=_get_period_trade_index,
         entity_registry_enabled_default=False,
@@ -1427,7 +1451,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         key="period_trading_result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=4,
         entity_category=None,
@@ -1438,7 +1462,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         key="period_total_result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
@@ -1449,7 +1473,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         key="period_imbalance_result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
@@ -1459,7 +1483,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         key="period_epex_result",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
@@ -1469,7 +1493,7 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         key="period_frank_slim_bonus",
         icon=ICON,
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=None,
         native_unit_of_measurement=CURRENCY_EURO,
         suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
@@ -5176,6 +5200,109 @@ def _sensor_energy_contract(description: FrankEnergieEntityDescription) -> str |
     return None
 
 
+class FrankEnergieBatteryPeriodLength(BatteryPeriodEntity, SensorEntity):
+    """Display the inclusive number of selected calendar days on the Batteries device."""
+
+    _attr_translation_key = "battery_period_length"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+
+    @property
+    def native_value(self) -> int:
+        """Count both endpoints without depending on provider availability."""
+        return BatteryPeriod.for_entry(self._entry).days
+
+
+async def _async_refresh_battery_reports(
+    entry: ConfigEntry,
+    refresh_lock: asyncio.Lock,
+    period: BatteryPeriod,
+    coordinators: list[FrankEnergieBatterySessionCoordinator],
+) -> None:
+    """Refresh sequentially and drop queued requests for superseded dates."""
+    async with refresh_lock:
+        for coordinator in coordinators:
+            if period != BatteryPeriod.for_entry(entry):
+                return
+            await coordinator.async_refresh()
+
+
+def _battery_session_sensors(
+    inventory: FrankEnergieBatteryCoordinator,
+    session: FrankEnergieBatterySessionCoordinator,
+) -> list[FrankEnergieBatterySessionSensor]:
+    """Keep yesterday and lifetime on the rolling feed as the selected dates change."""
+    entities: list[FrankEnergieBatterySessionSensor] = []
+    for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
+        source = (
+            inventory
+            if description.key in ("daily_trading_result", "total_trading_result")
+            else session
+        )
+        entities.append(
+            FrankEnergieBatterySessionSensor(source, description, session.device_id)
+        )
+    return entities
+
+
+@callback
+def _async_setup_battery_period_sensors(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Share one period request across each battery's sensors on discovery."""
+    inventory = entry.runtime_data.battery_coordinator
+    selected = BatteryPeriod.for_entry(entry)
+    refresh_lock = asyncio.Lock()
+
+    @callback
+    def _async_queue(coordinators: list[FrankEnergieBatterySessionCoordinator]) -> None:
+        """Tie report requests to the config-entry lifecycle."""
+        entry.async_create_background_task(
+            hass,
+            _async_refresh_battery_reports(entry, refresh_lock, selected, coordinators),
+            "Frank Energie battery period",
+            eager_start=False,
+        )
+
+    @callback
+    def _async_check_period() -> None:
+        """Invalidate the old amounts on edits and on a rolling month-to-date change."""
+        nonlocal selected
+        period = BatteryPeriod.for_entry(entry)
+        if period == selected:
+            return
+        selected = period
+        sessions = list(entry.runtime_data.battery_session_coordinators.values())
+        for session in sessions:
+            session.async_update_listeners()
+        if sessions:
+            _async_queue(sessions)
+
+    @callback
+    def _async_discover(ids: list[str], first: bool) -> None:
+        """Set up period sensors even when the first provider read fails."""
+        nonlocal selected
+        entities: list[SensorEntity] = []
+        if first:
+            selected = BatteryPeriod.for_entry(entry)
+            entities.append(
+                FrankEnergieBatteryPeriodLength(entry, "battery_period_length")
+            )
+            entry.async_on_unload(inventory.async_add_listener(_async_check_period))
+        new: list[FrankEnergieBatterySessionCoordinator] = []
+        for battery_id in ids:
+            session = FrankEnergieBatterySessionCoordinator(
+                hass, entry, inventory.api, battery_id, inventory
+            )
+            entry.runtime_data.battery_session_coordinators[battery_id] = session
+            new.append(session)
+            entities.extend(_battery_session_sensors(inventory, session))
+        async_add_entities(entities)
+        _async_queue(new)
+
+    async_watch_battery_inventory(entry, _async_discover)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -5239,35 +5366,12 @@ async def async_setup_entry(
 
     batteries = battery_coordinator.data.get(DATA_BATTERIES, [])
 
-    session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = {}
     entities: list = []
 
     if batteries and batteries.batteries:
         _async_remove_legacy_battery_device_id_entities(
             hass, config_entry, {battery.id for battery in batteries.batteries}
         )
-        api = settings_coordinator.api  # type: ignore[attr-defined]
-
-        # Set up session coordinators per battery
-        for battery in batteries.batteries:
-            device_id = battery.id
-            session_coordinator = FrankEnergieBatterySessionCoordinator(
-                hass, config_entry, api, device_id
-            )
-
-            try:
-                await session_coordinator.async_config_entry_first_refresh()
-            except Exception as err:
-                _LOGGER.exception(
-                    "Failed to refresh battery session coordinator for device %s: %s",
-                    device_id,
-                    err,
-                )
-                continue
-
-            session_coordinators[device_id] = session_coordinator
-
-        config_entry.runtime_data.battery_session_coordinators = session_coordinators
 
     user_data: object = None
     if settings_coordinator.api.is_authenticated:
@@ -5460,24 +5564,6 @@ async def async_setup_entry(
                         "Added individual smart battery sensor for %s", description.key
                     )
 
-        for battery_id, session_coordinator in session_coordinators.items():
-            if session_coordinator.data is None:
-                _LOGGER.debug(
-                    "Creating battery session sensors before results are available"
-                )
-            for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
-                if (
-                    not description.authenticated
-                    or settings_coordinator.api.is_authenticated
-                ):
-                    entities.append(
-                        FrankEnergieBatterySessionSensor(
-                            coordinator=session_coordinator,
-                            description=description,
-                            battery_id=battery_id,
-                        )
-                    )
-
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
     _LOGGER.debug("Number of vehicles found: %d", num_vehicles)
@@ -5530,6 +5616,7 @@ async def async_setup_entry(
         _LOGGER.exception("Failed to add entities for entry %s", config_entry.entry_id)
         raise
 
+    _async_setup_battery_period_sensors(hass, config_entry, async_add_entities)
     async_setup_smart_hvac_sensors(hass, config_entry, async_add_entities)
     _LOGGER.debug("All sensors added for entry: %s", config_entry.entry_id)
 

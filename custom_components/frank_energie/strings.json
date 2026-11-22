@@ -106,6 +106,14 @@
     }
   },
   "entity": {
+    "date": {
+      "battery_period_start": {
+        "name": "Period start date"
+      },
+      "battery_period_end": {
+        "name": "Period end date"
+      }
+    },
     "binary_sensor": {
       "tomorrow_prices_available": {
         "name": "Tomorrow electricity prices available"
@@ -405,6 +413,9 @@
       }
     },
     "sensor": {
+      "battery_period_length": {
+        "name": "Period length"
+      },
       "month_insights_electricity_expected_costs": {"name":"Expected electricity costs (MonthInsights)"},
       "month_insights_electricity_actual_usage": {"name":"Actual electricity usage (MonthInsights)"},
       "month_insights_electricity_actual_average_unit_price": {"name":"Actual average electricity unit price (MonthInsights)"},
@@ -1316,6 +1327,9 @@
     "battery_inventory_unavailable": {
       "message": "The battery list is unavailable. Try again after the next successful battery update."
     },
+    "battery_period_date_only": {
+      "message": "Choose a calendar date without a time."
+    },
     "battery_results_reversed_dates": {
       "message": "The end date must be on or after the start date."
     }
@@ -1341,7 +1355,7 @@
     },
     "get_battery_results": {
       "name": "Get Smart Battery results",
-      "description": "Get trading results, signed EPEX corrections and daily sessions for each battery over an inclusive date range.",
+      "description": "Get trading results, signed EPEX corrections and daily sessions for each battery over an inclusive date range. Omit both dates to use the period selected on the Batteries device.",
       "fields": {
         "config_entry": {
           "name": "Configuration",

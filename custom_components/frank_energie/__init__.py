@@ -41,6 +41,7 @@ from .coordinator import (
     FrankEnergieSettingsCoordinator,
     FrankEnergiePriceCoordinator,
     FrankEnergieBatteryCoordinator,
+    FrankEnergieBatterySessionCoordinator,
     FrankEnergieChargerCoordinator,
     FrankEnergiePVCoordinator,
     FrankEnergieVehicleCoordinator,
@@ -81,7 +82,9 @@ class FrankEnergieEntryData(FrankEnergieSetupData):
     vehicle_coordinator: FrankEnergieVehicleCoordinator
     statistics_coordinator: FrankEnergieStatisticsCoordinator
     invoice_coordinator: FrankEnergieInvoiceCoordinator
-    battery_session_coordinators: dict[str, object] = field(default_factory=dict)
+    battery_session_coordinators: dict[str, FrankEnergieBatterySessionCoordinator] = (
+        field(default_factory=dict)
+    )
     smart_hvac_coordinator: FrankEnergieSmartHvacCoordinator | None = None
     stale_device_absences: dict[str, int] = field(default_factory=dict)
 
@@ -90,6 +93,7 @@ class FrankEnergieEntryData(FrankEnergieSetupData):
 _DEPENDENT_PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.DATE,
     Platform.DATETIME,
     Platform.NUMBER,
     Platform.SELECT,

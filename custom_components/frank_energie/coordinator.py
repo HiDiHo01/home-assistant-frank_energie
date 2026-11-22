@@ -69,6 +69,7 @@ from python_frank_energie.models import (
 )
 
 from . import helpers
+from .battery_results import BatteryPeriod, current_battery_ids
 from .insight_period import default_insight_period, validate_insight_period
 from .const import (
     CONF_INTERVAL_BATTERIES,
@@ -4409,20 +4410,25 @@ class FrankEnergieBatterySessionCoordinator(
         config_entry: ConfigEntry,
         api: FrankEnergie,
         device_id: str,
+        inventory: FrankEnergieBatteryCoordinator | None = None,
     ) -> None:
         """
         Initialize the battery session coordinator.
 
         Args:
             hass (HomeAssistant): Home Assistant instance.
-            entry (ConfigEntry): Config entry containing integration settings.
+            config_entry (ConfigEntry): Config entry containing the selected period.
             api (FrankEnergie): Instance of the FrankEnergie API.
             device_id (str): The smart battery device ID.
+            inventory: The site's battery coordinator, when available.
         """
         self.api = api
         self.rate_limits = get_rate_limit_state(hass, config_entry)
         self.site_reference = config_entry.data.get("site_reference")
         self.device_id = device_id
+        self._inventory = inventory
+        self._entry = config_entry
+        self._reported_period: BatteryPeriod | None = None
 
         super().__init__(
             hass,
@@ -4436,50 +4442,48 @@ class FrankEnergieBatterySessionCoordinator(
             config_entry=config_entry,
         )
 
-    def _session_date_window(self) -> tuple[date, date]:
-        """Validate access and determine the month-to-date session time window."""
-        today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+    @property
+    def period_data(self) -> SmartBatterySessions | None:
+        """Expose a snapshot only while its requested dates are still selected."""
+        if self._reported_period == BatteryPeriod.for_entry(self._entry):
+            return self.data
+        return None
+
+    async def _async_update_data(self) -> SmartBatterySessions | None:
+        """Fetch and verify the selected range once for this battery."""
         if not self.api.is_authenticated:
             raise UpdateFailed("API client is not authenticated.")
         if not self.device_id:
             raise UpdateFailed("No device ID provided for smart battery sessions.")
-        start = min(today.replace(day=1), today - timedelta(days=1))
-        return start, today + timedelta(days=1)
+        if self._inventory is not None:
+            ids = current_battery_ids(self._inventory)
+            if ids is not None and self.device_id not in ids:
+                return None
+        if api_maintenance_active(datetime.now(UTC)):
+            raise UpdateFailed(
+                "Smart Battery results are unavailable during maintenance."
+            )
+        period = BatteryPeriod.for_entry(self._entry)
+        data = await self._async_fetch_period(period)
+        if data is not None and not period.matches(data, self.device_id):
+            raise UpdateFailed(
+                "Smart Battery results do not match the requested device or dates."
+            )
+        self._reported_period = period
+        return data
 
-    def _cached_sessions_or_raise(
-        self, error: UpdateFailed
+    async def _async_fetch_period(
+        self, period: BatteryPeriod
     ) -> SmartBatterySessions | None:
-        """Reuse the last successful sessions only after a failed refresh."""
-        if self.last_update_success:
-            _LOGGER.warning("%s", error)
-            return self.data
-        raise error
-
-    async def _async_update_data(self) -> SmartBatterySessions | None:
-        """
-        Fetch smart battery session data.
-
-        Returns:
-            SmartBatterySessions: Session data for the specified smart battery device.
-
-        Raises:
-            UpdateFailed: If an error occurs during data fetching.
-        """
+        """Request the exact inclusive dates with the shared authentication and rate limits."""
         try:
-            mtd_start, tomorrow = self._session_date_window()
             return await self.rate_limits.async_call(
                 "smart_battery_sessions",
                 lambda: self.api.smart_battery_sessions(
-                    self.device_id, mtd_start, tomorrow
+                    self.device_id, period.start_date, period.end_date
                 ),
             )
-
-        except UpdateFailed as ex:
-            return self._cached_sessions_or_raise(ex)
         except AuthException as ex:
-            _LOGGER.debug(
-                "Authentication tokens expired, attempting token renewal: %s", ex
-            )
             try:
                 await self.rate_limits.async_call("renew_token", self.api.renew_token)
             except RateLimitException as err:
@@ -4492,21 +4496,7 @@ class FrankEnergieBatterySessionCoordinator(
             raise rate_limit_update_failed(ex, self.update_interval) from ex
 
         except RequestException as ex:
-            raise UpdateFailed(
-                f"Failed to fetch battery session data from Frank Energie: {ex!s}"
-            ) from ex
-
-        except ConfigEntryAuthFailed as ex:
-            _LOGGER.exception("Authentication failed")
-            raise ex
-
-        except asyncio.CancelledError:
-            raise
-
-        except Exception as ex:
-            raise UpdateFailed(
-                f"Unexpected error while fetching battery session data: {ex}"
-            ) from ex
+            raise UpdateFailed("Failed to fetch Smart Battery sessions.") from ex
 
 
 def _parse_resolution(resolution: str) -> int:

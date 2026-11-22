@@ -1,13 +1,133 @@
 """Read signed Smart Battery results for sensors and date-range actions."""
 
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TypedDict
+from typing import TYPE_CHECKING, Self, TypedDict
 from zoneinfo import ZoneInfo
 
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import callback
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from python_frank_energie.models import SmartBatterySession, SmartBatterySessions
 
-from .const import TIMEZONE_AMSTERDAM
+from .const import DATA_BATTERIES, DOMAIN, SERVICE_NAME_BATTERIES, TIMEZONE_AMSTERDAM
+from .device_inventory import validated_inventory_ids
+from .helpers import service_device_info
+
+if TYPE_CHECKING:
+    from . import FrankEnergieEntryData
+    from .coordinator import FrankEnergieBatteryCoordinator
+
+CONF_BATTERY_PERIOD = "battery_period"
+
+
+@dataclass(frozen=True, slots=True)
+class BatteryPeriod:
+    """An inclusive range of Amsterdam calendar dates for one battery report."""
+
+    start_date: date
+    end_date: date
+
+    def __post_init__(self) -> None:
+        """Reject timestamps and reversed ranges before saving or querying."""
+        if isinstance(self.start_date, datetime) or isinstance(self.end_date, datetime):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="battery_period_date_only"
+            )
+        if self.end_date < self.start_date:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="battery_results_reversed_dates",
+            )
+
+    @property
+    def days(self) -> int:
+        """Count both calendar dates, independently of daylight-saving time."""
+        return (self.end_date - self.start_date).days + 1
+
+    @classmethod
+    def for_entry(cls, entry: ConfigEntry) -> Self:
+        """Restore the saved pair, defaulting to the current month through today."""
+        stored = entry.options.get(CONF_BATTERY_PERIOD)
+        if isinstance(stored, Mapping):
+            try:
+                return cls(
+                    date.fromisoformat(stored["start_date"]),
+                    date.fromisoformat(stored["end_date"]),
+                )
+            except (KeyError, TypeError, ValueError, ServiceValidationError):
+                pass
+        today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        return cls(today.replace(day=1), today)
+
+    def matches(self, data: SmartBatterySessions, battery_id: str) -> bool:
+        """Check the device, reported bounds and daily rows before publishing."""
+        return (
+            data.device_id == battery_id
+            and battery_day(data.period_start_date) in (None, self.start_date)
+            and battery_day(data.period_end_date) in (None, self.end_date)
+            and all(
+                (day := battery_day(row.date)) is not None
+                and self.start_date <= day <= self.end_date
+                for row in data.sessions
+            )
+        )
+
+
+def current_battery_ids(coordinator: FrankEnergieBatteryCoordinator) -> set[str] | None:
+    """Distinguish a confirmed inventory from a failed or incomplete refresh."""
+    if not coordinator.last_update_success:
+        return None
+    return validated_inventory_ids(
+        "batteries", (coordinator.data or {}).get(DATA_BATTERIES)
+    )
+
+
+class BatteryPeriodEntity(CoordinatorEntity["FrankEnergieBatteryCoordinator"]):
+    """A local period setting or measurement on this entry's Batteries device."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, entry: ConfigEntry[FrankEnergieEntryData], key: str) -> None:
+        """Use an entry-scoped identity for the shared period."""
+        super().__init__(entry.runtime_data.battery_coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_device_info = service_device_info(
+            entry.entry_id, SERVICE_NAME_BATTERIES
+        )
+
+    @property
+    def available(self) -> bool:
+        """Keep local settings usable during outages until all batteries are removed."""
+        return current_battery_ids(self.coordinator) != set()
+
+
+@callback
+def async_watch_battery_inventory(
+    entry: ConfigEntry[FrankEnergieEntryData],
+    on_discovery: Callable[[list[str], bool], None],
+) -> None:
+    """Announce new battery IDs and the first nonempty inventory for this entry."""
+    coordinator = entry.runtime_data.battery_coordinator
+    if not coordinator.api.is_authenticated:
+        return
+    known: set[str] = set()
+
+    @callback
+    def _async_discover() -> None:
+        """Add each battery once following a successful inventory refresh."""
+        ids = current_battery_ids(coordinator)
+        if ids and (added := ids - known):
+            first = not known
+            known.update(added)
+            on_discovery(sorted(added), first)
+
+    _async_discover()
+    entry.async_on_unload(coordinator.async_add_listener(_async_discover))
 
 
 class PeriodBreakdown(TypedDict):
@@ -55,26 +175,21 @@ def session_status(session: SmartBatterySession) -> str:
 
 
 def battery_range_result(
-    data: SmartBatterySessions | None, battery_id: str, start: date, end: date
+    data: SmartBatterySessions | None, battery_id: str, period: BatteryPeriod
 ) -> dict[str, object] | None:
     """Serialize only sessions and amounts belonging to this battery and range."""
-    if data is None or data.device_id != battery_id:
-        return None
-    if battery_day(data.period_start_date) not in (None, start):
-        return None
-    if battery_day(data.period_end_date) not in (None, end):
+    if data is None or not period.matches(data, battery_id):
         return None
 
-    sessions = []
-    for session in data.sessions:
-        day = battery_day(session.date)
-        if day is None or not start <= day <= end:
-            return None
-        sessions.append(
+    return {
+        **period_breakdown(data),
+        "sessions": [
             {
                 "date": day.isoformat(),
                 "result": session.result,
                 "status": session_status(session),
             }
-        )
-    return {**period_breakdown(data), "sessions": sessions}
+            for session in data.sessions
+            if (day := battery_day(session.date)) is not None
+        ],
+    }
