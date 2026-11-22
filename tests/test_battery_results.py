@@ -41,6 +41,17 @@ _DAY = "2026-11-14"
 _YEAR_END = "2026-12-31"
 _NEW_YEAR = "2027-01-01"
 _BATTERY = "battery-a"
+_SDK_PERIOD_FIELDS = frozenset(
+    {
+        "period_breakdown_trading_result",
+        "period_breakdown_frank_slim",
+        "period_result",
+        "period_breakdown_epex_correction",
+    }
+)
+_SDK_HAS_PERIOD_FIELDS = _SDK_PERIOD_FIELDS <= frozenset(
+    getattr(SmartBatterySessions, "__annotations__", {})
+)
 
 
 @pytest.fixture(autouse=True)
@@ -164,8 +175,12 @@ async def _request(
     return response
 
 
+@pytest.mark.skipif(
+    not _SDK_HAS_PERIOD_FIELDS,
+    reason="Requires python-frank-energie with Smart Battery period fields",
+)
 async def test_single_day_through_sdk_parser(hass: HomeAssistant) -> None:
-    """Require the installed SDK to carry actual GraphQL amounts to the action."""
+    """Verify that the released SDK preserves GraphQL amounts for the action."""
     entry = await _load_entry(hass)
     coordinator = entry.runtime_data.battery_coordinator
     payload = {
@@ -448,3 +463,4 @@ async def test_cancelling_a_range_stops_later_requests(hass: HomeAssistant) -> N
         with pytest.raises(asyncio.CancelledError):
             await _request(hass, entry)
     fetch.assert_awaited_once()
+
