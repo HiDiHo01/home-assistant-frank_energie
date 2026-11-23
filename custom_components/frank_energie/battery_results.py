@@ -2,8 +2,9 @@
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+from enum import StrEnum
 from typing import TYPE_CHECKING, Self, TypedDict
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,25 @@ if TYPE_CHECKING:
     from .coordinator import FrankEnergieBatteryCoordinator
 
 CONF_BATTERY_PERIOD = "battery_period"
+
+
+class BatteryPeriodPreset(StrEnum):
+    """Calendar ranges and the fixed pair set by the editable date entities."""
+
+    MONTH_TO_DATE = "month_to_date"
+    YESTERDAY = "yesterday"
+    PREVIOUS_MONTH = "previous_month"
+    CUSTOM = "custom"
+
+    @classmethod
+    def for_entry(cls, entry: ConfigEntry) -> Self:
+        """Recognize saved date pairs from earlier versions as custom selections."""
+        selection = entry.options.get(CONF_BATTERY_PERIOD)
+        if BatteryPeriod.saved_pair(selection) is not None:
+            return cls.CUSTOM
+        if selection in (cls.YESTERDAY, cls.PREVIOUS_MONTH):
+            return cls(selection)
+        return cls.MONTH_TO_DATE
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,18 +69,31 @@ class BatteryPeriod:
         return (self.end_date - self.start_date).days + 1
 
     @classmethod
-    def for_entry(cls, entry: ConfigEntry) -> Self:
-        """Restore the saved pair, defaulting to the current month through today."""
-        stored = entry.options.get(CONF_BATTERY_PERIOD)
-        if isinstance(stored, Mapping):
+    def saved_pair(cls, selection: object) -> Self | None:
+        """Parse persisted custom dates, allowing older entries or a damaged option to recover."""
+        if isinstance(selection, Mapping):
             try:
                 return cls(
-                    date.fromisoformat(stored["start_date"]),
-                    date.fromisoformat(stored["end_date"]),
+                    date.fromisoformat(selection["start_date"]),
+                    date.fromisoformat(selection["end_date"]),
                 )
             except (KeyError, TypeError, ValueError, ServiceValidationError):
-                pass
+                return None
+        return None
+
+    @classmethod
+    def for_entry(cls, entry: ConfigEntry) -> Self:
+        """Restore the saved dates or calculate the active preset in the site's timezone."""
+        preset = entry.options.get(CONF_BATTERY_PERIOD)
+        if (saved := cls.saved_pair(preset)) is not None:
+            return saved
         today = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date()
+        if preset == BatteryPeriodPreset.YESTERDAY:
+            yesterday = today - timedelta(days=1)
+            return cls(yesterday, yesterday)
+        if preset == BatteryPeriodPreset.PREVIOUS_MONTH:
+            last_day = today.replace(day=1) - timedelta(days=1)
+            return cls(last_day.replace(day=1), last_day)
         return cls(today.replace(day=1), today)
 
     def matches(self, data: SmartBatterySessions, battery_id: str) -> bool:
@@ -105,26 +138,60 @@ class BatteryPeriodEntity(CoordinatorEntity["FrankEnergieBatteryCoordinator"]):
         """Keep local settings usable during outages until all batteries are removed."""
         return current_battery_ids(self.coordinator) != set()
 
+    @callback
+    def _async_save_selection(
+        self, selection: BatteryPeriod | BatteryPeriodPreset
+    ) -> None:
+        """Persist both date bounds or a rolling preset with one update notification."""
+        stored: dict[str, str] | str
+        if isinstance(selection, BatteryPeriod):
+            stored = {
+                "start_date": selection.start_date.isoformat(),
+                "end_date": selection.end_date.isoformat(),
+            }
+        else:
+            stored = selection.value
+        if self._entry.options.get(CONF_BATTERY_PERIOD) != stored:
+            self.hass.config_entries.async_update_entry(
+                self._entry,
+                options={**self._entry.options, CONF_BATTERY_PERIOD: stored},
+            )
+            self.coordinator.async_update_listeners()
+
 
 @callback
 def async_watch_battery_inventory(
     entry: ConfigEntry[FrankEnergieEntryData],
     on_discovery: Callable[[list[str], bool], None],
+    *,
+    still_registered: Callable[[str], bool] | None = None,
 ) -> None:
     """Announce new battery IDs and the first nonempty inventory for this entry."""
     coordinator = entry.runtime_data.battery_coordinator
     if not coordinator.api.is_authenticated:
         return
     known: set[str] = set()
+    present: set[str] = set()
 
     @callback
     def _async_discover() -> None:
         """Add each battery once following a successful inventory refresh."""
+        nonlocal present
         ids = current_battery_ids(coordinator)
-        if ids and (added := ids - known):
+        if ids is None:
+            return
+        returning = ids - present
+        present = ids
+        added = sorted(
+            item
+            for item in returning
+            if item not in known
+            or (still_registered is not None and not still_registered(item))
+        )
+        if added:
             first = not known
             known.update(added)
-            on_discovery(sorted(added), first)
+            on_discovery(added, first)
 
     _async_discover()
     entry.async_on_unload(coordinator.async_add_listener(_async_discover))

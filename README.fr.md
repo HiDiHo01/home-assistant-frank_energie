@@ -43,7 +43,7 @@ Vous pouvez, par exemple, utiliser les capteurs de prix pour automatiser des app
 
 Utilisez `frank_energie.get_prices_for_date` pour consulter les tarifs disponibles à une date donnée. [Exemple pour les tarifs](docs/examples.md#prices-for-a-date)
 
-Sur l’appareil **Batteries**, réglez la **Date de début de la période** et la **Date de fin de la période** pour actualiser les capteurs de chaque batterie. La **Durée de la période** inclut les deux dates. L’action `frank_energie.get_battery_results` utilise cette sélection ou deux dates précisées pour une seule demande. [Champs de réponse et exemple d’automatisation](docs/smart_battery.md#results-for-a-date-range)
+Sur l’appareil **Batteries**, réglez les dates ou choisissez **Mois en cours**, **Hier** ou **Mois civil précédent**. La **Durée de la période** inclut les deux dates. Chaque batterie affiche également les cinq montants d’hier dès que Frank Energie les a finalisés. L’action `frank_energie.get_battery_results` permet de consulter la période sélectionnée ou de récupérer une journée manquée. [Champs de réponse et exemple d’automatisation](docs/smart_battery.md#results-for-a-date-range)
 
 ## Installation
 Copiez le dossier `frank_energie` situé dans `custom_components` de ce dépôt vers le dossier `custom_components` de votre installation Home Assistant.

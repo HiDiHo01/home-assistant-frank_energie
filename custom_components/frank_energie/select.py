@@ -11,7 +11,7 @@ from typing import Any
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -39,6 +39,12 @@ from .const import (
     SERVICE_NAME_SETTINGS,
 )
 from .coordinator import FrankEnergieBatteryCoordinator, FrankEnergieCoordinator
+from .battery_results import (
+    BatteryPeriod,
+    BatteryPeriodEntity,
+    BatteryPeriodPreset,
+    async_watch_battery_inventory,
+)
 from .device_inventory import inventory_device_identifiers
 from .helpers import (
     AdjustableBatterySetting,
@@ -206,6 +212,39 @@ async def async_setup_entry(
     )
 
     async_add_entities(entities)
+
+    @callback
+    def _async_add_preset(_ids: list[str], first: bool) -> None:
+        """Add one shared period selector when this site first discovers a battery."""
+        if first:
+            async_add_entities(
+                [FrankEnergieBatteryPeriodSelect(entry, "battery_period_preset")]
+            )
+
+    async_watch_battery_inventory(entry, _async_add_preset)
+
+
+class FrankEnergieBatteryPeriodSelect(BatteryPeriodEntity, SelectEntity):
+    """Apply a calendar range to all battery period sensors on this site."""
+
+    _attr_translation_key = "battery_period_preset"
+    _attr_icon = "mdi:calendar-range"
+    _attr_options = [option.value for option in BatteryPeriodPreset]
+
+    @property
+    def current_option(self) -> str:
+        """Identify the active rolling preset or the saved pair of custom dates."""
+        return BatteryPeriodPreset.for_entry(self._entry).value
+
+    async def async_select_option(self, option: str) -> None:  # NOSONAR(S7503)
+        """Change both dates atomically or freeze the current pair for manual editing."""
+        preset = BatteryPeriodPreset(option)
+        selection = (
+            BatteryPeriod.for_entry(self._entry)
+            if preset == BatteryPeriodPreset.CUSTOM
+            else preset
+        )
+        self._async_save_selection(selection)
 
 
 class FrankEnergieResolutionSelect(CoordinatorEntity, SelectEntity):

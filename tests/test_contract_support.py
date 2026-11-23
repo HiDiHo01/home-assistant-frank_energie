@@ -135,6 +135,7 @@ async def test_battery_period_date_controls_follow_the_site_through_reload(
         {"data": {"me": {"countryCode": "NL", "smartTrading": {"isActivated": True}}}}
     )
     ids = ("battery-a", "battery-b")
+    finalized = {ids[1]}
     api.smart_batteries.return_value = SmartBatteries([])
     start, end = date(2026, 12, 31), date(2027, 1, 2)
 
@@ -154,7 +155,9 @@ async def test_battery_period_date_controls_follow_the_site_through_reload(
                         "sessions": [
                             {
                                 "date": day.isoformat(),
-                                "status": "COMPLETE_FINAL",
+                                "status": "COMPLETE_FINAL"
+                                if battery_id in finalized
+                                else "COMPLETED",
                                 "result": 0.1814,
                             }
                         ],
@@ -242,12 +245,17 @@ async def test_battery_period_date_controls_follow_the_site_through_reload(
                 daily = hass.states.get(
                     entity_id("sensor", f"{item}_daily_trading_result")
                 )
-                assert float(daily.state) == pytest.approx(0.1814)
+                assert daily.attributes["result_date"] == "2027-01-01"
+                assert daily.attributes["session_status"] == (
+                    "complete_final" if item in finalized else "completed"
+                )
             assert entry.options["resolution"] == "PT15M"
             assert entry.options[CONF_BATTERY_PERIOD] == {
                 "start_date": start.isoformat(),
                 "end_date": start.isoformat(),
             }
+            finalized.add(ids[0])
+            api.smart_battery_sessions.reset_mock()
             assert await hass.config_entries.async_reload(entry.entry_id)
             await hass.async_block_till_done(wait_background_tasks=True)
             assert entity_id("date", start_key) == first
@@ -257,8 +265,101 @@ async def test_battery_period_date_controls_follow_the_site_through_reload(
                 == start.isoformat()
             )
             assert hass.states.get(length).state == "1"
+            daily_id = entity_id("sensor", f"{ids[0]}_daily_trading_result")
+            assert (
+                hass.states.get(daily_id).attributes["session_status"]
+                == "complete_final"
+            )
+            day = date(2027, 1, 1)
+            assert all(
+                api.smart_battery_sessions.await_args_list.count(call(item, day, day))
+                == 1
+                for item in ids
+            )
+            preset = entity_id("select", f"{entry.entry_id}_battery_period_preset")
+            assert hass.states.get(preset).state == "custom"
+            await _check_battery_presets(hass, api, preset, first, last, ids)
+            await _check_battery_rediscovery(hass, api, entry, ids)
         finally:
             await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def _check_battery_presets(
+    hass: HomeAssistant,
+    api: AsyncMock,
+    preset: str,
+    first: str,
+    last: str,
+    ids: tuple[str, ...],
+) -> None:
+    """Apply both bounds in one real HA select action and preserve the daily cache."""
+    for option, start, end in (
+        ("previous_month", date(2026, 12, 1), date(2026, 12, 31)),
+        ("yesterday", date(2027, 1, 1), date(2027, 1, 1)),
+        ("month_to_date", date(2027, 1, 1), date(2027, 1, 2)),
+        ("custom", date(2027, 1, 1), date(2027, 1, 2)),
+    ):
+        api.smart_battery_sessions.reset_mock()
+        await hass.services.async_call(
+            "select",
+            "select_option",
+            {"entity_id": preset, "option": option},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert hass.states.get(preset).state == option
+        assert (hass.states.get(first).state, hass.states.get(last).state) == (
+            start.isoformat(),
+            end.isoformat(),
+        )
+        expected = (
+            []
+            if option in ("yesterday", "custom")
+            else [call(item, start, end) for item in ids]
+        )
+        assert api.smart_battery_sessions.await_args_list == expected
+
+
+async def _check_battery_rediscovery(
+    hass: HomeAssistant, api: AsyncMock, entry: MockConfigEntry, ids: tuple[str, ...]
+) -> None:
+    """Keep devices through a temporary gap and register a physically removed battery on return."""
+    registry = er.async_get(hass)
+    devices = dr.async_get(hass)
+    battery_id = ids[0]
+    unique_id = f"{entry.entry_id}_{battery_id}_yesterday_total"
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+    previous = registry.async_get(entity_id)
+
+    async def inventory(current: tuple[str, ...]) -> None:
+        """Publish a verified hardware inventory through the real integration coordinator."""
+        api.smart_batteries.return_value = SmartBatteries(
+            [SmartBattery(id=item) for item in current]
+        )
+        await entry.runtime_data.battery_coordinator.async_refresh()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    await inventory(())
+    await inventory(ids)
+    assert registry.async_get(entity_id).id == previous.id
+    await inventory(())
+    devices.async_remove_device(previous.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
+    await inventory(ids)
+    restored = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+    assert restored is not None
+    assert hass.states.get(restored).attributes["session_status"] == "complete_final"
+    assert (
+        len(
+            [
+                item
+                for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+                if item.unique_id == unique_id
+            ]
+        )
+        == 1
+    )
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

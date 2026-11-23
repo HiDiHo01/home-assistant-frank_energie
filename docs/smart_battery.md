@@ -141,10 +141,31 @@ For example, a result of €0.0899 and a correction of −€0.6557 settle at
 −€0.5658. A positive correction increases the total. If either operand is
 missing, the settlement total is unknown. A reported zero remains zero.
 
-The existing `daily_trading_result` sensor is now named **Yesterday's Result**.
-It uses the daily session result before EPEX. It shows a value when yesterday's
-sessions have reported results and their statuses are `completed` or
-`complete_final`. For billing, check explicitly for `complete_final` in the action.
+### Finalized results for yesterday
+
+Each battery has five EUR sensors that share one single-day request. The
+existing **Yesterday's Result** keeps its entity identity (`daily_trading_result`).
+
+| Sensor | Amount for the previous Amsterdam calendar day |
+| --- | --- |
+| Yesterday's Trading Result | Trading component |
+| Yesterday's Frank Slim | Frank Slim component |
+| Yesterday's Result | Provider's result before EPEX |
+| Yesterday's EPEX Correction | Signed EPEX correction |
+| Yesterday's Total | Result plus the signed EPEX correction |
+
+`result_date` identifies the requested day. The amounts become available when
+all sessions for that day have `session_status: complete_final`. A status such
+as `completed` is provisional. An empty response shows `missing`, and a failed
+request shows `unavailable`. Missing amounts remain unknown. A finalized zero
+displays as zero. The four period fields require a newer SDK than 2026.11.21.
+
+At Amsterdam midnight the sensors switch to the new day and clear the previous
+values. Unfinished days are checked on battery inventory refreshes, starting
+after 15 minutes. The wait doubles up to four hours and respects maintenance
+and provider throttling. Once a battery's day is final, ordinary refreshes reuse
+it for the rest of the day. Reloading the integration fetches the applicable day
+again. The action below can retrieve dates missed while Home Assistant was offline.
 
 ### Results for a date range
 
@@ -153,13 +174,17 @@ to update the period sensors for every battery at that site. **Period length**
 counts Amsterdam calendar days, including both endpoints. For example, 31 December
 through 2 January is three days. Equal dates select a single day.
 
-The initial selection follows the first of the current month through today.
-Editing a date saves the pair across Home Assistant restarts. To move the range
+**Battery reporting period** offers **Month to date** (the default), **Yesterday**,
+**Previous calendar month** and **Custom dates**. The first three follow the
+Amsterdam calendar. Choosing a preset changes both dates together. Selecting
+**Custom dates** freezes the displayed pair. Editing either date also switches
+to **Custom dates**, and the selection survives a restart. To move the range
 entirely into the past, set the start first. To move it forward, set the end first.
 An edit that would reverse the range raises an error and keeps the previous dates.
 Each battery shares one request across its period sensors. The previous period's
-amounts disappear while the new report is being fetched. Yesterday's Result and the
-lifetime result continue to use the rolling battery sessions. User-selected reporting
+amounts disappear while the new report is being fetched. Selecting yesterday
+reuses the verified one-day report. The five yesterday sensors always refer
+to the previous day, regardless of the period selected. User-selected reporting
 periods can overlap, so the period amounts and trade index do not feed long-term
 statistics. Their current values and normal Recorder history remain available.
 
@@ -202,24 +227,35 @@ remaining batteries have `null` entries. A successful empty inventory returns
 `"batteries": {}`. An unavailable inventory or a configuration without a login
 raises an action error. Requests leave the sensors' polling data intact.
 
-The automation below checks yesterday at 08:00, 10:00 and 12:00 on a Home
-Assistant installation configured for Europe/Amsterdam. It posts the amount
-once all sessions for that day are final. Later checks update the same
-notification. Select the config entry in the action editor and replace the
-example battery ID with a key from the action response.
+To catch up after downtime, create a date-only `input_datetime` helper named
+`input_datetime.battery_last_settlement`. Set it to the day before the first
+settlement you want to retrieve. The example checks one outstanding day at
+startup and at 08:00, 10:00 and 12:00, using Home Assistant's Europe/Amsterdam
+timezone. It advances the helper only after posting a finalized total, so a
+failed or pending day will be retried. Select your Frank Energie configuration
+in the action editor and replace the example battery ID.
 
 ```yaml
-alias: Report yesterday's finalized Smart Battery result
+alias: Report outstanding finalized Smart Battery results
+mode: single
 triggers:
+  - trigger: homeassistant
+    event: start
   - trigger: time
     at:
       - "08:00:00"
       - "10:00:00"
       - "12:00:00"
 variables:
-  day: "{{ (now().date() - timedelta(days=1)).isoformat() }}"
   battery_id: example-battery
+  last_date: "{{ states('input_datetime.battery_last_settlement') }}"
 actions:
+  - condition: template
+    value_template: "{{ as_datetime(last_date, none) is not none }}"
+  - variables:
+      day: "{{ (as_datetime(last_date).date() + timedelta(days=1)).isoformat() }}"
+  - condition: template
+    value_template: "{{ as_datetime(day).date() < now().date() }}"
   - action: frank_energie.get_battery_results
     data:
       config_entry: YOUR_FRANK_ENERGIE_CONFIG_ENTRY_ID
@@ -239,6 +275,11 @@ actions:
       notification_id: "battery_result_{{ battery_id }}_{{ day }}"
       title: "Battery settlement for {{ day }}"
       message: "Total including EPEX correction: €{{ battery.total }}"
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.battery_last_settlement
+    data:
+      date: "{{ day }}"
 ```
 
 ## Battery Optimization

@@ -43,7 +43,7 @@ Je kunt de prijssensoren bijvoorbeeld gebruiken om apparaten automatisch in of u
 
 Met `frank_energie.get_prices_for_date` haal je de beschikbare energieprijzen voor een datum op. [Prijsvoorbeeld](docs/examples.md#prices-for-a-date)
 
-Stel op het apparaat **Batterijen** de **Begindatum periode** en **Einddatum periode** in. **Periodelengte** telt beide dagen mee en de periodesensoren tonen de bedragen per batterij. Met `frank_energie.get_battery_results` lees je de gekozen periode uit of geef je voor die ene aanvraag twee andere datums op. [Antwoordvelden en automatisering](docs/smart_battery.md#results-for-a-date-range)
+Stel op het apparaat **Batterijen** de **Periode begindatum** en **Periode einddatum** in, of kies **Lopende maand**, **Gisteren** of **Vorige kalendermaand**. **Periodelengte** telt beide datums mee. Elke batterij toont ook vijf dagbedragen zodra Frank Energie gisteren definitief heeft afgerekend. Met `frank_energie.get_battery_results` lees je de gekozen periode uit of haal je een gemiste dag op. [Antwoordvelden en automatisering](docs/smart_battery.md#results-for-a-date-range)
 
 ## Installatie
 Kopieer de map `frank_energie` uit `custom_components` in deze repository naar de map `custom_components` van je Home Assistant-installatie.

@@ -134,10 +134,10 @@
   "entity": {
     "date": {
       "battery_period_start": {
-        "name": "Begindatum periode"
+        "name": "Periode begindatum"
       },
       "battery_period_end": {
-        "name": "Einddatum periode"
+        "name": "Periode einddatum"
       }
     },
     "sensor": {
@@ -879,7 +879,59 @@
         "name": "Periode Frank Slim bonus"
       },
       "daily_trading_result": {
-        "name": "Resultaat van gisteren"
+        "name": "Resultaat van gisteren",
+        "state_attributes": {
+          "result_date": {
+            "name": "Resultaatdatum"
+          },
+          "session_status": {
+            "name": "Sessiestatus"
+          }
+        }
+      },
+      "yesterday_trading_result": {
+        "name": "Handelsresultaat gisteren",
+        "state_attributes": {
+          "result_date": {
+            "name": "Resultaatdatum"
+          },
+          "session_status": {
+            "name": "Sessiestatus"
+          }
+        }
+      },
+      "yesterday_frank_slim": {
+        "name": "Frank Slim gisteren",
+        "state_attributes": {
+          "result_date": {
+            "name": "Resultaatdatum"
+          },
+          "session_status": {
+            "name": "Sessiestatus"
+          }
+        }
+      },
+      "yesterday_epex_correction": {
+        "name": "EPEX-correctie gisteren",
+        "state_attributes": {
+          "result_date": {
+            "name": "Resultaatdatum"
+          },
+          "session_status": {
+            "name": "Sessiestatus"
+          }
+        }
+      },
+      "yesterday_total": {
+        "name": "Totaal gisteren",
+        "state_attributes": {
+          "result_date": {
+            "name": "Resultaatdatum"
+          },
+          "session_status": {
+            "name": "Sessiestatus"
+          }
+        }
       },
       "total_trading_result": {
         "name": "Totaal handelsresultaat"
@@ -1105,6 +1157,15 @@
       }
     },
     "select": {
+      "battery_period_preset": {
+        "name": "Batterijrapportageperiode",
+        "state": {
+          "month_to_date": "Lopende maand",
+          "yesterday": "Gisteren",
+          "previous_month": "Vorige kalendermaand",
+          "custom": "Aangepaste datums"
+        }
+      },
       "resolution": {
         "name": "Prijs resolutie",
         "state": {

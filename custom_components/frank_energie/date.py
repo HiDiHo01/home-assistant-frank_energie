@@ -10,7 +10,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import FrankEnergieEntryData
 from .battery_results import (
-    CONF_BATTERY_PERIOD,
     BatteryPeriod,
     BatteryPeriodEntity,
     async_watch_battery_inventory,
@@ -70,16 +69,6 @@ class FrankEnergieBatteryDate(BatteryPeriodEntity, DateEntity):
 
     async def async_set_value(self, value: date) -> None:  # NOSONAR(S7503)
         """Save both bounds atomically and notify the entry's period listeners."""
-        entry = self._entry
-        previous = BatteryPeriod.for_entry(entry)
+        previous = BatteryPeriod.for_entry(self._entry)
         period = replace(previous, **{self.entity_description.key: value})
-        saved = {
-            "start_date": period.start_date.isoformat(),
-            "end_date": period.end_date.isoformat(),
-        }
-        if entry.options.get(CONF_BATTERY_PERIOD) == saved:
-            return
-        self.hass.config_entries.async_update_entry(
-            entry, options={**entry.options, CONF_BATTERY_PERIOD: saved}
-        )
-        self.coordinator.async_update_listeners()
+        self._async_save_selection(period)

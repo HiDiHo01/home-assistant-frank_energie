@@ -69,6 +69,7 @@ from python_frank_energie.models import (
 )
 
 from . import helpers
+from .battery_daily import BatteryDailyCoordinator
 from .battery_results import BatteryPeriod, current_battery_ids
 from .insight_period import default_insight_period, validate_insight_period
 from .const import (
@@ -4411,6 +4412,7 @@ class FrankEnergieBatterySessionCoordinator(
         api: FrankEnergie,
         device_id: str,
         inventory: FrankEnergieBatteryCoordinator | None = None,
+        daily: BatteryDailyCoordinator | None = None,
     ) -> None:
         """
         Initialize the battery session coordinator.
@@ -4421,12 +4423,14 @@ class FrankEnergieBatterySessionCoordinator(
             api (FrankEnergie): Instance of the FrankEnergie API.
             device_id (str): The smart battery device ID.
             inventory: The site's battery coordinator, when available.
+            daily: Shared one-day results for this site, when configured.
         """
         self.api = api
         self.rate_limits = get_rate_limit_state(hass, config_entry)
         self.site_reference = config_entry.data.get("site_reference")
         self.device_id = device_id
         self._inventory = inventory
+        self._daily = daily
         self._entry = config_entry
         self._reported_period: BatteryPeriod | None = None
 
@@ -4445,7 +4449,10 @@ class FrankEnergieBatterySessionCoordinator(
     @property
     def period_data(self) -> SmartBatterySessions | None:
         """Expose a snapshot only while its requested dates are still selected."""
-        if self._reported_period == BatteryPeriod.for_entry(self._entry):
+        period = BatteryPeriod.for_entry(self._entry)
+        if self._daily is not None and self._daily.covers(period):
+            return self._daily.result(self.device_id).report
+        if self._reported_period == period:
             return self.data
         return None
 
@@ -4476,6 +4483,8 @@ class FrankEnergieBatterySessionCoordinator(
         self, period: BatteryPeriod
     ) -> SmartBatterySessions | None:
         """Request the exact inclusive dates with the shared authentication and rate limits."""
+        if self._daily is not None and self._daily.covers(period):
+            return await self._daily.async_report(self.device_id, period)
         try:
             return await self.rate_limits.async_call(
                 "smart_battery_sessions",

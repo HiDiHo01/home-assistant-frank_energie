@@ -47,6 +47,8 @@ completed usage and cost hours for the Energy Dashboard. [Automation example and
 
 Set **Period start date** and **Period end date** on the **Batteries** device to
 update each battery's period sensors. **Period length** counts both dates.
+Choose **Month to date**, **Yesterday** or **Previous calendar month** to keep
+the range current. Each battery also shows yesterday's five finalized amounts.
 Use `frank_energie.get_battery_results` to read the selection or supply two
 dates for a single request. [Response fields and automation example](docs/smart_battery.md#results-for-a-date-range)
 
