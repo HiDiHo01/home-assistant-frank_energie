@@ -204,4 +204,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-# Diagnostic trigger for PR #487: execute the existing Sonar issue-export workflow.

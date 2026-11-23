@@ -5303,7 +5303,8 @@ def _async_setup_battery_period_sensors(
     )
 
 
-async def async_setup_entry(
+# Home Assistant awaits the platform setup hook even when it has no I/O to await.
+async def async_setup_entry(  # NOSONAR: required Home Assistant coroutine contract.
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
