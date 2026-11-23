@@ -55,6 +55,7 @@ _YEAR_END = "2026-12-31"
 _NEW_YEAR = "2027-01-01"
 _BATTERY = "battery-a"
 
+
 @pytest.fixture(autouse=True)
 def outside_maintenance(freezer: FrozenDateTimeFactory) -> None:
     """Keep normal requests outside the provider maintenance window."""
