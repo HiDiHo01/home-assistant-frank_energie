@@ -268,6 +268,15 @@
       }
     },
     "select": {
+      "battery_period_preset": {
+        "name": "Battery reporting period",
+        "state": {
+          "month_to_date": "Month to date",
+          "yesterday": "Yesterday",
+          "previous_month": "Previous calendar month",
+          "custom": "Custom dates"
+        }
+      },
       "battery_mode": {
         "name": "Smart battery mode",
         "state": {
@@ -1151,7 +1160,59 @@
         "name": "Period Frank Slim Bonus"
       },
       "daily_trading_result": {
-        "name": "Yesterday's Result"
+        "name": "Yesterday's Result",
+        "state_attributes": {
+          "result_date": {
+            "name": "Result date"
+          },
+          "session_status": {
+            "name": "Session status"
+          }
+        }
+      },
+      "yesterday_trading_result": {
+        "name": "Yesterday's Trading Result",
+        "state_attributes": {
+          "result_date": {
+            "name": "Result date"
+          },
+          "session_status": {
+            "name": "Session status"
+          }
+        }
+      },
+      "yesterday_frank_slim": {
+        "name": "Yesterday's Frank Slim",
+        "state_attributes": {
+          "result_date": {
+            "name": "Result date"
+          },
+          "session_status": {
+            "name": "Session status"
+          }
+        }
+      },
+      "yesterday_epex_correction": {
+        "name": "Yesterday's EPEX Correction",
+        "state_attributes": {
+          "result_date": {
+            "name": "Result date"
+          },
+          "session_status": {
+            "name": "Session status"
+          }
+        }
+      },
+      "yesterday_total": {
+        "name": "Yesterday's Total",
+        "state_attributes": {
+          "result_date": {
+            "name": "Result date"
+          },
+          "session_status": {
+            "name": "Session status"
+          }
+        }
       },
       "total_trading_result": {
         "name": "Total Trading Result"

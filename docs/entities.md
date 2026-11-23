@@ -20,6 +20,7 @@ The integration may create entities from the following Home Assistant platforms.
 | Sensor | Electricity prices, gas prices, costs, contracts, invoices, smart charging and battery information |
 | Binary Sensor | Status indicators, feature availability and configuration states |
 | Select | Smart charging and smart battery configuration options |
+| Date | Start and end of the selected Smart Battery reporting period |
 | Text | Editable reporting period for authenticated Insight data |
 | Number | Configurable charging and battery settings |
 | Button | Actions such as refreshing data or synchronizing connected services |
@@ -226,7 +227,11 @@ When smart charging is enabled and a supported charger is connected, additional 
 
 ## Smart Battery Entities
 
-When a supported battery is connected, additional entities become available.
+Each connected battery has five sensors for yesterday's finalized trading result,
+Frank Slim, result before EPEX, signed EPEX correction and settlement total.
+Their attributes identify the settlement date and session status. The site's
+**Batteries** device contains the reporting-period selector, editable dates and
+inclusive day count. [Smart Battery results](smart_battery.md#finalized-results-for-yesterday)
 
 ## Dynamic Entity Creation
 

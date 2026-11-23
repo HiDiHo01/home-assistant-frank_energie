@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from functools import partial
 from math import isfinite
 from typing import Any, Callable, ClassVar, Final, Generic, Optional, TypeVar, Union
-from zoneinfo import ZoneInfo
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -107,6 +106,7 @@ from .const import (
     UNIT_ELECTRICITY,
     UNIT_GAS_NL,
 )
+from .battery_daily import DAILY_SENSORS, BatteryDailyCoordinator, BatteryDailySensor
 from .battery_results import (
     BatteryPeriod,
     BatteryPeriodEntity,
@@ -474,7 +474,7 @@ class FrankEnergieBatterySessionSensor(
 
     @property
     def _sessions(self) -> SmartBatterySessions | None:
-        """Use rolling data for yesterday and lifetime, selected data for the period."""
+        """Use rolling data for lifetime amounts and selected data for the period."""
         if isinstance(self.coordinator, FrankEnergieBatteryCoordinator):
             reports = (self.coordinator.data or {}).get(DATA_BATTERY_SESSIONS) or ()
             return next(
@@ -1396,24 +1396,6 @@ def _battery_period_attributes(data: SmartBatterySessions | None) -> dict[str, o
     }
 
 
-def _yesterday_battery_result(data: SmartBatterySessions | None) -> float | None:
-    """Sum reported results only when yesterday's sessions have finished."""
-    if data is None:
-        return None
-    yesterday = datetime.now(ZoneInfo(TIMEZONE_AMSTERDAM)).date() - timedelta(days=1)
-    results = []
-    for session in data.sessions:
-        if battery_day(session.date) != yesterday:
-            continue
-        if session.result is None or session_status(session) not in (
-            "complete_final",
-            "completed",
-        ):
-            return None
-        results.append(session.result)
-    return sum(results) if results else None
-
-
 BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
     tuple[FrankEnergieEntityDescription, ...]
 ] = (
@@ -1498,16 +1480,6 @@ BATTERY_SESSION_SENSOR_DESCRIPTIONS: Final[
         suggested_display_precision=4,
         service_name=SERVICE_NAME_BATTERY_SESSIONS,
         value_fn=lambda data: period_breakdown(data)["frank_slim"],
-    ),
-    FrankEnergieEntityDescription(
-        key="daily_trading_result",
-        icon=ICON,
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        native_unit_of_measurement=CURRENCY_EURO,
-        suggested_display_precision=4,
-        service_name=SERVICE_NAME_BATTERY_SESSIONS,
-        value_fn=_yesterday_battery_result,
     ),
     FrankEnergieEntityDescription(
         key="total_trading_result",
@@ -5230,19 +5202,28 @@ async def _async_refresh_battery_reports(
 def _battery_session_sensors(
     inventory: FrankEnergieBatteryCoordinator,
     session: FrankEnergieBatterySessionCoordinator,
-) -> list[FrankEnergieBatterySessionSensor]:
-    """Keep yesterday and lifetime on the rolling feed as the selected dates change."""
-    entities: list[FrankEnergieBatterySessionSensor] = []
+    daily: BatteryDailyCoordinator,
+) -> list[SensorEntity]:
+    """Keep yesterday's finalized data, selected periods and lifetime data independent."""
+    entities: list[SensorEntity] = [
+        BatteryDailySensor(daily, session.device_id, item) for item in DAILY_SENSORS
+    ]
     for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS:
-        source = (
-            inventory
-            if description.key in ("daily_trading_result", "total_trading_result")
-            else session
-        )
+        source = inventory if description.key == "total_trading_result" else session
         entities.append(
             FrankEnergieBatterySessionSensor(source, description, session.device_id)
         )
     return entities
+
+
+@callback
+def _async_publish_selected_day(
+    entry: ConfigEntry, daily: BatteryDailyCoordinator
+) -> None:
+    """Notify period sensors when their exact single-day source has just changed."""
+    if daily.covers(BatteryPeriod.for_entry(entry)):
+        for session in entry.runtime_data.battery_session_coordinators.values():
+            session.async_update_listeners()
 
 
 @callback
@@ -5251,6 +5232,8 @@ def _async_setup_battery_period_sensors(
 ) -> None:
     """Share one period request across each battery's sensors on discovery."""
     inventory = entry.runtime_data.battery_coordinator
+    daily = BatteryDailyCoordinator(hass, entry)
+    registry = er.async_get(hass)
     selected = BatteryPeriod.for_entry(entry)
     refresh_lock = asyncio.Lock()
 
@@ -5275,8 +5258,7 @@ def _async_setup_battery_period_sensors(
         sessions = list(entry.runtime_data.battery_session_coordinators.values())
         for session in sessions:
             session.async_update_listeners()
-        if sessions:
-            _async_queue(sessions)
+        _async_queue(sessions)
 
     @callback
     def _async_discover(ids: list[str], first: bool) -> None:
@@ -5284,23 +5266,41 @@ def _async_setup_battery_period_sensors(
         nonlocal selected
         entities: list[SensorEntity] = []
         if first:
+            daily.async_start()
+            entry.async_on_unload(
+                daily.async_add_listener(
+                    partial(_async_publish_selected_day, entry, daily)
+                )
+            )
             selected = BatteryPeriod.for_entry(entry)
             entities.append(
                 FrankEnergieBatteryPeriodLength(entry, "battery_period_length")
             )
             entry.async_on_unload(inventory.async_add_listener(_async_check_period))
         new: list[FrankEnergieBatterySessionCoordinator] = []
+        sessions = entry.runtime_data.battery_session_coordinators
         for battery_id in ids:
-            session = FrankEnergieBatterySessionCoordinator(
-                hass, entry, inventory.api, battery_id, inventory
-            )
-            entry.runtime_data.battery_session_coordinators[battery_id] = session
+            if (session := sessions.get(battery_id)) is None:
+                session = FrankEnergieBatterySessionCoordinator(
+                    hass, entry, inventory.api, battery_id, inventory, daily
+                )
+                sessions[battery_id] = session
             new.append(session)
-            entities.extend(_battery_session_sensors(inventory, session))
+            entities.extend(_battery_session_sensors(inventory, session, daily))
         async_add_entities(entities)
         _async_queue(new)
 
-    async_watch_battery_inventory(entry, _async_discover)
+    def still_registered(battery_id: str) -> bool:
+        """A transient inventory gap keeps the entities; removing the device deletes them."""
+        entity_id = registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{battery_id}_period_start_date"
+        )
+        record = registry.async_get(entity_id) if entity_id is not None else None
+        return record is not None and record.config_entry_id == entry.entry_id
+
+    async_watch_battery_inventory(
+        entry, _async_discover, still_registered=still_registered
+    )
 
 
 async def async_setup_entry(

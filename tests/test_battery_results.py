@@ -1,18 +1,22 @@
 """Test Smart Battery period sensors and the Home Assistant date-range action."""
 
 import asyncio
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import probatio
 import pytest
+import yaml
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, ServiceResponse
+from homeassistant.components.automation.config import async_validate_config_item
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service import async_get_all_descriptions
-from pytest_homeassistant.common import MockConfigEntry
+from homeassistant.helpers.template import Template
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 from python_frank_energie import FrankEnergie
 from python_frank_energie.exceptions import RateLimitException, RequestException
 from python_frank_energie.models import (
@@ -23,6 +27,11 @@ from python_frank_energie.models import (
 )
 
 from custom_components.frank_energie import FrankEnergieEntryData
+from custom_components.frank_energie.battery_daily import (
+    DAILY_SENSORS,
+    BatteryDailyCoordinator,
+    BatteryDailySensor,
+)
 from custom_components.frank_energie.battery_results import (
     CONF_BATTERY_PERIOD,
     BatteryPeriod,
@@ -184,8 +193,11 @@ async def _request(
     not _SDK_HAS_PERIOD_FIELDS,
     reason="Requires python-frank-energie with Smart Battery period fields",
 )
-async def test_single_day_through_sdk_parser(hass: HomeAssistant) -> None:
-    """Verify that the released SDK preserves GraphQL amounts for the action."""
+async def test_single_day_through_sdk_parser(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Verify the action and all five daily entities against the SDK's real GraphQL parser."""
+    freezer.move_to("2026-11-15T09:00:00Z")
     entry = await _load_entry(hass)
     coordinator = entry.runtime_data.battery_coordinator
     payload = {
@@ -231,6 +243,18 @@ async def test_single_day_through_sdk_parser(hass: HomeAssistant) -> None:
             }
         },
     }
+    daily = BatteryDailyCoordinator(hass, entry)
+    coordinator.update_interval = None
+    with patch.object(coordinator.api, "_query", return_value=payload) as daily_query:
+        daily.async_start()
+        await hass.async_block_till_done(wait_background_tasks=True)
+    daily_query.assert_awaited_once()
+    assert (
+        daily_query.await_args.args[0].variables == query.await_args.args[0].variables
+    )
+    assert [
+        BatteryDailySensor(daily, _BATTERY, desc).native_value for desc in DAILY_SENSORS
+    ] == pytest.approx([0.1814, 0.1613, 0.0202, -0.0034, 0.1780])
 
 
 async def test_multi_battery_range_is_entry_scoped(hass: HomeAssistant) -> None:
@@ -564,7 +588,10 @@ async def test_two_batteries_register_each_session_sensor_once(
         statistics_coordinator=other_coordinator,
     )
     add_entities = MagicMock()
-    with patch.object(FrankEnergieBatterySessionCoordinator, "async_refresh"):
+    with (
+        patch.object(FrankEnergieBatterySessionCoordinator, "async_refresh"),
+        patch.object(coordinator.api, "smart_battery_sessions", return_value=None),
+    ):
         await async_setup_sensors(hass, entry, add_entities)
         await hass.async_block_till_done(wait_background_tasks=True)
 
@@ -579,6 +606,300 @@ async def test_two_batteries_register_each_session_sensor_once(
         for battery_id in ids
         for description in BATTERY_SESSION_SENSOR_DESCRIPTIONS
     )
+
+
+def _daily_report(
+    battery_id: str, day: date, status: str, **amounts: float | None
+) -> SimpleNamespace:
+    """Return a parsed SDK-shaped report for a single day with explicit settlement fields."""
+    row = SimpleNamespace(date=day, status=status, result=99)
+    return _report(
+        battery_id, day.isoformat(), day.isoformat(), sessions=[row], **amounts
+    )
+
+
+async def test_yesterday_sensors_share_final_snapshot_and_retry_only_pending_batteries(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Expose five signed values per day, independently of other batteries and manual periods."""
+    entry = await _load_entry(hass, (_BATTERY, "battery-b"))
+    inventory = entry.runtime_data.battery_coordinator
+    inventory.update_interval = None
+    daily = BatteryDailyCoordinator(hass, entry)
+    day = date.fromisoformat(_NEW_YEAR)
+    final = _daily_report(
+        _BATTERY,
+        day,
+        "COMPLETE_FINAL",
+        period_result=0.0899,
+        period_breakdown_trading_result=0.1221,
+        period_breakdown_frank_slim=-0.0323,
+        period_breakdown_epex_correction=-0.6557,
+    )
+    pending = _daily_report("battery-b", day, "COMPLETED", period_result=0)
+    final_b = _daily_report(
+        "battery-b",
+        day,
+        "COMPLETE_FINAL",
+        period_result=0,
+        period_breakdown_epex_correction=0.0735,
+    )
+    with patch.object(
+        inventory.api,
+        "smart_battery_sessions",
+        side_effect=[final, pending, None, final_b],
+    ) as fetch:
+        daily.async_start()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        sensors = [BatteryDailySensor(daily, _BATTERY, desc) for desc in DAILY_SENSORS]
+        assert [sensor.native_value for sensor in sensors] == pytest.approx(
+            [0.0899, 0.1221, -0.0323, -0.6557, -0.5658]
+        )
+        assert sensors[0].unique_id == f"{_BATTERY}_daily_trading_result"
+        assert all(
+            sensor.unique_id.startswith(f"{entry.entry_id}_{_BATTERY}_")
+            for sensor in sensors[1:]
+        )
+        assert all(
+            sensor.extra_state_attributes
+            == {"result_date": _NEW_YEAR, "session_status": "complete_final"}
+            for sensor in sensors
+        )
+        assert sensors[0].last_reset.astimezone(UTC) == datetime(
+            2026, 12, 31, 23, tzinfo=UTC
+        )
+        assert daily.result("battery-b").status == "completed"
+        assert daily.result("battery-b").amounts is None
+        assert fetch.await_args_list == [
+            call(_BATTERY, day, day),
+            call("battery-b", day, day),
+        ]
+
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_BATTERY_PERIOD: {"start_date": _DAY, "end_date": _DAY}}
+        )
+        for clock in ("09:12", "09:15", "09:44", "09:45", "21:59"):
+            freezer.move_to(f"2027-01-02T{clock}:00Z")
+            inventory.async_update_listeners()
+            inventory.async_update_listeners()
+            await hass.async_block_till_done(wait_background_tasks=True)
+            if clock == "09:15":
+                assert daily.result("battery-b").status == "missing"
+        assert fetch.await_args_list == [
+            call(_BATTERY, day, day),
+            *[call("battery-b", day, day)] * 3,
+        ]
+        assert daily.result("battery-b").amounts["result"] == 0
+        assert daily.result("battery-b").amounts["total"] == pytest.approx(0.0735)
+        assert daily.result("battery-b").amounts["frank_slim"] is None
+        assert daily.result(_BATTERY).amounts["total"] == pytest.approx(-0.5658)
+
+
+async def test_daily_results_keep_errors_local_and_respect_maintenance_and_throttling(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """A throttled site shares a deadline; an independent site with the same battery can finalize."""
+    freezer.move_to("2027-01-02T00:20:00Z")
+    first = await _load_entry(hass, (_BATTERY, "battery-b"))
+    other = await _load_entry(hass)
+    first_inventory = first.runtime_data.battery_coordinator
+    other_inventory = other.runtime_data.battery_coordinator
+    first_inventory.update_interval = other_inventory.update_interval = None
+    daily = BatteryDailyCoordinator(hass, first)
+    independent = BatteryDailyCoordinator(hass, other)
+    day = date.fromisoformat(_NEW_YEAR)
+    first_final = _daily_report(
+        _BATTERY,
+        day,
+        "COMPLETE_FINAL",
+        period_result=0,
+        period_breakdown_epex_correction=0,
+    )
+    other_final = _daily_report(
+        _BATTERY,
+        day,
+        "COMPLETE_FINAL",
+        period_result=0.1814,
+        period_breakdown_epex_correction=-0.0034,
+    )
+    with (
+        patch.object(
+            first_inventory.api,
+            "smart_battery_sessions",
+            side_effect=[
+                RateLimitException("SmartBatterySessions", retry_after=5400),
+                first_final,
+                RequestException("test failure"),
+            ],
+        ) as first_fetch,
+        patch.object(
+            other_inventory.api, "smart_battery_sessions", return_value=other_final
+        ) as other_fetch,
+    ):
+        daily.async_start()
+        independent.async_start()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        first_fetch.assert_not_awaited()
+        other_fetch.assert_not_awaited()
+        freezer.move_to("2027-01-02T01:00:00Z")
+        daily.async_check()
+        independent.async_check()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert daily.result(_BATTERY).status == "unavailable"
+        assert independent.result(_BATTERY).amounts["total"] == pytest.approx(0.1780)
+        freezer.move_to("2027-01-02T02:29:59Z")
+        daily.async_check()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        first_fetch.assert_awaited_once_with(_BATTERY, day, day)
+        freezer.move_to("2027-01-02T02:30:01Z")
+        daily.async_check()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert first_fetch.await_args_list == [
+            call(_BATTERY, day, day),
+            call(_BATTERY, day, day),
+            call("battery-b", day, day),
+        ]
+        assert daily.result(_BATTERY).amounts["total"] == 0
+        assert daily.result("battery-b").status == "unavailable"
+        other_fetch.assert_awaited_once_with(_BATTERY, day, day)
+
+
+@pytest.mark.parametrize(
+    ("midnight", "day"),
+    [
+        ("2026-03-29T22:00:00Z", "2026-03-29"),
+        ("2026-10-25T23:00:00Z", "2026-10-25"),
+        ("2026-12-31T23:00:00Z", _YEAR_END),
+    ],
+)
+async def test_daily_rollover_discards_old_inflight_report(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, midnight: str, day: str
+) -> None:
+    """Advance while an old request is held open across a short, long or year-end day."""
+    boundary = datetime.fromisoformat(midnight)
+    freezer.move_to(boundary - timedelta(seconds=2))
+    entry = await _load_entry(hass)
+    inventory = entry.runtime_data.battery_coordinator
+    inventory.update_interval = None
+    daily = BatteryDailyCoordinator(hass, entry)
+    old_started = asyncio.Event()
+    release_old = asyncio.Event()
+    target = date.fromisoformat(day)
+    old_day = target - timedelta(days=1)
+
+    async def delayed(battery_id: str, start: date, end: date) -> SimpleNamespace:
+        """Return different settlement amounts on either side of the simulated midnight."""
+        assert start == end
+        if start == old_day:
+            old_started.set()
+            await release_old.wait()
+        return _daily_report(
+            battery_id,
+            start,
+            "complete_final",
+            period_result=0 if start == target else 12.5,
+        )
+
+    with patch.object(
+        inventory.api, "smart_battery_sessions", side_effect=delayed
+    ) as fetch:
+        daily.async_start()
+        await old_started.wait()
+        freezer.move_to(boundary)
+        async_fire_time_changed(hass, boundary)
+        await hass.async_block_till_done()
+        assert daily.result(_BATTERY).day == target
+        assert daily.result(_BATTERY).amounts is None
+        release_old.set()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert fetch.await_args_list == [
+            call(_BATTERY, old_day, old_day),
+            call(_BATTERY, target, target),
+        ]
+        assert daily.result(_BATTERY).amounts["result"] == 0
+
+
+async def test_finalized_daily_amount_expires_at_midnight_without_inventory_poll(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """A real HA clock event clears yesterday even while the next day's first response is pending."""
+    freezer.move_to("2026-12-31T22:59:58Z")
+    entry = await _load_entry(hass)
+    inventory = entry.runtime_data.battery_coordinator
+    inventory.update_interval = None
+    daily = BatteryDailyCoordinator(hass, entry)
+    started, release = asyncio.Event(), asyncio.Event()
+    old_day, new_day = date(2026, 12, 30), date(2026, 12, 31)
+
+    async def report(battery_id: str, start: date, _end: date) -> SimpleNamespace:
+        """Delay the new day's settlement until the listener has published its pending state."""
+        if start == new_day:
+            started.set()
+            await release.wait()
+        return _daily_report(battery_id, start, "complete_final", period_result=1)
+
+    snapshots = []
+    with patch.object(
+        inventory.api, "smart_battery_sessions", side_effect=report
+    ) as fetch:
+        daily.async_start()
+        entry.async_on_unload(
+            daily.async_add_listener(lambda: snapshots.append(daily.result(_BATTERY)))
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert snapshots[-1].day == old_day and snapshots[-1].amounts["result"] == 1
+        boundary = datetime(2026, 12, 31, 23, tzinfo=UTC)
+        freezer.move_to(boundary)
+        async_fire_time_changed(hass, boundary)
+        await asyncio.wait_for(started.wait(), 5)
+        assert (snapshots[-1].day, snapshots[-1].status, snapshots[-1].amounts) == (
+            new_day,
+            "pending",
+            None,
+        )
+        release.set()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await daily.async_refresh()
+        assert fetch.await_args_list == [
+            call(_BATTERY, old_day, old_day),
+            call(_BATTERY, new_day, new_day),
+        ]
+
+
+async def test_documented_automation_catches_up_only_after_final_settlement(
+    hass: HomeAssistant,
+) -> None:
+    """Validate the published YAML and render its date cursor and finality guards in Home Assistant."""
+    guide = Path(__file__).parents[1] / "docs" / "smart_battery.md"
+    section = guide.read_text(encoding="utf-8").split(
+        "### Results for a date range", 1
+    )[1]
+    example = yaml.safe_load(section.split("```yaml\n", 1)[1].split("\n```", 1)[0])
+    assert await async_validate_config_item(hass, "automation", example) is not None
+    actions = example["actions"]
+    cursor, past, finalized = [
+        Template(item["value_template"], hass)
+        for item in actions
+        if item.get("condition") == "template"
+    ]
+    next_day = Template(
+        next(
+            item["variables"]["day"]
+            for item in actions
+            if "day" in item.get("variables", {})
+        ),
+        hass,
+    )
+    assert not cursor.async_render({"last_date": "unavailable"})
+    assert cursor.async_render({"last_date": _YEAR_END})
+    assert next_day.async_render({"last_date": _YEAR_END}) == _NEW_YEAR
+    assert past.async_render({"day": _NEW_YEAR})
+    assert not past.async_render({"day": "2027-01-02"})
+    for status in ("pending", "completed", "complete_final"):
+        row = {"total": 0.0, "sessions": [{"status": status}]}
+        assert finalized.async_render({"battery": row}) == (status == "complete_final")
+    assert not finalized.async_render({"battery": None})
+    assert actions[-1]["action"] == "input_datetime.set_datetime"
 
 
 async def test_cancelling_a_range_stops_later_requests(hass: HomeAssistant) -> None:

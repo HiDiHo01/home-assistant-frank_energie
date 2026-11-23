@@ -1,8 +1,7 @@
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
-from freezegun.api import FrozenDateTimeFactory
 from homeassistant import config_entries
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, State
@@ -1822,44 +1821,54 @@ def test_calculate_market_percent_tax() -> None:
 
 
 @pytest.mark.parametrize(
-    ("rows", "expected"),
+    ("rows", "amount", "expected_status", "expected"),
     [
-        ([], None),
-        ([("2026-12-30", 5.0, "complete_final")], None),
-        ([("2026-12-31", None, "complete_final")], None),
-        ([("2026-12-31", 0.0, "pending")], None),
-        ([("2026-12-31", 0.0, "complete_final")], 0.0),
-        ([("2026-12-31", 1.5, "completed"), ("2026-12-31", 2.5, "completed")], 4.0),
+        ([], 0.0, "missing", None),
+        ([("2026-12-30", 5.0, "complete_final")], 5.0, "unavailable", None),
+        ([("2026-12-31", 1.0, "complete_final")], None, "complete_final", None),
+        ([("2026-12-31", 0.0, "pending")], 0.0, "pending", None),
+        ([("2026-12-31", 0.0, "complete_final")], 0.0, "complete_final", 0.0),
+        ([("2026-12-31", 4.0, "completed")], 4.0, "completed", None),
         (
             [("2026-12-31", 1.5, "complete_final"), ("2026-12-31", None, "completed")],
+            1.5,
+            "completed",
             None,
+        ),
+        (
+            [
+                ("2026-12-31", 1.5, "complete_final"),
+                ("2026-12-31", 2.5, "complete_final"),
+            ],
+            3.9999,
+            "complete_final",
+            3.9999,
         ),
     ],
 )
 def test_yesterday_battery_result(
-    freezer: FrozenDateTimeFactory,
     rows: list[tuple[str, float | None, str]],
+    amount: float | None,
+    expected_status: str,
     expected: float | None,
 ) -> None:
-    """Select yesterday in Amsterdam and require a finished, reported result."""
+    """Use the unrounded one-day result only when all matching rows are final."""
     from types import SimpleNamespace
-    from custom_components.frank_energie.sensor import (
-        BATTERY_SESSION_SENSOR_DESCRIPTIONS,
-    )
+    from custom_components.frank_energie.battery_daily import DailyResult
 
-    freezer.move_to("2026-12-31T23:30:00+00:00")
-    description = next(
-        item
-        for item in BATTERY_SESSION_SENSOR_DESCRIPTIONS
-        if item.key == "daily_trading_result"
-    )
     data = SimpleNamespace(
+        device_id="battery",
+        period_start_date="2026-12-31",
+        period_end_date="2026-12-31",
+        period_result=amount,
         sessions=[
             SimpleNamespace(date=day, result=result, status=status)
             for day, result, status in rows
-        ]
+        ],
     )
-    value = description.value_fn(data)
+    snapshot = DailyResult.from_report(date(2026, 12, 31), "battery", data)
+    assert snapshot.status == expected_status
+    value = snapshot.amounts["result"] if snapshot.amounts is not None else None
     if expected is None:
         assert value is None
     else:

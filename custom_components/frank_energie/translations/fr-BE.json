@@ -268,6 +268,15 @@
       }
     },
     "select": {
+      "battery_period_preset": {
+        "name": "Période du rapport de batterie",
+        "state": {
+          "month_to_date": "Mois en cours",
+          "yesterday": "Hier",
+          "previous_month": "Mois civil précédent",
+          "custom": "Dates personnalisées"
+        }
+      },
       "battery_mode": {
         "name": "Mode de batterie intelligente",
         "state": {
@@ -1078,7 +1087,59 @@
         "name": "Bonus Frank Slim de la période"
       },
       "daily_trading_result": {
-        "name": "Résultat d'hier"
+        "name": "Résultat d'hier",
+        "state_attributes": {
+          "result_date": {
+            "name": "Date du résultat"
+          },
+          "session_status": {
+            "name": "Statut de la session"
+          }
+        }
+      },
+      "yesterday_trading_result": {
+        "name": "Résultat des transactions d’hier",
+        "state_attributes": {
+          "result_date": {
+            "name": "Date du résultat"
+          },
+          "session_status": {
+            "name": "Statut de la session"
+          }
+        }
+      },
+      "yesterday_frank_slim": {
+        "name": "Frank Slim d’hier",
+        "state_attributes": {
+          "result_date": {
+            "name": "Date du résultat"
+          },
+          "session_status": {
+            "name": "Statut de la session"
+          }
+        }
+      },
+      "yesterday_epex_correction": {
+        "name": "Correction EPEX d’hier",
+        "state_attributes": {
+          "result_date": {
+            "name": "Date du résultat"
+          },
+          "session_status": {
+            "name": "Statut de la session"
+          }
+        }
+      },
+      "yesterday_total": {
+        "name": "Total d’hier",
+        "state_attributes": {
+          "result_date": {
+            "name": "Date du résultat"
+          },
+          "session_status": {
+            "name": "Statut de la session"
+          }
+        }
       },
       "total_trading_result": {
         "name": "Résultat de trading total"
