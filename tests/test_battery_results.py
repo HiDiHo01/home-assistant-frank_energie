@@ -832,7 +832,8 @@ async def test_finalized_daily_amount_expires_at_midnight_without_inventory_poll
             daily.async_add_listener(lambda: snapshots.append(daily.result(_BATTERY)))
         )
         await hass.async_block_till_done(wait_background_tasks=True)
-        assert snapshots[-1].day == old_day and snapshots[-1].amounts["result"] == 1
+        assert snapshots[-1].day == old_day
+        assert snapshots[-1].amounts["result"] == 1
         boundary = datetime(2026, 12, 31, 23, tzinfo=UTC)
         freezer.move_to(boundary)
         async_fire_time_changed(hass, boundary)
