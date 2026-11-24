@@ -83,6 +83,7 @@ from .const import (
     DOMAIN,
     ICON,
     ICON_CLOCK_OUTLINE,
+    ICON_TRANSMISSION_TOWER,
     POWER_DELIVERY_STATES,
     SERVICE_NAME_BATTERIES,
     SERVICE_NAME_BATTERY_SESSIONS,
@@ -1160,7 +1161,7 @@ ENODE_VEHICLE_SENSOR_TYPES: list[EnodeVehicleEntityDescription] = [
     EnodeVehicleEntityDescription(
         key="power_delivery_state",
         translation_key="power_delivery_state",
-        icon="mdi:transmission-tower",
+        icon=ICON_TRANSMISSION_TOWER,
         authenticated=True,
         device_class=SensorDeviceClass.ENUM,
         options=list(POWER_DELIVERY_STATES),
@@ -3862,7 +3863,7 @@ SENSOR_TYPES: tuple[FrankEnergieEntityDescription, ...] = (
     FrankEnergieEntityDescription(
         key="gridOperator",
         translation_key="grid_operator",
-        icon="mdi:transmission-tower",
+        icon=ICON_TRANSMISSION_TOWER,
         authenticated=True,
         service_name=SERVICE_NAME_USER,
         value_fn=lambda data: (
@@ -4776,9 +4777,14 @@ def _battery_summary_enum_description(
 def _build_smart_battery_status_descriptions(
     base_key: str,
     i: int,
-    supported: frozenset[str] = _LIB_SUPPORTED_BATTERY_SUMMARY_FIELDS,
+    supported: frozenset[str] | None = None,
 ) -> list[FrankEnergieEntityDescription]:
-    """Build the activity, connection and congestion sensors for one battery."""
+    """Build the activity, connection and congestion sensors for one battery.
+
+    ``supported`` defaults to the summary fields the installed client has.
+    """
+    if supported is None:
+        supported = _LIB_SUPPORTED_BATTERY_SUMMARY_FIELDS
     candidates = (
         _battery_summary_enum_description(
             base_key,
@@ -4804,7 +4810,7 @@ def _build_smart_battery_status_descriptions(
             supported,
             attribute="grid_congestion_status",
             translation_key="battery_grid_congestion_status",
-            icon="mdi:transmission-tower",
+            icon=ICON_TRANSMISSION_TOWER,
             options=SMART_BATTERY_GRID_CONGESTION_STATUSES,
             # Most batteries are not enrolled, so it stays off until wanted.
             enabled_by_default=False,

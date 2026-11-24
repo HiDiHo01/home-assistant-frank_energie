@@ -2868,21 +2868,28 @@ def _battery_with_summary(**summary_fields):
     )
 
 
-def _battery_status_descriptions(*, supported: bool = True) -> dict:
-    """Build the three sensors, bypassing the client-version gate by default."""
+def _battery_status_descriptions() -> dict:
+    """Build the three sensors, bypassing the client-version gate."""
     from custom_components.frank_energie import sensor
 
-    fields = (
-        frozenset(sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES)
-        if supported
-        else frozenset()
-    )
     return {
         description.translation_key: description
         for description in sensor._build_smart_battery_status_descriptions(
-            "smart_battery_0", 0, supported=fields
+            "smart_battery_0",
+            0,
+            supported=frozenset(sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES),
         )
     }
+
+
+def _battery_status_key(attribute: str) -> str:
+    """Return the translation key the integration uses for a summary attribute."""
+    from custom_components.frank_energie import sensor
+
+    (description,) = sensor._build_smart_battery_status_descriptions(
+        "smart_battery_0", 0, supported=frozenset({attribute})
+    )
+    return description.translation_key
 
 
 @pytest.mark.parametrize(
@@ -2914,13 +2921,32 @@ def test_smart_battery_status_sensors_tolerate_old_summary() -> None:
         assert description.value_fn(data) is None, translation_key
 
 
-def test_smart_battery_status_sensors_follow_client_support() -> None:
-    """Each sensor is created only when the installed client has its attribute."""
-    from python_frank_energie.models import SmartBatterySummary
+@pytest.mark.parametrize(
+    "client_fields",
+    [
+        frozenset(),
+        frozenset({"activity_status"}),
+        frozenset({"activity_status", "connection_status"}),
+        frozenset({"activity_status", "connection_status", "grid_congestion_status"}),
+    ],
+    ids=["old-client", "activity-only", "activity-and-connection", "full-client"],
+)
+def test_smart_battery_status_sensors_follow_client_support(
+    monkeypatch: pytest.MonkeyPatch, client_fields: frozenset[str]
+) -> None:
+    """A sensor exists only when the client has its summary attribute.
 
+    The supported fields are simulated, so the production gate is exercised on
+    every installed client and not only on the one CI happens to install.
+    """
     from custom_components.frank_energie import sensor
 
-    all_keys = {d.translation_key for d in _battery_status_descriptions().values()}
+    monkeypatch.setattr(sensor, "_LIB_SUPPORTED_BATTERY_SUMMARY_FIELDS", client_fields)
+    all_keys = {
+        _battery_status_key(attribute)
+        for attribute in sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES
+    }
+
     created = {
         description.translation_key
         for description in sensor._build_single_smart_battery_descriptions(
@@ -2928,18 +2954,22 @@ def test_smart_battery_status_sensors_follow_client_support() -> None:
         )
         if description.translation_key in all_keys
     }
-    expected = {
-        description.translation_key
+
+    # Absent, not permanently unavailable, for every missing attribute.
+    assert created == {_battery_status_key(attribute) for attribute in client_fields}
+
+
+def test_smart_battery_status_gate_matches_installed_client() -> None:
+    """The real gate lists exactly the summary attributes the installed client has."""
+    from python_frank_energie.models import SmartBatterySummary
+
+    from custom_components.frank_energie import sensor
+
+    assert sensor._LIB_SUPPORTED_BATTERY_SUMMARY_FIELDS == {
+        attribute
         for attribute in sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES
         if hasattr(SmartBatterySummary, attribute)
-        for description in sensor._build_smart_battery_status_descriptions(
-            "smart_battery_0", 0, supported=frozenset({attribute})
-        )
     }
-
-    # Old client pin: absent, not permanently unavailable.
-    assert created == expected
-    assert _battery_status_descriptions(supported=False) == {}
 
 
 def test_smart_battery_grid_congestion_sensor_is_disabled_by_default() -> None:
