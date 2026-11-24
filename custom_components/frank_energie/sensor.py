@@ -5636,42 +5636,45 @@ def _build_enode_charger_sensors(
 ) -> list[SensorEntity]:
     """Build charger sensors and register their parent before child devices."""
     charger_coordinator = entry.runtime_data.charger_coordinator
+    enode = charger_coordinator.data.get(DATA_ENODE_CHARGERS)
+    if not enode or not enode.chargers:
+        return []
+
     entities: list[SensorEntity] = []
-    if (enode := charger_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
-        _LOGGER.debug(
-            "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
-        )
-        # Register the Chargers parent device before its child devices are added.
-        charger_via_device_id = _service_parent_device_id(
-            hass,
-            entry,
-            charger_coordinator,
-            SERVICE_NAME_ENODE_CHARGERS,
-            user_data,
-        )
-        for description in STATIC_ENODE_SENSOR_TYPES:
+    _LOGGER.debug(
+        "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
+    )
+    # Register the Chargers parent device before its child devices are added.
+    charger_via_device_id = _service_parent_device_id(
+        hass,
+        entry,
+        charger_coordinator,
+        SERVICE_NAME_ENODE_CHARGERS,
+        user_data,
+    )
+    for description in STATIC_ENODE_SENSOR_TYPES:
+        if (
+            not description.authenticated
+            or charger_coordinator.api.is_authenticated
+        ):
+            entities.append(
+                FrankEnergieSensor(charger_coordinator, description, entry)
+            )
+
+    for charger in enode.chargers:
+        for description in ENODE_CHARGER_SENSOR_TYPES:
             if (
                 not description.authenticated
                 or charger_coordinator.api.is_authenticated
             ):
                 entities.append(
-                    FrankEnergieSensor(charger_coordinator, description, entry)
-                )
-
-        for charger in enode.chargers:
-            for description in ENODE_CHARGER_SENSOR_TYPES:
-                if (
-                    not description.authenticated
-                    or charger_coordinator.api.is_authenticated
-                ):
-                    entities.append(
-                        EnodeChargerSensor(
-                            charger_coordinator,
-                            description,
-                            charger,
-                            charger_via_device_id,
-                        )
+                    EnodeChargerSensor(
+                        charger_coordinator,
+                        description,
+                        charger,
+                        charger_via_device_id,
                     )
+                )
     return entities
 
 
@@ -5708,30 +5711,30 @@ def _build_enode_vehicle_sensors(
 def _build_pv_system_sensors(entry: ConfigEntry) -> list[SensorEntity]:
     """Build PV system and panel-group sensors from the current inventory."""
     pv_coordinator = entry.runtime_data.pv_coordinator
-    entities: list[SensorEntity] = []
     pv_systems = pv_coordinator.data.get(DATA_PV_SYSTEMS)
-    if pv_systems and pv_systems.systems:
-        _LOGGER.debug(
-            "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
+    if not pv_systems or not pv_systems.systems:
+        return []
+
+    entities: list[SensorEntity] = []
+    _LOGGER.debug(
+        "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
+    )
+    for system in pv_systems.systems:
+        if not system:
+            continue
+        entities.extend(
+            FrankEnergiePvSensor(pv_coordinator, system.id, description)
+            for description in PV_SENSORS
         )
-        for system in pv_systems.systems:
-            if system:
-                entities.extend(
-                    [
-                        *(
-                            FrankEnergiePvSensor(pv_coordinator, system.id, description)
-                            for description in PV_SENSORS
-                        ),
-                    ]
+        if not system.panel_groups:
+            continue
+        for group in system.panel_groups:
+            if group and group.id:
+                entities.append(
+                    FrankEnergiePvPanelGroupSensor(
+                        pv_coordinator, system.id, group.id, group.position
+                    )
                 )
-                if system.panel_groups:
-                    for group in system.panel_groups:
-                        if group and group.id:
-                            entities.append(
-                                FrankEnergiePvPanelGroupSensor(
-                                    pv_coordinator, system.id, group.id, group.position
-                                )
-                            )
     return entities
 
 
