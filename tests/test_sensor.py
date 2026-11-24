@@ -2963,7 +2963,9 @@ def test_smart_battery_status_sensors_follow_client_support(
 
     created = {
         description.translation_key
-        for description in sensor._build_single_smart_battery_descriptions(_battery_with_summary())
+        for description in sensor._build_single_smart_battery_descriptions(
+            _battery_with_summary()
+        )
         if description.translation_key in all_keys
     }
 
@@ -3166,7 +3168,9 @@ async def test_battery_sensor_identity_preserves_ambiguous_registry_entries(
     assert registry.async_get_entity_id(
         "sensor", const.DOMAIN, battery_sensor_unique_id(entry, "battery_1", key)
     ) is None
-    assert all(registry.async_get(item.entity_id).unique_id == item.unique_id for item in legacy)
+    assert all(
+        registry.async_get(item.entity_id).unique_id == item.unique_id for item in legacy
+    )
 
 
 async def test_battery_sensor_discovery_handles_inventory_changes(
@@ -3220,3 +3224,69 @@ async def test_battery_sensor_discovery_handles_inventory_changes(
     assert len(added) == initial_count * 3 // 2
     assert len({entity.unique_id for entity in added}) == len(added)
     coordinator.async_request_refresh.assert_not_called()
+
+
+def test_parsed_battery_summary_keeps_unknown_steering_status() -> None:
+    """Use the installed SDK's real null-to-UNKNOWN parser contract."""
+    from python_frank_energie.models import SmartBattery, SmartBatterySummary
+
+    from custom_components.frank_energie.sensor import (
+        _build_single_smart_battery_descriptions,
+    )
+
+    battery = SmartBattery(id="battery_1", capacity=10.0)
+    description = next(
+        item
+        for item in _build_single_smart_battery_descriptions(battery)
+        if item.translation_key == "battery_status"
+    )
+    data = {const.DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
+    assert description.value_fn(data) is None
+    battery.summary = SmartBatterySummary.from_dict(
+        {
+            "lastKnownStateOfCharge": 50,
+            "lastKnownStatus": None,
+            "lastUpdate": "2026-11-24T12:00:00Z",
+            "totalResult": 0.0,
+        }
+    )
+    assert description.value_fn(data) == "unknown"
+
+
+async def test_battery_sensor_migration_refuses_foreign_target(
+    hass: HomeAssistant,
+) -> None:
+    """A canonical ID occupied by another entry must not overwrite either entry."""
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.frank_energie.device_inventory import (
+        async_migrate_battery_sensor_identity,
+        battery_sensor_unique_id,
+    )
+
+    entry = MockConfigEntry(domain=const.DOMAIN, unique_id="site-a")
+    entry.add_to_hass(hass)
+    other = MockConfigEntry(domain=const.DOMAIN, unique_id="site-b")
+    other.add_to_hass(hass)
+    registry = entity_registry.async_get(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers=inventory_device_identifiers(entry.entry_id, "battery", "battery_1"),
+    )
+    legacy = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        "site-a.battery_1_smart_battery_0_status",
+        config_entry=entry,
+        device_id=device.id,
+    )
+    key = "smart_battery_status"
+    foreign = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        battery_sensor_unique_id(entry, "battery_1", key),
+        config_entry=other,
+    )
+    assert not async_migrate_battery_sensor_identity(hass, entry, "battery_1", key)
+    assert registry.async_get(legacy.entity_id).unique_id == legacy.unique_id
+    assert registry.async_get(foreign.entity_id).config_entry_id == other.entry_id
