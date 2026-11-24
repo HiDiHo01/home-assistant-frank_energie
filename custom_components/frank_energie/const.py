@@ -171,6 +171,7 @@ SMART_BATTERY_ACTIVITY_STATUSES: Final[tuple[str, ...]] = (
 )
 SMART_BATTERY_CONNECTION_STATUSES: Final[tuple[str, ...]] = (
     "connected",
+    "no_recent_data",
     "unknown",
 )
 # Only "not_enrolled" has been observed; "enrolled" and "active" are inferred
