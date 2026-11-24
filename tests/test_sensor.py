@@ -2171,11 +2171,11 @@ def test_smart_battery_id_is_diagnostic_and_disabled_by_default() -> None:
     )
     descriptions = {
         description.translation_key: description
-        for description in _build_single_smart_battery_descriptions(battery, 0)
+        for description in _build_single_smart_battery_descriptions(battery)
     }
 
     battery_id_description = descriptions["battery_id"]
-    assert battery_id_description.key == "smart_battery_0_id"
+    assert battery_id_description.key == "smart_battery_id"
     assert battery_id_description.entity_category is EntityCategory.DIAGNOSTIC
     assert battery_id_description.entity_registry_enabled_default is False
     assert battery_id_description.icon == "mdi:fingerprint"
@@ -2237,11 +2237,11 @@ def test_smart_battery_current_capacity_sensor(
     )
     descriptions = {
         description.translation_key: description
-        for description in _build_single_smart_battery_descriptions(battery, 0)
+        for description in _build_single_smart_battery_descriptions(battery)
     }
     current = descriptions["battery_current_capacity"]
 
-    assert current.key == "smart_battery_0_current_capacity"
+    assert current.key == "smart_battery_current_capacity"
     assert current.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
     assert current.device_class is SensorDeviceClass.ENERGY_STORAGE
     assert current.state_class is SensorStateClass.MEASUREMENT
@@ -2296,12 +2296,16 @@ def test_smart_battery_current_capacity_uses_its_own_battery() -> None:
         description = next(
             item
             for item in _build_single_smart_battery_descriptions(
-                batteries[index], index
+                batteries[index]
             )
             if item.translation_key == "battery_current_capacity"
         )
-        assert description.key == f"smart_battery_{index}_current_capacity"
+        assert description.key == "smart_battery_current_capacity"
         assert description.value_fn(data) == pytest.approx(expected)
+        reordered = {DATA_BATTERIES: SimpleNamespace(batteries=list(reversed(batteries)))}
+        assert description.value_fn(reordered) == pytest.approx(expected)
+        removed = {DATA_BATTERIES: SimpleNamespace(batteries=[batteries[1 - index]])}
+        assert description.value_fn(removed) is None
 
 
 @pytest.mark.parametrize(
@@ -2388,10 +2392,10 @@ def test_batteries_service_current_capacity(
         individual_total = sum(
             next(
                 item
-                for item in _build_single_smart_battery_descriptions(battery, index)
+                for item in _build_single_smart_battery_descriptions(battery)
                 if item.translation_key == "battery_current_capacity"
             ).value_fn(data)
-            for index, battery in enumerate(batteries)
+            for battery in batteries
         )
         assert actual == pytest.approx(individual_total)
 
@@ -2411,7 +2415,7 @@ def test_batteries_service_current_capacity_without_inventory() -> None:
 
 
 def _battery_strategy_sensor_description() -> object:
-    """Return the smart_battery_0 imbalance_trading_strategy entity description
+    """Return the smart_battery imbalance_trading_strategy entity description
     built by ``_build_single_smart_battery_descriptions``."""
     from types import SimpleNamespace
 
@@ -2434,9 +2438,9 @@ def _battery_strategy_sensor_description() -> object:
         settings=SmartBatterySettings(),
         summary=None,
     )
-    descriptions = _build_single_smart_battery_descriptions(battery, 0)
+    descriptions = _build_single_smart_battery_descriptions(battery)
     return next(
-        d for d in descriptions if d.key == "smart_battery_0_imbalance_trading_strategy"
+        d for d in descriptions if d.key == "smart_battery_imbalance_trading_strategy"
     )
 
 
@@ -2464,7 +2468,7 @@ async def _battery_strategy_sensor_state(
     *,
     trading_algorithm: SmartBatteryTradingAlgorithm | None = None,
 ) -> str | None:
-    """Register the smart_battery_0 imbalance_trading_strategy sensor on a real
+    """Register the smart_battery imbalance_trading_strategy sensor on a real
     entity platform and return the state Home Assistant computed for it
     (running the real SensorEntity ENUM ``options`` validation)."""
     from types import SimpleNamespace
@@ -2476,6 +2480,7 @@ async def _battery_strategy_sensor_state(
     from custom_components.frank_energie.sensor import FrankEnergieSmartBatterySensor
 
     battery = SimpleNamespace(
+        id="battery_1",
         settings=SmartBatterySettings(
             imbalance_trading_strategy=strategy,
             trading_algorithm=trading_algorithm,
@@ -2884,8 +2889,8 @@ def _battery_status_descriptions() -> "dict[str, FrankEnergieEntityDescription]"
     return {
         description.translation_key: description
         for description in sensor._build_smart_battery_status_descriptions(
-            "smart_battery_0",
-            0,
+            "smart_battery",
+            "battery_1",
             supported=frozenset(sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES),
         )
     }
@@ -2896,7 +2901,7 @@ def _battery_status_key(attribute: str) -> str:
     from custom_components.frank_energie import sensor
 
     (description,) = sensor._build_smart_battery_status_descriptions(
-        "smart_battery_0", 0, supported=frozenset({attribute})
+        "smart_battery", "battery_1", supported=frozenset({attribute})
     )
     return description.translation_key
 
@@ -2959,7 +2964,7 @@ def test_smart_battery_status_sensors_follow_client_support(
     created = {
         description.translation_key
         for description in sensor._build_single_smart_battery_descriptions(
-            _battery_with_summary(), 0
+            _battery_with_summary()
         )
         if description.translation_key in all_keys
     }
