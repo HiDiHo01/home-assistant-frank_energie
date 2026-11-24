@@ -5653,13 +5653,8 @@ def _build_enode_charger_sensors(
         user_data,
     )
     for description in STATIC_ENODE_SENSOR_TYPES:
-        if (
-            not description.authenticated
-            or charger_coordinator.api.is_authenticated
-        ):
-            entities.append(
-                FrankEnergieSensor(charger_coordinator, description, entry)
-            )
+        if not description.authenticated or charger_coordinator.api.is_authenticated:
+            entities.append(FrankEnergieSensor(charger_coordinator, description, entry))
 
     for charger in enode.chargers:
         for description in ENODE_CHARGER_SENSOR_TYPES:
@@ -5716,9 +5711,7 @@ def _build_pv_system_sensors(entry: ConfigEntry) -> list[SensorEntity]:
         return []
 
     entities: list[SensorEntity] = []
-    _LOGGER.debug(
-        "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
-    )
+    _LOGGER.debug("Setting up smart PV sensors for %d systems", len(pv_systems.systems))
     for system in pv_systems.systems:
         if not system:
             continue
