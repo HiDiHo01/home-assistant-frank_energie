@@ -3,6 +3,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant import config_entries
@@ -29,6 +30,9 @@ from custom_components.frank_energie.device_inventory import (
     inventory_device_identifiers,
 )
 from tests.utils import ResponseMocks
+
+if TYPE_CHECKING:
+    from custom_components.frank_energie.sensor import FrankEnergieEntityDescription
 
 
 _MONTH_SUMMARY_COST_KEYS = (
@@ -2846,7 +2850,12 @@ _BATTERY_SENSOR_CASES = [
 ]
 
 
-def _battery_with_summary(**summary_fields):
+def _battery_with_summary(**summary_fields: object) -> SimpleNamespace:
+    """Build a battery whose summary carries ``summary_fields`` on top of defaults.
+
+    Pass the summary attributes under test (for example ``activity_status``);
+    leave one out to model a client or API that does not send it.
+    """
     return SimpleNamespace(
         id="battery_1",
         brand="Test",
@@ -2868,7 +2877,7 @@ def _battery_with_summary(**summary_fields):
     )
 
 
-def _battery_status_descriptions() -> dict:
+def _battery_status_descriptions() -> "dict[str, FrankEnergieEntityDescription]":
     """Build the three sensors, bypassing the client-version gate."""
     from custom_components.frank_energie import sensor
 
