@@ -1,5 +1,8 @@
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from homeassistant import config_entries
@@ -2801,3 +2804,217 @@ def test_month_summary_source_metadata_distinguishes_reading_and_fetch(
 
     data[const.DATA_MONTH_SUMMARY_FETCHED_AT] = None
     assert "source_updated_at" not in description.attr_fn(data)
+
+
+# --- Smart battery activity, connection and congestion sensors ----------------
+#
+# ``SmartBatterySummary.activity_status`` and friends exist only in newer
+# python-frank-energie releases, so ``_build_single_smart_battery_descriptions``
+# creates each sensor only when the installed client has its attribute. The
+# builder below takes the supported fields as a parameter, so the value, enum
+# validation and default-state tests run on every client version; only the gate
+# test depends on the installed client, and it branches on the same check.
+
+_BATTERY_SENSOR_CASES = [
+    ("battery_activity_status", "activity_status", "CHARGING", "charging"),
+    ("battery_activity_status", "activity_status", "DISCHARGING", "discharging"),
+    ("battery_activity_status", "activity_status", "STANDBY", "standby"),
+    ("battery_activity_status", "activity_status", "UNKNOWN", "unknown"),
+    ("battery_activity_status", "activity_status", None, None),
+    # A value the integration does not list becomes "unknown", never an
+    # invalid enum state.
+    ("battery_activity_status", "activity_status", "HIBERNATING", "unknown"),
+    ("battery_connection_status", "connection_status", "CONNECTED", "connected"),
+    ("battery_connection_status", "connection_status", "UNKNOWN", "unknown"),
+    ("battery_connection_status", "connection_status", None, None),
+    ("battery_connection_status", "connection_status", "DISCONNECTED", "unknown"),
+    (
+        "battery_grid_congestion_status",
+        "grid_congestion_status",
+        "NOT_ENROLLED",
+        "not_enrolled",
+    ),
+    (
+        "battery_grid_congestion_status",
+        "grid_congestion_status",
+        "ENROLLED",
+        "enrolled",
+    ),
+    ("battery_grid_congestion_status", "grid_congestion_status", "ACTIVE", "active"),
+    ("battery_grid_congestion_status", "grid_congestion_status", "UNKNOWN", "unknown"),
+    ("battery_grid_congestion_status", "grid_congestion_status", None, None),
+]
+
+
+def _battery_with_summary(**summary_fields):
+    return SimpleNamespace(
+        id="battery_1",
+        brand="Test",
+        capacity=10.0,
+        external_reference=None,
+        max_charge_power=5.0,
+        max_discharge_power=5.0,
+        provider="Test",
+        created_at=None,
+        updated_at=None,
+        settings=None,
+        summary=SimpleNamespace(
+            last_known_state_of_charge=50,
+            last_known_status="IDLE_SMART_HOME",
+            last_update=None,
+            total_result=0.0,
+            **summary_fields,
+        ),
+    )
+
+
+def _battery_status_descriptions(*, supported: bool = True) -> dict:
+    """Build the three sensors, bypassing the client-version gate by default."""
+    from custom_components.frank_energie import sensor
+
+    fields = (
+        frozenset(sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES)
+        if supported
+        else frozenset()
+    )
+    return {
+        description.translation_key: description
+        for description in sensor._build_smart_battery_status_descriptions(
+            "smart_battery_0", 0, supported=fields
+        )
+    }
+
+
+@pytest.mark.parametrize(
+    ("translation_key", "attribute", "raw", "expected"), _BATTERY_SENSOR_CASES
+)
+def test_smart_battery_status_sensor_values(
+    translation_key: str, attribute: str, raw: str | None, expected: str | None
+) -> None:
+    """The sensors lowercase the library value, keep an explicit UNKNOWN, report
+    None when the API sent nothing, and map unlisted values to "unknown"."""
+    from homeassistant.components.sensor import SensorDeviceClass
+
+    battery = _battery_with_summary(**{attribute: raw})
+    description = _battery_status_descriptions()[translation_key]
+
+    assert description.device_class is SensorDeviceClass.ENUM
+    assert "unknown" in description.options
+    data = {const.DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
+    assert description.value_fn(data) == expected
+    assert expected is None or expected in description.options
+
+
+def test_smart_battery_status_sensors_tolerate_old_summary() -> None:
+    """A summary without the new attributes yields None, not an AttributeError."""
+    battery = _battery_with_summary()
+    data = {const.DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
+
+    for translation_key, description in _battery_status_descriptions().items():
+        assert description.value_fn(data) is None, translation_key
+
+
+def test_smart_battery_status_sensors_follow_client_support() -> None:
+    """Each sensor is created only when the installed client has its attribute."""
+    from python_frank_energie.models import SmartBatterySummary
+
+    from custom_components.frank_energie import sensor
+
+    all_keys = {d.translation_key for d in _battery_status_descriptions().values()}
+    created = {
+        description.translation_key
+        for description in sensor._build_single_smart_battery_descriptions(
+            _battery_with_summary(), 0
+        )
+        if description.translation_key in all_keys
+    }
+    expected = {
+        description.translation_key
+        for attribute in sensor._SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES
+        if hasattr(SmartBatterySummary, attribute)
+        for description in sensor._build_smart_battery_status_descriptions(
+            "smart_battery_0", 0, supported=frozenset({attribute})
+        )
+    }
+
+    # Old client pin: absent, not permanently unavailable.
+    assert created == expected
+    assert _battery_status_descriptions(supported=False) == {}
+
+
+def test_smart_battery_grid_congestion_sensor_is_disabled_by_default() -> None:
+    """Most batteries are not enrolled, so only the congestion sensor ships off."""
+    descriptions = _battery_status_descriptions()
+
+    assert (
+        descriptions["battery_grid_congestion_status"].entity_registry_enabled_default
+        is False
+    )
+    for key in ("battery_activity_status", "battery_connection_status"):
+        assert descriptions[key].entity_registry_enabled_default is True
+
+
+@pytest.mark.parametrize(
+    ("translation_key", "attribute", "raw", "expected"), _BATTERY_SENSOR_CASES
+)
+async def test_smart_battery_status_sensors_pass_ha_enum_validation(
+    hass: HomeAssistant,
+    enable_custom_integrations,
+    translation_key: str,
+    attribute: str,
+    raw: str | None,
+    expected: str | None,
+) -> None:
+    """Adding the sensor to a real entity platform validates its state against
+    ``options``: every value the library can produce is a valid enum state, and
+    a missing value makes the entity unavailable rather than unknown."""
+    from unittest.mock import MagicMock
+
+    from pytest_homeassistant.common import MockEntityPlatform
+
+    from custom_components.frank_energie.sensor import FrankEnergieSensor
+
+    battery = _battery_with_summary(**{attribute: raw})
+    # The congestion sensor ships disabled; a disabled entity has no state.
+    description = replace(
+        _battery_status_descriptions()[translation_key],
+        entity_registry_enabled_default=True,
+    )
+
+    coordinator = MagicMock()
+    coordinator.data = {const.DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
+    entry = MagicMock()
+    entry.unique_id = "test_unique_id"
+    entry.entry_id = "test_entry_id"
+
+    sensor = FrankEnergieSensor(
+        coordinator=coordinator, description=description, entry=entry
+    )
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=const.DOMAIN)
+    await platform.async_add_entities([sensor])
+
+    state = hass.states.get(sensor.entity_id)
+    assert state is not None
+    assert state.state == (expected if expected is not None else "unavailable")
+
+
+def test_smart_battery_status_sensor_translations_ship() -> None:
+    """Every state and name exists in the shipped strings and all locales."""
+    import json
+
+    base = Path(const.__file__).parent
+    for path in [
+        base / "strings.json",
+        *sorted((base / "translations").glob("*.json")),
+    ]:
+        sensors = json.loads(path.read_text(encoding="utf-8"))["entity"]["sensor"]
+        for key, options in (
+            ("battery_activity_status", const.SMART_BATTERY_ACTIVITY_STATUSES),
+            ("battery_connection_status", const.SMART_BATTERY_CONNECTION_STATUSES),
+            (
+                "battery_grid_congestion_status",
+                const.SMART_BATTERY_GRID_CONGESTION_STATUSES,
+            ),
+        ):
+            assert sensors[key]["name"], (path.name, key)
+            assert set(sensors[key]["state"]) == set(options), (path.name, key)

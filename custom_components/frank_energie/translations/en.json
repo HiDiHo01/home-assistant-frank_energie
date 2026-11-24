@@ -1295,6 +1295,31 @@
           "unknown": "Unknown"
         }
       },
+      "battery_activity_status": {
+        "name": "Battery Activity",
+        "state": {
+          "charging": "Charging",
+          "discharging": "Discharging",
+          "standby": "Standby",
+          "unknown": "Unknown"
+        }
+      },
+      "battery_connection_status": {
+        "name": "Battery Connection",
+        "state": {
+          "connected": "Connected",
+          "unknown": "Unknown"
+        }
+      },
+      "battery_grid_congestion_status": {
+        "name": "Battery Grid Congestion",
+        "state": {
+          "not_enrolled": "Not enrolled",
+          "enrolled": "Enrolled",
+          "active": "Active",
+          "unknown": "Unknown"
+        }
+      },
       "battery_brand": {
         "name": "Battery Brand"
       },

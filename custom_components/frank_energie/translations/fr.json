@@ -1295,6 +1295,31 @@
           "unknown": "Inconnu"
         }
       },
+      "battery_activity_status": {
+        "name": "Activité de la batterie",
+        "state": {
+          "charging": "En charge",
+          "discharging": "En décharge",
+          "standby": "Veille",
+          "unknown": "Inconnu"
+        }
+      },
+      "battery_connection_status": {
+        "name": "Connexion de la batterie",
+        "state": {
+          "connected": "Connectée",
+          "unknown": "Inconnu"
+        }
+      },
+      "battery_grid_congestion_status": {
+        "name": "Congestion du réseau de la batterie",
+        "state": {
+          "not_enrolled": "Non inscrite",
+          "enrolled": "Inscrite",
+          "active": "Active",
+          "unknown": "Inconnu"
+        }
+      },
       "battery_brand": {
         "name": "Marque de la batterie"
       },

@@ -48,7 +48,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 from homeassistant.util import dt as dt_util
-from python_frank_energie.models import EnodeCharger, PriceData
+from python_frank_energie.models import EnodeCharger, PriceData, SmartBatterySummary
 
 from .const import (
     ATTR_FROM_TIME,
@@ -99,6 +99,9 @@ from .const import (
     SERVICE_NAME_SETTINGS,
     SERVICE_NAME_USAGE,
     SERVICE_NAME_USER,
+    SMART_BATTERY_ACTIVITY_STATUSES,
+    SMART_BATTERY_CONNECTION_STATUSES,
+    SMART_BATTERY_GRID_CONGESTION_STATUSES,
     SMART_BATTERY_STATUSES,
     SERVICE_STATUSES,
     SUPPORTED_RESOLUTIONS,
@@ -4715,6 +4718,101 @@ def _get_battery_current_capacity(data: FrankEnergieData, idx: int) -> float | N
     return capacity * round(charge_level) / 100
 
 
+# These summary attributes were added to python-frank-energie after the pinned
+# release. Without them a sensor would stay permanently unavailable, so each is
+# only created when the installed client has it. Remove the gate once the
+# manifest requires a client release that includes them.
+_SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES: Final = (
+    "activity_status",
+    "connection_status",
+    "grid_congestion_status",
+)
+_LIB_SUPPORTED_BATTERY_SUMMARY_FIELDS: Final = frozenset(
+    attribute
+    for attribute in _SMART_BATTERY_SUMMARY_ENUM_ATTRIBUTES
+    if hasattr(SmartBatterySummary, attribute)
+)
+
+
+def _get_battery_enum_state(
+    data: Any, idx: int, attribute: str, options: tuple[str, ...]
+) -> str | None:
+    """Return a summary status for an enum sensor, always one of ``options``.
+
+    A value the integration does not list (for example a member added by a newer
+    client) becomes "unknown": Home Assistant rejects any other enum state.
+    """
+    value = _get_battery_summary_lower(data, idx, attribute)
+    return value if value is None or value in options else "unknown"
+
+
+def _battery_summary_enum_description(
+    base_key: str,
+    i: int,
+    supported: frozenset[str],
+    *,
+    attribute: str,
+    translation_key: str,
+    icon: str,
+    options: tuple[str, ...],
+    enabled_by_default: bool = True,
+) -> FrankEnergieEntityDescription | None:
+    """Describe one enum sensor read from the summary, or None if unsupported."""
+    if attribute not in supported:
+        return None
+    return FrankEnergieEntityDescription(
+        key=f"{base_key}_{attribute}",
+        translation_key=translation_key,
+        authenticated=True,
+        service_name=SERVICE_NAME_BATTERIES,
+        icon=icon,
+        device_class=SensorDeviceClass.ENUM,
+        options=list(options),
+        entity_registry_enabled_default=enabled_by_default,
+        value_fn=lambda data: _get_battery_enum_state(data, i, attribute, options),
+    )
+
+
+def _build_smart_battery_status_descriptions(
+    base_key: str,
+    i: int,
+    supported: frozenset[str] = _LIB_SUPPORTED_BATTERY_SUMMARY_FIELDS,
+) -> list[FrankEnergieEntityDescription]:
+    """Build the activity, connection and congestion sensors for one battery."""
+    candidates = (
+        _battery_summary_enum_description(
+            base_key,
+            i,
+            supported,
+            attribute="activity_status",
+            translation_key="battery_activity_status",
+            icon="mdi:battery-sync",
+            options=SMART_BATTERY_ACTIVITY_STATUSES,
+        ),
+        _battery_summary_enum_description(
+            base_key,
+            i,
+            supported,
+            attribute="connection_status",
+            translation_key="battery_connection_status",
+            icon="mdi:battery-check-outline",
+            options=SMART_BATTERY_CONNECTION_STATUSES,
+        ),
+        _battery_summary_enum_description(
+            base_key,
+            i,
+            supported,
+            attribute="grid_congestion_status",
+            translation_key="battery_grid_congestion_status",
+            icon="mdi:transmission-tower",
+            options=SMART_BATTERY_GRID_CONGESTION_STATUSES,
+            # Most batteries are not enrolled, so it stays off until wanted.
+            enabled_by_default=False,
+        ),
+    )
+    return [description for description in candidates if description is not None]
+
+
 def _build_single_smart_battery_descriptions(
     battery: Any,
     i: int,
@@ -4951,6 +5049,7 @@ def _build_single_smart_battery_descriptions(
                 ),
             ]
         )
+        descriptions.extend(_build_smart_battery_status_descriptions(base_key, i))
 
     return descriptions
 

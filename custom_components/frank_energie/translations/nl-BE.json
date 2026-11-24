@@ -1014,6 +1014,31 @@
           "unknown": "Onbekend"
         }
       },
+      "battery_activity_status": {
+        "name": "Batterijactiviteit",
+        "state": {
+          "charging": "Aan het laden",
+          "discharging": "Aan het ontladen",
+          "standby": "Stand-by",
+          "unknown": "Onbekend"
+        }
+      },
+      "battery_connection_status": {
+        "name": "Batterijverbinding",
+        "state": {
+          "connected": "Verbonden",
+          "unknown": "Onbekend"
+        }
+      },
+      "battery_grid_congestion_status": {
+        "name": "Netcongestie batterij",
+        "state": {
+          "not_enrolled": "Niet aangemeld",
+          "enrolled": "Aangemeld",
+          "active": "Actief",
+          "unknown": "Onbekend"
+        }
+      },
       "battery_brand": {
         "name": "Batterijmerk"
       },
