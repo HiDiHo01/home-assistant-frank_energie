@@ -2834,6 +2834,12 @@ _BATTERY_SENSOR_CASES = [
     # invalid enum state.
     ("battery_activity_status", "activity_status", "HIBERNATING", "unknown"),
     ("battery_connection_status", "connection_status", "CONNECTED", "connected"),
+    (
+        "battery_connection_status",
+        "connection_status",
+        "NO_RECENT_DATA",
+        "no_recent_data",
+    ),
     ("battery_connection_status", "connection_status", "UNKNOWN", "unknown"),
     ("battery_connection_status", "connection_status", None, None),
     ("battery_connection_status", "connection_status", "DISCONNECTED", "unknown"),
@@ -3040,6 +3046,34 @@ async def test_smart_battery_status_sensors_pass_ha_enum_validation(
     state = hass.states.get(sensor.entity_id)
     assert state is not None
     assert state.state == (expected if expected is not None else "unavailable")
+
+
+_LIBRARY_STATUS_ENUM_OPTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("SmartBatteryActivityStatus", const.SMART_BATTERY_ACTIVITY_STATUSES),
+    ("SmartBatteryConnectionStatus", const.SMART_BATTERY_CONNECTION_STATUSES),
+    ("SmartBatteryGridCongestionStatus", const.SMART_BATTERY_GRID_CONGESTION_STATUSES),
+)
+
+
+@pytest.mark.parametrize(
+    ("enum_name", "options"),
+    [
+        pytest.param(name, options, id=name)
+        for name, options in _LIBRARY_STATUS_ENUM_OPTIONS
+    ],
+)
+def test_every_library_status_member_is_a_listed_sensor_option(
+    enum_name: str, options: tuple[str, ...]
+) -> None:
+    """A value the client can return but the sensor does not list would be shown as
+    "unknown". Fail when the client gains a member so it is added deliberately."""
+    from python_frank_energie import domain
+
+    enum_cls = getattr(domain, enum_name, None)
+    if enum_cls is None:
+        pytest.skip(f"the installed client has no {enum_name} yet")
+
+    assert {member.value.lower() for member in enum_cls} <= set(options)
 
 
 def test_smart_battery_status_sensor_translations_ship() -> None:
