@@ -4671,9 +4671,7 @@ class SmartBatteriesData:
         return len(self.batteries)
 
 
-def _get_battery(
-    data: FrankEnergieData | None, battery_id: str
-) -> SmartBattery | None:
+def _get_battery(data: FrankEnergieData | None, battery_id: str) -> SmartBattery | None:
     """Return a battery only when its provider identity is unambiguous."""
     if not battery_id.strip():
         return None
