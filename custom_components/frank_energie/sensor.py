@@ -5561,14 +5561,12 @@ def _build_battery_aggregate_sensors(entry: ConfigEntry) -> list[SensorEntity]:
 
 
 def _get_coordinator_for_description(
-    entry: ConfigEntry, description: FrankEnergieEntityDescription,
+    entry: ConfigEntry,
+    description: FrankEnergieEntityDescription,
 ) -> FrankEnergieCoordinator:
     """Return the sub-coordinator responsible for the given sensor description."""
     runtime_data = entry.runtime_data
-    if (
-        description.invoice_based
-        or description.service_name == SERVICE_NAME_INVOICES
-    ):
+    if description.invoice_based or description.service_name == SERVICE_NAME_INVOICES:
         return runtime_data.invoice_coordinator
     if description.key == "contract_price_resolution_state":
         return runtime_data.price_coordinator
