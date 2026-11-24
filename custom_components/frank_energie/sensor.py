@@ -60,6 +60,7 @@ from .const import (
     BATTERY_STRATEGY_OPTIONS,
     DATA_BATTERIES,
     DATA_BATTERY_SESSIONS,
+    DATA_BATTERY_STATUS_HISTORY,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -4693,6 +4694,23 @@ def _get_battery_summary_lower(data: Any, idx: int, key: str) -> str | None:
     return val.lower() if val else None
 
 
+def _get_battery_status_attributes(data: Any, idx: int) -> dict[str, object]:
+    """Describe the last status the API reported while the current one is missing.
+
+    These are historical: the state itself stays whatever the summary says, so
+    a plan from earlier is never presented as the current one.
+    """
+    battery = _get_battery(data, idx)
+    history = data.get(DATA_BATTERY_STATUS_HISTORY) if battery is not None else None
+    reported = history.get(battery.id) if history else None
+    if reported is None:
+        return {}
+    return {
+        "last_reported_status": reported.status.lower(),
+        "last_reported_status_seen_at": reported.seen_at.isoformat(),
+    }
+
+
 def _get_battery_current_capacity(data: FrankEnergieData, idx: int) -> float | None:
     """Calculate stored energy in kWh from capacity and displayed charge percentage."""
     battery = _get_battery(data, idx)
@@ -5027,6 +5045,9 @@ def _build_single_smart_battery_descriptions(
                     options=list(SMART_BATTERY_STATUSES),
                     value_fn=lambda data, idx=i: _get_battery_summary_lower(
                         data, idx, "last_known_status"
+                    ),
+                    attr_fn=lambda data, idx=i: _get_battery_status_attributes(
+                        data, idx
                     ),
                 ),
                 FrankEnergieEntityDescription(
