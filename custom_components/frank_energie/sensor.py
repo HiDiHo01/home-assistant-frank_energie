@@ -4885,7 +4885,9 @@ def _build_single_smart_battery_descriptions(
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:identifier",
-                value_fn=lambda data: _get_battery_field(data, battery_id, "external_reference"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, "external_reference"
+                ),
                 entity_registry_enabled_default=False,
             ),
             FrankEnergieEntityDescription(
@@ -4897,7 +4899,9 @@ def _build_single_smart_battery_descriptions(
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
-                value_fn=lambda data: _get_battery_field(data, battery_id, "max_charge_power"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, "max_charge_power"
+                ),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_max_discharge_power",
@@ -4908,7 +4912,9 @@ def _build_single_smart_battery_descriptions(
                 device_class=SensorDeviceClass.POWER,
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
-                value_fn=lambda data: _get_battery_field(data, battery_id, "max_discharge_power"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, "max_discharge_power"
+                ),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_capacity",
@@ -4936,7 +4942,9 @@ def _build_single_smart_battery_descriptions(
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:calendar-clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
-                value_fn=lambda data: _get_battery_field(data, battery_id, "created_at"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, "created_at"
+                ),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_updated_at",
@@ -4945,7 +4953,9 @@ def _build_single_smart_battery_descriptions(
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:calendar-clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
-                value_fn=lambda data: _get_battery_field(data, battery_id, "updated_at"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, "updated_at"
+                ),
             ),
         ]
     )
@@ -5437,7 +5447,9 @@ def _async_setup_smart_battery_sensors(
                 if not async_migrate_battery_sensor_identity(
                     hass, entry, battery_id, description.key
                 ):
-                    _LOGGER.warning("Skipping battery sensor with ambiguous registry identity")
+                    _LOGGER.warning(
+                        "Skipping battery sensor with ambiguous registry identity"
+                    )
                     continue
                 entities.append(
                     FrankEnergieSmartBatterySensor(
@@ -5669,7 +5681,9 @@ async def async_setup_entry(
                     )
 
     if (batteries := battery_coordinator.data.get(DATA_BATTERIES)) and batteries.batteries:
-        _LOGGER.debug("Setting up aggregate battery sensors for %d batteries", len(batteries.batteries))
+        _LOGGER.debug(
+            "Setting up aggregate battery sensors for %d batteries", len(batteries.batteries)
+        )
         aggregated_battery_descriptions = (
             _build_aggregated_smart_batteries_descriptions()
         )
