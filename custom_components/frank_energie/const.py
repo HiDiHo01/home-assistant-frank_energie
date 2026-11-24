@@ -160,6 +160,27 @@ SMART_BATTERY_STATUSES: Final[tuple[str, ...]] = (
     "unknown",
 )
 
+# Observed ``activityStatus`` / ``status`` values of a smart battery summary.
+# Unrecognised provider values reach the sensor as "unknown".
+SMART_BATTERY_ACTIVITY_STATUSES: Final[tuple[str, ...]] = (
+    "charging",
+    "discharging",
+    "standby",
+    "unknown",
+)
+SMART_BATTERY_CONNECTION_STATUSES: Final[tuple[str, ...]] = (
+    "connected",
+    "unknown",
+)
+# Only "not_enrolled" has been observed; "enrolled" and "active" are inferred
+# from the Frank Energie app's translation keys.
+SMART_BATTERY_GRID_CONGESTION_STATUSES: Final[tuple[str, ...]] = (
+    "not_enrolled",
+    "enrolled",
+    "active",
+    "unknown",
+)
+
 # Selectable modes when the library cannot report a battery's own options.
 BATTERY_MODE_OPTIONS: Final[list[str]] = [
     "self_consumption_mix",
