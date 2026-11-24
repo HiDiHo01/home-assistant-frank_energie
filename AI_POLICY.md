@@ -42,6 +42,7 @@ AI-generated code should:
 - use lazy `%` logging formatting
 - provide descriptive validation and error messages
 - avoid dead code, duplicate logic, and unnecessary dependencies
+- comply with the [mandatory Cognitive Complexity maximum of 15](AGENTS.md#cognitive-complexity-mandatory-maximum-15) for functions and methods, without bypassing analysis or weakening thresholds
 - maintain backwards compatibility unless a breaking change is intentional and documented
 
 ## Frank Energie-specific guidance
