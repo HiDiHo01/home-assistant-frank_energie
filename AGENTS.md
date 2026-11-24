@@ -574,6 +574,14 @@ uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # @v2
 * When enforcing a previously informational lint rule, first measure pre-existing violations. Keep the transition explicit and narrowly scoped, with a follow-up to make the full check blocking once the debt is resolved; do not silently suppress new violations.
 * Run the configured Python-version matrix and relevant pytest suites after lint changes. Review the complete diff and report checks that have not yet completed; never claim a PR is clean based only on the absence of current annotations.
 
+### Cognitive Complexity (mandatory maximum 15)
+
+* Every Python function and method, including async functions, nested callbacks, helpers, fixtures, and test functions, must have a Cognitive Complexity score of at most 15 according to Sonar rule `python:S3776`. The limit is inclusive; a score of 16 or higher is unacceptable.
+* Inspect complexity during implementation and every code review, including all new or modified functions and their extracted helpers. Refactor any affected function above 15 before considering the change complete. Report unrelated existing violations separately; do not increase the limit or introduce new debt.
+* Prefer cohesive helper extraction, guard clauses, early returns, and reduced nesting while preserving behavior, async semantics, error handling, and regression coverage. Do not hide complexity with suppressions, exclusions, quality-profile changes, or a wider lint baseline.
+* Verify the score using the configured SonarQube Cloud analysis or an equivalent implementation of the same rule. Check individual findings for the final PR head, not only the overall Quality Gate. If analysis is unavailable, inspect control flow, report any estimated score as an estimate, and leave verification pending. Never claim a measured score or a passing check without evidence.
+* Cognitive Complexity is distinct from Flake8's McCabe cyclomatic complexity (`C901`). Both requirements remain independently applicable; passing either does not establish compliance with the other.
+
 ## 17. Home Assistant Integration Quality Scale
 
 Use the official Integration Quality Scale as the architectural and user-experience benchmark.
@@ -828,6 +836,7 @@ Review this repository as a senior Python engineer specializing in Home Assistan
 * Avoid unnecessary imports, mutable defaults, broad exception handling, and redundant abstractions.
 * Use lazy `%` formatting in logging calls.
 * Use timezone-aware datetimes.
+* Enforce the [mandatory Cognitive Complexity limit of 15](#cognitive-complexity-mandatory-maximum-15) for every affected function and method, including test code.
 
 ## Testing
 
@@ -858,6 +867,7 @@ A task is complete only when all applicable conditions are satisfied:
 * [ ] Existing config entries and entity identities remain compatible, or a migration is included.
 * [ ] Relevant automated tests have been added or updated.
 * [ ] Applicable tests and static checks have been executed.
+* [ ] Every new or modified function and method, including extracted helpers, has verified Cognitive Complexity of at most 15; any unavailable verification is explicitly reported and remains pending.
 * [ ] Manifest, translations, and documentation remain valid.
 * [ ] No credentials, secrets, or sensitive diagnostic information have been exposed.
 * [ ] The diff contains no unrelated changes.
