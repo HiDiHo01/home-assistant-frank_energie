@@ -288,3 +288,87 @@ def test_flake8_baseline_fails_when_scanner_errors() -> None:
     )
     with patch.object(module.subprocess, "run", return_value=result):
         assert module.main() == 1
+
+def test_manual_development_validation_is_opt_in() -> None:
+    """Keep manual Ruff and repository exports outside normal PR jobs."""
+    workflow = _read_workflow("ci.yaml")
+    export = workflow[True]["workflow_dispatch"]["inputs"]["export_git_bundle"]
+    assert export["type"] == "boolean"
+    assert export["default"] is False
+    bundle = workflow["jobs"]["export-git-bundle"]
+    assert bundle["if"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.export_git_bundle"
+        " && github.event.repository.private == false }}"
+    )
+    assert bundle["permissions"] == {"contents": "read"}
+    checkout = _named_step("ci.yaml", "export-git-bundle", "Checkout full Git history")
+    assert checkout["with"] == {
+        "ref": "${{ github.sha }}",
+        "fetch-depth": 0,
+        "persist-credentials": False,
+    }
+    upload = _named_step("ci.yaml", "export-git-bundle", "Upload offline Git bundle")
+    assert upload["with"]["path"] == "${{ runner.temp }}/repository.bundle"
+    assert upload["with"]["retention-days"] == 7
+    for name, args in (
+        ("Manual Ruff lint", "check custom_components tests"),
+        ("Manual Ruff format check", "format --check --diff custom_components tests"),
+    ):
+        step = _named_step("ci.yaml", "run", name)
+        assert "github.event_name == 'workflow_dispatch'" in step["if"]
+        assert "!matrix.experimental" in step["if"]
+        assert step["with"]["version"] == "0.15.18"
+        assert step["with"]["args"] == args
+
+
+def test_offline_git_bundle_restores_selected_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the actual bundle step and restore history without a remote network."""
+    source = tmp_path / "source"
+    source.mkdir()
+
+    def git(*args: str, cwd: Path = source) -> str:
+        """Execute Git only against the synthetic test repository."""
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git("init", "-b", "main")
+    git("config", "user.name", "Fixture")
+    git("config", "user.email", "fixture@example.invalid")
+    git("config", "commit.gpgsign", "false")
+    git("commit", "--allow-empty", "-m", "initial")
+    (source / "tracked.txt").write_text("tracked", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-m", "selected")
+    selected = git("rev-parse", "HEAD")
+    git("switch", "-c", "unrelated")
+    git("commit", "--allow-empty", "-m", "unrelated")
+    unrelated = git("rev-parse", "HEAD")
+    git("checkout", "--detach", selected)
+    (source / "untracked.txt").write_text("fixture", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_SHA", selected)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    step = _named_step("ci.yaml", "export-git-bundle", "Create and verify Git bundle")
+    subprocess.run(
+        ["bash", "-c", str(step["run"])],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    restored = tmp_path / "restored"
+    git("clone", str(tmp_path / "repository.bundle"), str(restored))
+    assert git("rev-parse", "HEAD", cwd=restored) == selected
+    assert git("rev-list", "--count", "HEAD", cwd=restored) == "2"
+    assert (restored / "tracked.txt").read_text(encoding="utf-8") == "tracked"
+    assert not (restored / "untracked.txt").exists()
+    assert unrelated not in git("rev-list", "--all", cwd=restored).splitlines()

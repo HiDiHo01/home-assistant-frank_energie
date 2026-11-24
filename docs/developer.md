@@ -32,6 +32,36 @@ The workflow uses Ubuntu 24.04 because GitHub publishes interpreter builds for b
 
 `poetry.lock` is authoritative for reproducibility. Update Home Assistant and the matching `pytest-homeassistant` version together, regenerate the lockfile with the pinned Poetry version, and rerun the required 3.14.10 job plus the experimental 3.15.2 job. Record the actual interpreter and dependency versions with the results. The existing three skipped teardown cases remain visible in pytest's summary.
 
+## Remote development when local Git or dependencies are unavailable
+
+After the workflow change has been merged, open **Actions → Flake8 and pytest
+→ Run workflow** and select the branch to validate. Manual runs retain the
+normal locked Python 3.14.10 environment, full pytest suite, Flake8 gates and
+JUnit report, and additionally run the configured Ruff lint and format checks.
+The experimental Python job remains non-blocking.
+
+Enable `export_git_bundle` only when an offline Git checkout is needed. This
+separate read-only job exports the selected commit and its complete reachable
+history (not every branch or tag), verifies the bundle, and uploads it for
+seven days. It does not archive untracked files, local configuration, runner
+credentials, or the installed virtual environment. Export is disabled by
+default and restricted to manual runs of non-private repositories. Committed
+history is included, so review its suitability before exporting.
+
+Download the `repository-bundle-<commit>` artifact, extract the ZIP, and run:
+
+```sh
+git clone repository.bundle frank-energie-offline
+cd frank-energie-offline
+git switch -c offline-development
+```
+
+The clone starts at the exported commit with a detached HEAD. The new branch
+allows local edits. Restore dependencies separately; the bundle is not a
+Python environment. GitHub Actions remains the authoritative full-test
+environment when the local interpreter or network is unavailable. No workflow
+publishes, pushes, or merges changes.
+
 ## Repository Structure
 
 ```text
