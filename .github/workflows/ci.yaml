@@ -5,6 +5,12 @@ on:
     branches: ["main"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      export_git_bundle:
+        description: Export selected commit and its Git history for offline development
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -56,6 +62,7 @@ jobs:
             sonarcloud.io:443
             objects.githubusercontent.com:443
             release-assets.githubusercontent.com:443
+            releases.astral.sh:443
             uploads.github.com:443
             upload.pypi.org:443
             test.pypi.org:443
@@ -235,6 +242,20 @@ jobs:
         run: |
           poetry run python -m pytest tests -ra --junitxml=pytest-results.xml
 
+      - name: Manual Ruff lint
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && !matrix.experimental && steps.environment.outcome == 'success' }}
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # upstream commit 2026-07-05
+        with:
+          version: "0.15.18"
+          args: "check custom_components tests"
+
+      - name: Manual Ruff format check
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && !matrix.experimental && steps.environment.outcome == 'success' }}
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # upstream commit 2026-07-05
+        with:
+          version: "0.15.18"
+          args: "format --check --diff custom_components tests"
+
       - name: Run Python 3.15 upstream client smoke tests
         if: ${{ matrix.experimental }}
         id: smoke
@@ -264,3 +285,42 @@ jobs:
             echo "The wheel availability audit above lists blockers for the full Home Assistant environment."
             echo "This job does not establish official Home Assistant Python 3.15 support."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  export-git-bundle:
+    name: Export offline Git bundle
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.export_git_bundle && github.event.repository.private == false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # upstream commit 2026-11-18
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            api.github.com:443
+            github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+      - name: Checkout full Git history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # upstream commit 2026-07-17
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Create and verify Git bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse --is-shallow-repository)" = false
+          git bundle create "$RUNNER_TEMP/repository.bundle" HEAD
+          git bundle verify "$RUNNER_TEMP/repository.bundle"
+      - name: Upload offline Git bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # upstream commit 2026-10-07
+        with:
+          name: repository-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/repository.bundle
+          if-no-files-found: error
+          retention-days: 7
