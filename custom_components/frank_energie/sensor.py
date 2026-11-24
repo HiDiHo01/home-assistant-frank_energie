@@ -6,6 +6,7 @@ Sensor platform for Frank Energie integration."""
 # VERSION = "2026.6.21"
 
 import asyncio
+from collections import Counter
 import inspect
 import logging
 from dataclasses import asdict, dataclass, field
@@ -48,7 +49,12 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 from homeassistant.util import dt as dt_util
-from python_frank_energie.models import EnodeCharger, PriceData, SmartBatterySummary
+from python_frank_energie.models import (
+    EnodeCharger,
+    PriceData,
+    SmartBattery,
+    SmartBatterySummary,
+)
 
 from .const import (
     ATTR_FROM_TIME,
@@ -4526,7 +4532,9 @@ class FrankEnergieSmartBatterySensor(FrankEnergieSensor):
         self._battery_name = battery_name
         self._battery_brand = battery_brand
         self._via_device_id = via_device_id
-        self._attr_unique_id = battery_sensor_unique_id(entry, battery_id, description.key)
+        self._attr_unique_id = battery_sensor_unique_id(
+            entry, battery_id, description.key
+        )
 
     @property
     def device_info(self) -> DeviceInfo | None:
@@ -4663,19 +4671,28 @@ class SmartBatteriesData:
         return len(self.batteries)
 
 
-def _get_battery(data: Any, battery_id: str) -> Any | None:
+def _get_battery(
+    data: FrankEnergieData | None, battery_id: str
+) -> SmartBattery | None:
     """Return a battery only when its provider identity is unambiguous."""
+    if not battery_id.strip():
+        return None
     matches = [
         battery
-        for battery in _get_batteries_from_data(data or {})
+        for battery in _get_batteries_from_data(data)
         if getattr(battery, "id", None) == battery_id
     ]
     return matches[0] if len(matches) == 1 else None
 
 
-def _get_battery_field(data: FrankEnergieData, battery_id: str, key: str) -> Any | None:
-    """Read current inventory metadata instead of capturing setup-time values."""
-    return getattr(_get_battery(data, battery_id), key, None)
+def _get_battery_field(
+    data: FrankEnergieData,
+    battery_id: str,
+    accessor: Callable[[SmartBattery], StateType],
+) -> StateType:
+    """Read typed, current inventory metadata instead of capturing setup values."""
+    battery = _get_battery(data, battery_id)
+    return accessor(battery) if battery is not None else None
 
 
 def _get_battery_setting(data: Any, battery_id: str, key: str) -> Any | None:
@@ -4710,7 +4727,9 @@ def _get_battery_summary_lower(data: Any, battery_id: str, key: str) -> str | No
     return val.lower() if isinstance(val, str) and val else None
 
 
-def _get_battery_current_capacity(data: FrankEnergieData, battery_id: str) -> float | None:
+def _get_battery_current_capacity(
+    data: FrankEnergieData, battery_id: str
+) -> float | None:
     """Calculate stored energy in kWh from capacity and displayed charge percentage."""
     battery = _get_battery(data, battery_id)
     if battery is None or battery.summary is None:
@@ -4764,16 +4783,17 @@ def _get_battery_enum_state(
     return value if value is None or value in options else "unknown"
 
 
-def _get_battery_steering_state(
-    data: FrankEnergieData, battery_id: str
-) -> str | None:
+def _get_battery_steering_state(data: FrankEnergieData, battery_id: str) -> str | None:
     """Distinguish a missing summary from an unknown steering plan."""
     battery = _get_battery(data, battery_id)
     if battery is None or battery.summary is None:
         return None
-    return _get_battery_enum_state(
-        data, battery_id, "last_known_status", SMART_BATTERY_STATUSES
-    ) or "unknown"
+    return (
+        _get_battery_enum_state(
+            data, battery_id, "last_known_status", SMART_BATTERY_STATUSES
+        )
+        or "unknown"
+    )
 
 
 def _battery_summary_enum_description(
@@ -4799,7 +4819,9 @@ def _battery_summary_enum_description(
         device_class=SensorDeviceClass.ENUM,
         options=list(options),
         entity_registry_enabled_default=enabled_by_default,
-        value_fn=lambda data: _get_battery_enum_state(data, battery_id, attribute, options),
+        value_fn=lambda data: _get_battery_enum_state(
+            data, battery_id, attribute, options
+        ),
     )
 
 
@@ -4867,7 +4889,9 @@ def _build_single_smart_battery_descriptions(
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:battery",
-                value_fn=lambda data: _get_battery_field(data, battery_id, "brand"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, lambda battery: battery.brand
+                ),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_id",
@@ -4876,7 +4900,9 @@ def _build_single_smart_battery_descriptions(
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:fingerprint",
                 entity_category=EntityCategory.DIAGNOSTIC,
-                value_fn=lambda data: _get_battery_field(data, battery_id, "id"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, lambda battery: battery.id
+                ),
                 entity_registry_enabled_default=False,
             ),
             FrankEnergieEntityDescription(
@@ -4886,7 +4912,7 @@ def _build_single_smart_battery_descriptions(
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:identifier",
                 value_fn=lambda data: _get_battery_field(
-                    data, battery_id, "external_reference"
+                    data, battery_id, lambda battery: battery.external_reference
                 ),
                 entity_registry_enabled_default=False,
             ),
@@ -4900,7 +4926,7 @@ def _build_single_smart_battery_descriptions(
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
                 value_fn=lambda data: _get_battery_field(
-                    data, battery_id, "max_charge_power"
+                    data, battery_id, lambda battery: battery.max_charge_power
                 ),
             ),
             FrankEnergieEntityDescription(
@@ -4913,7 +4939,7 @@ def _build_single_smart_battery_descriptions(
                 native_unit_of_measurement=UnitOfPower.KILO_WATT,
                 suggested_display_precision=1,
                 value_fn=lambda data: _get_battery_field(
-                    data, battery_id, "max_discharge_power"
+                    data, battery_id, lambda battery: battery.max_discharge_power
                 ),
             ),
             FrankEnergieEntityDescription(
@@ -4925,7 +4951,9 @@ def _build_single_smart_battery_descriptions(
                 device_class=SensorDeviceClass.ENERGY,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
                 suggested_display_precision=0,
-                value_fn=lambda data: _get_battery_field(data, battery_id, "capacity"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, lambda battery: battery.capacity
+                ),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_provider",
@@ -4933,7 +4961,9 @@ def _build_single_smart_battery_descriptions(
                 authenticated=True,
                 service_name=SERVICE_NAME_BATTERIES,
                 icon="mdi:factory",
-                value_fn=lambda data: _get_battery_field(data, battery_id, "provider"),
+                value_fn=lambda data: _get_battery_field(
+                    data, battery_id, lambda battery: battery.provider
+                ),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_created_at",
@@ -4943,7 +4973,7 @@ def _build_single_smart_battery_descriptions(
                 icon="mdi:calendar-clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
                 value_fn=lambda data: _get_battery_field(
-                    data, battery_id, "created_at"
+                    data, battery_id, lambda battery: battery.created_at
                 ),
             ),
             FrankEnergieEntityDescription(
@@ -4954,7 +4984,7 @@ def _build_single_smart_battery_descriptions(
                 icon="mdi:calendar-clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
                 value_fn=lambda data: _get_battery_field(
-                    data, battery_id, "updated_at"
+                    data, battery_id, lambda battery: battery.updated_at
                 ),
             ),
         ]
@@ -5010,7 +5040,9 @@ def _build_single_smart_battery_descriptions(
                         )
                     )
                     is not None
-                    and _get_battery_summary_lower(data, battery_id, "last_known_status")
+                    and _get_battery_summary_lower(
+                        data, battery_id, "last_known_status"
+                    )
                     != "status_unreliable_data"
                     else None
                 ),
@@ -5068,7 +5100,8 @@ def _build_single_smart_battery_descriptions(
     return descriptions
 
 
-def _get_batteries_from_data(data: Any) -> list:
+def _get_batteries_from_data(data: FrankEnergieData | None) -> list[SmartBattery]:
+    """Return the SDK collection, treating an absent or malformed list as empty."""
     bats = (data or {}).get(DATA_BATTERIES)
     return (
         bats.batteries
@@ -5420,6 +5453,24 @@ def _async_setup_battery_period_sensors(
     )
 
 
+def _discoverable_battery_ids(
+    coordinator: FrankEnergieBatteryCoordinator,
+) -> set[str] | None:
+    """Discover unambiguous IDs without treating partial inventory as removal."""
+    if not coordinator.last_update_success:
+        return None
+    inventory = (coordinator.data or {}).get(DATA_BATTERIES)
+    if not isinstance(getattr(inventory, "batteries", None), list):
+        return None
+    counts = Counter(
+        battery_id
+        for battery in inventory.batteries
+        if isinstance(battery_id := getattr(battery, "id", None), str)
+        and battery_id.strip()
+    )
+    return {battery_id for battery_id, count in counts.items() if count == 1}
+
+
 @callback
 def _async_setup_smart_battery_sensors(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -5476,8 +5527,39 @@ def _async_setup_smart_battery_sensors(
         )
 
     async_watch_battery_inventory(
-        entry, _async_discover, still_registered=still_registered
+        entry,
+        _async_discover,
+        still_registered=still_registered,
+        inventory_ids=_discoverable_battery_ids,
     )
+
+
+def _build_battery_aggregate_sensors(entry: ConfigEntry) -> list[SensorEntity]:
+    """Build existing service aggregates independently of per-battery discovery."""
+    battery_coordinator = entry.runtime_data.battery_coordinator
+    entities: list[SensorEntity] = []
+    if (
+        batteries := battery_coordinator.data.get(DATA_BATTERIES)
+    ) and batteries.batteries:
+        _LOGGER.debug(
+            "Setting up aggregate battery sensors for %d batteries",
+            len(batteries.batteries),
+        )
+        aggregated_battery_descriptions = (
+            _build_aggregated_smart_batteries_descriptions()
+        )
+        for description in (
+            list(STATIC_BATTERY_SENSOR_TYPES) + aggregated_battery_descriptions
+        ):
+            if (
+                not description.authenticated
+                or battery_coordinator.api.is_authenticated
+            ):
+                entities.append(
+                    FrankEnergieSensor(battery_coordinator, description, entry)
+                )
+                _LOGGER.debug("Added aggregate battery sensor for %s", description.key)
+    return entities
 
 
 async def async_setup_entry(
@@ -5680,24 +5762,7 @@ async def async_setup_entry(
                         )
                     )
 
-    if (batteries := battery_coordinator.data.get(DATA_BATTERIES)) and batteries.batteries:
-        _LOGGER.debug(
-            "Setting up aggregate battery sensors for %d batteries", len(batteries.batteries)
-        )
-        aggregated_battery_descriptions = (
-            _build_aggregated_smart_batteries_descriptions()
-        )
-        for description in (
-            list(STATIC_BATTERY_SENSOR_TYPES) + aggregated_battery_descriptions
-        ):
-            if (
-                not description.authenticated
-                or battery_coordinator.api.is_authenticated
-            ):
-                entities.append(
-                    FrankEnergieSensor(battery_coordinator, description, config_entry)
-                )
-                _LOGGER.debug("Added aggregate battery sensor for %s", description.key)
+    entities.extend(_build_battery_aggregate_sensors(config_entry))
 
     enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
     num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
