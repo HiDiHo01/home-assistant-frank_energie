@@ -4764,6 +4764,18 @@ def _get_battery_enum_state(
     return value if value is None or value in options else "unknown"
 
 
+def _get_battery_steering_state(
+    data: FrankEnergieData, battery_id: str
+) -> str | None:
+    """Distinguish a missing summary from an unknown steering plan."""
+    battery = _get_battery(data, battery_id)
+    if battery is None or battery.summary is None:
+        return None
+    return _get_battery_enum_state(
+        data, battery_id, "last_known_status", SMART_BATTERY_STATUSES
+    ) or "unknown"
+
+
 def _battery_summary_enum_description(
     base_key: str,
     battery_id: str,
@@ -5003,9 +5015,7 @@ def _build_single_smart_battery_descriptions(
                 state_class=SensorStateClass.MEASUREMENT,
                 native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
                 suggested_display_precision=2,
-                value_fn=lambda data: _get_battery_current_capacity(
-                    data, battery_id
-                ),
+                value_fn=lambda data: _get_battery_current_capacity(data, battery_id),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_status",
@@ -5015,9 +5025,7 @@ def _build_single_smart_battery_descriptions(
                 icon="mdi:battery-clock",
                 device_class=SensorDeviceClass.ENUM,
                 options=list(SMART_BATTERY_STATUSES),
-                value_fn=lambda data: _get_battery_enum_state(
-                    data, battery_id, "last_known_status", SMART_BATTERY_STATUSES
-                ),
+                value_fn=lambda data: _get_battery_steering_state(data, battery_id),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_last_update",
@@ -5052,7 +5060,11 @@ def _build_single_smart_battery_descriptions(
 
 def _get_batteries_from_data(data: Any) -> list:
     bats = (data or {}).get(DATA_BATTERIES)
-    return bats.batteries if bats and isinstance(getattr(bats, "batteries", None), list) else []
+    return (
+        bats.batteries
+        if bats and isinstance(getattr(bats, "batteries", None), list)
+        else []
+    )
 
 
 def _get_total_max_charge_power(data: Any) -> float | None:
@@ -5410,7 +5422,10 @@ def _async_setup_smart_battery_sensors(
     def _async_discover(ids: list[str], _first: bool) -> None:
         """Use the current inventory and never refresh the API during discovery."""
         parent_id = _service_parent_device_id(
-            hass, entry, coordinator, SERVICE_NAME_BATTERIES,
+            hass,
+            entry,
+            coordinator,
+            SERVICE_NAME_BATTERIES,
             coordinator.data.get(DATA_USER),
         )
         entities: list[SensorEntity] = []
@@ -5419,30 +5434,34 @@ def _async_setup_smart_battery_sensors(
             if battery is None:
                 continue
             for description in _build_single_smart_battery_descriptions(battery):
-                if async_migrate_battery_sensor_identity(
+                if not async_migrate_battery_sensor_identity(
                     hass, entry, battery_id, description.key
                 ):
-                    entities.append(
-                        FrankEnergieSmartBatterySensor(
-                            coordinator,
-                            description,
-                            entry,
-                            battery_id,
-                            f"Smart Battery {battery_id}",
-                            battery.brand,
-                            parent_id,
-                        )
+                    _LOGGER.warning("Skipping battery sensor with ambiguous registry identity")
+                    continue
+                entities.append(
+                    FrankEnergieSmartBatterySensor(
+                        coordinator,
+                        description,
+                        entry,
+                        battery_id,
+                        f"Smart Battery {battery_id}",
+                        battery.brand,
+                        parent_id,
                     )
+                )
         if entities:
             async_add_entities(entities)
 
     def still_registered(battery_id: str) -> bool:
         """Keep existing entities on temporary absence; recreate after deletion."""
-        entity_id = registry.async_get_entity_id(
-            "sensor", DOMAIN, battery_sensor_unique_id(entry, battery_id, "smart_battery_id")
+        prefix = battery_sensor_unique_id(entry, battery_id, "smart_battery_")
+        return any(
+            record.domain == "sensor"
+            and record.platform == DOMAIN
+            and record.unique_id.startswith(prefix)
+            for record in er.async_entries_for_config_entry(registry, entry.entry_id)
         )
-        record = registry.async_get(entity_id) if entity_id is not None else None
-        return record is not None and record.config_entry_id == entry.entry_id
 
     async_watch_battery_inventory(
         entry, _async_discover, still_registered=still_registered
@@ -5649,16 +5668,8 @@ async def async_setup_entry(
                         )
                     )
 
-    if (
-        batteries := battery_coordinator.data.get(DATA_BATTERIES)
-    ) and batteries.batteries:
-        _LOGGER.debug("Setting up smart battery sensors: %s", batteries)
-        # <class 'python_frank_energie.models.SmartBatteries'>
-        _LOGGER.debug("Setting up smart battery type: %s", type(batteries))
-        _LOGGER.debug("Number of smart battery sensors: %d", len(batteries.batteries))
-        _LOGGER.debug(
-            "Setting up smart battery type: %s", type(batteries.batteries)
-        )  # <class 'list'>
+    if (batteries := battery_coordinator.data.get(DATA_BATTERIES)) and batteries.batteries:
+        _LOGGER.debug("Setting up aggregate battery sensors for %d batteries", len(batteries.batteries))
         aggregated_battery_descriptions = (
             _build_aggregated_smart_batteries_descriptions()
         )

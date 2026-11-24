@@ -148,11 +148,14 @@ def async_migrate_battery_sensor_identity(
     existing_id = registry.async_get_entity_id("sensor", DOMAIN, new_unique_id)
     if existing_id is not None:
         existing = registry.async_get(existing_id)
-        return existing is not None and existing.config_entry_id == entry.entry_id
+        return existing is not None and _battery_sensor_owned(
+            hass, entry, existing, battery_id
+        )
 
     suffix = key.removeprefix("smart_battery_")
-    prefix = re.escape(f"{entry.unique_id}.{battery_id}_smart_battery_")
-    pattern = re.compile(rf"{prefix}[0-9]+_{re.escape(suffix)}")
+    pattern = re.compile(
+        rf".+\.{re.escape(battery_id)}_smart_battery_[0-9]+_{re.escape(suffix)}"
+    )
     candidates = [
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
@@ -165,15 +168,25 @@ def async_migrate_battery_sensor_identity(
     if len(candidates) != 1:
         return False
     legacy = candidates[0]
-    device = dr.async_get(hass).async_get(legacy.device_id) if legacy.device_id else None
-    if (
-        device is None
-        or device.config_entry_id != entry.entry_id
-        or (DOMAIN, battery_id) not in device.identifiers
-    ):
+    if not _battery_sensor_owned(hass, entry, legacy, battery_id):
         return False
     registry.async_update_entity(legacy.entity_id, new_unique_id=new_unique_id)
     return True
+
+
+def _battery_sensor_owned(
+    hass: HomeAssistant, entry: ConfigEntry, entity: er.RegistryEntry, battery_id: str
+) -> bool:
+    """Prove registry ownership using the persisted physical device identity."""
+    device = (
+        dr.async_get(hass).async_get(entity.device_id) if entity.device_id else None
+    )
+    return (
+        entity.config_entry_id == entry.entry_id
+        and device is not None
+        and device.config_entry_id == entry.entry_id
+        and (DOMAIN, battery_id) in device.identifiers
+    )
 
 
 def _has_battery_sensor(
@@ -196,7 +209,8 @@ def _has_battery_sensor(
         and entity.domain == "sensor"
         and (
             marker.fullmatch(entity.unique_id) is not None
-            or entity.unique_id == battery_sensor_unique_id(entry, identifier, "smart_battery_id")
+            or entity.unique_id
+            == battery_sensor_unique_id(entry, identifier, "smart_battery_id")
         )
         for entity in er.async_entries_for_device(
             er.async_get(hass), device.id, include_disabled_entities=True
