@@ -1308,6 +1308,7 @@
         "name": "Battery Connection",
         "state": {
           "connected": "Connected",
+          "no_recent_data": "No recent data",
           "unknown": "Unknown"
         }
       },

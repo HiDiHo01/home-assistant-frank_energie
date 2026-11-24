@@ -1235,6 +1235,7 @@
         "name": "Connexion de la batterie",
         "state": {
           "connected": "Connectée",
+          "no_recent_data": "Aucune donnée récente",
           "unknown": "Inconnu"
         }
       },
