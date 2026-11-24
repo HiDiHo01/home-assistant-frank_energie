@@ -289,6 +289,7 @@ def test_flake8_baseline_fails_when_scanner_errors() -> None:
     with patch.object(module.subprocess, "run", return_value=result):
         assert module.main() == 1
 
+
 def test_manual_development_validation_is_opt_in() -> None:
     """Keep manual Ruff and repository exports outside normal PR jobs."""
     workflow = _read_workflow("ci.yaml")
