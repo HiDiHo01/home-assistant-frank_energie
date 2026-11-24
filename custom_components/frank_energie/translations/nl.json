@@ -1027,6 +1027,7 @@
         "name": "Batterijverbinding",
         "state": {
           "connected": "Verbonden",
+          "no_recent_data": "Geen recente gegevens",
           "unknown": "Onbekend"
         }
       },
