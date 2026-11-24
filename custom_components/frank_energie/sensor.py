@@ -5560,6 +5560,183 @@ def _build_battery_aggregate_sensors(entry: ConfigEntry) -> list[SensorEntity]:
     return entities
 
 
+def _get_coordinator_for_description(
+    entry: ConfigEntry, description: FrankEnergieEntityDescription,
+) -> FrankEnergieCoordinator:
+    """Return the sub-coordinator responsible for the given sensor description."""
+    runtime_data = entry.runtime_data
+    if (
+        description.invoice_based
+        or description.service_name == SERVICE_NAME_INVOICES
+    ):
+        return runtime_data.invoice_coordinator
+    if description.key == "contract_price_resolution_state":
+        return runtime_data.price_coordinator
+    if description.service_name in (
+        SERVICE_NAME_PRICES,
+        SERVICE_NAME_GAS_PRICES,
+        SERVICE_NAME_ELEC_PRICES,
+    ):
+        return runtime_data.price_coordinator
+    if description.service_name in (
+        SERVICE_NAME_MONTH_SUMMARY,
+        SERVICE_NAME_COSTS,
+        SERVICE_NAME_USAGE,
+    ):
+        return runtime_data.statistics_coordinator
+    if description.service_name == SERVICE_NAME_BATTERIES:
+        return runtime_data.battery_coordinator
+    if description.service_name == SERVICE_NAME_ENODE_CHARGERS:
+        return runtime_data.charger_coordinator
+    if description.service_name in (
+        SERVICE_NAME_PV_SYSTEMS,
+        SERVICE_NAME_PV_SUMMARY,
+    ):
+        return runtime_data.pv_coordinator
+    if description.service_name == SERVICE_NAME_ENODE_VEHICLES:
+        return runtime_data.vehicle_coordinator
+    if description.service_name in (SERVICE_NAME_SETTINGS, SERVICE_NAME_USER):
+        return runtime_data.settings_coordinator
+    return runtime_data.price_coordinator
+
+
+def _get_estimated_feed_in(user_data: object) -> float | None:
+    """Read the first connection's estimated feed-in for sensor filtering."""
+    connections: list[dict] = []
+    first_connection = None
+    estimated_feed_in = None
+
+    if isinstance(user_data, object) and hasattr(user_data, "connections"):
+        if isinstance(user_data.connections, list):
+            connections = user_data.connections
+        else:
+            _LOGGER.warning(
+                "Expected user_data.connections to be a list, got %s",
+                type(user_data.connections).__name__,
+            )
+    else:
+        _LOGGER.debug(
+            "user_data does not have attribute 'connections' or is not valid: %s",
+            type(user_data).__name__,
+        )
+
+    if connections:
+        first_connection = connections[0]
+        if isinstance(first_connection, dict):
+            estimated_feed_in = first_connection.get("estimatedFeedIn")
+        else:
+            estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
+    else:
+        _LOGGER.debug("No connections found in user_data")
+
+    _LOGGER.debug("estimated_feed_in: %s", estimated_feed_in)
+    return estimated_feed_in
+
+
+def _build_enode_charger_sensors(
+    hass: HomeAssistant, entry: ConfigEntry, user_data: object
+) -> list[SensorEntity]:
+    """Build charger sensors and register their parent before child devices."""
+    charger_coordinator = entry.runtime_data.charger_coordinator
+    entities: list[SensorEntity] = []
+    if (enode := charger_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
+        _LOGGER.debug(
+            "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
+        )
+        # Register the Chargers parent device before its child devices are added.
+        charger_via_device_id = _service_parent_device_id(
+            hass,
+            entry,
+            charger_coordinator,
+            SERVICE_NAME_ENODE_CHARGERS,
+            user_data,
+        )
+        for description in STATIC_ENODE_SENSOR_TYPES:
+            if (
+                not description.authenticated
+                or charger_coordinator.api.is_authenticated
+            ):
+                entities.append(
+                    FrankEnergieSensor(charger_coordinator, description, entry)
+                )
+
+        for charger in enode.chargers:
+            for description in ENODE_CHARGER_SENSOR_TYPES:
+                if (
+                    not description.authenticated
+                    or charger_coordinator.api.is_authenticated
+                ):
+                    entities.append(
+                        EnodeChargerSensor(
+                            charger_coordinator,
+                            description,
+                            charger,
+                            charger_via_device_id,
+                        )
+                    )
+    return entities
+
+
+def _build_enode_vehicle_sensors(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> list[SensorEntity]:
+    """Build vehicle sensors in the existing inventory order."""
+    vehicle_coordinator = entry.runtime_data.vehicle_coordinator
+    entities: list[SensorEntity] = []
+    enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
+    num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
+    _LOGGER.debug("Number of vehicles found: %d", num_vehicles)
+
+    if enode_vehicles and enode_vehicles.vehicles:
+        enode_vehicle_sensors = []
+
+        for veh_idx, vehicle in enumerate(enode_vehicles.vehicles):
+            for description in ENODE_VEHICLE_SENSOR_TYPES:
+                enode_vehicle_sensors.append(
+                    EnodeVehicleSensor(
+                        hass, vehicle_coordinator, description, vehicle, veh_idx
+                    )
+                )
+
+        for entity in enode_vehicle_sensors:
+            # entity.name isn't safe here: it needs self.platform, which
+            # is only set once async_add_entities registers the entity below.
+            _LOGGER.debug("Added vehicle sensor: %s", entity.unique_id)
+
+        entities.extend(enode_vehicle_sensors)
+    return entities
+
+
+def _build_pv_system_sensors(entry: ConfigEntry) -> list[SensorEntity]:
+    """Build PV system and panel-group sensors from the current inventory."""
+    pv_coordinator = entry.runtime_data.pv_coordinator
+    entities: list[SensorEntity] = []
+    pv_systems = pv_coordinator.data.get(DATA_PV_SYSTEMS)
+    if pv_systems and pv_systems.systems:
+        _LOGGER.debug(
+            "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
+        )
+        for system in pv_systems.systems:
+            if system:
+                entities.extend(
+                    [
+                        *(
+                            FrankEnergiePvSensor(pv_coordinator, system.id, description)
+                            for description in PV_SENSORS
+                        ),
+                    ]
+                )
+                if system.panel_groups:
+                    for group in system.panel_groups:
+                        if group and group.id:
+                            entities.append(
+                                FrankEnergiePvPanelGroupSensor(
+                                    pv_coordinator, system.id, group.id, group.position
+                                )
+                            )
+    return entities
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -5572,54 +5749,11 @@ async def async_setup_entry(
 
     runtime_data = config_entry.runtime_data
     settings_coordinator = runtime_data.settings_coordinator
-    price_coordinator = runtime_data.price_coordinator
     battery_coordinator = runtime_data.battery_coordinator
-    charger_coordinator = runtime_data.charger_coordinator
-    pv_coordinator = runtime_data.pv_coordinator
-    vehicle_coordinator = runtime_data.vehicle_coordinator
-    statistics_coordinator = runtime_data.statistics_coordinator
     invoice_coordinator = runtime_data.invoice_coordinator
 
     _async_remove_deprecated_insight_month_cost_sensor(hass, config_entry)
     _async_migrate_insight_entity_ids(hass, config_entry)
-
-    def _get_coordinator_for_description(
-        description: FrankEnergieEntityDescription,
-    ) -> FrankEnergieCoordinator:
-        """Return the sub-coordinator responsible for the given sensor description."""
-        if (
-            description.invoice_based
-            or description.service_name == SERVICE_NAME_INVOICES
-        ):
-            return invoice_coordinator
-        if description.key == "contract_price_resolution_state":
-            return price_coordinator
-        if description.service_name in (
-            SERVICE_NAME_PRICES,
-            SERVICE_NAME_GAS_PRICES,
-            SERVICE_NAME_ELEC_PRICES,
-        ):
-            return price_coordinator
-        if description.service_name in (
-            SERVICE_NAME_MONTH_SUMMARY,
-            SERVICE_NAME_COSTS,
-            SERVICE_NAME_USAGE,
-        ):
-            return statistics_coordinator
-        if description.service_name == SERVICE_NAME_BATTERIES:
-            return battery_coordinator
-        if description.service_name == SERVICE_NAME_ENODE_CHARGERS:
-            return charger_coordinator
-        if description.service_name in (
-            SERVICE_NAME_PV_SYSTEMS,
-            SERVICE_NAME_PV_SUMMARY,
-        ):
-            return pv_coordinator
-        if description.service_name == SERVICE_NAME_ENODE_VEHICLES:
-            return vehicle_coordinator
-        if description.service_name in (SERVICE_NAME_SETTINGS, SERVICE_NAME_USER):
-            return settings_coordinator
-        return price_coordinator
 
     batteries = battery_coordinator.data.get(DATA_BATTERIES, [])
 
@@ -5659,38 +5793,11 @@ async def async_setup_entry(
             },
         )
 
-    connections: list[dict] = []
-    first_connection = None
-    estimated_feed_in = None
-
-    if isinstance(user_data, object) and hasattr(user_data, "connections"):
-        if isinstance(user_data.connections, list):
-            connections = user_data.connections
-        else:
-            _LOGGER.warning(
-                "Expected user_data.connections to be a list, got %s",
-                type(user_data.connections).__name__,
-            )
-    else:
-        _LOGGER.debug(
-            "user_data does not have attribute 'connections' or is not valid: %s",
-            type(user_data).__name__,
-        )
-
-    if connections:
-        first_connection = connections[0]
-        if isinstance(first_connection, dict):
-            estimated_feed_in = first_connection.get("estimatedFeedIn")
-        else:
-            estimated_feed_in = getattr(first_connection, "estimatedFeedIn", None)
-    else:
-        _LOGGER.debug("No connections found in user_data")
-
-    _LOGGER.debug("estimated_feed_in: %s", estimated_feed_in)
+    estimated_feed_in = _get_estimated_feed_in(user_data)
 
     entities = [
         FrankEnergieSensor(
-            _get_coordinator_for_description(description),
+            _get_coordinator_for_description(config_entry, description),
             description,
             config_entry,
             invoice_coordinator=(
@@ -5709,7 +5816,9 @@ async def async_setup_entry(
             )
             and (
                 not description.authenticated
-                or _get_coordinator_for_description(description).api.is_authenticated
+                or _get_coordinator_for_description(
+                    config_entry, description
+                ).api.is_authenticated
             )
             and (not description.requires_known_contract or contracts is not None)
             and (
@@ -5724,89 +5833,13 @@ async def async_setup_entry(
         )
     ]
 
-    if (enode := charger_coordinator.data.get(DATA_ENODE_CHARGERS)) and enode.chargers:
-        _LOGGER.debug(
-            "Setting up Enode charger sensors for %d chargers", len(enode.chargers)
-        )
-        # Register the Chargers parent device before its child devices are added.
-        charger_via_device_id = _service_parent_device_id(
-            hass,
-            config_entry,
-            charger_coordinator,
-            SERVICE_NAME_ENODE_CHARGERS,
-            user_data,
-        )
-        for description in STATIC_ENODE_SENSOR_TYPES:
-            if (
-                not description.authenticated
-                or charger_coordinator.api.is_authenticated
-            ):
-                entities.append(
-                    FrankEnergieSensor(charger_coordinator, description, config_entry)
-                )
-
-        for charger in enode.chargers:
-            for description in ENODE_CHARGER_SENSOR_TYPES:
-                if (
-                    not description.authenticated
-                    or charger_coordinator.api.is_authenticated
-                ):
-                    entities.append(
-                        EnodeChargerSensor(
-                            charger_coordinator,
-                            description,
-                            charger,
-                            charger_via_device_id,
-                        )
-                    )
+    entities.extend(_build_enode_charger_sensors(hass, config_entry, user_data))
 
     entities.extend(_build_battery_aggregate_sensors(config_entry))
 
-    enode_vehicles = vehicle_coordinator.data.get(DATA_ENODE_VEHICLES)
-    num_vehicles = len(enode_vehicles.vehicles) if enode_vehicles else 0
-    _LOGGER.debug("Number of vehicles found: %d", num_vehicles)
+    entities.extend(_build_enode_vehicle_sensors(hass, config_entry))
 
-    if enode_vehicles and enode_vehicles.vehicles:
-        enode_vehicle_sensors = []
-
-        for veh_idx, vehicle in enumerate(enode_vehicles.vehicles):
-            for description in ENODE_VEHICLE_SENSOR_TYPES:
-                enode_vehicle_sensors.append(
-                    EnodeVehicleSensor(
-                        hass, vehicle_coordinator, description, vehicle, veh_idx
-                    )
-                )
-
-        for entity in enode_vehicle_sensors:
-            # entity.name isn't safe here: it needs self.platform, which
-            # is only set once async_add_entities registers the entity below.
-            _LOGGER.debug("Added vehicle sensor: %s", entity.unique_id)
-
-        entities.extend(enode_vehicle_sensors)
-
-    pv_systems = pv_coordinator.data.get(DATA_PV_SYSTEMS)
-    if pv_systems and pv_systems.systems:
-        _LOGGER.debug(
-            "Setting up smart PV sensors for %d systems", len(pv_systems.systems)
-        )
-        for system in pv_systems.systems:
-            if system:
-                entities.extend(
-                    [
-                        *(
-                            FrankEnergiePvSensor(pv_coordinator, system.id, description)
-                            for description in PV_SENSORS
-                        ),
-                    ]
-                )
-                if system.panel_groups:
-                    for group in system.panel_groups:
-                        if group and group.id:
-                            entities.append(
-                                FrankEnergiePvPanelGroupSensor(
-                                    pv_coordinator, system.id, group.id, group.position
-                                )
-                            )
+    entities.extend(_build_pv_system_sensors(config_entry))
 
     try:
         async_add_entities(entities, update_before_add=True)
