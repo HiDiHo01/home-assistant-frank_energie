@@ -56,6 +56,7 @@ WHATSAPP_NL: Final[str] = "+31649163884"
 # --- Component Metadata ---
 ICON: Final[str] = "mdi:currency-eur"
 ICON_CLOCK_OUTLINE: Final[str] = "mdi:clock-outline"
+ICON_TRANSMISSION_TOWER: Final[str] = "mdi:transmission-tower"
 COMPONENT_TITLE: Final[str] = "Frank Energie"
 MANUFACTURER_FRANK_ENERGIE: Final[str] = "Frank Energie"
 
