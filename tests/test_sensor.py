@@ -2484,7 +2484,7 @@ async def _battery_strategy_sensor_state(
         settings=SmartBatterySettings(
             imbalance_trading_strategy=strategy,
             trading_algorithm=trading_algorithm,
-        )
+        ),
     )
     coordinator = MagicMock()
     coordinator.data = {DATA_BATTERIES: SimpleNamespace(batteries=[battery])}
@@ -3145,7 +3145,9 @@ async def test_battery_sensor_identity_migrates_in_place(
     other_entry.add_to_hass(hass)
     device = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers=inventory_device_identifiers(entry.entry_id, "battery", "battery_1"),
+        identifiers=inventory_device_identifiers(
+            entry.entry_id, "battery", "battery_1"
+        ),
     )
     registry = entity_registry.async_get(hass)
     legacy = registry.async_get_or_create(
@@ -3169,6 +3171,74 @@ async def test_battery_sensor_identity_migrates_in_place(
         assert updated.disabled_by is entity_registry.RegistryEntryDisabler.USER
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("typed", [False, True])
+async def test_battery_sensor_migration_distinguishes_suffix_ids(
+    hass: HomeAssistant, reverse: bool, typed: bool
+) -> None:
+    """Migrate suffix-related legacy IDs independently in either order."""
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.frank_energie.device_inventory import (
+        async_migrate_battery_sensor_identity,
+        battery_sensor_unique_id,
+    )
+
+    entry = MockConfigEntry(domain=const.DOMAIN, unique_id="site-a")
+    entry.add_to_hass(hass)
+    registry = entity_registry.async_get(hass)
+    ids = ["battery_1", "rack.battery_1"]
+    records = {}
+    for index, battery_id in enumerate(ids):
+        identifiers = (
+            inventory_device_identifiers(entry.entry_id, "battery", battery_id)
+            if typed
+            else {(const.DOMAIN, battery_id)}
+        )
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers=identifiers
+        )
+        records[battery_id] = registry.async_get_or_create(
+            "sensor",
+            const.DOMAIN,
+            f"old-site.{battery_id}_smart_battery_{index}_status",
+            config_entry=entry,
+            device_id=device.id,
+            disabled_by=entity_registry.RegistryEntryDisabler.USER,
+        )
+    if reverse:
+        ids.reverse()
+    for battery_id in ids:
+        key = "smart_battery_status"
+        assert async_migrate_battery_sensor_identity(hass, entry, battery_id, key)
+        updated = registry.async_get(records[battery_id].entity_id)
+        assert updated.unique_id == battery_sensor_unique_id(entry, battery_id, key)
+        assert updated.disabled_by is entity_registry.RegistryEntryDisabler.USER
+
+
+async def test_battery_migration_refuses_unresolved_suffix_match(
+    hass: HomeAssistant,
+) -> None:
+    """Do not ignore a matching legacy record without an attached device."""
+    from custom_components.frank_energie.device_inventory import (
+        async_migrate_battery_sensor_identity,
+    )
+
+    entry = MockConfigEntry(domain=const.DOMAIN, unique_id="site-a")
+    entry.add_to_hass(hass)
+    registry = entity_registry.async_get(hass)
+    legacy = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        "old-site.rack.battery_1_smart_battery_0_status",
+        config_entry=entry,
+    )
+    assert not async_migrate_battery_sensor_identity(
+        hass, entry, "battery_1", "smart_battery_status"
+    )
+    assert registry.async_get(legacy.entity_id).unique_id == legacy.unique_id
+
+
 async def test_battery_sensor_identity_preserves_ambiguous_registry_entries(
     hass: HomeAssistant,
 ) -> None:
@@ -3184,7 +3254,9 @@ async def test_battery_sensor_identity_preserves_ambiguous_registry_entries(
     entry.add_to_hass(hass)
     device = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers=inventory_device_identifiers(entry.entry_id, "battery", "battery_1"),
+        identifiers=inventory_device_identifiers(
+            entry.entry_id, "battery", "battery_1"
+        ),
     )
     registry = entity_registry.async_get(hass)
     legacy = [
@@ -3199,11 +3271,15 @@ async def test_battery_sensor_identity_preserves_ambiguous_registry_entries(
     ]
     key = "smart_battery_status"
     assert not async_migrate_battery_sensor_identity(hass, entry, "battery_1", key)
-    assert registry.async_get_entity_id(
-        "sensor", const.DOMAIN, battery_sensor_unique_id(entry, "battery_1", key)
-    ) is None
+    assert (
+        registry.async_get_entity_id(
+            "sensor", const.DOMAIN, battery_sensor_unique_id(entry, "battery_1", key)
+        )
+        is None
+    )
     assert all(
-        registry.async_get(item.entity_id).unique_id == item.unique_id for item in legacy
+        registry.async_get(item.entity_id).unique_id == item.unique_id
+        for item in legacy
     )
 
 
@@ -3215,7 +3291,9 @@ async def test_battery_sensor_discovery_handles_inventory_changes(
 
     from pytest_homeassistant.common import MockEntityPlatform
 
-    from custom_components.frank_energie.sensor import _async_setup_smart_battery_sensors
+    from custom_components.frank_energie.sensor import (
+        _async_setup_smart_battery_sensors,
+    )
 
     entry = MockConfigEntry(domain=const.DOMAIN, unique_id="site-a")
     entry.add_to_hass(hass)
@@ -3258,6 +3336,107 @@ async def test_battery_sensor_discovery_handles_inventory_changes(
     assert len(added) == initial_count * 3 // 2
     assert len({entity.unique_id for entity in added}) == len(added)
     coordinator.async_request_refresh.assert_not_called()
+
+
+async def test_battery_sensor_discovery_skips_only_ambiguous_ids(
+    hass: HomeAssistant,
+) -> None:
+    """Discover valid batteries even if a different ID occurs twice."""
+    from unittest.mock import MagicMock
+
+    from python_frank_energie.models import SmartBatteries, SmartBattery
+
+    from custom_components.frank_energie.sensor import (
+        _async_setup_smart_battery_sensors,
+    )
+
+    entry = MockConfigEntry(domain=const.DOMAIN, unique_id="site-a")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+    coordinator.api.is_authenticated = True
+    first = SmartBattery.from_dict({"id": "battery_1", "brand": "Test"})
+    second = SmartBattery.from_dict({"id": "battery_2", "brand": "Test"})
+    coordinator.data = {
+        const.DATA_BATTERIES: SmartBatteries(batteries=[first, first, second])
+    }
+    entry.runtime_data = SimpleNamespace(battery_coordinator=coordinator)
+    added: list[SensorEntity] = []
+    _async_setup_smart_battery_sensors(hass, entry, added.extend)
+    discover = coordinator.async_add_listener.call_args.args[0]
+    assert added
+    assert all(
+        (const.DOMAIN, "battery_2") in entity.device_info["identifiers"]
+        for entity in added
+    )
+    count = len(added)
+    coordinator.data[const.DATA_BATTERIES].batteries = [second, first]
+    discover()
+    assert len(added) == count * 2
+    assert len({entity.unique_id for entity in added}) == len(added)
+    coordinator.async_request_refresh.assert_not_called()
+
+
+async def test_battery_registered_sensors_recover_parsed_settings_and_summary(
+    hass: HomeAssistant, enable_custom_integrations: None
+) -> None:
+    """Recover registered status and mode entities without replacing their IDs."""
+    from unittest.mock import MagicMock
+
+    from pytest_homeassistant.common import MockEntityPlatform
+    from python_frank_energie.models import (
+        SmartBatteries,
+        SmartBattery,
+        SmartBatterySummary,
+    )
+
+    from custom_components.frank_energie.sensor import (
+        _async_setup_smart_battery_sensors,
+    )
+
+    entry = MockConfigEntry(domain=const.DOMAIN, unique_id="site-a")
+    entry.add_to_hass(hass)
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+    coordinator.api.is_authenticated = True
+    battery = SmartBattery.from_dict({"id": "battery_1", "brand": "Test"})
+    coordinator.data = {const.DATA_BATTERIES: SmartBatteries(batteries=[battery])}
+    entry.runtime_data = SimpleNamespace(battery_coordinator=coordinator)
+    added: list[SensorEntity] = []
+    _async_setup_smart_battery_sensors(hass, entry, added.extend)
+    entities = {
+        entity.entity_description.translation_key: entity
+        for entity in added
+        if entity.entity_description.translation_key
+        in {"battery_status", "battery_mode"}
+    }
+    assert set(entities) == {"battery_status", "battery_mode"}
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=const.DOMAIN)
+    platform.config_entry = entry
+    await platform.async_add_entities(list(entities.values()))
+    entity_ids = {key: entity.entity_id for key, entity in entities.items()}
+    for entity in entities.values():
+        assert not entity.available
+        assert hass.states.get(entity.entity_id).state == "unavailable"
+
+    recovered = SmartBattery.from_dict(
+        {"id": "battery_1", "brand": "Test", "settings": {"batteryMode": "TRADING"}}
+    )
+    recovered.summary = SmartBatterySummary.from_dict(
+        {
+            "lastKnownStateOfCharge": 50,
+            "lastKnownStatus": "IDLE_SMART_HOME",
+            "lastUpdate": "2026-11-24T12:00:00Z",
+            "totalResult": 0.0,
+        }
+    )
+    coordinator.data[const.DATA_BATTERIES].batteries = [recovered]
+    for entity in entities.values():
+        entity.async_write_ha_state()
+        assert entity.available
+    assert hass.states.get(entity_ids["battery_status"]).state == "idle_smart_home"
+    assert hass.states.get(entity_ids["battery_mode"]).state == "trading"
+    assert {key: entity.entity_id for key, entity in entities.items()} == entity_ids
 
 
 def test_parsed_battery_summary_keeps_unknown_steering_status() -> None:
@@ -3305,7 +3484,9 @@ async def test_battery_sensor_migration_refuses_foreign_target(
     registry = entity_registry.async_get(hass)
     device = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        identifiers=inventory_device_identifiers(entry.entry_id, "battery", "battery_1"),
+        identifiers=inventory_device_identifiers(
+            entry.entry_id, "battery", "battery_1"
+        ),
     )
     legacy = registry.async_get_or_create(
         "sensor",

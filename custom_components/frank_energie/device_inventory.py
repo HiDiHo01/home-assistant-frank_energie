@@ -156,13 +156,24 @@ def async_migrate_battery_sensor_identity(
     pattern = re.compile(
         rf".+\.{re.escape(battery_id)}_smart_battery_[0-9]+_{re.escape(suffix)}"
     )
-    candidates = [
-        entity
-        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if entity.domain == "sensor"
-        and entity.platform == DOMAIN
-        and pattern.fullmatch(entity.unique_id)
-    ]
+    candidates = []
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            entity.domain != "sensor"
+            or entity.platform != DOMAIN
+            or pattern.fullmatch(entity.unique_id) is None
+        ):
+            continue
+        owner = _battery_sensor_device_identity(hass, entry, entity)
+        if owner is None:
+            return False
+        if owner == battery_id:
+            candidates.append(entity)
+        elif not re.fullmatch(
+            rf".+\.{re.escape(owner)}_smart_battery_[0-9]+_{re.escape(suffix)}",
+            entity.unique_id,
+        ):
+            return False
     if not candidates:
         return True
     if len(candidates) != 1:
@@ -178,15 +189,41 @@ def _battery_sensor_owned(
     hass: HomeAssistant, entry: ConfigEntry, entity: er.RegistryEntry, battery_id: str
 ) -> bool:
     """Prove registry ownership using the persisted physical device identity."""
+    return _battery_sensor_device_identity(hass, entry, entity) == battery_id
+
+
+def _battery_sensor_device_identity(
+    hass: HomeAssistant, entry: ConfigEntry, entity: er.RegistryEntry
+) -> str | None:
+    """Resolve one persisted battery ID, rejecting conflicting device markers."""
     device = (
         dr.async_get(hass).async_get(entity.device_id) if entity.device_id else None
     )
-    return (
-        entity.config_entry_id == entry.entry_id
-        and device is not None
-        and device.config_entry_id == entry.entry_id
-        and (DOMAIN, battery_id) in device.identifiers
-    )
+    if (
+        entity.config_entry_id != entry.entry_id
+        or device is None
+        or device.config_entry_id != entry.entry_id
+        or device.entry_type is not None
+    ):
+        return None
+    identifiers = {
+        identifier
+        for domain, identifier in device.identifiers
+        if domain == DOMAIN and identifier
+    }
+    raw_ids = {
+        identifier
+        for identifier in identifiers
+        if not identifier.startswith(_TYPED_ID_PREFIX)
+    }
+    if len(raw_ids) != 1:
+        return None
+    identifier = next(iter(raw_ids))
+    markers = identifiers - raw_ids
+    expected = _typed_device_marker(entry.entry_id, "battery", identifier)
+    if markers and markers != {expected}:
+        return None
+    return identifier
 
 
 def _has_battery_sensor(

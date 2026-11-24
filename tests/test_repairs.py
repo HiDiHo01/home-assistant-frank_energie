@@ -680,7 +680,9 @@ async def test_battery_identified_by_disabled_sensor_without_controls(
         identifiers={(DOMAIN, "stale-battery")},
         via_device_id=register_service_device(hass, entry, SERVICE_NAME_BATTERIES),
     )
-    from custom_components.frank_energie.device_inventory import battery_sensor_unique_id
+    from custom_components.frank_energie.device_inventory import (
+        battery_sensor_unique_id,
+    )
 
     unique_id = (
         battery_sensor_unique_id(entry, "stale-battery", "smart_battery_id")
