@@ -32,6 +32,7 @@ from custom_components.frank_energie.device_inventory import (
 from tests.utils import ResponseMocks
 
 if TYPE_CHECKING:
+    from custom_components.frank_energie.coordinator import ReportedBatteryStatus
     from custom_components.frank_energie.sensor import FrankEnergieEntityDescription
 
 
@@ -3091,3 +3092,133 @@ def test_smart_battery_status_sensor_translations_ship() -> None:
         ):
             assert sensors[key]["name"], (path.name, key)
             assert set(sensors[key]["state"]) == set(options), (path.name, key)
+
+
+# --- Battery status: historical attributes ------------------------------------
+
+_STATUS_SEEN_AT = datetime(2026, 11, 24, 11, 44, tzinfo=UTC)
+
+
+def _status_battery(battery_id: str, last_known_status: str) -> SimpleNamespace:
+    """A battery with the given ID whose summary reports ``last_known_status``."""
+    battery = _battery_with_summary()
+    battery.id = battery_id
+    battery.summary.last_known_status = last_known_status
+    return battery
+
+
+def _status_description_for(
+    battery: SimpleNamespace, position: int = 0
+) -> "FrankEnergieEntityDescription":
+    """The battery status description built for ``battery`` at ``position``."""
+    from custom_components.frank_energie import sensor
+
+    return {
+        description.translation_key: description
+        for description in sensor._build_single_smart_battery_descriptions(
+            battery, position
+        )
+    }["battery_status"]
+
+
+def _reported(status: str = "DISCHARGE_SMART_HOME") -> "ReportedBatteryStatus":
+    """A remembered status, received at a fixed time."""
+    from python_frank_energie.domain import SmartBatteryStatus
+
+    from custom_components.frank_energie.coordinator import ReportedBatteryStatus
+
+    return ReportedBatteryStatus(SmartBatteryStatus(status), _STATUS_SEEN_AT)
+
+
+def _status_data(*batteries: SimpleNamespace, history: dict | None = None) -> dict:
+    """Coordinator data holding ``batteries`` and, if given, the status history."""
+    data: dict = {const.DATA_BATTERIES: SimpleNamespace(batteries=list(batteries))}
+    if history is not None:
+        data[const.DATA_BATTERY_STATUS_HISTORY] = history
+    return data
+
+
+def test_status_stays_unknown_and_the_previous_one_is_historical() -> None:
+    """A missing status is never replaced by an earlier plan as the state."""
+    battery = _status_battery("bat_1", "UNKNOWN")
+    description = _status_description_for(battery)
+    data = _status_data(battery, history={"bat_1": _reported()})
+
+    assert description.value_fn(data) == "unknown"
+    assert description.attr_fn(data) == {
+        "last_reported_status": "discharge_smart_home",
+        "last_reported_status_seen_at": _STATUS_SEEN_AT.isoformat(),
+    }
+
+
+def test_status_has_no_historical_attributes_when_it_is_reported() -> None:
+    """With a status present the history is empty, and so are the attributes."""
+    battery = _status_battery("bat_1", "IDLE_SMART_HOME")
+    description = _status_description_for(battery)
+    data = _status_data(battery, history={})
+
+    assert description.value_fn(data) == "idle_smart_home"
+    assert description.attr_fn(data) == {}
+
+
+def test_status_without_history_data_has_no_attributes() -> None:
+    """Coordinator data without the history key keeps the previous behaviour."""
+    battery = _status_battery("bat_1", "UNKNOWN")
+    description = _status_description_for(battery)
+    data = _status_data(battery)
+
+    assert description.value_fn(data) == "unknown"
+    assert description.attr_fn(data) == {}
+
+
+def test_status_attributes_follow_the_battery_the_state_comes_from() -> None:
+    """State and attributes are read from the same battery, also after the API
+    reorders them. (Finding a battery by position at all is the existing issue
+    about stable identity; this does not change it.)"""
+    first = _status_battery("bat_1", "IDLE_SMART_HOME")
+    second = _status_battery("bat_2", "UNKNOWN")
+    history = {"bat_2": _reported("CHARGE_SMART_HOME")}
+    description = _status_description_for(second, position=1)
+
+    in_order = _status_data(first, second, history=history)
+    assert description.value_fn(in_order) == "unknown"
+    assert description.attr_fn(in_order)["last_reported_status"] == "charge_smart_home"
+
+    reordered = _status_data(second, first, history=history)  # position 1 is now bat_1
+    assert description.value_fn(reordered) == "idle_smart_home"
+    assert description.attr_fn(reordered) == {}
+
+
+async def test_status_state_and_attributes_reach_home_assistant(
+    hass: HomeAssistant, enable_custom_integrations: None
+) -> None:
+    """A real entity platform accepts the unknown state, with the historical
+    attributes next to it."""
+    from unittest.mock import MagicMock
+
+    from pytest_homeassistant.common import MockEntityPlatform
+
+    from custom_components.frank_energie.sensor import FrankEnergieSensor
+
+    battery = _status_battery("bat_1", "UNKNOWN")
+    coordinator = MagicMock()
+    coordinator.data = _status_data(battery, history={"bat_1": _reported()})
+    entry = MagicMock()
+    entry.unique_id = "test_unique_id"
+    entry.entry_id = "test_entry_id"
+    sensor = FrankEnergieSensor(
+        coordinator=coordinator,
+        description=_status_description_for(battery),
+        entry=entry,
+    )
+
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=const.DOMAIN)
+    await platform.async_add_entities([sensor])
+
+    state = hass.states.get(sensor.entity_id)
+    assert state is not None
+    assert state.state == "unknown"
+    assert state.attributes["last_reported_status"] == "discharge_smart_home"
+    assert (
+        state.attributes["last_reported_status_seen_at"] == _STATUS_SEEN_AT.isoformat()
+    )

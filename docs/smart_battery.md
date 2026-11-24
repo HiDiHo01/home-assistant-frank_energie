@@ -53,6 +53,27 @@ calculation. If any reported battery is missing a reliable capacity or charge
 level, the service sensor reports `unknown` instead of a misleading partial
 total. A genuine combined 0 kWh remains 0 kWh.
 
+### Battery status when the API sends none
+
+The **Battery status** sensor shows the status Frank Energie reports for the
+battery (for example `Discharging (Smart Home)`). The API sometimes sends no
+status at all while the rest of the data is fresh. The sensor then shows
+`unknown`: a plan from earlier may no longer hold, and an automation should not
+act on it.
+
+While the status is missing, the sensor adds two attributes for diagnosis and
+display:
+
+- `last_reported_status`: the last status the API reported for this battery.
+- `last_reported_status_seen_at`: when Home Assistant received that status. It is
+  the time of the observation, not a timestamp from Frank Energie, and it does
+  not move when the same summary is served again.
+
+They are historical. They are not a current status and are absent when the
+sensor shows a status. They are kept in memory only, so they are empty after a
+restart of Home Assistant. The **Activity** sensor shows what the battery is
+doing now.
+
 ## Battery Operating Modes
 
 Supported batteries expose selectable operating modes.
