@@ -19,6 +19,8 @@ For each rule record: requirement, applicability, declared status (if this repos
 
 ## Verify with evidence
 
+For battery device/entity naming, use the [normative Smart Battery naming specification](../../../SPECS/battery_entity_naming_spec.md) as the repository-specific acceptance criteria. Do not claim compliance without implementation and regression evidence.
+
 1. Read the official rule text and distinguish objectively measurable thresholds from review-based requirements. Do not copy thresholds from a Core-only skill without checking the current rule.
 2. Inspect `custom_components/frank_energie/`, `tests/`, `docs/`, `SPECS/`, and `.github/workflows/` for the specific evidence.
 3. Verify config-entry setup, cleanup, duplicate handling, reauthentication/reconfiguration and migrations; entity availability, stable unique IDs, translations, diagnostics redaction, documented behavior and async resource handling.

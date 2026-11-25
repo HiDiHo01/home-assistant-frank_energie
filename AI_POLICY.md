@@ -49,6 +49,8 @@ AI-generated code should:
 
 Follow [`home-assistant.md`](home-assistant.md) for integration-specific invariants: config-entry and site isolation, distinct resource lifecycles, nullable upstream data, UTC versus Amsterdam-local time, cache integrity, and accurate service claims. Use the official Home Assistant developer documentation to verify current APIs.
 
+All AI-assisted battery entity changes and reviews must comply with [the normative Smart Battery naming specification](SPECS/battery_entity_naming_spec.md), including identity preservation and regression evidence.
+
 ## Home Assistant specific requirements
 
 AI-assisted changes should:

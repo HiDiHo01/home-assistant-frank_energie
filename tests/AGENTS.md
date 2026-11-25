@@ -50,6 +50,8 @@ unavailable instructions rather than inventing exceptions.
 
 ## Regression coverage
 
+Battery naming, inventory and registry changes must cover the applicable mandatory cases in [the Smart Battery naming specification](../SPECS/battery_entity_naming_spec.md) using synthetic identifiers and actual Home Assistant registry behavior.
+
 Choose cases relevant to each behavior change:
 
 | Area | Required evidence when affected |
