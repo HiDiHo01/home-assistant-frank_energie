@@ -1258,7 +1258,7 @@
         }
       },
       "battery_status": {
-        "name": "Statut de la batterie",
+        "name": "Statut",
         "state": {
           "status_charging": "En charge",
           "status_discharging": "En décharge",

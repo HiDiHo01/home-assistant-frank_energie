@@ -3108,6 +3108,8 @@ def test_smart_battery_status_sensor_translations_ship() -> None:
             assert set(sensors[key]["state"]) == set(options), (path.name, key)
 
         steering = sensors["battery_status"]
+        expected_name = "Statut" if path.stem in {"fr", "fr-BE"} else "Status"
+        assert steering["name"] == expected_name, path.name
         attributes = steering["state_attributes"]
         assert attributes["last_reported_status"]["name"]
         assert attributes["last_reported_status_seen_at"]["name"]
@@ -3538,7 +3540,9 @@ def _status_battery(
     updated_at: datetime = _STATUS_SEEN_AT,
 ) -> SmartBattery:
     """Parse a provider steering summary, including its null-to-UNKNOWN mapping."""
-    battery = SmartBattery.from_dict({"id": battery_id, "brand": "Test"})
+    battery = SmartBattery.from_dict(
+        {"id": battery_id, "brand": "Test", "externalReference": "shared-reference"}
+    )
     battery.summary = SmartBatterySummary.from_dict(
         {"lastKnownStatus": plan, "lastUpdate": updated_at.isoformat()}
     )
@@ -3590,14 +3594,47 @@ def test_current_steering_state_gates_residual_history(
     assert description.attr_fn(data) == {}
 
 
+def _seed_customized_battery_status(
+    hass: HomeAssistant, entry: MockConfigEntry, battery_id: str
+) -> tuple[str, str]:
+    """Create user-customized registry records for the existing status sensor."""
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.frank_energie.device_inventory import (
+        battery_sensor_unique_id,
+    )
+
+    devices = dr.async_get(hass)
+    device = devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers=inventory_device_identifiers(entry.entry_id, "battery", battery_id),
+    )
+    devices.async_update_device(device.id, name_by_user="Garage battery")
+    registry = entity_registry.async_get(hass)
+    record = registry.async_get_or_create(
+        "sensor",
+        const.DOMAIN,
+        battery_sensor_unique_id(entry, battery_id, "smart_battery_status"),
+        config_entry=entry,
+        device_id=device.id,
+    )
+    updated = registry.async_update_entity(
+        record.entity_id,
+        new_entity_id="sensor.garage_battery_custom_status",
+        name="Garage steering plan",
+    )
+    return updated.entity_id, device.id
+
+
 async def test_registered_steering_sensors_keep_history_by_id_across_polls(
     hass: HomeAssistant,
     enable_custom_integrations: None,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """Publish parsed summaries through the coordinator and keep registry identity on reorder."""
+    """Keep status history and user registry names independent of inventory order."""
     from unittest.mock import AsyncMock, MagicMock
 
+    from homeassistant.helpers import device_registry as dr
     from pytest_homeassistant.common import MockEntityPlatform
 
     from custom_components.frank_energie.coordinator import (
@@ -3628,12 +3665,14 @@ async def test_registered_steering_sensors_keep_history_by_id_across_polls(
     later = _STATUS_SEEN_AT + timedelta(minutes=5)
     first = _status_battery("bat_1", "DISCHARGE_SMART_HOME")
     second = _status_battery("bat_2", "CHARGE_SMART_HOME")
+    custom_id, first_device_id = _seed_customized_battery_status(hass, entry, first.id)
     reordered = SmartBatteries(
         [
             _status_battery(second.id, "STATUS_UNRELIABLE_DATA", later),
             _status_battery(first.id, None, later),
         ]
     )
+    reordered.batteries[1].external_reference = "changed-reference"
     api.smart_batteries.side_effect = [
         SmartBatteries([first, second]),
         reordered,
@@ -3665,6 +3704,9 @@ async def test_registered_steering_sensors_keep_history_by_id_across_polls(
         return entity_id
 
     first_id, second_id = registered_id(first.id), registered_id(second.id)
+    assert first_id == custom_id
+    assert registry.async_get(first_id).device_id == first_device_id
+    assert registry.async_get(second_id).device_id != first_device_id
     assert hass.states.get(first_id).state == "discharge_smart_home"
     assert hass.states.get(second_id).state == "charge_smart_home"
     freezer.move_to(later)
@@ -3704,3 +3746,7 @@ async def test_registered_steering_sensors_keep_history_by_id_across_polls(
     rediscovered = hass.states.get(first_id)
     assert rediscovered.state == "unknown"
     assert "last_reported_status" not in rediscovered.attributes
+    record = registry.async_get(first_id)
+    assert record.device_id == first_device_id
+    assert record.name == "Garage steering plan"
+    assert dr.async_get(hass).async_get(first_device_id).name_by_user == "Garage battery"
