@@ -37,6 +37,8 @@ If all meaningful changes are already present with equivalent behavior, cite the
 
 ## Validate findings
 
+- For battery-related changes, verify the [normative Smart Battery naming specification](../../../SPECS/battery_entity_naming_spec.md), including cross-platform consistency, collision handling, registry compatibility and regression evidence. Distinguish newly introduced deviations from pre-existing adoption work.
+
 - Confirm each potential issue against the actual code and relevant tests, not merely an automated comment or a Sonar annotation.
 - Always check the [mandatory Cognitive Complexity maximum of 15](../../../AGENTS.md#cognitive-complexity-mandatory-maximum-15) for all changed functions and methods, including nested callbacks, extracted helpers and tests. Verify the final-head Sonar S3776 findings separately from Flake8 C901 and the overall Quality Gate; report unavailable analysis as unverified rather than inventing scores.
 - Prioritize observable faults: broken setup/reauth/reconfigure, entity or registry identity changes, electricity-only/gas-only/dual contract failures, unsafe caching, invoice isolation, wrong PT15M/PT60M behavior, DST mistakes, cancellation errors, and leaked customer data.

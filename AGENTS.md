@@ -275,6 +275,8 @@ Follow the current entity architecture and entity platform conventions.
 
 ### Entity requirements
 
+* **Mandatory Smart Battery naming:** Follow [the Smart Battery device and entity naming specification](SPECS/battery_entity_naming_spec.md) for all battery-related implementation, translations, migrations and reviews. Reject newly introduced deviations; require the specified regression coverage for naming changes.
+
 * Provide stable, meaningful `unique_id` values.
 * Set `has_entity_name = True` when appropriate for modern entity naming.
 * Use `device_info` only when a real, identifiable device exists.
