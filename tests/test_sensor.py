@@ -3706,7 +3706,9 @@ async def test_registered_steering_sensors_keep_history_by_id_across_polls(
     first_id, second_id = registered_id(first.id), registered_id(second.id)
     assert first_id == custom_id
     assert registry.async_get(first_id).device_id == first_device_id
-    assert registry.async_get(second_id).device_id != first_device_id
+    second_device_id = registry.async_get(second_id).device_id
+    assert second_device_id is not None
+    assert second_device_id != first_device_id
     assert hass.states.get(first_id).state == "discharge_smart_home"
     assert hass.states.get(second_id).state == "charge_smart_home"
     freezer.move_to(later)
@@ -3749,4 +3751,7 @@ async def test_registered_steering_sensors_keep_history_by_id_across_polls(
     record = registry.async_get(first_id)
     assert record.device_id == first_device_id
     assert record.name == "Garage steering plan"
-    assert dr.async_get(hass).async_get(first_device_id).name_by_user == "Garage battery"
+    assert registry.async_get(second_id).device_id == second_device_id
+    device = dr.async_get(hass).async_get(first_device_id)
+    assert device is not None
+    assert device.name_by_user == "Garage battery"
