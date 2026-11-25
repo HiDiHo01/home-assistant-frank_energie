@@ -669,8 +669,9 @@ async def test_battery_classification_uses_stable_entity_marker(
     assert _is_device_removal_safe(hass, entry, updated_device)
 
 
+@pytest.mark.parametrize("stable", [False, True])
 async def test_battery_identified_by_disabled_sensor_without_controls(
-    hass: HomeAssistant, frank_energie_setup: SetupEntry
+    hass: HomeAssistant, frank_energie_setup: SetupEntry, stable: bool
 ) -> None:
     """Identify a historical battery registered with only sensor entities."""
     entry = await frank_energie_setup()
@@ -679,10 +680,19 @@ async def test_battery_identified_by_disabled_sensor_without_controls(
         identifiers={(DOMAIN, "stale-battery")},
         via_device_id=register_service_device(hass, entry, SERVICE_NAME_BATTERIES),
     )
+    from custom_components.frank_energie.device_inventory import (
+        battery_sensor_unique_id,
+    )
+
+    unique_id = (
+        battery_sensor_unique_id(entry, "stale-battery", "smart_battery_id")
+        if stable
+        else f"{entry.unique_id}.stale-battery_smart_battery_2_id"
+    )
     er.async_get(hass).async_get_or_create(
         "sensor",
         DOMAIN,
-        f"{entry.unique_id}.stale-battery_smart_battery_2_id",
+        unique_id,
         config_entry=entry,
         device_id=device.id,
         disabled_by=er.RegistryEntryDisabler.INTEGRATION,

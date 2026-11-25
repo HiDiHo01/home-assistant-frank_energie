@@ -128,6 +128,104 @@ def _has_pv_panel_group_marker(
     )
 
 
+def battery_sensor_unique_id(entry: ConfigEntry, battery_id: str, key: str) -> str:
+    """Create an entry-scoped battery sensor ID independent of inventory order."""
+    digest = sha256(battery_id.encode()).hexdigest()
+    return f"{entry.entry_id}_{digest}_{key}"
+
+
+@callback
+def async_migrate_battery_sensor_identity(
+    hass: HomeAssistant, entry: ConfigEntry, battery_id: str, key: str
+) -> bool:
+    """Migrate a uniquely owned legacy registry entry without changing its entity ID.
+
+    Return False when ownership or an existing collision cannot be resolved safely.
+    Never remove historical entries or infer battery identity from an inventory index.
+    """
+    registry = er.async_get(hass)
+    new_unique_id = battery_sensor_unique_id(entry, battery_id, key)
+    existing_id = registry.async_get_entity_id("sensor", DOMAIN, new_unique_id)
+    if existing_id is not None:
+        existing = registry.async_get(existing_id)
+        return existing is not None and _battery_sensor_owned(
+            hass, entry, existing, battery_id
+        )
+
+    suffix = key.removeprefix("smart_battery_")
+    pattern = re.compile(
+        rf".+\.{re.escape(battery_id)}_smart_battery_[0-9]+_{re.escape(suffix)}"
+    )
+    candidates = []
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            entity.domain != "sensor"
+            or entity.platform != DOMAIN
+            or pattern.fullmatch(entity.unique_id) is None
+        ):
+            continue
+        owner = _battery_sensor_device_identity(hass, entry, entity)
+        if owner is None:
+            return False
+        if owner == battery_id:
+            candidates.append(entity)
+        elif not re.fullmatch(
+            rf".+\.{re.escape(owner)}_smart_battery_[0-9]+_{re.escape(suffix)}",
+            entity.unique_id,
+        ):
+            return False
+    if not candidates:
+        return True
+    if len(candidates) != 1:
+        return False
+    legacy = candidates[0]
+    if not _battery_sensor_owned(hass, entry, legacy, battery_id):
+        return False
+    registry.async_update_entity(legacy.entity_id, new_unique_id=new_unique_id)
+    return True
+
+
+def _battery_sensor_owned(
+    hass: HomeAssistant, entry: ConfigEntry, entity: er.RegistryEntry, battery_id: str
+) -> bool:
+    """Prove registry ownership using the persisted physical device identity."""
+    return _battery_sensor_device_identity(hass, entry, entity) == battery_id
+
+
+def _battery_sensor_device_identity(
+    hass: HomeAssistant, entry: ConfigEntry, entity: er.RegistryEntry
+) -> str | None:
+    """Resolve one persisted battery ID, rejecting conflicting device markers."""
+    device = (
+        dr.async_get(hass).async_get(entity.device_id) if entity.device_id else None
+    )
+    if (
+        entity.config_entry_id != entry.entry_id
+        or device is None
+        or device.config_entry_id != entry.entry_id
+        or device.entry_type is not None
+    ):
+        return None
+    identifiers = {
+        identifier
+        for domain, identifier in device.identifiers
+        if domain == DOMAIN and identifier
+    }
+    raw_ids = {
+        identifier
+        for identifier in identifiers
+        if not identifier.startswith(_TYPED_ID_PREFIX)
+    }
+    if len(raw_ids) != 1:
+        return None
+    identifier = next(iter(raw_ids))
+    markers = identifiers - raw_ids
+    expected = _typed_device_marker(entry.entry_id, "battery", identifier)
+    if markers and markers != {expected}:
+        return None
+    return identifier
+
+
 def _has_battery_sensor(
     hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry, identifier: str
 ) -> bool:
@@ -146,7 +244,11 @@ def _has_battery_sensor(
         entity.config_entry_id == entry.entry_id
         and entity.platform == DOMAIN
         and entity.domain == "sensor"
-        and marker.fullmatch(entity.unique_id) is not None
+        and (
+            marker.fullmatch(entity.unique_id) is not None
+            or entity.unique_id
+            == battery_sensor_unique_id(entry, identifier, "smart_battery_id")
+        )
         for entity in er.async_entries_for_device(
             er.async_get(hass), device.id, include_disabled_entities=True
         )

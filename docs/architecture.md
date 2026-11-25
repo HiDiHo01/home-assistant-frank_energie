@@ -198,6 +198,22 @@ Examples:
 
 This allows the integration to adapt automatically to account capabilities.
 
+### Smart Battery sensor identity
+
+Per-battery inventory, settings and summary sensors resolve current data by
+provider battery ID, not list position. Unique IDs combine the config-entry ID,
+a digest of the battery ID and the sensor key. Supported sensors register even
+when summary or settings data is temporarily missing. The existing inventory
+listener discovers new and returning batteries without requesting extra data.
+Removed or missing data makes the corresponding sensor unavailable.
+
+Legacy index-based registry entries are migrated in place only when their
+config-entry and device ownership are verified and there is exactly one
+candidate. Ambiguous entries are retained rather than deleted or guessed;
+no additional sensor is registered for that ambiguous legacy identity. Existing
+entity IDs and user registry settings are preserved by the in-place update.
+The optional status sensors retain the installed-SDK capability gate.
+
 ## Entity Platforms
 
 ### Sensor Platform

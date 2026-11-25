@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import pytest
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import UTC, date, datetime, timedelta, timezone
@@ -13,7 +14,10 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from custom_components.frank_energie.const import (
+    DATA_BATTERIES,
     DATA_BATTERY_SETTINGS,
+    DATA_BATTERY_STATUS_HISTORY,
+    DATA_BATTERY_STEERING_STATES,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
     DATA_GAS,
@@ -31,6 +35,7 @@ from custom_components.frank_energie.coordinator import (
     BATTERY_SETTINGS_FAILURE_RETRY_INTERVAL,
     FrankEnergieCoordinator,
     PricesTodayCache,
+    ReportedBatteryStatus,
     FrankEnergieSettingsCoordinator,
     FrankEnergiePriceCoordinator,
     FrankEnergieBatteryCoordinator,
@@ -59,6 +64,9 @@ from python_frank_energie.models import (
     PriceData,
     MarketPrices,
     UserSmartFeedInStatus,
+    SmartBatteries,
+    SmartBattery,
+    SmartBatterySummary,
 )
 from aiohttp import ClientError
 
@@ -3955,15 +3963,15 @@ async def test_battery_settings_inflight_failure_does_not_restore_cooldown(
 
 
 @pytest.mark.asyncio
-async def test_battery_update_publishes_settings(mock_config_entry) -> None:
+async def test_battery_update_publishes_settings(
+    mock_config_entry: MockConfigEntry,
+) -> None:
     """The battery coordinator's update result carries the per-battery settings."""
     api = AsyncMock()
     api.smart_battery_settings.side_effect = lambda battery_id: f"settings-{battery_id}"
     coordinator = _battery_coordinator_for(api, mock_config_entry)
     coordinator.settings_coordinator.data = {}
-    batteries = SimpleNamespace(
-        batteries=[SimpleNamespace(id="bat_1"), SimpleNamespace(id="bat_2")]
-    )
+    batteries = SmartBatteries([SmartBattery(id="bat_1"), SmartBattery(id="bat_2")])
 
     with (
         patch.object(coordinator, "_should_skip_api_calls", return_value=False),
@@ -4689,26 +4697,24 @@ _UPDATED = datetime(2026, 11, 24, 11, 40, tzinfo=UTC)
 
 def _status_batteries(
     updated: datetime | None = _UPDATED, **status_by_id: str | None
-) -> SimpleNamespace:
-    """Batteries whose summaries report the given status; ``None`` omits the summary."""
-    from python_frank_energie.domain import SmartBatteryStatus
-
-    return SimpleNamespace(
-        batteries=[
-            SimpleNamespace(
-                id=battery_id,
-                summary=(
-                    None
-                    if status is None
-                    else SimpleNamespace(
-                        last_known_status=SmartBatteryStatus(status),
-                        last_update=updated,
-                    )
-                ),
+) -> SmartBatteries:
+    """Parse synthetic provider plans; None omits the entire summary."""
+    batteries = []
+    for battery_id, status in status_by_id.items():
+        battery = SmartBattery.from_dict({"id": battery_id})
+        if status is not None:
+            summary = SmartBatterySummary.from_dict(
+                {
+                    "lastKnownStatus": None if status == "unknown" else status,
+                    "lastUpdate": (updated or _UPDATED).isoformat(),
+                }
             )
-            for battery_id, status in status_by_id.items()
-        ]
-    )
+            # Exercise an untimestamped SDK object separately from the required wire field.
+            battery.summary = (
+                summary if updated is not None else replace(summary, last_update=None)
+            )
+        batteries.append(battery)
+    return SmartBatteries(batteries)
 
 
 def _history(
@@ -4716,11 +4722,12 @@ def _history(
     minutes: float,
     updated: datetime | None = _UPDATED,
     **status_by_id: str | None,
-) -> dict:
-    """Resolve the history for one poll, ``minutes`` after the first."""
-    return coordinator._resolve_battery_status_history(
+) -> dict[str, ReportedBatteryStatus]:
+    """Return visible historical reports for one poll at a fixed receipt time."""
+    _, history = coordinator._resolve_battery_statuses(
         _status_batteries(updated, **status_by_id), _T0 + timedelta(minutes=minutes)
     )
+    return history
 
 
 def _updated_at(minutes: float) -> datetime:
@@ -4736,7 +4743,7 @@ def test_reported_status_is_remembered_but_not_exposed(
 
     assert _history(coordinator, 0, bat_1="discharge_smart_home") == {}
 
-    reported = coordinator._last_reported_status["bat_1"]
+    reported = coordinator._battery_steering["bat_1"].reported
     assert reported.status == "discharge_smart_home"
     assert reported.seen_at == _T0
 
@@ -4770,8 +4777,8 @@ def test_a_new_status_ends_the_history(mock_config_entry: MockConfigEntry) -> No
     _history(coordinator, 45, _updated_at(45), bat_1="unknown")
 
     assert _history(coordinator, 85, _updated_at(85), bat_1="charge_smart_home") == {}
-    assert coordinator._last_reported_status["bat_1"].status == "charge_smart_home"
-    assert coordinator._last_reported_status["bat_1"].seen_at == _T0 + timedelta(
+    assert coordinator._battery_steering["bat_1"].reported.status == "charge_smart_home"
+    assert coordinator._battery_steering["bat_1"].reported.seen_at == _T0 + timedelta(
         minutes=85
     )
 
@@ -4785,24 +4792,50 @@ def test_the_same_summary_served_again_does_not_renew_the_time(
     _history(coordinator, 0, bat_1="discharge_smart_home")
 
     _history(coordinator, 30, _UPDATED, bat_1="discharge_smart_home")  # same summary
-    assert coordinator._last_reported_status["bat_1"].seen_at == _T0
+    assert coordinator._battery_steering["bat_1"].reported.seen_at == _T0
 
     _history(coordinator, 35, _updated_at(35), bat_1="discharge_smart_home")  # newer
-    assert coordinator._last_reported_status["bat_1"].seen_at == _T0 + timedelta(
+    assert coordinator._battery_steering["bat_1"].reported.seen_at == _T0 + timedelta(
         minutes=35
     )
 
 
-def test_an_older_response_does_not_replace_a_newer_report(
+@pytest.mark.parametrize("incoming_minute", [2, 10])
+def test_older_or_equal_conflicting_plan_keeps_the_accepted_observation(
     mock_config_entry: MockConfigEntry,
+    incoming_minute: int,
 ) -> None:
-    """A response whose summary is older than the one on record is ignored."""
+    """An older or tied conflicting plan cannot renew or replace the accepted plan."""
     coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
     _history(coordinator, 0, _updated_at(10), bat_1="discharge_smart_home")
 
-    _history(coordinator, 5, _updated_at(2), bat_1="charge_smart_home")
+    states, _ = coordinator._resolve_battery_statuses(
+        _status_batteries(_updated_at(incoming_minute), bat_1="charge_smart_home"),
+        _T0 + timedelta(minutes=5),
+    )
+    assert states["bat_1"] == "discharge_smart_home"
+    reported = _history(coordinator, 15, _updated_at(15), bat_1="unknown")["bat_1"]
+    assert reported.status == "discharge_smart_home"
+    assert reported.seen_at == _T0
 
-    assert coordinator._last_reported_status["bat_1"].status == "discharge_smart_home"
+
+def test_untimestamped_plan_preserves_the_latest_provider_timestamp(
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """An untimestamped observation survives a later-arriving older summary."""
+    coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
+    _history(coordinator, 0, _updated_at(10), bat_1="charge_smart_home")
+    _history(coordinator, 5, None, bat_1="discharge_smart_home")
+
+    states, _ = coordinator._resolve_battery_statuses(
+        _status_batteries(_updated_at(2), bat_1="idle_smart_home"),
+        _T0 + timedelta(minutes=8),
+    )
+    assert states["bat_1"] == "discharge_smart_home"
+    assert coordinator._battery_steering["bat_1"].latest_summary_at == _updated_at(10)
+    reported = _history(coordinator, 15, _updated_at(15), bat_1="unknown")["bat_1"]
+    assert reported.status == "discharge_smart_home"
+    assert reported.seen_at == _T0 + timedelta(minutes=5)
 
 
 def test_a_summary_without_a_timestamp_is_always_a_new_report(
@@ -4814,7 +4847,7 @@ def test_a_summary_without_a_timestamp_is_always_a_new_report(
 
     _history(coordinator, 20, None, bat_1="discharge_smart_home")
 
-    assert coordinator._last_reported_status["bat_1"].seen_at == _T0 + timedelta(
+    assert coordinator._battery_steering["bat_1"].reported.seen_at == _T0 + timedelta(
         minutes=20
     )
 
@@ -4844,22 +4877,48 @@ def test_history_is_per_battery_and_dropped_when_a_battery_is_removed(
     assert history["bat_1"].status == "discharge_smart_home"
 
     _history(coordinator, 10, _updated_at(10), bat_2="charge_smart_home")  # bat_1 gone
-    assert "bat_1" not in coordinator._last_reported_status
-    assert _history(coordinator, 15, _updated_at(15), bat_1="unknown") == {}
-
-
-def test_a_skipped_fetch_keeps_the_history(mock_config_entry: MockConfigEntry) -> None:
-    """A fetch that returned nothing says nothing new about the batteries: what
-    was shown stays shown, and what is remembered is not erased."""
-    coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
-    _history(coordinator, 0, bat_1="discharge_smart_home", bat_2="idle_smart_home")
-    shown = _history(
-        coordinator, 5, _updated_at(5), bat_1="unknown", bat_2="idle_smart_home"
+    assert "bat_1" not in coordinator._battery_steering
+    returned = _history(
+        coordinator, 15, _updated_at(1), bat_1="unknown", bat_2="unknown"
     )
+    assert returned == {}
+    assert coordinator._battery_steering["bat_1"].latest_summary_at == _updated_at(1)
+    assert coordinator._battery_steering["bat_2"].latest_summary_at == _updated_at(10)
+    other = _history(coordinator, 20, _updated_at(20), bat_1="unknown", bat_2="unknown")
+    assert other["bat_2"].status == "charge_smart_home"
+    assert "bat_1" not in other
 
-    assert coordinator._resolve_battery_status_history(None, _T0) == shown
-    assert list(shown) == ["bat_1"]
-    assert "bat_1" in _history(coordinator, 30, _updated_at(30), bat_1="unknown")
+
+def test_entries_with_the_same_provider_id_keep_independent_history() -> None:
+    """A missing or removed plan in one entry cannot change the other entry."""
+    first = _battery_coordinator_for(
+        AsyncMock(), MockConfigEntry(domain="frank_energie", unique_id="site-a")
+    )
+    second = _battery_coordinator_for(
+        AsyncMock(), MockConfigEntry(domain="frank_energie", unique_id="site-b")
+    )
+    _history(first, 0, bat_1="discharge_smart_home")
+    _history(second, 5, bat_1="charge_smart_home")
+
+    report_a = _history(first, 10, _updated_at(10), bat_1="unknown")["bat_1"]
+    _history(first, 15)
+    report_b = _history(second, 20, _updated_at(20), bat_1="unknown")["bat_1"]
+    assert report_a.status == "discharge_smart_home"
+    assert report_a.seen_at == _T0
+    assert report_b.status == "charge_smart_home"
+    assert report_b.seen_at == _T0 + timedelta(minutes=5)
+
+
+def test_a_failed_fetch_hides_history_and_preserves_memory(
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Unavailable inventories expose no plan or attributes; a later null report recovers history."""
+    coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
+    _history(coordinator, 0, bat_1="discharge_smart_home")
+    shown = _history(coordinator, 5, _updated_at(5), bat_1="unknown")
+
+    assert coordinator._resolve_battery_statuses(None, _T0) == ({}, {})
+    assert _history(coordinator, 30, _updated_at(30), bat_1="unknown") == shown
 
 
 def test_an_empty_inventory_clears_the_history(
@@ -4871,42 +4930,136 @@ def test_an_empty_inventory_clears_the_history(
 
     _history(coordinator, 5)  # a real, empty inventory
 
-    assert coordinator._last_reported_status == {}
+    assert coordinator._battery_steering == {}
 
 
 def test_a_battery_without_a_summary_has_no_history(
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """A battery whose details were not fetched gets no entry."""
+    """An absent summary hides previously exposed history, even across a failed fetch."""
     coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
+    _history(coordinator, 0, bat_1="idle_smart_home")
+    shown = _history(coordinator, 5, _updated_at(5), bat_1="unknown")
+    assert shown["bat_1"].seen_at == _T0
+    assert coordinator._resolve_battery_statuses(
+        _status_batteries(bat_1=None), _T0
+    ) == ({}, {})
+    assert coordinator._resolve_battery_statuses(None, _T0) == ({}, {})
+    assert _history(coordinator, 30, _updated_at(30), bat_1="unknown") == shown
 
-    assert _history(coordinator, 0, bat_1=None) == {}
 
-
-@pytest.mark.asyncio
-async def test_battery_update_publishes_the_status_history(
+@pytest.mark.parametrize(
+    "bad_record", ["duplicate", "blank", "invalid_id", "mapping", "invalid_summary"]
+)
+async def test_malformed_inventory_cannot_overwrite_or_prune_steering_history(
     mock_config_entry: MockConfigEntry,
+    bad_record: str,
 ) -> None:
-    """The coordinator's update result carries the history the sensor reads."""
-    from custom_components.frank_energie.const import DATA_BATTERY_STATUS_HISTORY
-
+    """Invalid SDK inventories suppress steering and retain both absent and present batteries."""
     coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
     coordinator.settings_coordinator.data = {}
-    polls = [
-        _status_batteries(_updated_at(0), bat_1="discharge_smart_home"),
-        _status_batteries(_updated_at(5), bat_1="unknown"),
-    ]
+    _history(coordinator, 0, bat_1="idle_smart_home", bat_2="charge_smart_home")
+    shown = _history(coordinator, 10, _updated_at(10), bat_1="unknown", bat_2="unknown")
+    malformed = _status_batteries(
+        _updated_at(30), bat_1="discharge_smart_home", bad="idle_smart_home"
+    )
+    malformed.batteries[1] = {
+        "duplicate": SmartBattery(id="bat_1"),
+        "blank": SmartBattery(id="  "),
+        "invalid_id": SmartBattery(id=None),
+        "mapping": {"id": "bat_3"},
+        "invalid_summary": SmartBattery(id="bat_3", summary={}),
+    }[bad_record]
 
     with (
         patch.object(coordinator, "_should_skip_api_calls", return_value=False),
-        patch.object(coordinator, "_is_smart_trading_enabled", return_value=True),
+        patch.object(coordinator, "_fetch_smart_batteries", return_value=malformed),
+    ):
+        result = await coordinator._async_update_data()
+
+    assert result[DATA_BATTERY_STEERING_STATES] == {}
+    assert result[DATA_BATTERY_STATUS_HISTORY] == {}
+    assert coordinator._battery_steering["bat_1"].latest_summary_at == _updated_at(10)
+    assert coordinator._battery_steering["bat_2"].latest_summary_at == _updated_at(10)
+    assert (
+        _history(coordinator, 15, _updated_at(15), bat_1="unknown", bat_2="unknown")
+        == shown
+    )
+
+
+async def test_battery_update_orders_steering_independently_of_other_fields(
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A stale known plan after a newer null cannot become current or log a recovery."""
+    coordinator = _battery_coordinator_for(AsyncMock(), mock_config_entry)
+    coordinator.settings_coordinator.data = {}
+    stale = _status_batteries(_updated_at(20), bat_1="discharge_smart_home")
+    stale.batteries[0].summary.last_known_state_of_charge = 72
+    polls = [
+        _status_batteries(_updated_at(10), bat_1="idle_smart_home"),
+        _status_batteries(_updated_at(30), bat_1="unknown"),
+        stale,
+        _status_batteries(_updated_at(40), bat_1="charge_smart_home"),
+    ]
+    freezer.move_to(_T0)
+    with (
+        patch.object(coordinator, "_should_skip_api_calls", return_value=False),
         patch.object(coordinator, "_fetch_smart_batteries", side_effect=polls),
+        caplog.at_level(logging.DEBUG, logger="custom_components.frank_energie"),
     ):
         first = await coordinator._async_update_data()
-        second = await coordinator._async_update_data()
+        freezer.tick(timedelta(minutes=1))
+        missing = await coordinator._async_update_data()
+        older = await coordinator._async_update_data()
+        assert not any("status reported again" in line for line in _status_log(caplog))
+        recovered = await coordinator._async_update_data()
 
     assert first[DATA_BATTERY_STATUS_HISTORY] == {}
-    assert second[DATA_BATTERY_STATUS_HISTORY]["bat_1"].status == "discharge_smart_home"
+    assert missing[DATA_BATTERY_STEERING_STATES]["bat_1"] == "unknown"
+    assert older[DATA_BATTERY_STEERING_STATES]["bat_1"] == "unknown"
+    assert older[DATA_BATTERY_STATUS_HISTORY] == missing[DATA_BATTERY_STATUS_HISTORY]
+    report = older[DATA_BATTERY_STATUS_HISTORY]["bat_1"]
+    assert report.status == "idle_smart_home"
+    assert report.seen_at == _T0
+    assert older[DATA_BATTERIES].batteries[0].summary.last_known_state_of_charge == 72
+    assert recovered[DATA_BATTERY_STEERING_STATES]["bat_1"] == "charge_smart_home"
+    assert recovered[DATA_BATTERY_STATUS_HISTORY] == {}
+    assert sum("status reported again" in line for line in _status_log(caplog)) == 1
+
+
+async def test_status_observation_time_is_inventory_receipt(
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Slow inventory and detail calls bracket the actual receipt time of the plan."""
+    api = AsyncMock()
+    coordinator = _battery_coordinator_for(api, mock_config_entry)
+    coordinator.settings_coordinator.data = {}
+    freezer.move_to(_T0)
+    received_at = _T0 + timedelta(seconds=7)
+
+    async def fetch_inventory() -> SmartBatteries:
+        """Simulate time in transit before the parsed summary arrives."""
+        freezer.move_to(received_at)
+        return _status_batteries(bat_1="idle_smart_home")
+
+    async def fetch_detail(battery_id: str) -> None:
+        """Advance the clock during the independent detail request."""
+        freezer.tick(timedelta(seconds=11))
+
+    api.smart_batteries.side_effect = fetch_inventory
+    api.smart_battery_details.side_effect = fetch_detail
+    with (
+        patch.object(coordinator, "_should_skip_api_calls", return_value=False),
+        patch.object(coordinator, "_is_smart_trading_enabled", return_value=True),
+    ):
+        await coordinator._async_update_data()
+    api.smart_battery_details.assert_awaited_once_with("bat_1")
+    assert datetime.now(UTC) > received_at
+    shown = _history(coordinator, 5, _updated_at(5), bat_1="unknown")
+    assert shown["bat_1"].seen_at == received_at
 
 
 _STATUS_LOG_FRAGMENTS = (

@@ -89,6 +89,7 @@ from .const import (
     DATA_BATTERY_SESSIONS,
     DATA_BATTERY_SETTINGS,
     DATA_BATTERY_STATUS_HISTORY,
+    DATA_BATTERY_STEERING_STATES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -127,7 +128,7 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
-from .device_inventory import async_identify_inventory_device
+from .device_inventory import async_identify_inventory_device, validated_inventory_ids
 from .helpers import (
     api_maintenance_active,
     decrypt_password,
@@ -358,8 +359,56 @@ class ReportedBatteryStatus:
     seen_at: datetime
     """When Home Assistant received it. This is not an upstream timestamp."""
 
-    summary_updated_at: datetime | None = None
-    """The summary's ``lastUpdate`` then; only used to ignore a stale repeat."""
+
+@dataclass(slots=True)
+class _BatterySteering:
+    """Track the accepted plan, provider ordering and last known report separately."""
+
+    current: SmartBatteryStatus = SmartBatteryStatus.UNKNOWN
+    latest_summary_at: datetime | None = None
+    """Latest accepted provider timestamp, including summaries with unknown plans."""
+
+    reported: ReportedBatteryStatus | None = None
+
+    def observe(
+        self, summary: SmartBatterySummary, received_at: datetime, position: int
+    ) -> None:
+        """Accept newer summaries and untimestamped observations in receipt order."""
+        updated_at = summary.last_update
+        if updated_at is not None:
+            if (
+                self.latest_summary_at is not None
+                and updated_at <= self.latest_summary_at
+            ):
+                return
+            self.latest_summary_at = updated_at
+
+        status = summary.last_known_status
+        if status != SmartBatteryStatus.UNKNOWN:
+            if self.current == SmartBatteryStatus.UNKNOWN and self.reported is not None:
+                _LOGGER.debug(
+                    "Battery %d: status reported again, the previous one was seen %s ago",
+                    position,
+                    _whole_seconds(received_at - self.reported.seen_at),
+                )
+            self.reported = ReportedBatteryStatus(status, received_at)
+        self.current = status
+
+
+def _typed_battery_inventory(inventory: object) -> SmartBatteries | None:
+    """Reject malformed SDK records before fetching details or changing history."""
+    if not isinstance(inventory, SmartBatteries) or not isinstance(
+        inventory.batteries, list
+    ):
+        return None
+    for battery in inventory.batteries:
+        if not isinstance(battery, SmartBattery) or not isinstance(battery.id, str):
+            return None
+        if battery.summary is not None and not isinstance(
+            battery.summary, SmartBatterySummary
+        ):
+            return None
+    return inventory
 
 
 class FrankEnergieData(TypedDict):
@@ -425,6 +474,9 @@ class FrankEnergieData(TypedDict):
     smart_battery_settings: dict[str, object]
     """Per-battery adjustable settings and options, keyed by battery ID."""
 
+    smart_battery_steering_states: dict[str, SmartBatteryStatus]
+    """Accepted plans for live, unambiguous battery summaries in this poll."""
+
     smart_battery_status_history: dict[str, ReportedBatteryStatus]
     """Last reported status of each battery whose current status is missing."""
 
@@ -487,6 +539,7 @@ def _empty_data() -> FrankEnergieData:
         DATA_BATTERY_SESSIONS: [],
         DATA_BATTERY_SETTINGS: {},
         DATA_BATTERY_STATUS_HISTORY: {},
+        DATA_BATTERY_STEERING_STATES: {},
         DATA_ENODE_VEHICLES: None,
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
@@ -3667,11 +3720,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         # recorded, so an older response can never overwrite a newer one.
         self._battery_settings_requested: dict[str, int] = {}
         self._battery_settings_recorded: dict[str, int] = {}
-        # Last status the API reported per battery. Kept in memory only, so a
-        # restart never presents an old status as recent. ``_status_missing``
-        # holds the batteries whose latest poll had none; it only drives logging.
-        self._last_reported_status: dict[str, ReportedBatteryStatus] = {}
-        self._status_missing: set[str] = set()
+        self._battery_steering: dict[str, _BatterySteering] = {}
 
     async def async_update_battery_settings(
         self, battery_id: str, settings: dict[str, object]
@@ -3889,96 +3938,40 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
 
         return details_list, sessions_list, settings_by_battery
 
-    def _remember_reported_status(
-        self, battery_id: str, summary: SmartBatterySummary, now: datetime
-    ) -> None:
-        """Record a status the API reported, unless the summary is stale or older.
+    def _resolve_battery_statuses(
+        self, inventory: SmartBatteries | None, received_at: datetime
+    ) -> tuple[dict[str, SmartBatteryStatus], dict[str, ReportedBatteryStatus]]:
+        """Build this poll's steering states and visible history from a verified inventory."""
+        present = validated_inventory_ids("batteries", inventory)
+        if inventory is None or present is None:
+            return {}, {}
+        for removed in self._battery_steering.keys() - present:
+            del self._battery_steering[removed]
 
-        The summary's ``lastUpdate`` is not known to be specific to the status, so
-        it is only used to avoid two mistakes: renewing the time for the same
-        summary served again, and replacing a newer report with an older one.
-        This assumes ``lastUpdate`` does not move backwards.
-        """
-        updated_at = summary.last_update
-        previous = self._last_reported_status.get(battery_id)
-        if (
-            previous is not None
-            and previous.summary_updated_at is not None
-            and updated_at is not None
-        ):
-            if updated_at < previous.summary_updated_at:
-                return
-            if (
-                updated_at == previous.summary_updated_at
-                and summary.last_known_status == previous.status
-            ):
-                return
-        self._last_reported_status[battery_id] = ReportedBatteryStatus(
-            summary.last_known_status, now, updated_at
-        )
-
-    def _note_status_returned(
-        self, battery_id: str, position: int, now: datetime
-    ) -> None:
-        """Log the end of a period without a status, once."""
-        if battery_id not in self._status_missing:
-            return
-        self._status_missing.discard(battery_id)
-        reported = self._last_reported_status.get(battery_id)
-        if reported is not None:
-            _LOGGER.debug(
-                "Battery %d: status reported again, the previous one was seen %s ago",
-                position,
-                _whole_seconds(now - reported.seen_at),
-            )
-
-    def _resolve_battery_status_history(
-        self, batteries: SmartBatteries | None, now: datetime
-    ) -> dict[str, ReportedBatteryStatus]:
-        """Return the last reported status of each battery whose current one is missing.
-
-        The API sometimes sends a null ``lastKnownStatus`` while every other field
-        is fresh, which the client reports as ``UNKNOWN``. The status sensor keeps
-        showing ``unknown`` then, because a plan from earlier may no longer hold.
-        This history is exposed only as explicitly historical attributes.
-
-        Batteries are named by position in the debug log, never by ID.
-        """
-        if batteries is None:
-            # The fetch failed or was skipped: no new information, so keep
-            # showing what was shown and do not erase what is remembered.
-            return {
-                battery_id: reported
-                for battery_id in self._status_missing
-                if (reported := self._last_reported_status.get(battery_id))
-            }
+        states: dict[str, SmartBatteryStatus] = {}
         history: dict[str, ReportedBatteryStatus] = {}
-        for position, battery in enumerate(batteries.batteries, 1):
-            summary = getattr(battery, "summary", None)
-            if summary is None:
+        for position, battery in enumerate(inventory.batteries, 1):
+            if battery.summary is None:
                 continue
-            if summary.last_known_status != SmartBatteryStatus.UNKNOWN:
-                self._note_status_returned(battery.id, position, now)
-                self._remember_reported_status(battery.id, summary, now)
-                continue
-            self._status_missing.add(battery.id)
-            reported = self._last_reported_status.get(battery.id)
-            if reported is not None:
-                history[battery.id] = reported
-                _LOGGER.debug(
-                    "Battery %d: status not reported, last reported %s seen %s ago",
-                    position,
-                    reported.status,
-                    _whole_seconds(now - reported.seen_at),
-                )
-        present = {battery.id for battery in batteries.batteries}
-        for removed in self._last_reported_status.keys() - present:
-            del self._last_reported_status[removed]
-        self._status_missing &= present
-        return history
+            steering = self._battery_steering.setdefault(battery.id, _BatterySteering())
+            steering.observe(battery.summary, received_at, position)
+            states[battery.id] = steering.current
+            if (
+                steering.current == SmartBatteryStatus.UNKNOWN
+                and steering.reported is not None
+            ):
+                history[battery.id] = steering.reported
+                if battery.summary.last_known_status == SmartBatteryStatus.UNKNOWN:
+                    _LOGGER.debug(
+                        "Battery %d: status not reported, last reported %s seen %s ago",
+                        position,
+                        steering.reported.status,
+                        _whole_seconds(received_at - steering.reported.seen_at),
+                    )
+        return states, history
 
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch battery data."""
+        """Fetch live battery resources and publish the accepted steering observations."""
         self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
@@ -3994,7 +3987,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         is_smart_trading = self._is_smart_trading_enabled(user_data)
 
         try:
-            data_smart_batteries = await self._fetch_smart_batteries(is_smart_trading)
+            fetched = await self._fetch_smart_batteries(is_smart_trading)
+            status_seen_at = datetime.now(ZoneInfo("UTC"))
+            data_smart_batteries = _typed_battery_inventory(fetched)
 
             (
                 data_smart_battery_details,
@@ -4023,9 +4018,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
             result[DATA_BATTERY_SETTINGS] = data_smart_battery_settings
-            result[DATA_BATTERY_STATUS_HISTORY] = self._resolve_battery_status_history(
-                data_smart_batteries, now_utc
-            )
+            (
+                result[DATA_BATTERY_STEERING_STATES],
+                result[DATA_BATTERY_STATUS_HISTORY],
+            ) = self._resolve_battery_statuses(data_smart_batteries, status_seen_at)
             self._process_device_inventory("battery", data_smart_batteries)
             return result
         except Exception as err:

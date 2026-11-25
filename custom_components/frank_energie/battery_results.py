@@ -165,6 +165,9 @@ def async_watch_battery_inventory(
     on_discovery: Callable[[list[str], bool], None],
     *,
     still_registered: Callable[[str], bool] | None = None,
+    inventory_ids: Callable[[FrankEnergieBatteryCoordinator], set[str] | None] = (
+        current_battery_ids
+    ),
 ) -> None:
     """Announce new battery IDs and the first nonempty inventory for this entry."""
     coordinator = entry.runtime_data.battery_coordinator
@@ -177,7 +180,7 @@ def async_watch_battery_inventory(
     def _async_discover() -> None:
         """Add each battery once following a successful inventory refresh."""
         nonlocal present
-        ids = current_battery_ids(coordinator)
+        ids = inventory_ids(coordinator)
         if ids is None:
             return
         returning = ids - present
