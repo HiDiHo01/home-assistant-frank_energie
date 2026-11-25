@@ -66,6 +66,8 @@ from .const import (
     BATTERY_STRATEGY_OPTIONS,
     DATA_BATTERIES,
     DATA_BATTERY_SESSIONS,
+    DATA_BATTERY_STATUS_HISTORY,
+    DATA_BATTERY_STEERING_STATES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -4782,16 +4784,36 @@ def _get_battery_enum_state(
 
 
 def _get_battery_steering_state(data: FrankEnergieData, battery_id: str) -> str | None:
-    """Distinguish a missing summary from an unknown steering plan."""
+    """Read the accepted steering plan for this battery's live summary."""
     battery = _get_battery(data, battery_id)
     if battery is None or battery.summary is None:
         return None
+    if DATA_BATTERY_STEERING_STATES in data:
+        status = data[DATA_BATTERY_STEERING_STATES].get(battery_id)
+        if status is None:
+            return None
+        return status.value if status.value in SMART_BATTERY_STATUSES else STATE_UNKNOWN
     return (
         _get_battery_enum_state(
             data, battery_id, "last_known_status", SMART_BATTERY_STATUSES
         )
         or "unknown"
     )
+
+
+def _get_battery_status_attributes(
+    data: FrankEnergieData, battery_id: str
+) -> dict[str, str]:
+    """Expose the last reported plan only for this battery's current unknown state."""
+    if _get_battery_steering_state(data, battery_id) != STATE_UNKNOWN:
+        return {}
+    reported = data.get(DATA_BATTERY_STATUS_HISTORY, {}).get(battery_id)
+    if reported is None:
+        return {}
+    return {
+        "last_reported_status": reported.status.value,
+        "last_reported_status_seen_at": reported.seen_at.isoformat(),
+    }
 
 
 def _battery_summary_enum_description(
@@ -5066,6 +5088,7 @@ def _build_single_smart_battery_descriptions(
                 device_class=SensorDeviceClass.ENUM,
                 options=list(SMART_BATTERY_STATUSES),
                 value_fn=lambda data: _get_battery_steering_state(data, battery_id),
+                attr_fn=lambda data: _get_battery_status_attributes(data, battery_id),
             ),
             FrankEnergieEntityDescription(
                 key=f"{base_key}_last_update",

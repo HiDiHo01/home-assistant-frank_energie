@@ -34,6 +34,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 from python_frank_energie import FrankEnergie
+from python_frank_energie.domain import SmartBatteryStatus
 from python_frank_energie.exceptions import (
     AuthException,
     AuthRequiredException,
@@ -61,6 +62,7 @@ from python_frank_energie.models import (
     SmartBattery,
     SmartBatteryDetails,
     SmartBatterySessions,
+    SmartBatterySummary,
     SmartPvSystems,
     SmartPvSystemSummary,
     User,
@@ -86,6 +88,8 @@ from .const import (
     DATA_BATTERY_DETAILS,
     DATA_BATTERY_SESSIONS,
     DATA_BATTERY_SETTINGS,
+    DATA_BATTERY_STATUS_HISTORY,
+    DATA_BATTERY_STEERING_STATES,
     DATA_CONTRACT_PRICE_RESOLUTION_STATE,
     DATA_DELIVERY_SITE,
     DATA_ELECTRICITY,
@@ -124,7 +128,7 @@ from .const import (
     TIMEZONE_AMSTERDAM,
     TOMORROW_PUBLICATION_HOUR_LOCAL,
 )
-from .device_inventory import async_identify_inventory_device
+from .device_inventory import async_identify_inventory_device, validated_inventory_ids
 from .helpers import (
     api_maintenance_active,
     decrypt_password,
@@ -340,6 +344,73 @@ def _is_no_market_prices_error(ex: Exception) -> bool:
     return isinstance(ex, RequestException) and ERROR_NO_MARKET_PRICES in str(ex)
 
 
+def _whole_seconds(age: timedelta) -> timedelta:
+    """Round an age to whole seconds so it reads cleanly in a log line."""
+    return timedelta(seconds=round(age.total_seconds()))
+
+
+@dataclass(frozen=True, slots=True)
+class ReportedBatteryStatus:
+    """The last status the API reported for a battery, and when it was received."""
+
+    status: SmartBatteryStatus
+    """The reported status."""
+
+    seen_at: datetime
+    """When Home Assistant received it. This is not an upstream timestamp."""
+
+
+@dataclass(slots=True)
+class _BatterySteering:
+    """Track the accepted plan, provider ordering and last known report separately."""
+
+    current: SmartBatteryStatus = SmartBatteryStatus.UNKNOWN
+    latest_summary_at: datetime | None = None
+    """Latest accepted provider timestamp, including summaries with unknown plans."""
+
+    reported: ReportedBatteryStatus | None = None
+
+    def observe(
+        self, summary: SmartBatterySummary, received_at: datetime, position: int
+    ) -> None:
+        """Accept newer summaries and untimestamped observations in receipt order."""
+        updated_at = summary.last_update
+        if updated_at is not None:
+            if (
+                self.latest_summary_at is not None
+                and updated_at <= self.latest_summary_at
+            ):
+                return
+            self.latest_summary_at = updated_at
+
+        status = summary.last_known_status
+        if status != SmartBatteryStatus.UNKNOWN:
+            if self.current == SmartBatteryStatus.UNKNOWN and self.reported is not None:
+                _LOGGER.debug(
+                    "Battery %d: status reported again, the previous one was seen %s ago",
+                    position,
+                    _whole_seconds(received_at - self.reported.seen_at),
+                )
+            self.reported = ReportedBatteryStatus(status, received_at)
+        self.current = status
+
+
+def _typed_battery_inventory(inventory: object) -> SmartBatteries | None:
+    """Reject malformed SDK records before fetching details or changing history."""
+    if not isinstance(inventory, SmartBatteries) or not isinstance(
+        inventory.batteries, list
+    ):
+        return None
+    for battery in inventory.batteries:
+        if not isinstance(battery, SmartBattery) or not isinstance(battery.id, str):
+            return None
+        if battery.summary is not None and not isinstance(
+            battery.summary, SmartBatterySummary
+        ):
+            return None
+    return inventory
+
+
 class FrankEnergieData(TypedDict):
     """Represents data fetched from Frank Energie API."""
 
@@ -403,6 +474,12 @@ class FrankEnergieData(TypedDict):
     smart_battery_settings: dict[str, object]
     """Per-battery adjustable settings and options, keyed by battery ID."""
 
+    smart_battery_steering_states: dict[str, SmartBatteryStatus]
+    """Accepted plans for live, unambiguous battery summaries in this poll."""
+
+    smart_battery_status_history: dict[str, ReportedBatteryStatus]
+    """Last reported status of each battery whose current status is missing."""
+
     smart_pv_systems: SmartPvSystems | None
     """Optional smart PV systems data."""
 
@@ -461,6 +538,8 @@ def _empty_data() -> FrankEnergieData:
         DATA_BATTERY_DETAILS: [],
         DATA_BATTERY_SESSIONS: [],
         DATA_BATTERY_SETTINGS: {},
+        DATA_BATTERY_STATUS_HISTORY: {},
+        DATA_BATTERY_STEERING_STATES: {},
         DATA_ENODE_VEHICLES: None,
         DATA_PV_SYSTEMS: None,
         DATA_PV_SUMMARY: None,
@@ -3641,6 +3720,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         # recorded, so an older response can never overwrite a newer one.
         self._battery_settings_requested: dict[str, int] = {}
         self._battery_settings_recorded: dict[str, int] = {}
+        self._battery_steering: dict[str, _BatterySteering] = {}
 
     async def async_update_battery_settings(
         self, battery_id: str, settings: dict[str, object]
@@ -3858,8 +3938,40 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
 
         return details_list, sessions_list, settings_by_battery
 
+    def _resolve_battery_statuses(
+        self, inventory: SmartBatteries | None, received_at: datetime
+    ) -> tuple[dict[str, SmartBatteryStatus], dict[str, ReportedBatteryStatus]]:
+        """Build this poll's steering states and visible history from a verified inventory."""
+        present = validated_inventory_ids("batteries", inventory)
+        if inventory is None or present is None:
+            return {}, {}
+        for removed in self._battery_steering.keys() - present:
+            del self._battery_steering[removed]
+
+        states: dict[str, SmartBatteryStatus] = {}
+        history: dict[str, ReportedBatteryStatus] = {}
+        for position, battery in enumerate(inventory.batteries, 1):
+            if battery.summary is None:
+                continue
+            steering = self._battery_steering.setdefault(battery.id, _BatterySteering())
+            steering.observe(battery.summary, received_at, position)
+            states[battery.id] = steering.current
+            if (
+                steering.current == SmartBatteryStatus.UNKNOWN
+                and steering.reported is not None
+            ):
+                history[battery.id] = steering.reported
+                if battery.summary.last_known_status == SmartBatteryStatus.UNKNOWN:
+                    _LOGGER.debug(
+                        "Battery %d: status not reported, last reported %s seen %s ago",
+                        position,
+                        steering.reported.status,
+                        _whole_seconds(received_at - steering.reported.seen_at),
+                    )
+        return states, history
+
     async def _async_update_data(self) -> FrankEnergieData:
-        """Fetch battery data."""
+        """Fetch live battery resources and publish the accepted steering observations."""
         self.verified_inventory_ids = None
         now_utc = datetime.now(ZoneInfo("UTC"))
         if self._should_skip_api_calls(now_utc):
@@ -3875,7 +3987,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         is_smart_trading = self._is_smart_trading_enabled(user_data)
 
         try:
-            data_smart_batteries = await self._fetch_smart_batteries(is_smart_trading)
+            fetched = await self._fetch_smart_batteries(is_smart_trading)
+            status_seen_at = datetime.now(ZoneInfo("UTC"))
+            data_smart_batteries = _typed_battery_inventory(fetched)
 
             (
                 data_smart_battery_details,
@@ -3904,6 +4018,10 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             result[DATA_BATTERY_DETAILS] = data_smart_battery_details
             result[DATA_BATTERY_SESSIONS] = data_smart_battery_sessions
             result[DATA_BATTERY_SETTINGS] = data_smart_battery_settings
+            (
+                result[DATA_BATTERY_STEERING_STATES],
+                result[DATA_BATTERY_STATUS_HISTORY],
+            ) = self._resolve_battery_statuses(data_smart_batteries, status_seen_at)
             self._process_device_inventory("battery", data_smart_batteries)
             return result
         except Exception as err:

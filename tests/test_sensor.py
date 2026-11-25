@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from freezegun.api import FrozenDateTimeFactory
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -18,12 +19,21 @@ from pytest_homeassistant.common import (
 )
 from python_frank_energie.domain import (
     SmartBatteryImbalanceStrategy,
+    SmartBatteryStatus,
     SmartBatteryTradingAlgorithm,
     SmartPvOperationalStatus,
     SmartPvSteeringStatus,
 )
 from python_frank_energie.exceptions import RequestException
-from python_frank_energie.models import Invoice, Invoices, MonthSummary, PriceData
+from python_frank_energie.models import (
+    Invoice,
+    Invoices,
+    MonthSummary,
+    PriceData,
+    SmartBatteries,
+    SmartBattery,
+    SmartBatterySummary,
+)
 
 from custom_components.frank_energie import const
 from custom_components.frank_energie.device_inventory import (
@@ -3077,7 +3087,7 @@ def test_every_library_status_member_is_a_listed_sensor_option(
 
 
 def test_smart_battery_status_sensor_translations_ship() -> None:
-    """Every state and name exists in the shipped strings and all locales."""
+    """Live and historical battery states use the same labels in every locale."""
     import json
 
     base = Path(const.__file__).parent
@@ -3096,6 +3106,16 @@ def test_smart_battery_status_sensor_translations_ship() -> None:
         ):
             assert sensors[key]["name"], (path.name, key)
             assert set(sensors[key]["state"]) == set(options), (path.name, key)
+
+        steering = sensors["battery_status"]
+        attributes = steering["state_attributes"]
+        assert attributes["last_reported_status"]["name"]
+        assert attributes["last_reported_status_seen_at"]["name"]
+        assert attributes["last_reported_status"]["state"] == {
+            code: label
+            for code, label in steering["state"].items()
+            if code != "unknown"
+        }
 
 
 def test_battery_descriptions_recover_without_rebuilding() -> None:
@@ -3505,3 +3525,182 @@ async def test_battery_sensor_migration_refuses_foreign_target(
     assert not async_migrate_battery_sensor_identity(hass, entry, "battery_1", key)
     assert registry.async_get(legacy.entity_id).unique_id == legacy.unique_id
     assert registry.async_get(foreign.entity_id).config_entry_id == other.entry_id
+
+
+# --- Battery status: historical attributes ------------------------------------
+
+_STATUS_SEEN_AT = datetime(2026, 11, 24, 11, 44, tzinfo=UTC)
+
+
+def _status_battery(
+    battery_id: str,
+    plan: str | None,
+    updated_at: datetime = _STATUS_SEEN_AT,
+) -> SmartBattery:
+    """Parse a provider steering summary, including its null-to-UNKNOWN mapping."""
+    battery = SmartBattery.from_dict({"id": battery_id, "brand": "Test"})
+    battery.summary = SmartBatterySummary.from_dict(
+        {"lastKnownStatus": plan, "lastUpdate": updated_at.isoformat()}
+    )
+    return battery
+
+
+@pytest.mark.parametrize(
+    ("plan", "expected"),
+    [
+        (None, "unknown"),
+        ("IDLE_SMART_HOME", "idle_smart_home"),
+        ("STATUS_UNRELIABLE_DATA", "status_unreliable_data"),
+    ],
+)
+def test_current_steering_state_gates_residual_history(
+    plan: str | None, expected: str
+) -> None:
+    """Only a live unknown plan can display this battery's historical attributes."""
+    from custom_components.frank_energie.coordinator import ReportedBatteryStatus
+    from custom_components.frank_energie.sensor import (
+        _build_single_smart_battery_descriptions,
+    )
+
+    battery = _status_battery("bat_1", plan)
+    description = next(
+        item
+        for item in _build_single_smart_battery_descriptions(battery)
+        if item.translation_key == "battery_status"
+    )
+    data = {const.DATA_BATTERIES: SmartBatteries([battery])}
+    assert description.value_fn(data) == expected
+    assert description.attr_fn(data) == {}
+    data[const.DATA_BATTERY_STATUS_HISTORY] = {
+        battery.id: ReportedBatteryStatus(
+            SmartBatteryStatus.DISCHARGE_SMART_HOME, _STATUS_SEEN_AT
+        )
+    }
+    expected_attributes = (
+        {
+            "last_reported_status": "discharge_smart_home",
+            "last_reported_status_seen_at": _STATUS_SEEN_AT.isoformat(),
+        }
+        if plan is None
+        else {}
+    )
+    assert description.attr_fn(data) == expected_attributes
+    battery.summary = None
+    assert description.value_fn(data) is None
+    assert description.attr_fn(data) == {}
+
+
+async def test_registered_steering_sensors_keep_history_by_id_across_polls(
+    hass: HomeAssistant,
+    enable_custom_integrations: None,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Publish parsed summaries through the coordinator and keep registry identity on reorder."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from pytest_homeassistant.common import MockEntityPlatform
+
+    from custom_components.frank_energie.coordinator import (
+        FrankEnergieBatteryCoordinator,
+    )
+    from custom_components.frank_energie.device_inventory import (
+        battery_sensor_unique_id,
+    )
+    from custom_components.frank_energie.sensor import (
+        _async_setup_smart_battery_sensors,
+    )
+
+    freezer.move_to(_STATUS_SEEN_AT)
+    entry = MockConfigEntry(
+        domain=const.DOMAIN, unique_id="site-a", data={"site_reference": "site-a"}
+    )
+    entry.add_to_hass(hass)
+    api = AsyncMock()
+    api.smart_battery_details.return_value = None
+    api.smart_battery_sessions.return_value = None
+    api.smart_battery_settings.return_value = None
+    settings = MagicMock()
+    settings.data = {
+        const.DATA_USER: SimpleNamespace(smartTrading={"isActivated": True})
+    }
+    coordinator = FrankEnergieBatteryCoordinator(hass, entry, api, settings)
+    entry.runtime_data = SimpleNamespace(battery_coordinator=coordinator)
+    later = _STATUS_SEEN_AT + timedelta(minutes=5)
+    first = _status_battery("bat_1", "DISCHARGE_SMART_HOME")
+    second = _status_battery("bat_2", "CHARGE_SMART_HOME")
+    reordered = SmartBatteries(
+        [
+            _status_battery(second.id, "STATUS_UNRELIABLE_DATA", later),
+            _status_battery(first.id, None, later),
+        ]
+    )
+    api.smart_batteries.side_effect = [
+        SmartBatteries([first, second]),
+        reordered,
+        SmartBatteries([SmartBattery(id=first.id), second]),
+        None,
+        reordered,
+        SmartBatteries([second]),
+        reordered,
+    ]
+    await coordinator.async_refresh()
+    added: list[SensorEntity] = []
+    _async_setup_smart_battery_sensors(hass, entry, added.extend)
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=const.DOMAIN)
+    platform.config_entry = entry
+    await platform.async_add_entities(
+        [
+            entity
+            for entity in added
+            if entity.entity_description.translation_key == "battery_status"
+        ]
+    )
+    registry = entity_registry.async_get(hass)
+
+    def registered_id(battery_id: str) -> str:
+        """Look up the registered status entity using its provider ID and config entry."""
+        unique_id = battery_sensor_unique_id(entry, battery_id, "smart_battery_status")
+        entity_id = registry.async_get_entity_id("sensor", const.DOMAIN, unique_id)
+        assert entity_id is not None
+        return entity_id
+
+    first_id, second_id = registered_id(first.id), registered_id(second.id)
+    assert hass.states.get(first_id).state == "discharge_smart_home"
+    assert hass.states.get(second_id).state == "charge_smart_home"
+    freezer.move_to(later)
+    await coordinator.async_refresh()
+    unknown = hass.states.get(first_id)
+    assert unknown.state == "unknown"
+    assert unknown.attributes["last_reported_status"] == "discharge_smart_home"
+    assert (
+        unknown.attributes["last_reported_status_seen_at"]
+        == _STATUS_SEEN_AT.isoformat()
+    )
+    unreliable = hass.states.get(second_id)
+    assert unreliable.state == "status_unreliable_data"
+    assert "last_reported_status" not in unreliable.attributes
+
+    for _ in range(2):  # Missing summary, then failed inventory fetch.
+        await coordinator.async_refresh()
+        unavailable = hass.states.get(first_id)
+        assert unavailable.state == "unavailable"
+        assert "last_reported_status" not in unavailable.attributes
+    await coordinator.async_refresh()
+    assert registered_id(first.id) == first_id
+    assert registered_id(second.id) == second_id
+    restored = hass.states.get(first_id)
+    assert restored.state == "unknown"
+    assert (
+        restored.attributes["last_reported_status_seen_at"]
+        == _STATUS_SEEN_AT.isoformat()
+    )
+
+    await (
+        coordinator.async_refresh()
+    )  # A verified inventory contains only the second battery.
+    assert hass.states.get(first_id).state == "unavailable"
+    await coordinator.async_refresh()
+    assert registered_id(first.id) == first_id
+    rediscovered = hass.states.get(first_id)
+    assert rediscovered.state == "unknown"
+    assert "last_reported_status" not in rediscovered.attributes

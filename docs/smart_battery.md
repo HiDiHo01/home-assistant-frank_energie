@@ -53,6 +53,31 @@ calculation. If any reported battery is missing a reliable capacity or charge
 level, the service sensor reports `unknown` instead of a misleading partial
 total. A genuine combined 0 kWh remains 0 kWh.
 
+### Battery status and its history
+
+When Frank Energie returns a summary with an unknown steering plan, **Battery
+status** shows `unknown`. If Home Assistant previously received a plan for
+that battery, two attributes appear for the duration of the gap.
+
+| Attribute | Meaning |
+| --- | --- |
+| `last_reported_status` | Last known steering plan for this battery. |
+| `last_reported_status_seen_at` | UTC time when Home Assistant received the summary containing that plan. |
+
+A known plan, including `status_unreliable_data`, is shown as the current
+state and clears the displayed attributes. A missing summary, a failed
+inventory fetch or ambiguous battery IDs make the steering state unavailable.
+History stays in memory per config entry and battery ID until a verified
+inventory removes the battery or the coordinator restarts. During scheduled
+maintenance the coordinator can reuse the previous snapshot.
+
+Home Assistant orders steering updates by the provider's `lastUpdate`,
+including updates with an unknown plan. For equal timestamps the first
+accepted plan wins. Older or repeated timestamped reports keep the original
+observation time. If a summary arrives without a timestamp, each receipt is
+a new observation and the most recent provider timestamp still applies to
+subsequent timestamped reports. Other battery measurements use the live response.
+
 ## Battery Operating Modes
 
 Supported batteries expose selectable operating modes.

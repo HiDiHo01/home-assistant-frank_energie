@@ -1012,6 +1012,48 @@
           "charge_smart_home": "Laden (Smart Home)",
           "idle_smart_home": "Inactief (Smart Home)",
           "unknown": "Onbekend"
+        },
+        "state_attributes": {
+          "last_reported_status": {
+            "name": "Laatst gemelde status",
+            "state": {
+              "status_charging": "Aan het laden",
+              "status_discharging": "Aan het ontladen",
+              "status_idle": "Inactief",
+              "status_unreliable_data": "Onbetrouwbare data",
+              "status_offline": "Offline",
+              "status_standby": "Stand-by",
+              "separate_imbalances": "Gescheiden onbalansen",
+              "idle_full": "Inactief (Vol)",
+              "idle_price": "Inactief (Prijs)",
+              "discharge_self_consumption": "Ontladen (Zelfconsumptie)",
+              "discharge_imbalance": "Ontladen (Onbalans)",
+              "charge_imbalance": "Laden (Onbalans)",
+              "discharge_intraday": "Ontladen (Intraday)",
+              "charge_intraday": "Laden (Intraday)",
+              "idle_intraday": "Inactief (Intraday)",
+              "charge_epex": "Laden (EPEX)",
+              "discharge_epex": "Ontladen (EPEX)",
+              "idle_epex": "Inactief (EPEX)",
+              "discharge_congestion": "Ontladen (Congestie)",
+              "charge_congestion": "Laden (Congestie)",
+              "discharge_self_consumption_mixed": "Ontladen (Zelfconsumptie Gemengd)",
+              "idle_congestion": "Inactief (Congestie)",
+              "idle_empty": "Inactief (Leeg)",
+              "idle_fifteen_percent": "Inactief (15%)",
+              "idle_fifteen_percentage": "Inactief (15%)",
+              "charge_self_consumption": "Laden (Zelfconsumptie)",
+              "charge_self_consumption_mixed": "Laden (Zelfconsumptie Gemengd)",
+              "status_maintenance": "Onderhoud",
+              "status_error": "Fout",
+              "discharge_smart_home": "Ontladen (Smart Home)",
+              "charge_smart_home": "Laden (Smart Home)",
+              "idle_smart_home": "Inactief (Smart Home)"
+            }
+          },
+          "last_reported_status_seen_at": {
+            "name": "Status ontvangen op"
+          }
         }
       },
       "battery_activity_status": {
