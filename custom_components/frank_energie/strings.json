@@ -1258,7 +1258,7 @@
         }
       },
       "battery_status": {
-        "name": "Battery Status",
+        "name": "Status",
         "state": {
           "status_charging": "Charging",
           "status_discharging": "Discharging",

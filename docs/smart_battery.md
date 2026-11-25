@@ -55,9 +55,11 @@ total. A genuine combined 0 kWh remains 0 kWh.
 
 ### Battery status and its history
 
-When Frank Energie returns a summary with an unknown steering plan, **Battery
-status** shows `unknown`. If Home Assistant previously received a plan for
-that battery, two attributes appear for the duration of the gap.
+When Frank Energie returns a summary with an unknown steering plan, the
+battery's **Status** sensor shows `unknown`. If Home Assistant previously
+received a plan for that battery, two attributes appear for the duration of the gap.
+The entity name describes the property; Home Assistant combines it with the
+device context. Existing entity IDs and user-customized names are preserved.
 
 | Attribute | Meaning |
 | --- | --- |
