@@ -3829,8 +3829,25 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             return False, None, BATTERY_SETTINGS_REFRESH_INTERVAL
         return True, settings, None
 
+    async def _fetch_battery_details_and_observe(
+        self, battery: SmartBattery, position: int | None
+    ) -> SmartBatteryDetails | None:
+        """Observe a detail summary at receipt, independently of sibling requests."""
+        details = await self._fetch_battery_details(battery)
+        summary = details.smart_battery_summary if details is not None else None
+        if position is not None and isinstance(summary, SmartBatterySummary):
+            self._observe_battery_summary(
+                battery.id, summary, datetime.now(UTC), position
+            )
+        return details
+
     async def _fetch_battery_data(
-        self, battery: SmartBattery, start_date: date, tomorrow: date, now: datetime
+        self,
+        battery: SmartBattery,
+        start_date: date,
+        tomorrow: date,
+        now: datetime,
+        position: int | None,
     ) -> tuple[
         SmartBatteryDetails | None,
         SmartBatterySessions | None,
@@ -3839,7 +3856,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         """Fetch details, sessions and settings for one smart battery concurrently."""
         _LOGGER.debug("Fetching details and sessions for battery: %s", battery.id)
         return await asyncio.gather(
-            self._fetch_battery_details(battery),
+            self._fetch_battery_details_and_observe(battery, position),
             self._fetch_battery_sessions(battery, start_date, tomorrow),
             self._fetch_battery_settings(battery, now),
         )
@@ -3886,6 +3903,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         data_smart_batteries: SmartBatteries | None,
         start_date: date,
         tomorrow: date,
+        positions: dict[str, int],
     ) -> tuple[
         list[SmartBatteryDetails], list[SmartBatterySessions], dict[str, object]
     ]:
@@ -3919,7 +3937,9 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
         }
         results = await asyncio.gather(
             *(
-                self._fetch_battery_data(battery, start_date, tomorrow, now)
+                self._fetch_battery_data(
+                    battery, start_date, tomorrow, now, positions.get(battery.id)
+                )
                 for battery in batteries
             )
         )
@@ -3938,36 +3958,66 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
 
         return details_list, sessions_list, settings_by_battery
 
-    def _resolve_battery_statuses(
+    def _observe_battery_summary(
+        self,
+        battery_id: str,
+        summary: SmartBatterySummary,
+        received_at: datetime,
+        position: int,
+    ) -> None:
+        """Apply provider ordering to a summary received from either endpoint."""
+        steering = self._battery_steering.setdefault(battery_id, _BatterySteering())
+        steering.observe(summary, received_at, position)
+        if (
+            steering.current == SmartBatteryStatus.UNKNOWN
+            and steering.reported is not None
+            and summary.last_known_status == SmartBatteryStatus.UNKNOWN
+        ):
+            _LOGGER.debug(
+                "Battery %d: status not reported, last reported %s seen %s ago",
+                position,
+                steering.reported.status,
+                _whole_seconds(received_at - steering.reported.seen_at),
+            )
+
+    def _observe_battery_inventory(
         self, inventory: SmartBatteries | None, received_at: datetime
-    ) -> tuple[dict[str, SmartBatteryStatus], dict[str, ReportedBatteryStatus]]:
-        """Build this poll's steering states and visible history from a verified inventory."""
+    ) -> dict[str, int]:
+        """Observe the verified inventory before detail requests can replace summaries."""
         present = validated_inventory_ids("batteries", inventory)
         if inventory is None or present is None:
-            return {}, {}
+            return {}
         for removed in self._battery_steering.keys() - present:
             del self._battery_steering[removed]
 
+        positions = {}
+        for position, battery in enumerate(inventory.batteries, 1):
+            positions[battery.id] = position
+            if battery.summary is not None:
+                self._observe_battery_summary(
+                    battery.id, battery.summary, received_at, position
+                )
+        return positions
+
+    def _resolve_battery_statuses(
+        self, inventory: SmartBatteries | None, positions: dict[str, int]
+    ) -> tuple[dict[str, SmartBatteryStatus], dict[str, ReportedBatteryStatus]]:
+        """Build this poll's states and visible history from accepted observations."""
+        if inventory is None or not positions:
+            return {}, {}
+
         states: dict[str, SmartBatteryStatus] = {}
         history: dict[str, ReportedBatteryStatus] = {}
-        for position, battery in enumerate(inventory.batteries, 1):
-            if battery.summary is None:
+        for battery in inventory.batteries:
+            if not isinstance(battery.summary, SmartBatterySummary):
                 continue
-            steering = self._battery_steering.setdefault(battery.id, _BatterySteering())
-            steering.observe(battery.summary, received_at, position)
+            steering = self._battery_steering[battery.id]
             states[battery.id] = steering.current
             if (
                 steering.current == SmartBatteryStatus.UNKNOWN
                 and steering.reported is not None
             ):
                 history[battery.id] = steering.reported
-                if battery.summary.last_known_status == SmartBatteryStatus.UNKNOWN:
-                    _LOGGER.debug(
-                        "Battery %d: status not reported, last reported %s seen %s ago",
-                        position,
-                        steering.reported.status,
-                        _whole_seconds(received_at - steering.reported.seen_at),
-                    )
         return states, history
 
     async def _async_update_data(self) -> FrankEnergieData:
@@ -3990,12 +4040,17 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             fetched = await self._fetch_smart_batteries(is_smart_trading)
             status_seen_at = datetime.now(ZoneInfo("UTC"))
             data_smart_batteries = _typed_battery_inventory(fetched)
+            positions = self._observe_battery_inventory(
+                data_smart_batteries, status_seen_at
+            )
 
             (
                 data_smart_battery_details,
                 data_smart_battery_sessions,
                 data_smart_battery_settings,
-            ) = await self._get_battery_data(data_smart_batteries, start_date, tomorrow)
+            ) = await self._get_battery_data(
+                data_smart_batteries, start_date, tomorrow, positions
+            )
 
             if data_smart_batteries and data_smart_batteries.batteries:
                 self.update_interval = timedelta(
@@ -4021,7 +4076,7 @@ class FrankEnergieBatteryCoordinator(FrankEnergieCoordinator):
             (
                 result[DATA_BATTERY_STEERING_STATES],
                 result[DATA_BATTERY_STATUS_HISTORY],
-            ) = self._resolve_battery_statuses(data_smart_batteries, status_seen_at)
+            ) = self._resolve_battery_statuses(data_smart_batteries, positions)
             self._process_device_inventory("battery", data_smart_batteries)
             return result
         except Exception as err:
