@@ -1220,6 +1220,48 @@
           "charge_smart_home": "Charge (Maison intelligente)",
           "idle_smart_home": "Inactif (Maison intelligente)",
           "unknown": "Inconnu"
+        },
+        "state_attributes": {
+          "last_reported_status": {
+            "name": "Dernier état signalé",
+            "state": {
+              "status_charging": "En charge",
+              "status_discharging": "En décharge",
+              "status_idle": "Inactif",
+              "status_unreliable_data": "Données non fiables",
+              "status_offline": "Hors ligne",
+              "status_standby": "Veille",
+              "separate_imbalances": "Équilibrages séparés",
+              "idle_full": "Inactif (Plein)",
+              "idle_price": "Inactif (Prix)",
+              "discharge_self_consumption": "Décharge (Autoconsommation)",
+              "discharge_imbalance": "Décharge (Équilibrage)",
+              "charge_imbalance": "Charge (Équilibrage)",
+              "discharge_intraday": "Décharge (Intraday)",
+              "charge_intraday": "Charge (Intraday)",
+              "idle_intraday": "Inactif (Intraday)",
+              "charge_epex": "Charge (EPEX)",
+              "discharge_epex": "Décharge (EPEX)",
+              "idle_epex": "Inactif (EPEX)",
+              "discharge_congestion": "Décharge (Congestion)",
+              "charge_congestion": "Charge (Congestion)",
+              "discharge_self_consumption_mixed": "Décharge (Autoconsommation Mixte)",
+              "idle_congestion": "Inactif (Congestion)",
+              "idle_empty": "Inactif (Vide)",
+              "idle_fifteen_percent": "Inactif (15%)",
+              "idle_fifteen_percentage": "Inactif (15%)",
+              "charge_self_consumption": "Charge (Autoconsommation)",
+              "charge_self_consumption_mixed": "Charge (Autoconsommation Mixte)",
+              "status_maintenance": "Maintenance",
+              "status_error": "Erreur",
+              "discharge_smart_home": "Décharge (Maison intelligente)",
+              "charge_smart_home": "Charge (Maison intelligente)",
+              "idle_smart_home": "Inactif (Maison intelligente)"
+            }
+          },
+          "last_reported_status_seen_at": {
+            "name": "État reçu le"
+          }
         }
       },
       "battery_activity_status": {
