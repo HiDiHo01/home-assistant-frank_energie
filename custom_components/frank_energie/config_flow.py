@@ -785,9 +785,11 @@ class ConfigFlow(config_entries.ConfigFlow):
                 CONF_ACCESS_TOKEN: self.sign_in_data[CONF_ACCESS_TOKEN],
                 CONF_TOKEN: self.sign_in_data[CONF_TOKEN],
             }
-            # Remove plaintext credentials from data if any
+            # Remove plaintext credentials and transient site labels from data.
             updated_data.pop(CONF_USERNAME, None)
             updated_data.pop(CONF_PASSWORD, None)
+            updated_data.pop("site_title", None)
+            updated_data.pop("site_titles", None)
 
             return self.async_update_reload_and_abort(
                 self._reauth_entry,
