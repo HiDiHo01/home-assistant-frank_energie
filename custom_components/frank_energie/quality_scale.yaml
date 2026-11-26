@@ -154,11 +154,11 @@ rules:
     status: todo
     comment: PR 352 contains dedicated lifecycle work and remains unmerged; do not count it as main evidence.
   repair-issues:
-    status: todo
-    comment: Assess repairable configuration/capability failures and document which are covered by HA's built-in reauth handling.
+    status: done
+    comment: User-actionable stale hardware is reported through persistent, entry-scoped repairs with translated confirmation and recovery handling. Repairs require two complete validated inventory absences and revalidate the live inventory before removal. Authentication expiry uses Home Assistant's built-in reauthentication flow; transient API failures and invalid inventories do not create repairs. See repairs.py and tests/test_repairs.py.
   stale-devices:
-    status: todo
-    comment: Obsolete umbrella-device cleanup exists; complete removal handling for departed batteries, chargers and vehicles.
+    status: done
+    comment: Departed batteries, chargers, vehicles, PV systems and Smart Heating devices are identified from complete validated inventories. Users can remove confirmed stale hardware through the persistent repair flow or the device-page removal action. Both paths require two confirmed absences and a newly fetched valid inventory before deletion; provider errors, disabled features and unknown identities are protected. Unused service devices can also be removed when they have no entities or dependents. See repairs.py, device_inventory.py, async_remove_config_entry_device in __init__.py, and tests/test_repairs.py.
   # Platinum
   async-dependency:
     status: done
