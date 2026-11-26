@@ -86,6 +86,8 @@ TO_REDACT: set[str] = {
     "contractProductName",
     "site_reference",
     "siteReference",
+    "site_title",
+    "site_titles",
     "reference",
     "externalReference",
     "external_reference",
