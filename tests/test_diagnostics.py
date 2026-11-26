@@ -238,6 +238,10 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
             "customer_number": "CUST-12345",
             "customerNumber": "CUST-67890",
             "mandateId": "MANDATE-999",
+            "iban": "NL00TEST1234567890",
+            "IBAN": "NL00TEST0987654321",
+            "accountNumber": "123456789",
+            "account_number": "987654321",
         }
     )
 
@@ -346,6 +350,10 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["data"]["customer_number"] == "**REDACTED**"
     assert diagnostics["data"]["customerNumber"] == "**REDACTED**"
     assert diagnostics["data"]["mandateId"] == "**REDACTED**"
+    assert diagnostics["data"]["iban"] == "**REDACTED**"
+    assert diagnostics["data"]["IBAN"] == "**REDACTED**"
+    assert diagnostics["data"]["accountNumber"] == "**REDACTED**"
+    assert diagnostics["data"]["account_number"] == "**REDACTED**"
 
     # Real provider dataclasses are serialized before recursive key redaction.
     battery = diagnostics["data"]["smart_batteries"]["batteries"][0]
