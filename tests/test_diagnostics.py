@@ -193,6 +193,11 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
         "accessToken": "token_camel",
         "auth_token": "token_auth",
         "site_reference": "site",
+        "site_title": "12 Example Street, 1234 AB",
+        "site_titles": {
+            "site-reference-private-1": "12 Example Street, 1234 AB",
+            "site-reference-private-2": "34 Sample Road, 5678 CD",
+        },
     }
     entry.runtime_data = runtime_data
 
@@ -307,6 +312,8 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
     assert diagnostics["entry"]["data"]["accessToken"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["auth_token"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["site_reference"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["site_title"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["site_titles"] == "**REDACTED**"
 
     assert diagnostics["data"]["email"] == "**REDACTED**"
     assert diagnostics["data"]["ean"] == "**REDACTED**"
