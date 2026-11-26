@@ -303,7 +303,9 @@ async def test_password_field_uses_password_text_selector(
 
 
 async def test_reconfigure_uses_email_username_selector(
-    hass: HomeAssistant, config_entry_with_site: MockConfigEntry
+    hass: HomeAssistant,
+    config_entry_with_site: MockConfigEntry,
+    mock_auth_success: MagicMock,
 ) -> None:
     """Keep current account and password semantics on reconfigure."""
     result = await hass.config_entries.flow.async_init(
