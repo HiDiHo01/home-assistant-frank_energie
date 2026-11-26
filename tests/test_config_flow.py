@@ -318,6 +318,26 @@ async def test_reconfigure_uses_email_username_selector(
     assert result["step_id"] == "login"
     _assert_credential_selectors(result["data_schema"])
 
+    # Legacy entries may still contain labels persisted by an older reconfigure flow.
+    config_entry_with_site.data.update(
+        {
+            "site_title": "12 Example Street, 1234 AB",
+            "site_titles": {
+                "site_ref_123": "12 Example Street, 1234 AB",
+            },
+        }
+    )
+    completed = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input=USER_INPUT,
+    )
+    assert completed["type"] == FlowResultType.ABORT
+    assert completed["reason"] == "reconfigure_successful"
+    await hass.async_block_till_done()
+    assert "site_title" not in config_entry_with_site.data
+    assert "site_titles" not in config_entry_with_site.data
+    assert config_entry_with_site.data["site_reference"] == "site_ref_123"
+
 
 @pytest.mark.parametrize(
     ("site_failure", "expected_step"),
