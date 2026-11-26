@@ -391,6 +391,48 @@ async def test_diagnostics_redacts_sensitive_data() -> None:
 
 
 @pytest.mark.asyncio
+async def test_diagnostics_without_runtime_data() -> None:
+    """Return useful diagnostics when runtime data is not initialized."""
+    entry = MagicMock()
+    entry.entry_id = "123"
+    entry.title = "Frank Energie"
+    entry.options = {}
+    entry.data = {
+        "site_title": "12 Example Street",
+        "site_titles": {"private-site-reference": "12 Example Street"},
+    }
+    entry.runtime_data = None
+
+    diagnostics = await async_get_config_entry_diagnostics(MagicMock(), entry)
+
+    assert diagnostics["coordinator"] == {}
+    assert diagnostics["data"] == {}
+    assert diagnostics["cached_prices"] is None
+    assert diagnostics["battery_session_coordinators"] == 0
+    assert diagnostics["entry"]["data"]["site_title"] == "**REDACTED**"
+    assert diagnostics["entry"]["data"]["site_titles"] == "**REDACTED**"
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_with_partial_coordinator_data() -> None:
+    """Handle a coordinator that exposes only its data attribute."""
+    entry = MagicMock()
+    entry.entry_id = "123"
+    entry.title = "Frank Energie"
+    entry.options = {}
+    entry.data = {}
+    entry.runtime_data = SimpleNamespace(
+        coordinator=SimpleNamespace(data={"safe": "value"}),
+    )
+
+    diagnostics = await async_get_config_entry_diagnostics(MagicMock(), entry)
+
+    assert diagnostics["coordinator"]["country_code"] is None
+    assert diagnostics["data"] == {"safe": "value"}
+    assert diagnostics["cached_prices"] is None
+
+
+@pytest.mark.asyncio
 async def test_diagnostics_coordinator_metadata() -> None:
     """Test coordinator metadata is included."""
 
