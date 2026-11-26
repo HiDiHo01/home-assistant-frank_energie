@@ -225,9 +225,7 @@ async def async_get_config_entry_diagnostics(
                 "last_update_success": getattr(
                     coordinator, "last_update_success", False
                 ),
-                "update_interval": str(
-                    getattr(coordinator, "update_interval", None)
-                ),
+                "update_interval": str(getattr(coordinator, "update_interval", None)),
                 "site_reference": getattr(coordinator, "site_reference", None),
                 "country_code": getattr(coordinator, "country_code", None),
                 "user_country": getattr(coordinator, "_user_country", None),
@@ -238,7 +236,9 @@ async def async_get_config_entry_diagnostics(
                 ),
                 "user_gas_enabled": getattr(coordinator, "user_gas_enabled", None),
                 "last_fetch_today": getattr(coordinator, "last_fetch_today", None),
-                "last_fetch_tomorrow": getattr(coordinator, "last_fetch_tomorrow", None),
+                "last_fetch_tomorrow": getattr(
+                    coordinator, "last_fetch_tomorrow", None
+                ),
                 "has_cached_prices": (
                     getattr(coordinator, "cached_prices", None) is not None
                 ),
@@ -261,11 +261,9 @@ async def async_get_config_entry_diagnostics(
             else {}
         ),
         "cached_prices": (
-            (
-                _serialize(getattr(coordinator, "cached_prices", None))
-                if coordinator is not None
-                else None
-            )
+            _serialize(getattr(coordinator, "cached_prices", None))
+            if coordinator is not None
+            else None
         ),
         "battery_session_coordinators": len(
             getattr(runtime_data, "battery_session_coordinators", {})
@@ -293,17 +291,17 @@ async def async_get_config_entry_diagnostics(
     ) is not None:
         snapshot = getattr(smart_hvac, "data", None)
         diagnostics["smart_hvac"] = {
-            "last_update_success": getattr(
-                smart_hvac, "last_update_success", False
-            ),
+            "last_update_success": getattr(smart_hvac, "last_update_success", False),
             "device_count": (
                 len(snapshot.devices)
-                if snapshot is not None and getattr(snapshot, "devices", None) is not None
+                if snapshot is not None
+                and getattr(snapshot, "devices", None) is not None
                 else None
             ),
             "connection_request_count": (
                 len(snapshot.requests)
-                if snapshot is not None and getattr(snapshot, "requests", None) is not None
+                if snapshot is not None
+                and getattr(snapshot, "requests", None) is not None
                 else None
             ),
         }

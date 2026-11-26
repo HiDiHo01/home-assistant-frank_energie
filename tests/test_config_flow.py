@@ -321,13 +321,15 @@ async def test_reconfigure_uses_email_username_selector(
     _assert_credential_selectors(result["data_schema"])
 
     # Legacy entries may still contain labels persisted by an older reconfigure flow.
-    config_entry_with_site.data.update(
-        {
+    hass.config_entries.async_update_entry(
+        config_entry_with_site,
+        data={
+            **config_entry_with_site.data,
             "site_title": "12 Example Street, 1234 AB",
             "site_titles": {
                 "site_ref_123": "12 Example Street, 1234 AB",
             },
-        }
+        },
     )
     completed = await hass.config_entries.flow.async_configure(
         result["flow_id"],
