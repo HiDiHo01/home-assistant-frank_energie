@@ -632,6 +632,8 @@ class ConfigFlow(config_entries.ConfigFlow):
         if self.source == config_entries.SOURCE_RECONFIGURE:
             reconfigure_entry = self._get_reconfigure_entry()
             updated_data = {**reconfigure_entry.data, **data}
+            updated_data.pop("site_title", None)
+            updated_data.pop("site_titles", None)
             return self.async_update_reload_and_abort(
                 reconfigure_entry,
                 data=updated_data,
