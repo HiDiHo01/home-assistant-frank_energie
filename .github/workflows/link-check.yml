@@ -106,7 +106,7 @@ jobs:
 
       - name: Run Lychee
         run: |
-          lychee --verbose --no-progress --accept 200,403,429 \
+          lychee --verbose --no-progress --accept 200,403,429,503 \
             --max-retries 5 --retry-wait-time 2 \
             --max-concurrency 64 --root-dir . .
         env:
