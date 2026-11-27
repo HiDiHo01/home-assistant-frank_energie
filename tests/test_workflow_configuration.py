@@ -100,8 +100,9 @@ def test_dependabot_references_only_defined_registries_and_existing_projects() -
             assert (REPOSITORY_ROOT / directory / "package.json").is_file()
 
 
-def test_pages_deployment_requires_a_complete_build_project() -> None:
-    """Prevent deployment jobs from referencing an absent Docusaurus project."""
+def test_pages_deployment_builds_jekyll_and_zensical_together() -> None:
+    """Require one Pages deployment to publish the Jekyll site and Zensical docs."""
+    deployment_workflows: list[str] = []
     for workflow_path in WORKFLOWS.iterdir():
         if workflow_path.suffix not in {".yml", ".yaml"}:
             continue
@@ -110,7 +111,7 @@ def test_pages_deployment_requires_a_complete_build_project() -> None:
         )
         jobs = configuration["jobs"]
         assert isinstance(jobs, dict)
-        for job in jobs.values():
+        for job_name, job in jobs.items():
             assert isinstance(job, dict)
             steps = job.get("steps", [])
             assert isinstance(steps, list)
@@ -118,13 +119,35 @@ def test_pages_deployment_requires_a_complete_build_project() -> None:
                 str(step.get("uses", "")).startswith("actions/deploy-pages@")
                 for step in steps
             ):
-                for required_path in (
-                    "package.json",
-                    "package-lock.json",
-                    "sidebars.js",
-                    "src/css/custom.css",
-                ):
-                    assert (REPOSITORY_ROOT / required_path).is_file(), required_path
+                deployment_workflows.append(workflow_path.name)
+                build_job = jobs.get("build")
+                assert isinstance(build_job, dict)
+                build_steps = build_job.get("steps", [])
+                assert isinstance(build_steps, list)
+                assert any(
+                    str(step.get("uses", "")).startswith(
+                        "actions/jekyll-build-pages@"
+                    )
+                    for step in build_steps
+                )
+                assert any(
+                    "zensical build --clean" in str(step.get("run", ""))
+                    for step in build_steps
+                )
+                assert any(
+                    "cp -a site/. _site/docs/" in str(step.get("run", ""))
+                    for step in build_steps
+                )
+                assert any(
+                    str(step.get("uses", "")).startswith(
+                        "actions/upload-pages-artifact@"
+                    )
+                    for step in build_steps
+                )
+                assert job_name == "deploy"
+    assert deployment_workflows == ["jekyll-gh-pages.yml"]
+    for required_path in ("mkdocs.yml", "requirements-docs.txt", "docs/index.md"):
+        assert (REPOSITORY_ROOT / required_path).is_file(), required_path
 
 
 @pytest.mark.parametrize(
