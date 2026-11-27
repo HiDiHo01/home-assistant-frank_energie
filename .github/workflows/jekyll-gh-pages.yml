@@ -51,6 +51,9 @@ jobs:
       - name: Build Zensical documentation
         run: zensical build --clean
 
+      - name: Prepare Jekyll output for the runner
+        run: sudo chown -R "$(id -u):$(id -g)" _site
+
       - name: Add documentation to the Jekyll website
         run: |
           mkdir -p _site/docs
