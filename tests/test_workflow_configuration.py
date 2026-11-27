@@ -147,6 +147,10 @@ def test_pages_deployment_builds_jekyll_and_zensical_together() -> None:
                     for step in build_steps
                 )
                 assert job_name == "deploy"
+                assert job.get("if") == (
+                    "github.ref == 'refs/heads/main' && "
+                    "github.event_name != 'pull_request'"
+                )
     assert deployment_workflows == ["jekyll-gh-pages.yml"]
     for required_path in (
         "_config.yml",
