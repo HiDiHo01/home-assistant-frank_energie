@@ -146,8 +146,17 @@ def test_pages_deployment_builds_jekyll_and_zensical_together() -> None:
                 )
                 assert job_name == "deploy"
     assert deployment_workflows == ["jekyll-gh-pages.yml"]
-    for required_path in ("mkdocs.yml", "requirements-docs.txt", "docs/index.md"):
+    for required_path in (
+        "_config.yml",
+        "mkdocs.yml",
+        "requirements-docs.txt",
+        "docs/index.md",
+    ):
         assert (REPOSITORY_ROOT / required_path).is_file(), required_path
+    jekyll_configuration = _read_configuration("_config.yml")
+    excluded_paths = jekyll_configuration.get("exclude", [])
+    assert isinstance(excluded_paths, list)
+    assert "docs" in excluded_paths
 
 
 @pytest.mark.parametrize(
