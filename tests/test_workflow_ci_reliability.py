@@ -54,23 +54,27 @@ def _load_baseline_checker() -> ModuleType:
 def test_link_check_retries_and_verifies_a_pinned_binary() -> None:
     """Prevent transient download errors and unverified release assets."""
     install_step = _named_step(
-        "link-check.yml", "link-check", "Install verified Lychee release"
+        "link-check.yml", "link-check", "Install verified Lychee nightly release"
     )
     environment = install_step["env"]
     assert isinstance(environment, dict)
     assert environment["LYCHEE_SHA256"] == (
-        "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
+        "320b6cd1e624d3d421fe3481b39427689e20b6ad65a2e3171fa0b7e19ac7a82e"
     )
     script = install_step["run"]
     assert isinstance(script, str)
     assert "curl " in script
     assert "--retry 3 --retry-all-errors" in script
     assert "--connect-timeout 10 --max-time 35" in script
-    assert "api.github.com/repos/lycheeverse/lychee/releases/assets/409959156" in script
+    assert "api.github.com/repos/lycheeverse/lychee/releases/assets/744397476" in script
     assert '--header "Authorization: Bearer $GITHUB_TOKEN"' in script
     assert "sha256sum --check" in script
     assert 'echo "$RUNNER_TEMP/lychee-bin" >> "$GITHUB_PATH"' in script
     assert install_step.get("continue-on-error", False) is False
+    harden_step = _named_step("link-check.yml", "link-check", "Harden Runner")
+    allowed_endpoints = str(harden_step["with"]["allowed-endpoints"])
+    assert "www.frankenergie.nl:443" in allowed_endpoints
+    assert "klantenservice.frankenergie.nl:443" in allowed_endpoints
     lychee = _named_step("link-check.yml", "link-check", "Run Lychee")
     assert lychee.get("continue-on-error", False) is False
     assert "lychee --verbose" in str(lychee["run"])
