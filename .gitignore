@@ -21,6 +21,9 @@ blueprints/
 *.log*
 *.db
 
+# MkDocs output
+/site/
+
 # JavaScript / build artifacts
 node_modules/
 build/
