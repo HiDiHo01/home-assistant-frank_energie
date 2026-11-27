@@ -46,7 +46,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install documentation dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-docs.txt
+        run: python -m pip install --disable-pip-version-check --only-binary :all: -r requirements-docs.txt
 
       - name: Build Zensical documentation
         run: zensical build --clean
