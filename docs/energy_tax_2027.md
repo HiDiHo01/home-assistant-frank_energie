@@ -54,7 +54,8 @@ These are regulatory and network-charge changes, not changes to wholesale market
 
 ## Sources and limitations
 
-- [Frank Energie: Energiebelasting en netbeheerkosten 2027](https://www.frankenergie.nl/nl/kennisbank/energie/energiebelasting-2027) (updated 24 November 2026).
+- [Frank Energie: Wijzigingen energiecontract 2027](https://www.frankenergie.nl/nl/kennisbank/energie/wijzigingen-energiecontract-2027) (source supplied on 27 November 2026).
+- [Frank Energie: Energiebelasting en netbeheerkosten 2027](https://www.frankenergie.nl/nl/kennisbank/energie/energiebelasting-2027) (related article, updated 24 November 2026).
 - Rate figures and the earlier blending-obligation estimate also reflect information supplied in the conversation on 27 November 2026.
 
 The article's figures are estimates/proposals and remain subject to final approval and publication. Confirm final rates against official government and Liander tariff schedules before using them for calculations or customer-facing claims.
