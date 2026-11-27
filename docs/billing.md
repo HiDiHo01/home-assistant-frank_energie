@@ -43,6 +43,17 @@ Both methods can result in the same total cost for identical consumption and pri
 
 The annual or final settlement still applies with Frank's dynamic method. It remains relevant for reconciling annual components such as energy tax and other charges based on estimated annual consumption.
 
+## Network charges: where to find the current amount
+
+Network charges (netbeheerkosten) pay for the energy network and the connection, and are passed on to the regional network operator. Frank Energie collects these charges through its invoice.
+
+To find the amount currently paid each month:
+1. Open the monthly invoice in the Frank Energie app or the email containing the invoice.
+2. Look under **Fixed costs (Vaste kosten)** for **Network charges (Netbeheerkosten)**.
+3. Use the amount in the **including VAT (incl. btw)** column to identify the current monthly charge.
+
+Network charges differ between households, because the regional network operator and the connection capacity determine the tariff. The cited Frank Energie article also notes an expected increase of approximately 20% for 2027; the actual increase in euros depends on the household and its network operator. Treat this percentage as an indicative estimate from the supplier, not a universal tariff.
+
 ## Invoice components
 
 ### Fixed and regulated components
@@ -100,6 +111,7 @@ These dates are typical rather than guaranteed.
 - [Frank Energie: Hoe we factureren](https://www.frankenergie.nl/nl/hoe-we-factureren)
 - [Frank Energie: Hoe we factureren (dynamisch)](https://www.frankenergie.nl/nl/hoe-we-factureren-dynamisch)
 - [Frank Energie: Dynamisch voorschot vs vast voorschot](https://www.frankenergie.nl/nl/kennisbank/dynamisch-energiecontract/dynamisch-voorschot)
+- [Frank Energie customer service: Where to find current network charges](https://klantenservice.frankenergie.nl/hc/nl/articles/53347402404113-Waar-zie-ik-hoeveel-ik-nu-betaal-aan-netbeheerkosten)
 - [Frank Energie customer service: dynamic billing system](https://klantenservice.frankenergie.nl/hc/nl/articles/52371300740497-Het-dynamische-facturatiesysteem-hoe-werkt-dat-nou-precies)
 - [Frank Energie: Leeswijzer termijnfactuur](https://www.frankenergie.nl/nl/leeswijzer-termijnfactuur)
 - [Frank Energie customer service: annual or final settlement](https://klantenservice.frankenergie.nl/hc/nl/articles/52371779835665-Wat-is-de-jaar-of-eindafrekening)
