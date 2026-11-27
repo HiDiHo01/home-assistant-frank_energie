@@ -206,6 +206,6 @@ poetry run python .github/helpers/check_flake8_baseline.py
 ```
 
 See [the developer guide](developer.md), [the integration development
-skill](../.agents/skills/frank-energie-development/SKILL.md), and
-the [dependency-update skill](../.agents/skills/frank-energie-dependency-update/SKILL.md).
+skill](https://github.com/HiDiHo01/home-assistant-frank_energie/blob/main/.agents/skills/frank-energie-development/SKILL.md),
+and the [dependency-update skill](https://github.com/HiDiHo01/home-assistant-frank_energie/blob/main/.agents/skills/frank-energie-dependency-update/SKILL.md).
 Always report checks not executed.
