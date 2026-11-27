@@ -41,6 +41,8 @@ jobs:
             codecov.io:443
             uploader.codecov.io:443
             www.home-assistant.io:443
+            www.frankenergie.nl:443
+            klantenservice.frankenergie.nl:443
             www.buymeacoffee.com:443
             docs.python.org:443
             peps.python.org:443
