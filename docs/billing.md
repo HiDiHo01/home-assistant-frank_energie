@@ -19,6 +19,30 @@ An invoice received in April may include:
 - Estimated consumption costs for May.
 - A correction for actual consumption and prices in March, compared with the amount previously estimated and paid for March.
 
+## Dynamic advance payment versus fixed advance payment
+
+Frank Energie uses a dynamic advance payment rather than a fixed monthly advance amount.
+
+### Dynamic advance payment
+
+- The advance payment is recalculated every month, based on expected consumption for that month and estimated market prices.
+- The expected consumption reflects the consumption profile and seasonal factors such as weather.
+- Energy tax is spread across the year: normally one-twelfth of the estimated annual energy-tax amount is included each month.
+- At the end of each month, the estimated costs are compared with the actual consumption and actual prices.
+- The difference is settled on a subsequent monthly invoice: an under-estimate increases a later invoice, while an over-estimate reduces a later payment.
+
+This means monthly payments typically rise in winter and fall in summer, reflecting seasonal consumption and price estimates rather than keeping the same payment amount all year.
+
+### Fixed advance payment
+
+With a fixed advance payment, the customer pays the same amount every month, regardless of the month's actual consumption or prices. The amount is estimated from expected annual consumption and prices. Summer overpayments may act as a buffer for winter consumption. The main reconciliation then takes place on the annual or final settlement.
+
+### What is the practical difference?
+
+Both methods can result in the same total cost for identical consumption and prices; they differ mainly in how payments are distributed through the year and when deviations are settled. Frank's dynamic method settles estimated-versus-actual energy costs monthly, reducing the size of the year-end correction for those components. A fixed advance payment postpones much of that reconciliation until the annual or final bill.
+
+The annual or final settlement still applies with Frank's dynamic method. It remains relevant for reconciling annual components such as energy tax and other charges based on estimated annual consumption.
+
 ## Invoice components
 
 ### Fixed and regulated components
@@ -75,6 +99,7 @@ These dates are typical rather than guaranteed.
 
 - [Frank Energie: Hoe we factureren](https://www.frankenergie.nl/nl/hoe-we-factureren)
 - [Frank Energie: Hoe we factureren (dynamisch)](https://www.frankenergie.nl/nl/hoe-we-factureren-dynamisch)
+- [Frank Energie: Dynamisch voorschot vs vast voorschot](https://www.frankenergie.nl/nl/kennisbank/dynamisch-energiecontract/dynamisch-voorschot)
 - [Frank Energie customer service: dynamic billing system](https://klantenservice.frankenergie.nl/hc/nl/articles/52371300740497-Het-dynamische-facturatiesysteem-hoe-werkt-dat-nou-precies)
 - [Frank Energie: Leeswijzer termijnfactuur](https://www.frankenergie.nl/nl/leeswijzer-termijnfactuur)
 - [Frank Energie customer service: annual or final settlement](https://klantenservice.frankenergie.nl/hc/nl/articles/52371779835665-Wat-is-de-jaar-of-eindafrekening)
