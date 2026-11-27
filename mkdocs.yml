@@ -1,0 +1,49 @@
+site_name: Frank Energie Home Assistant Integration
+site_description: Documentation for the Frank Energie custom integration for Home Assistant
+repo_url: https://github.com/HiDiHo01/home-assistant-frank_energie
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: mkdocs
+
+strict: true
+
+exclude_docs: |
+  /docs/coordinator_architecture_issues.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Configuration: configuration.md
+      - User features: user_features.md
+      - Entities: entities.md
+      - Events: events.md
+      - Examples: examples.md
+  - Energy costs:
+      - Billing: billing.md
+      - Energy taxes and network costs 2027: energy_tax_2027.md
+  - Smart energy:
+      - Smart Battery: smart_battery.md
+      - Smart Charging: smart_charging.md
+      - Smart heating: smart_hvac_activation.md
+  - Operations:
+      - Update frequency: update_frequency.md
+      - Diagnostics: diagnostics.md
+      - Troubleshooting: troubleshooting.md
+      - FAQ: faq.md
+      - Support: support.md
+  - Development:
+      - Architecture: architecture.md
+      - Developer guide: developer.md
+      - Release process: release_process.md
+      - Quality readiness: quality_readiness.md
+      - Documentation structure: Documentation Structure.md
