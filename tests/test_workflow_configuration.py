@@ -135,6 +135,10 @@ def test_pages_deployment_builds_jekyll_and_zensical_together() -> None:
                     for step in build_steps
                 )
                 assert any(
+                    'chown -R "$(id -u):$(id -g)" _site' in str(step.get("run", ""))
+                    for step in build_steps
+                )
+                assert any(
                     "cp -a site/. _site/docs/" in str(step.get("run", ""))
                     for step in build_steps
                 )
