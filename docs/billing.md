@@ -78,6 +78,8 @@ The monthly adjustment therefore primarily concerns the actual energy consumptio
 
 The invoice may also show expected and actual proceeds for exported electricity. Actual export proceeds are based on the applicable market prices and export-specific surcharges or deductions. The invoice guide explains that the market price for export is the same underlying market price as consumption, but different additions or deductions may apply.
 
+Frank Energie now refers to the **feed-in charge (terugleverkosten)** rather than the former term **feed-in purchase fee (inkoopvergoeding teruglevering)**. When interpreting older invoices, documentation or API-derived values, treat these as the old and new names for the same feed-in cost concept; do not confuse this charge with the market-price compensation paid for exported electricity.
+
 ## Annual or final settlement
 
 After a year of supply, or when the contract ends, Frank Energie issues an annual or final settlement, normally within six weeks.
