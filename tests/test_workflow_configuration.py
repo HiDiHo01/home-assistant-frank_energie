@@ -125,9 +125,7 @@ def test_pages_deployment_builds_jekyll_and_zensical_together() -> None:
                 build_steps = build_job.get("steps", [])
                 assert isinstance(build_steps, list)
                 assert any(
-                    str(step.get("uses", "")).startswith(
-                        "actions/jekyll-build-pages@"
-                    )
+                    str(step.get("uses", "")).startswith("actions/jekyll-build-pages@")
                     for step in build_steps
                 )
                 assert any(
