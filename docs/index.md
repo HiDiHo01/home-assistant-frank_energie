@@ -53,6 +53,8 @@ Automation examples, notifications, dashboards, and common use cases.
 
 ## Energy cost reference
 
+- [Frank Energie billing explained](billing.md) - Dynamic monthly invoices, estimates, actual-cost corrections and annual/final settlement.
+
 - [Dutch energy taxes and network costs for 2027](energy_tax_2027.md) - Rate summary and calculated changes (based on information supplied; pending approval/confirmation).
 
 ## Operations
