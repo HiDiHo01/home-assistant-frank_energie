@@ -52,7 +52,7 @@ def _load_baseline_checker() -> ModuleType:
 
 
 def test_link_check_retries_and_verifies_a_pinned_binary() -> None:
-    """Prevent transient download errors and unverified release assets."""
+    """Verify the pinned Lychee binary and keep accepted status codes narrowly scoped."""
     install_step = _named_step(
         "link-check.yml", "link-check", "Install verified Lychee nightly release"
     )
@@ -79,7 +79,8 @@ def test_link_check_retries_and_verifies_a_pinned_binary() -> None:
     assert lychee.get("continue-on-error", False) is False
     assert "lychee --verbose" in str(lychee["run"])
     assert "--max-retries 5 --retry-wait-time 2" in str(lychee["run"])
-    assert "--accept 200,403,429,503" in str(lychee["run"])
+    assert "--accept 200,403,429" in str(lychee["run"])
+    assert "503" not in str(lychee["run"])
     assert "404" not in str(lychee["run"])
     assert "--exclude-file" not in str(lychee["run"])
 
