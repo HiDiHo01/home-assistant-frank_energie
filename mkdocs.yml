@@ -1,4 +1,5 @@
 site_name: Frank Energie Home Assistant Integration
+site_url: https://hidiho01.github.io/home-assistant-frank_energie/
 site_description: Documentation for the Frank Energie custom integration for Home Assistant
 repo_url: https://github.com/HiDiHo01/home-assistant-frank_energie
 edit_uri: edit/main/docs/
@@ -7,7 +8,12 @@ docs_dir: docs
 site_dir: site
 
 theme:
-  name: mkdocs
+  name: material
+  variant: modern
+  language: en
+  features:
+    - content.action.edit
+    - content.action.view
 
 strict: true
 
