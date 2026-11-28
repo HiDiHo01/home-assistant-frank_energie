@@ -4,6 +4,9 @@
 ![installations](https://img.shields.io/badge/dynamic/json?label=Installaties&query=%24.frank_energie.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-orange)](https://buymeacoffee.com/royarx)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue)](https://www.paypal.me/royarx)
+[![CI](https://github.com/HiDiHo01/home-assistant-frank_energie/actions/workflows/ci.yaml/badge.svg)](https://github.com/HiDiHo01/home-assistant-frank_energie/actions/workflows/ci.yaml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=HiDiHo01_home-assistant-frank_energie&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=HiDiHo01_home-assistant-frank_energie)
+[![License](https://img.shields.io/github/license/HiDiHo01/home-assistant-frank_energie)](https://github.com/HiDiHo01/home-assistant-frank_energie/blob/main/LICENSE.md)
 
 **Taal:** [English](README.md) | [Nederlands](README.nl.md) | [Français](README.fr.md)
 
