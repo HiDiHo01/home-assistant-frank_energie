@@ -1,4 +1,6 @@
 [![Dernière version](https://img.shields.io/github/tag/HiDiHo01/home-assistant-frank_energie?include_prereleases=&sort=semver&label=Version)](https://github.com/HiDiHo01/home-assistant-frank_energie/releases/)
+![Total GitHub Downloads](https://img.shields.io/github/downloads/HiDiHo01/home-assistant-frank_energie/total?label=downloads)
+![Release Downloads](https://img.shields.io/github/downloads/HiDiHo01/home-assistant-frank_energie/2026.11.14/total?label=release%20downloads)
 ![Installations](https://img.shields.io/badge/dynamic/json?label=Installations&query=%24.frank_energie.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-orange)](https://buymeacoffee.com/royarx)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue)](https://www.paypal.me/royarx)
